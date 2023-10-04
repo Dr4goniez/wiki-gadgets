@@ -1,0 +1,27 @@
+{
+  "name": "wiki-gadgets",
+  "version": "1.0.0",
+  "description": "A workspace to develop scripts for Wikipedia.",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc -p ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "wiki-gadgets"
+  },
+  "keywords": [
+    "wiki"
+  ],
+  "author": "Dr4goniez",
+  "license": "CC-BY-SA-4.0",
+  "devDependencies": {
+    "@types/node": "^20.8.0",
+    "@typescript-eslint/eslint-plugin": "^6.7.3",
+    "@typescript-eslint/parser": "^6.7.3",
+    "eslint": "^8.50.0",
+    "types-mediawiki": "^1.4.0",
+    "typescript": "^5.2.2",
+    "wp-lib-extra": "^1.0.12"
+  }
+}
