@@ -17,11 +17,12 @@
   "license": "CC-BY-SA-4.0",
   "devDependencies": {
     "@types/node": "^20.8.0",
+    "@types/oojs-ui": "^0.47.2",
     "@typescript-eslint/eslint-plugin": "^6.7.3",
     "@typescript-eslint/parser": "^6.7.3",
     "eslint": "^8.50.0",
     "types-mediawiki": "^1.4.0",
     "typescript": "^5.2.2",
-    "wp-lib-extra": "^1.0.12"
+    "wp-lib-extra": "github:Dr4goniez/wp-lib-extra#1.1"
   }
 }
