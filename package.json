@@ -23,6 +23,6 @@
     "eslint": "^8.50.0",
     "types-mediawiki": "^1.4.0",
     "typescript": "^5.2.2",
-    "wp-lib-extra": "github:Dr4goniez/wp-lib-extra#1.1"
+    "wp-lib-extra": "^1.1.0"
   }
 }

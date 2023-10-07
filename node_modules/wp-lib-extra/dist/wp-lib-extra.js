@@ -346,9 +346,16 @@ function clean(str, trim) {
     return trim ? str.trim() : str;
 }
 /**
- * Get an \<img> tag for an icon.
+ * Get an icon as an \<img> tag.
+ *
+ * Available icons:
+ * - {@link https://upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif | load}
+ * - {@link https://upload.wikimedia.org/wikipedia/commons/f/fb/Yes_check.svg | check}
+ * - {@link https://upload.wikimedia.org/wikipedia/commons/a/a2/X_mark.svg | cross}
+ * - {@link https://upload.wikimedia.org/wikipedia/commons/6/61/Symbol_abstain_vote.svg | cancel}
  * @param iconType The type of the icon.
- * @returns
+ * @returns Always an `HTMLImageElement`. If an invalid value is passed to `iconType`, returns an \<img> tag
+ * without a `src` attribute (which shows no image).
  */
 function getIcon(iconType) {
     var img = document.createElement('img');
@@ -364,6 +371,9 @@ function getIcon(iconType) {
             break;
         case 'cancel':
             img.src = '//upload.wikimedia.org/wikipedia/commons/6/61/Symbol_abstain_vote.svg';
+            break;
+        default:
+            console.error("\"".concat(iconType, "\" is not a valid value as the parameter of getIcon."));
     }
     img.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
     return img;
@@ -1618,7 +1628,7 @@ function processArgFragment(args, fragment, options) {
 }
 // **************************************************** EXPORTS ****************************************************
 module.exports = {
-    version: '1.0.12',
+    version: '1.1.0',
     load: load,
     sleep: sleep,
     continuedRequest: continuedRequest,

@@ -189,10 +189,6 @@ function sleep(milliseconds: number): JQueryPromise<void> {
 	return def.promise();
 }
 
-interface DynamicObject {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	[key: string]: any;
-}
 /**
  * Send an API request that automatically continues until the limit is reached. Works only for calls that have a 'continue' property in the response.
  * @param params
@@ -337,9 +333,16 @@ function clean(str: string, trim = true): string {
 }
 
 /**
- * Get an \<img> tag for an icon.
+ * Get an icon as an \<img> tag.
+ * 
+ * Available icons:
+ * - {@link https://upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif | load}
+ * - {@link https://upload.wikimedia.org/wikipedia/commons/f/fb/Yes_check.svg | check}
+ * - {@link https://upload.wikimedia.org/wikipedia/commons/a/a2/X_mark.svg | cross}
+ * - {@link https://upload.wikimedia.org/wikipedia/commons/6/61/Symbol_abstain_vote.svg | cancel}
  * @param iconType The type of the icon.
- * @returns
+ * @returns Always an `HTMLImageElement`. If an invalid value is passed to `iconType`, returns an \<img> tag
+ * without a `src` attribute (which shows no image).
  */
 function getIcon(iconType: 'load'|'check'|'cross'|'cancel'): HTMLImageElement {
     const img = document.createElement('img');
@@ -355,15 +358,13 @@ function getIcon(iconType: 'load'|'check'|'cross'|'cancel'): HTMLImageElement {
             break;
         case 'cancel':
             img.src = '//upload.wikimedia.org/wikipedia/commons/6/61/Symbol_abstain_vote.svg';
+			break;
+		default:
+			console.error(`"${iconType}" is not a valid value as the parameter of getIcon.`);
     }
     img.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
     return img;
 }
-
-/**
- * A disjunctive union type for primitive types.
- */
-type primitive = string|number|bigint|boolean|null|undefined;
 
 /**
  * Check whether two arrays are equal. Neither array should contain non-primitive values as its elements.
@@ -397,6 +398,19 @@ function arraysDiff(sourceArray: primitive[], targetArray: primitive[]) {
 	});
 	return {added, removed};
 }
+
+/**
+ * `[key: string]: any;` object, used for API responses.
+ */
+interface DynamicObject {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	[key: string]: any;
+}
+
+/**
+ * A disjunctive union type for primitive types.
+ */
+type primitive = string|number|bigint|boolean|null|undefined;
 
 // **************************************************** CLASSES ****************************************************
 
@@ -2194,7 +2208,7 @@ function processArgFragment(args: ParsedArgument[], fragment: string, options?: 
 // **************************************************** EXPORTS ****************************************************
 
 module.exports = {
-	version: '1.0.12',
+	version: '1.1.0',
 	load,
 	sleep,
 	continuedRequest,

@@ -10,17 +10,26 @@ export {};
 
 // 3. Un-comment out `export {};` at the bottom of src/wp-lib-extra.ts
 
+// In types/wp-lib-extra.d.ts
+
 /**
- *	4. Comment out the following in types/wp-lib-extra.d.ts
+ *	4. Comment out the following
  *	- interface MwString
  *	- declare const mwString
+ *  - interface FragmentOptions
+ * 	- function processArgFragment 
  */
 
-// 5. Add the following to the bottom of types/wp-lib-extra.d.ts
+// 5. Add `declare global {` right below `declare const mwString`
 
+// 6. Remove `declare` from `declare function` and `declare class`
+
+// 7. Add the following interface to the bottom of `declare global`
 
 // declare global {
-// 	/** The object exported by `ext.gadget.WpLibExtra`. */
+// 	/** 
+// 	 * The object exported by `ext.gadget.WpLibExtra`.
+// 	 */
 //     interface WpLibExtra {
 // 		/** The version of the library. */
 // 		version: string;
@@ -49,5 +58,5 @@ export {};
  * 
  * @author [[User:Dragoniez]]
  * @license CC-BY-SA-4.0
- * @version 1.0.12
+ * @version 1.1.0
  */
