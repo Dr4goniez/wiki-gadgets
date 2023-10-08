@@ -7,6 +7,10 @@
 /** The script name. */
 const ANR = 'AN Reporter';
 
+const ANI = 'Wikipedia:管理者伝言板/投稿ブロック';
+const ANS = 'Wikipedia:管理者伝言板/投稿ブロック/ソックパペット';
+const AN3RR = 'Wikipedia:管理者伝言板/3RR';
+
 let lib: WpLibExtra;
 
 // ******************************************************************************************
@@ -56,7 +60,7 @@ function init() {
 				'mediawiki.user',
 				'mediawiki.util',
 				'mediawiki.api',
-				'mediatiki.Title',
+				'mediawiki.Title',
 				'oojs-ui',
 			];
 			$.when(mw.loader.using(modules), $.ready).then(() => {
@@ -67,7 +71,7 @@ function init() {
 				}
 				portlet.addEventListener('click', (e) => {
 					e.preventDefault();
-					// OPEN DIALOG
+					new Reporter();
 				});
 			});
 		}
@@ -76,37 +80,7 @@ function init() {
 
 }
 
-/**
- * Create a /<style> tag for the script.
- */
-function createStyleTag(): void {
-	const style = document.createElement('style');
-	style.textContent =
-		'#anrc-container {' +
-			'position: relative;' +
-		'}' +
-		'#anrc-container-overlay {' + // Overlay of the config body, used to make elements in it unclickable
-			'width: 100%;' +
-			'height: 100%;' +
-			'position: absolute;' +
-			'top: 0;' +
-			'left: 0;' +
-			'z-index: 10;' +
-		'}' +
-		'#anrc-options {' + // Border around fieldset
-			'padding: 1em;' +
-			'margin-bottom: 1em;' +
-			'border: 1px solid silver;' +
-		'}' +
-		'.anrc-colordemo {' + // Demo color span, change inline to inline-block
-			'display: inline-block;' +
-			'border: 1px solid silver;' +
-		'}' +
-		'.anrc-buttonwrapper:not(:last-child) {' + // Margin below buttons
-			'margin-bottom: 0.5em;' +
-		'}';
-	document.head.appendChild(style);
-}
+// function createStyleTag
 
 /**
  * Get the first heading and content body, replacing the latter with a 'now loading' message.
@@ -569,14 +543,351 @@ function createPortletLink(): HTMLLIElement|null {
 	const portlet = mw.util.addPortletLink(
 		portletlinkPosition,
 		'#',
-		'報告',
-		'ca-anr',
+		'報告β',
+		'ca-anr2',
 		'管理者伝言板に利用者を報告',
 		undefined,
 		'#ca-move'
 	);
 	return portlet || null;
 
+}
+
+/**
+ * Create a /<style> tag for the script.
+ */
+function createStyleTag(): void {
+	const style = document.createElement('style');
+	style.textContent =
+		'#anrc-container {' +
+			'position: relative;' +
+		'}' +
+		'#anrc-container-overlay {' + // Overlay of the config body, used to make elements in it unclickable
+			'width: 100%;' +
+			'height: 100%;' +
+			'position: absolute;' +
+			'top: 0;' +
+			'left: 0;' +
+			'z-index: 10;' +
+		'}' +
+		'#anrc-options {' + // Border around fieldset
+			'padding: 1em;' +
+			'margin-bottom: 1em;' +
+			'border: 1px solid silver;' +
+		'}' +
+		'.anrc-colordemo {' + // Demo color span, change inline to inline-block
+			'display: inline-block;' +
+			'border: 1px solid silver;' +
+		'}' +
+		'.anrc-buttonwrapper:not(:last-child) {' + // Margin below buttons
+			'margin-bottom: 0.5em;' +
+		'}' +
+		'.anr-dialog-content {' +
+			'padding: 1em;' +
+		// '}' +
+		// '.anr-dialog.ui-dialog-content,' +
+		// '.anr-dialog .ui-dialog-content,' +
+		// '.anr-dialog.ui-corner-all,' +
+		// '.anr-dialog .ui-corner-all,' +
+		// '.anr-dialog.ui-draggable,' +
+		// '.anr-dialog .ui-draggable,' +
+		// '.anr-dialog.ui-resizable,' +
+		// '.anr-dialog .ui-resizable,' +
+		// '.anr-dialog .ui-dialog-buttonpane {' +
+		// 	'background-color: yellow;' +
+		// '}' +
+		// '.anr-dialog .ui-dialog-titlebar,' +
+		// '.anr-dialog .ui-dialog-titlebar-close {' +
+		// 	'background-color: pink !important;' +
+		'}';
+	document.head.appendChild(style);
+}
+
+class Reporter {
+
+	$dialog: JQuery<HTMLElement>;
+	$content: JQuery<HTMLElement>;
+	fieldset: OO.ui.FieldsetLayout;
+	loader: OO.ui.ProgressBarWidget;
+
+	page: OO.ui.DropdownWidget;
+	section: OO.ui.DropdownWidget;
+	reason: OO.ui.MultilineTextInputWidget;
+	addComment: OO.ui.CheckboxInputWidget;
+	blockCheck: OO.ui.CheckboxInputWidget;
+	duplicateCheck: OO.ui.CheckboxInputWidget;
+	watchUser: OO.ui.CheckboxInputWidget;
+
+	constructor() {
+
+		const cfg = Config.merge();
+
+		// Create dialog
+		this.$dialog = $('<div>').attr('title', ANR).css({
+			'width': 'max-content'
+		});
+		this.$content = $('<div>').addClass('anr-dialog-content');
+		this.$dialog.append(this.$content);
+		this.fieldset = new OO.ui.FieldsetLayout();
+		this.$content.append(this.fieldset.$element);
+		this.$dialog.dialog({
+			dialogClass: 'anr-dialog',
+			resizable: false,
+			modal: true,
+			// height: 'auto',
+			width: 'auto',
+			position: {
+				my: 'center',
+				at: 'center',
+				of: window
+			}
+		});
+		// Reporter.setUpWidth(this.$dialog, this.fieldset);
+		
+		// Append a progress bar to show when the dialog is getting ready
+		this.loader = new OO.ui.ProgressBarWidget({
+			progress: false
+		});
+		this.fieldset.addItems([
+			new OO.ui.FieldLayout(this.loader, {
+				label: '読み込み中...',
+				align: 'top'
+			})
+		]);
+		Reporter.centerDialog(this.$dialog);
+
+		// Create main dialog elements
+		this.page = new OO.ui.DropdownWidget({
+			id: 'anr-dialog-page',
+			label: '選択してください',
+			menu: {
+				items: [
+					new OO.ui.MenuOptionWidget({
+						data: ANI,
+						label: ANI
+					}),
+					new OO.ui.MenuOptionWidget({
+						data: ANS,
+						label: ANS
+					}),
+					new OO.ui.MenuOptionWidget({
+						data: AN3RR,
+						label: AN3RR
+					})
+				]
+			}
+		});
+		this.section = new OO.ui.DropdownWidget({
+			id: 'anr-dialog-section',
+			label: '選択してください'
+		});
+		this.reason = new OO.ui.MultilineTextInputWidget({
+			id: 'anr-dialog-reason',
+			rows: 5
+		});
+		this.addComment = new OO.ui.CheckboxInputWidget();
+		this.blockCheck = new OO.ui.CheckboxInputWidget({
+			selected: cfg.blockCheck
+		});
+		this.duplicateCheck = new OO.ui.CheckboxInputWidget({
+			selected: cfg.duplicateCheck
+		});
+		this.watchUser = new OO.ui.CheckboxInputWidget({
+			selected: cfg.watchUser
+		});
+
+		this.fieldset.clearItems().addItems([
+			new OO.ui.FieldLayout(this.page, {
+				label: '報告先',
+				align: 'top'
+			}),
+			new OO.ui.FieldLayout(this.section, {
+				label: 'セクション',
+				align: 'top'
+			}),
+			// new OO.ui.FieldLayout(this.reason, {
+			// 	label: '理由',
+			// 	align: 'top'
+			// }),
+			// new OO.ui.FieldLayout(this.addComment, {
+			// 	label: '要約にコメントを追加',
+			// 	align: 'inline'
+			// }),
+			// new OO.ui.FieldLayout(this.blockCheck, {
+			// 	label: '報告前にブロック状態をチェック',
+			// 	align: 'inline'
+			// }),
+			// new OO.ui.FieldLayout(this.duplicateCheck, {
+			// 	label: '報告前に重複報告をチェック',
+			// 	align: 'inline'
+			// }),
+			// new OO.ui.FieldLayout(this.watchUser, {
+			// 	label: '報告対象者をウォッチ',
+			// 	align: 'inline'
+			// }),
+		]);
+		createUserPane();
+		// this.$content.append(createUserPane());
+		
+		Reporter.centerDialog(this.$dialog);
+
+		// const user = new User();
+		// this.$content.append(user.wrapper);
+
+	}
+
+	/**
+	 * Set up the width of the Reporter dialog (this static method is to be called in the constructor).
+	 * 
+	 * For this to work, **the dialog must be visible on the viewport**.
+	 * @param $dialog
+	 */
+	static setUpWidth($dialog: JQuery<HTMLElement>, fieldset: OO.ui.FieldsetLayout): void {
+
+		// Create a dummy dropdown with ANS selected
+		const dummy = new OO.ui.DropdownWidget({
+			id: 'anr-dialog-dummy',
+			menu: {
+				items: [
+					new OO.ui.MenuOptionWidget({
+						data: ANS,
+						label: ANS
+					})
+				]
+			}
+		});
+		dummy.getMenu().selectItemByData(ANS);
+
+		// Add the dummy dropdown to the fieldset
+		fieldset.addItems([
+			new OO.ui.FieldLayout(dummy, {
+				align: 'top'
+			})
+		]);
+
+		// Set an absolute width to the dialog, in accordance with the outerWidth of the dropdown
+		$dialog.dialog({width: $dialog.outerWidth(true)});
+
+		// Remove the dummy dropdown
+		fieldset.clearItems();
+
+	}
+
+	/**
+	 * Bring a jQuery UI dialog to the center of the viewport.
+	 * @param $dialog
+	 */
+	static centerDialog($dialog: JQuery<HTMLElement>): void {
+		$dialog.dialog({
+			position: {
+				my: 'center',
+				at: 'center',
+				of: window
+			}
+		});
+	}
+
+}
+
+/** The user field of the Reporter. */
+class User {
+
+	wrapper: JQuery<HTMLElement>;
+	user: OO.ui.TextInputWidget;
+	type: OO.ui.DropdownWidget;
+
+	constructor() {
+
+		this.wrapper = $('<div>').addClass('anr-userpane');
+
+		this.user = new OO.ui.TextInputWidget();
+		this.type = new OO.ui.DropdownWidget({
+			label: this.user.$element,
+			menu: {
+				items: [
+					new OO.ui.MenuOptionWidget({
+						data: 'UNL',
+						label: 'UNL'
+					}),
+					new OO.ui.MenuOptionWidget({
+						data: 'user2',
+						label: 'user2'
+					}),
+					new OO.ui.MenuOptionWidget({
+						data: 'IP2',
+						label: 'IP2'
+					}),
+					new OO.ui.MenuOptionWidget({
+						data: 'logid',
+						label: 'logid'
+					}),
+					new OO.ui.MenuOptionWidget({
+						data: 'diff',
+						label: 'diff'
+					}),
+					new OO.ui.MenuOptionWidget({
+						data: 'none',
+						label: 'none'
+					}),
+				]
+			}
+		});
+
+		this.wrapper.append(this.user.$element, this.type.$element);
+
+	}
+
+	static add(fieldset: OO.ui.FieldsetLayout, index?: number): User {
+		const U = new User();
+		fieldset.addItems([
+			// @ts-ignore
+			new OO.ui.FieldLayout(U.wrapper)
+		], index);
+		return U;
+	}
+
+}
+
+function createUserPane() {
+	const wrapper = new OO.ui.mixin.GroupElement();
+	const input = new OO.ui.TextInputWidget();
+	const dropdown = new OO.ui.DropdownWidget({
+		menu: {
+			items: [
+				new OO.ui.MenuOptionWidget({
+					data: 'UNL',
+					label: 'UNL'
+				}),
+				new OO.ui.MenuOptionWidget({
+					data: 'user2',
+					label: 'user2'
+				}),
+				new OO.ui.MenuOptionWidget({
+					data: 'IP2',
+					label: 'IP2'
+				}),
+				new OO.ui.MenuOptionWidget({
+					data: 'logid',
+					label: 'logid'
+				}),
+				new OO.ui.MenuOptionWidget({
+					data: 'diff',
+					label: 'diff'
+				}),
+				new OO.ui.MenuOptionWidget({
+					data: 'none',
+					label: 'none'
+				}),
+			]
+		}
+	});
+	wrapper.addItems([input, dropdown]);
+	console.log(wrapper);
+	// input.$element.css('display', 'inline-block');
+	// dropdown.$element.css('display', 'inline-block');
+	// $wrapper.append(input.$element, dropdown.$element);
+
+	return wrapper;
 }
 
 // ******************************************************************************************

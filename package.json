@@ -16,6 +16,7 @@
   "author": "Dr4goniez",
   "license": "CC-BY-SA-4.0",
   "devDependencies": {
+    "@types/jqueryui": "^1.12.18",
     "@types/node": "^20.8.0",
     "@types/oojs-ui": "^0.47.2",
     "@typescript-eslint/eslint-plugin": "^6.7.3",
