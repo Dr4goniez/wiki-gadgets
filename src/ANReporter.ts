@@ -39,48 +39,52 @@ function init() {
 			return;
 		}
 
-		// Create a style tag
-		createStyleTag();
-
 		// Main procedure
 		if (onConfig) {
 			// If on the config page, create the interface after loading dependent modules
 			$(loadConfigInterface); // Show a 'now loading' message as soon as the DOM gets ready
 			const modules = [
-				'mediawiki.user',
+				'mediawiki.user', // mw.user.options
 				'oojs-ui',
 				'oojs-ui.styles.icons-editing-core',
 				'oojs-ui.styles.icons-moderation',
-				'mediawiki.api',
+				'mediawiki.api', // mw.Api().saveOption
 			];
-			$.when(mw.loader.using(modules), $.ready).then(createConfigInterface);
+			$.when(mw.loader.using(modules), $.ready).then(() => {
+				createStyleTag(Config.merge());
+				createConfigInterface();
+			});
 		} else {
 			// If not on the config page, create a portlet link to open the ANR dialog after loading dependent modules
 			const modules = [
-				'mediawiki.user',
-				'mediawiki.util',
-				'mediawiki.api',
-				'mediawiki.Title',
-				'oojs-ui',
+				'mediawiki.user', // mw.user.options
+				'mediawiki.util', // addPortletLink
+				'mediawiki.api', // API queries
+				'mediawiki.Title', // lib
+				'jquery.ui',
 			];
-			$.when(mw.loader.using(modules), $.ready).then(() => {
+			$.when(
+				mw.loader.using(modules),
+				mw.loader.getScript('https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.js'),
+				$.ready
+			).then(() => {
 				const portlet = createPortletLink();
 				if (!portlet) {
 					console.error(`${ANR}: ポートレットリンクの作成に失敗しました。`);
 					return;
 				}
-				portlet.addEventListener('click', (e) => {
-					e.preventDefault();
-					new Reporter();
-				});
+				createStyleTag(Config.merge());
+				$('head').append('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.css">');
+				portlet.addEventListener('click', Reporter.new);
+			}).catch((...err) => {
+				console.warn(err);
+				mw.notify(ANR + ': モジュールの読み込みに失敗しました。', {type: 'error'});
 			});
 		}
 
 	});
 
 }
-
-// function createStyleTag
 
 /**
  * Get the first heading and content body, replacing the latter with a 'now loading' message.
@@ -477,7 +481,7 @@ class Config {
 
 		// Get config
 		const cfg: ANReporterConfig = {
-			reasons: this.reasons.getValue().split('\n').filter(el => el),
+			reasons: this.reasons.getValue().split('\n').filter(el => lib.clean(el)),
 			blockCheck: this.blockCheck.isSelected(),
 			duplicateCheck: this.duplicateCheck.isSelected(),
 			watchUser: this.watchUser.isSelected(),
@@ -556,9 +560,10 @@ function createPortletLink(): HTMLLIElement|null {
 /**
  * Create a /<style> tag for the script.
  */
-function createStyleTag(): void {
+function createStyleTag(cfg: ANReporterConfig): void {
 	const style = document.createElement('style');
 	style.textContent =
+		// Config
 		'#anrc-container {' +
 			'position: relative;' +
 		'}' +
@@ -582,312 +587,717 @@ function createStyleTag(): void {
 		'.anrc-buttonwrapper:not(:last-child) {' + // Margin below buttons
 			'margin-bottom: 0.5em;' +
 		'}' +
-		'.anr-dialog-content {' +
+		// Dialog
+		'.anr-dialog-spinner {' +
 			'padding: 1em;' +
-		// '}' +
-		// '.anr-dialog.ui-dialog-content,' +
-		// '.anr-dialog .ui-dialog-content,' +
-		// '.anr-dialog.ui-corner-all,' +
-		// '.anr-dialog .ui-corner-all,' +
-		// '.anr-dialog.ui-draggable,' +
-		// '.anr-dialog .ui-draggable,' +
-		// '.anr-dialog.ui-resizable,' +
-		// '.anr-dialog .ui-resizable,' +
-		// '.anr-dialog .ui-dialog-buttonpane {' +
-		// 	'background-color: yellow;' +
-		// '}' +
-		// '.anr-dialog .ui-dialog-titlebar,' +
-		// '.anr-dialog .ui-dialog-titlebar-close {' +
-		// 	'background-color: pink !important;' +
+		'}' +
+		'#anr-dialog-optionfield {' +
+			'padding: 1em;' +
+			'margin: 0;' +
+			'border: 1px solid gray;' +
+		'}' +
+		'#anr-dialog-optionfield > legend {' +
+			'font-weight: bold;' +
+			'padding-bottom: 0;' +
+		'}' +
+		'#anr-dialog-optionfield hr {' +
+			'margin: 0.8em 0;' +
+			'background-color: gray;' +
+		'}' +
+		'.anr-option-row:not(:last-child) {' +
+			'margin-bottom: 0.15em;' +
+		'}' +
+		'.anr-option-row-withselect2 {' +
+			'margin: 0.3em 0;' +
+		'}' +
+		'.anr-option-label {' +
+			'margin-right: 1em;' +
+			'float: left;' + // For a juxtaposed div to fill the remaining space
+		'}' +
+		'.anr-option-wrapper {' +
+			'overflow: hidden;' + // Implicit width of 100% (for the child element below)
+		'}' +
+		'#anr-option-reason, ' +
+		'.anr-juxtaposed {' + // Assigned by Reporter.wrapElement.
+			'box-sizing: border-box;' +
+			'width: 100%;' + // Fill the remaining space ("float" and "overflow" are essential for this to work)
+		'}' +
+		'.select2-container,' + // Set up the font size of select2 options 
+		'.anr-select2 .select2-selection--single {' +
+			'height: auto !important;' +
+		'}' +
+		'.anr-select2 .select2-selection__rendered {' +
+			'padding: 1px 2px;' +
+			'font-size: 1em;' +
+			'line-height: normal !important;' +
+		'}' +
+		'.anr-select2 .select2-results__option,' +
+		'.anr-select2 .select2-results__group {' +
+			'padding: 1px 8px;' +
+			'font-size: 0.9em;' +
+			'margin: 0;' +
+		'}' +
+		'.anr-disabledanchor {' + // Disabled anchor
+			'pointer: none;' +
+			'pointer-events: none;' +
+			'color: gray;' +
+			'text-decoration: line-through;' +
+		'}' +
+		'.anr-dialog-userpane-types {' +
+			'float: right;' +
+			'margin-left: 0.3em;' +
+		'}' +
+		'.anr-checkbox {' +
+			'margin-right: 0.5em;' +
+		'}' +
+		'#anr-option-comment {' +
+			'display: none;' +
+		'}' +
+		'#anr-option-addcomment:checked ~ #anr-option-comment {' +
+			'display: block;' +
+		'}' +
+		'#anr-option-watchexpiry-wrapper {' +
+			'display: none;' +
+		'}' +
+		'#anr-option-watchuser:checked ~ #anr-option-watchexpiry-wrapper {' +
+			'display: block;' +
+		'}' +
+		// Dialog colors
+		'.anr-dialog.ui-dialog-content,' +
+		'.anr-dialog.ui-corner-all,' +
+		'.anr-dialog.ui-draggable,' +
+		'.anr-dialog.ui-resizable,' +
+		'.anr-dialog .ui-dialog-buttonpane {' +
+			`background: ${cfg.backgroundColor};` +
+		'}' +
+		'.anr-dialog .ui-dialog-titlebar.ui-widget-header,' +
+		'.anr-dialog .ui-dialog-titlebar-close {' +
+			`background: ${cfg.headerColor} !important;` +
 		'}';
 	document.head.appendChild(style);
 }
 
+/**
+ * The Reporter class. Manipulates the ANR dialog.
+ */
 class Reporter {
 
-	$dialog: JQuery<HTMLElement>;
-	$content: JQuery<HTMLElement>;
-	fieldset: OO.ui.FieldsetLayout;
-	loader: OO.ui.ProgressBarWidget;
+	/** The Reporter config. */
+	cfg: ANReporterConfig;
+	/** The Reporter dialog. */
+	$dialog: JQuery<HTMLDivElement>;
+	/** The wrapper of the div with a spinner. */
+	$spinner: JQuery<HTMLDivElement>;
+	/** The label of the spinner image. */
+	$spinnerLabel: JQuery<HTMLSpanElement>;
+	/** The inner content wrapper of the dialog. */
+	$content: JQuery<HTMLDivElement>;
+	/** The fieldset that contains main dialog options on $content. */
+	$fieldset: JQuery<HTMLFieldSetElement>;
+	/** The page selector dropdown. */
+	page: HTMLSelectElement;
+	/** The link to (the section in) the page to which to forward the report. */
+	pageLink: HTMLAnchorElement;
+	/** The wrapper row for the section selector dropdown for ANI and AN3RR. */
+	$sectionWrapper: JQuery<HTMLDivElement>;
+	/** The section selector dropdown for ANI and AN3RR. */
+	section: HTMLSelectElement;
+	/** The wrapper row for the select2 section selector dropdown for ANS. */
+	$sectionAnsWrapper: JQuery<HTMLDivElement>;
+	/** The select2 section selector dropdown for ANS. */
+	$sectionAns: JQuery<HTMLSelectElement>;
+	/** The wrapper row for the select2 VIP dropdown. */
+	$vipWrapper: JQuery<HTMLDivElement>;
+	/** The select2 VIP dropdown. */
+	$vip: JQuery<HTMLSelectElement>;
+	/** The wrapper row for the select2 LTA dropdown. */
+	$ltaWrapper: JQuery<HTMLDivElement>;
+	/** The select2 LTA dropdown. */
+	$lta: JQuery<HTMLSelectElement>;
+	/** The select2 predefined reason dropdown. */
+	$predefined: JQuery<HTMLSelectElement>;
+	/** The text field for report reasons. */
+	reason: HTMLTextAreaElement;
+	/** The checkbox for whether to add a comment to the report summary. */
+	addComment: HTMLInputElement;
+	/** The text field to specify an additional comment to the report summary. */
+	comment: HTMLTextAreaElement;
+	/** The checkbox for whether to check the block statuses of reportees before submitting the report. */
+	checkBlock: HTMLInputElement;
+	/** The checkbox for whether to check existing duplicate reports before submitting the report. */
+	checkDuplicates: HTMLInputElement;
+	/** The checkbox for whether to watch the reportees. */
+	watchUser: HTMLInputElement;
+	/** The dropdown to specify the expiration time of watching the reportees. */
+	watchExpiry: HTMLSelectElement;
 
-	page: OO.ui.DropdownWidget;
-	section: OO.ui.DropdownWidget;
-	reason: OO.ui.MultilineTextInputWidget;
-	addComment: OO.ui.CheckboxInputWidget;
-	blockCheck: OO.ui.CheckboxInputWidget;
-	duplicateCheck: OO.ui.CheckboxInputWidget;
-	watchUser: OO.ui.CheckboxInputWidget;
-
+	/**
+	 * Initializes a `Reporter` instance. This constructor only creates the base components of the dialog, and
+	 * asynchronous procedures are externally handled by {@link new}.
+	 */
 	constructor() {
 
-		const cfg = Config.merge();
+		this.cfg = Config.merge();
 
-		// Create dialog
-		this.$dialog = $('<div>').attr('title', ANR).css({
-			'width': 'max-content'
-		});
-		this.$content = $('<div>').addClass('anr-dialog-content');
-		this.$dialog.append(this.$content);
-		this.fieldset = new OO.ui.FieldsetLayout();
-		this.$content.append(this.fieldset.$element);
+		// Create dialog contour
+		this.$dialog = $('<div>');
+		this.$dialog.attr('title', ANR).css('max-height', '70vh');
 		this.$dialog.dialog({
 			dialogClass: 'anr-dialog',
 			resizable: false,
-			modal: true,
-			// height: 'auto',
+			height: 'auto',
 			width: 'auto',
-			position: {
-				my: 'center',
-				at: 'center',
-				of: window
+			modal: true,
+			close: () => {
+				this.destroy();
 			}
 		});
-		// Reporter.setUpWidth(this.$dialog, this.fieldset);
-		
-		// Append a progress bar to show when the dialog is getting ready
-		this.loader = new OO.ui.ProgressBarWidget({
-			progress: false
-		});
-		this.fieldset.addItems([
-			new OO.ui.FieldLayout(this.loader, {
-				label: '読み込み中...',
-				align: 'top'
-			})
-		]);
-		Reporter.centerDialog(this.$dialog);
 
-		// Create main dialog elements
-		this.page = new OO.ui.DropdownWidget({
-			id: 'anr-dialog-page',
-			label: '選択してください',
-			menu: {
-				items: [
-					new OO.ui.MenuOptionWidget({
-						data: ANI,
-						label: ANI
-					}),
-					new OO.ui.MenuOptionWidget({
-						data: ANS,
-						label: ANS
-					}),
-					new OO.ui.MenuOptionWidget({
-						data: AN3RR,
-						label: AN3RR
-					})
-				]
+		// Create spinner container
+		this.$spinner = $('<div>');
+		this.$spinner.addClass('anr-dialog-spinner');
+		this.$spinnerLabel = $('<span>');
+		this.$spinnerLabel.text('読み込み中');
+		const spinnerImg = lib.getIcon('load');
+		spinnerImg.style.marginLeft = '0.5em';
+		this.$spinner.append(this.$spinnerLabel, spinnerImg);
+		this.$dialog.append(this.$spinner);
+
+		// Create option container
+		this.$content = $('<div>');
+		this.$content.addClass('anr-dialog-content');
+		this.$dialog.append(this.$content);
+
+		// Create fieldset
+		this.$fieldset = $('<fieldset>');
+		this.$fieldset.prop({
+			id: 'anr-dialog-optionfield',
+			innerHTML: '<legend>利用者を報告</legend>'
+		});
+		this.$content.append(this.$fieldset);
+
+		// Create target page option
+		const pageWrapper = Reporter.createRow();
+		Reporter.createLeftLabel(pageWrapper, '報告先');
+		this.page = document.createElement('select');
+		this.page.classList.add('anr-juxtaposed'); // Important for the dropdown to fill the remaining space
+		this.page.innerHTML =
+			'<option selected disabled hidden>選択してください</option>' +
+			'<option>' + ANI + '</option>' +
+			'<option>' + ANS + '</option>' +
+			'<option>' + AN3RR + '</option>';
+		Reporter.wrapElement(pageWrapper, this.page); // As important as above
+		this.$fieldset.append(pageWrapper);
+
+		// Create target page anchor
+		const pageLinkWrapper = Reporter.createRow();
+		Reporter.createLeftLabel(pageLinkWrapper, '&nbsp;');
+		this.pageLink = document.createElement('a');
+		this.pageLink.target = '_blank';
+		this.pageLink.textContent = '報告先を確認';
+		this.pageLink.classList.add('anr-disabledanchor'); // Disable the anchor by default
+		pageLinkWrapper.appendChild(this.pageLink);
+		this.$fieldset.append(pageLinkWrapper);
+
+		// Create section option for ANI and AN3RR
+		const sectionWrapper = Reporter.createRow();
+		this.$sectionWrapper = $(sectionWrapper);
+		Reporter.createLeftLabel(sectionWrapper, '節');
+		this.section = document.createElement('select');
+		this.section.innerHTML = '<option selected disabled hidden>選択してください</option>';
+		this.section.disabled = true;
+		Reporter.wrapElement(sectionWrapper, this.section);
+		this.$fieldset.append(sectionWrapper);
+
+		// Create section option for ANS
+		const section2Wrapper = Reporter.createRow(true);
+		this.$sectionAnsWrapper = $(section2Wrapper);
+		Reporter.createLeftLabel(section2Wrapper, '節');
+		const section2 = document.createElement('select'); // Options are created in `new`
+		Reporter.wrapElement(section2Wrapper, section2);
+		this.$sectionAns = $(section2);
+		this.$fieldset.append(section2Wrapper);
+		Reporter.select2(this.$sectionAns);
+
+		// Create a user pane (which is supposed to be the widest row)
+		this.$fieldset.append(document.createElement('hr'));
+		this.$fieldset.append(new UserPane().wrapper);
+		const dialogWith = this.$fieldset.outerWidth(true)!;
+		this.$fieldset.css('width', dialogWith); // Assign an absolute width to $content
+		this.$spinner.css('width', dialogWith);
+		this.$fieldset.append(document.createElement('hr'));
+		Reporter.centerDialog(this.$dialog); // Recenter the dialog because the width has been changed
+
+		// Create VIP copier
+		const vipWrapper = Reporter.createRow(true);
+		vipWrapper.style.clear = 'all';
+		this.$vipWrapper = $(vipWrapper);
+		Reporter.createLeftLabel(vipWrapper, 'VIP');
+		const vip = document.createElement('select'); // Options are created in `new`
+		Reporter.wrapElement(vipWrapper, vip);
+		this.$vip = $(vip);
+		this.$vip.off('change').on('change', function() {
+			copyToClipboard(this.value);
+			this.selectedIndex = 0;
+		});
+		this.$fieldset.append(vipWrapper);
+		Reporter.select2(this.$vip);
+
+		// Create LTA copier
+		const ltaWrapper = Reporter.createRow(true);
+		this.$ltaWrapper = $(ltaWrapper);
+		Reporter.createLeftLabel(ltaWrapper, 'LTA');
+		const lta = document.createElement('select'); // Options are created in `new`
+		Reporter.wrapElement(ltaWrapper, lta);
+		this.$lta = $(lta);
+		this.$lta.off('change').on('change', function() {
+			copyToClipboard(this.value);
+			this.selectedIndex = 0;
+		});
+		this.$fieldset.append(ltaWrapper);
+		Reporter.select2(this.$lta);
+
+		// Create predefined reason selector
+		const predefinedWrapper = Reporter.createRow(true);
+		Reporter.createLeftLabel(predefinedWrapper, '定型文');
+		const predefined = document.createElement('select');
+		['選択して挿入'].concat(this.cfg.reasons).forEach((reason, i) => {
+			const option = document.createElement('option');
+			option.textContent = reason;
+			if (i === 0) {
+				option.selected = true;
+				option.disabled = true;
+				option.hidden = true;
 			}
+			predefined.add(option);
 		});
-		this.section = new OO.ui.DropdownWidget({
-			id: 'anr-dialog-section',
-			label: '選択してください'
-		});
-		this.reason = new OO.ui.MultilineTextInputWidget({
-			id: 'anr-dialog-reason',
-			rows: 5
-		});
-		this.addComment = new OO.ui.CheckboxInputWidget();
-		this.blockCheck = new OO.ui.CheckboxInputWidget({
-			selected: cfg.blockCheck
-		});
-		this.duplicateCheck = new OO.ui.CheckboxInputWidget({
-			selected: cfg.duplicateCheck
-		});
-		this.watchUser = new OO.ui.CheckboxInputWidget({
-			selected: cfg.watchUser
-		});
+		Reporter.wrapElement(predefinedWrapper, predefined);
+		this.$predefined = $(predefined);
+		this.$fieldset.append(predefinedWrapper);
+		Reporter.select2(this.$predefined);
 
-		this.fieldset.clearItems().addItems([
-			new OO.ui.FieldLayout(this.page, {
-				label: '報告先',
-				align: 'top'
-			}),
-			new OO.ui.FieldLayout(this.section, {
-				label: 'セクション',
-				align: 'top'
-			}),
-			// new OO.ui.FieldLayout(this.reason, {
-			// 	label: '理由',
-			// 	align: 'top'
-			// }),
-			// new OO.ui.FieldLayout(this.addComment, {
-			// 	label: '要約にコメントを追加',
-			// 	align: 'inline'
-			// }),
-			// new OO.ui.FieldLayout(this.blockCheck, {
-			// 	label: '報告前にブロック状態をチェック',
-			// 	align: 'inline'
-			// }),
-			// new OO.ui.FieldLayout(this.duplicateCheck, {
-			// 	label: '報告前に重複報告をチェック',
-			// 	align: 'inline'
-			// }),
-			// new OO.ui.FieldLayout(this.watchUser, {
-			// 	label: '報告対象者をウォッチ',
-			// 	align: 'inline'
-			// }),
-		]);
-		createUserPane();
-		// this.$content.append(createUserPane());
-		
-		Reporter.centerDialog(this.$dialog);
+		// Create reason field
+		const reasonWrapper = Reporter.createRow();
+		Reporter.createLeftLabel(reasonWrapper, '理由');
+		this.reason = document.createElement('textarea');
+		this.reason.id = 'anr-option-reason';
+		this.reason.rows = 5;
+		this.reason.placeholder = '署名不要';
+		reasonWrapper.appendChild(this.reason);
+		this.$fieldset.append(reasonWrapper);
 
-		// const user = new User();
-		// this.$content.append(user.wrapper);
+		// Create "add comment" option
+		const addCommentElements = createLabelledCheckbox('要約にコメントを追加', 'anr-option-addcomment');
+		this.addComment = addCommentElements.checkbox;
+		this.$fieldset.append(addCommentElements.wrapper);
+		this.comment = document.createElement('textarea');
+		this.comment.id = 'anr-option-comment';
+		this.comment.rows = 2;
+		addCommentElements.wrapper.appendChild(this.comment);
+
+		// Create "block check" option
+		const checkBlockElements = createLabelledCheckbox('報告前にブロック状態をチェック', 'anr-option-checkblock');
+		this.checkBlock = checkBlockElements.checkbox;
+		this.$fieldset.append(checkBlockElements.wrapper);
+
+		// Create "duplicate check" option
+		const checkDuplicatesElements = createLabelledCheckbox('報告前に重複報告をチェック', 'anr-option-checkduplicates');
+		this.checkDuplicates = checkDuplicatesElements.checkbox;
+		this.$fieldset.append(checkDuplicatesElements.wrapper);
+
+		// Create "watch user" option
+		const watchUserElements = createLabelledCheckbox('報告対象者をウォッチ', 'anr-option-watchuser');
+		this.watchUser = watchUserElements.checkbox;
+		this.$fieldset.append(watchUserElements.wrapper);
+		this.watchExpiry = document.createElement('select');
+		this.watchExpiry.id = 'anr-option-watchexpiry';
+		this.watchExpiry.innerHTML =
+			'<option value="infinity">無期限</option>' +
+			'<option value="1 week">1週間</option>' +
+			'<option value="2 weeks">2週間</option>' +
+			'<option value="1 month">1か月</option>' +
+			'<option value="3 months">3か月</option>' +
+			'<option value="6 months">6か月</option>' +
+			'<option value="1 year">1年</option>';
+		const watchExpiryWrapper = document.createElement('div');
+		watchExpiryWrapper.id = 'anr-option-watchexpiry-wrapper';
+		watchExpiryWrapper.style.marginLeft = $(this.watchUser).outerWidth(true)! + 'px';
+		watchExpiryWrapper.style.marginTop = '0.3em';
+		watchExpiryWrapper.appendChild(document.createTextNode('期限: '));
+		watchExpiryWrapper.appendChild(this.watchExpiry);
+		watchUserElements.wrapper.appendChild(watchExpiryWrapper);
+
+		// Set all the left labels to the same width
+		const $labels = $('.anr-option-label');
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const optionsWidths = Array.prototype.map.call<JQuery<HTMLElement>, any[], number[]>(
+			$labels,
+			(el: HTMLElement) => el.offsetWidth // Collect the widths of all left labels
+		);
+		const optionWidth = Math.max(...optionsWidths); // Get the max value
+		$labels.css('width', optionWidth); // Set the value to all
+
+		// Make some wrappers invisible
+		this.$sectionAnsWrapper.hide();
+		this.$vipWrapper.hide();
+		this.$ltaWrapper.hide();
+		if (predefined.querySelectorAll('option').length < 2) {
+			$(predefinedWrapper).hide();
+		}
+		this.$content.hide();
 
 	}
 
 	/**
-	 * Set up the width of the Reporter dialog (this static method is to be called in the constructor).
-	 * 
-	 * For this to work, **the dialog must be visible on the viewport**.
-	 * @param $dialog
+	 * Create `<div class="anr-option-row"></div>`, used as a row.
+	 * @param hasSelect2 `false` by default. If true, create `<div class="anr-option-row-withselect2"></div>`.
+	 * @returns The created row.
 	 */
-	static setUpWidth($dialog: JQuery<HTMLElement>, fieldset: OO.ui.FieldsetLayout): void {
+	static createRow(hasSelect2 = false): HTMLDivElement {
+		const row = document.createElement('div');
+		row.classList.add(!hasSelect2 ? 'anr-option-row' : 'anr-option-row-withselect2');
+		return row;
+	}
 
-		// Create a dummy dropdown with ANS selected
-		const dummy = new OO.ui.DropdownWidget({
-			id: 'anr-dialog-dummy',
-			menu: {
-				items: [
-					new OO.ui.MenuOptionWidget({
-						data: ANS,
-						label: ANS
-					})
-				]
-			}
+	/**
+	 * Create a \<div> that works as a left-aligned label.
+	 * @param appendTo The element to which to append the label.
+	 * @param labelText The text of the label (in fact the innerHTML).
+	 * @returns The created label.
+	 */
+	static createLeftLabel(appendTo: HTMLElement, labelText: string): HTMLDivElement {
+		const label = document.createElement('div');
+		label.classList.add('anr-option-label');
+		label.innerHTML = labelText;
+		appendTo.appendChild(label);
+		return label;
+	}
+
+	/**
+	 * Wrap a \<select> element (next to a left label) with a div. This is for the element to fill the remaining space.
+	 * ```html
+	 * <div class="anr-option-row">
+	 * 	<div class="anr-option-label"></div> <!-- float: left; -->
+	 * 	<div class="anr-option-wrapper"> <!-- overflow: hidden; -->
+	 * 		<element class="anr-juxtaposed">...</element> <!-- width: 100%; -->
+	 * 	</div>
+	 * </div>
+	 * ```
+	 * @param appendTo The element to which to append the wrapper div.
+	 * @param element The element to wrap.
+	 * @returns The wrapper div.
+	 */
+	static wrapElement(appendTo: HTMLDivElement, element: HTMLSelectElement|HTMLInputElement): HTMLDivElement {
+		const wrapper = document.createElement('div');
+		wrapper.classList.add('anr-option-wrapper');
+		element.classList.add('anr-juxtaposed');
+		wrapper.appendChild(element);
+		appendTo.appendChild(wrapper);
+		return wrapper;
+	}
+
+	/**
+	 * Set up `select2` to a dropdown.
+	 * @param $dropdown
+	 */
+	static select2($dropdown: JQuery<HTMLSelectElement>): void {
+		$dropdown.select2({
+			width: '100%', // Without this, the right end of the dropdown overflows
+			dropdownCssClass: 'anr-select2' // This needs select2.full.js
 		});
-		dummy.getMenu().selectItemByData(ANS);
+	}
 
-		// Add the dummy dropdown to the fieldset
-		fieldset.addItems([
-			new OO.ui.FieldLayout(dummy, {
-				align: 'top'
-			})
-		]);
+	/**
+	 * Create a new Reporter dialog. This static method handles asynchronous procedures that are necessary
+	 * after calling the constructor.
+	 * @param e
+	 */
+	static new(e: MouseEvent) {
 
-		// Set an absolute width to the dialog, in accordance with the outerWidth of the dropdown
-		$dialog.dialog({width: $dialog.outerWidth(true)});
+		e.preventDefault();
 
-		// Remove the dummy dropdown
-		fieldset.clearItems();
+		const R = new Reporter();
+		$.when(
+			lib.Wikitext.newFromTitle(ANS),
+			getVipList(),
+			getLtaList()
+		)
+		.then((Wkt, vipList, ltaList) => {
+
+			// Initialize the ANS section dropdown
+			R.$sectionAns[0].innerHTML =
+				'<option selected disabled hidden>選択してください</option>' +
+				'<optgroup label="系列が立てられていないもの">' +
+					'<option>著作権侵害・犯罪予告</option>' +
+					'<option>名誉毀損・なりすまし・個人情報</option>' +
+					'<option>妨害編集・いたずら</option>' +
+					'<option>その他</option>' +
+				'</optgroup>';
+			if (Wkt) {
+				const exclude = [
+					'top',
+                    '系列が立てられていないもの',
+                    '著作権侵害・犯罪予告',
+                    '名誉毀損・なりすまし・個人情報',
+                    '妨害編集・いたずら',
+                    'その他',
+                    'A. 最優先',
+                    '暫定A',
+                    '休止中A',
+                    'B. 優先度高',
+                    '暫定B',
+                    '休止中B',
+                    'C. 優先度中',
+                    '暫定C',
+                    '休止中C',
+                    'D. 優先度低',
+                    '暫定D',
+                    '休止中D',
+                    'N. 未分類',
+                    'サブページなし',
+                    '休止中N'
+                ];
+				const optgroup = document.createElement('optgroup');
+				optgroup.label = 'LTA';
+				Wkt.parseSections().forEach(({title}) => {
+					if (!exclude.includes(title)) {
+						const option = document.createElement('option');
+						option.textContent = title;
+						optgroup.appendChild(option);
+					}
+				});
+				if (optgroup.querySelector('option')) {
+					R.$sectionAns[0].add(optgroup);
+				} else {
+					mw.notify('WP:AN/Sのセクション情報の取得に失敗しました。節構成が変更された、またはスクリプトのバグの可能性があります。', {type: 'error'});
+				}
+			} else {
+				mw.notify('WP:AN/Sのセクション情報の取得に失敗しました。ダイアログを開き直すと改善する場合があります。', {type: 'error'});
+			}
+
+			// Initialize the VIP copier dropdown
+			if (vipList.length) {
+				R.$vip[0].innerHTML = '<option selected disabled hidden>選択してコピー</option>';
+				const optgroup = document.createElement('optgroup');
+				optgroup.style.display = 'none'; // Wrap with optgroup to adjust font size
+				vipList.forEach((vip) => {
+					const option = document.createElement('option');
+					option.textContent = vip;
+					option.value = '[[WP:VIP#' + vip + ']]';
+					optgroup.appendChild(option);
+				});
+				R.$vip[0].add(optgroup);
+				R.$vipWrapper.show();
+			}
+
+			// Initialize the LTA copier dropdown
+			if (ltaList.length) {
+				R.$lta[0].innerHTML = '<option selected disabled hidden>選択してコピー</option>';
+				const optgroup = document.createElement('optgroup');
+				optgroup.style.display = 'none'; // Wrap with optgroup to adjust font size
+				ltaList.forEach((lta) => {
+					const option = document.createElement('option');
+					option.textContent = lta;
+					option.value = '[[LTA:' + lta + ']]';
+					optgroup.appendChild(option);
+				});
+				R.$lta[0].add(optgroup);
+				R.$ltaWrapper.show();
+			}
+
+			R.$spinner.hide();
+			R.$content.show();
+
+		});
 
 	}
 
 	/**
 	 * Bring a jQuery UI dialog to the center of the viewport.
-	 * @param $dialog
 	 */
-	static centerDialog($dialog: JQuery<HTMLElement>): void {
+	static centerDialog($dialog: JQuery<HTMLDivElement>): void {
 		$dialog.dialog({
 			position: {
-				my: 'center',
-				at: 'center',
+				my: 'top',
+				at: 'top+5%',
 				of: window
 			}
 		});
 	}
 
+	/**
+	 * Destroy the Reporter dialog.
+	 */
+	destroy(): void {
+		this.$dialog.empty().dialog('destroy');
+	}
+
 }
 
-/** The user field of the Reporter. */
-class User {
+/**
+ * The UserPane class. An instance of this handles a User field row on the main dialog.
+ */
+class UserPane {
 
-	wrapper: JQuery<HTMLElement>;
-	user: OO.ui.TextInputWidget;
-	type: OO.ui.DropdownWidget;
+	/** The wrapper row. */
+	wrapper: HTMLDivElement;
+	/** The username input. */
+	input: HTMLInputElement;
+	/** The type dropdown. */
+	type: HTMLSelectElement;
+	/** The options of the type dropdown. */
+	options: HTMLOptionElement[];
 
+	/**
+	 * Create the following structure.
+	 * ```html
+	 * <div class="anr-dialog-userpane">
+	 * 	<div class="anr-option-label">利用者</div> <!-- float: left; -->
+	 * 	<div class="anr-dialog-userpane-types"> <!-- float: right; -->
+	 * 		<select>...</select>
+	 * 	</div>
+	 * 	<div class="anr-option-wrapper"> <!-- overflow: hidden; -->
+	 * 		<input class="anr-dialog-userpane-user anr-juxtaposed"> <!-- width: 100%; -->
+	 * 	</div>
+	 * </div>
+	 * ```
+	 */
 	constructor() {
 
-		this.wrapper = $('<div>').addClass('anr-userpane');
+		this.wrapper = document.createElement('div');
+		this.wrapper.classList.add('anr-dialog-userpane');
+		Reporter.createLeftLabel(this.wrapper, '利用者');
 
-		this.user = new OO.ui.TextInputWidget();
-		this.type = new OO.ui.DropdownWidget({
-			label: this.user.$element,
-			menu: {
-				items: [
-					new OO.ui.MenuOptionWidget({
-						data: 'UNL',
-						label: 'UNL'
-					}),
-					new OO.ui.MenuOptionWidget({
-						data: 'user2',
-						label: 'user2'
-					}),
-					new OO.ui.MenuOptionWidget({
-						data: 'IP2',
-						label: 'IP2'
-					}),
-					new OO.ui.MenuOptionWidget({
-						data: 'logid',
-						label: 'logid'
-					}),
-					new OO.ui.MenuOptionWidget({
-						data: 'diff',
-						label: 'diff'
-					}),
-					new OO.ui.MenuOptionWidget({
-						data: 'none',
-						label: 'none'
-					}),
-				]
-			}
+		const typeWrapper = document.createElement('div');
+		typeWrapper.classList.add('anr-dialog-userpane-types');
+		this.type = document.createElement('select');
+		this.options = ['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map((t) => {
+			const option = document.createElement('option');
+			option.textContent = t;
+			this.type.add(option);
+			return option;
 		});
+		typeWrapper.appendChild(this.type);
+		this.wrapper.appendChild(typeWrapper);
 
-		this.wrapper.append(this.user.$element, this.type.$element);
+		this.input = document.createElement('input');
+		this.input.type = 'text';
+		this.input.classList.add('anr-dialog-userpane-user');
+		Reporter.wrapElement(this.wrapper, this.input);
 
 	}
+}
 
-	static add(fieldset: OO.ui.FieldsetLayout, index?: number): User {
-		const U = new User();
-		fieldset.addItems([
-			// @ts-ignore
-			new OO.ui.FieldLayout(U.wrapper)
-		], index);
-		return U;
-	}
+/**
+ * Copy a string to the clipboard.
+ * @param str
+ */
+function copyToClipboard(str: string): void {
+
+	const temp = document.createElement('textarea');
+	document.body.appendChild(temp); // Create a temporarily hidden text field
+	temp.value = str; // Put the passed string to the text field
+	temp.select(); // Select the text
+	document.execCommand('copy'); // Copy it to the clipboard
+	temp.remove();
+
+	const msg = document.createElement('div');
+	msg.innerHTML = `<code>${str}</code>をクリップボードにコピーしました。`;
+	mw.notify(msg, {type: 'success'});
 
 }
 
-function createUserPane() {
-	const wrapper = new OO.ui.mixin.GroupElement();
-	const input = new OO.ui.TextInputWidget();
-	const dropdown = new OO.ui.DropdownWidget({
-		menu: {
-			items: [
-				new OO.ui.MenuOptionWidget({
-					data: 'UNL',
-					label: 'UNL'
-				}),
-				new OO.ui.MenuOptionWidget({
-					data: 'user2',
-					label: 'user2'
-				}),
-				new OO.ui.MenuOptionWidget({
-					data: 'IP2',
-					label: 'IP2'
-				}),
-				new OO.ui.MenuOptionWidget({
-					data: 'logid',
-					label: 'logid'
-				}),
-				new OO.ui.MenuOptionWidget({
-					data: 'diff',
-					label: 'diff'
-				}),
-				new OO.ui.MenuOptionWidget({
-					data: 'none',
-					label: 'none'
-				}),
-			]
-		}
-	});
-	wrapper.addItems([input, dropdown]);
-	console.log(wrapper);
-	// input.$element.css('display', 'inline-block');
-	// dropdown.$element.css('display', 'inline-block');
-	// $wrapper.append(input.$element, dropdown.$element);
+let checkboxCnt = 0;
+/**
+ * Create a labelled checkbox.
+ * @param labelText The label text.
+ * @param checkboxId An optional checkbox ID. If not provided, an automatically generated ID is used.
+ * @returns 
+ */
+function createLabelledCheckbox(labelText: string, checkboxId?: string): {wrapper: HTMLDivElement, checkbox: HTMLInputElement} {
+	const checkbox = document.createElement('input');
+	checkbox.type = 'checkbox';
+	checkbox.classList.add('anr-checkbox');
+	const id = checkboxId && !document.getElementById(checkboxId) ? checkboxId : 'anr-checkbox-' + (checkboxCnt++);
+	checkbox.id = id;
+	const label = document.createElement('label');
+	label.htmlFor = id;
+	label.textContent = labelText;
+	const wrapper = Reporter.createRow();
+	wrapper.appendChild(checkbox);
+	wrapper.appendChild(label);
+	return {wrapper, checkbox};
+}
 
-	return wrapper;
+/**
+ * Get a list of VIPs.
+ * @returns
+ */
+function getVipList(): JQueryPromise<string[]> {
+	return new mw.Api().get({
+		action: 'parse',
+		page: 'Wikipedia:進行中の荒らし行為',
+		prop: 'sections',
+		formatversion: '2'
+	}).then((res) => {
+
+		const resSect = res && res.parse && res.parse.sections; // undefined or array of objects
+		if (!resSect) return[];
+
+		// Define sections tiltles that are irrelevant to VIP names
+		const excludeList = [
+			'記述について',
+			'急を要する二段階',
+			'配列',
+			'ブロック等の手段',
+			'このページに利用者名を加える',
+			'注意と選択',
+			'警告の方法',
+			'未登録（匿名・IP）ユーザーの場合',
+			'登録済み（ログイン）ユーザーの場合',
+			'警告中',
+			'関連項目'
+		];
+
+		// Return a list
+		return resSect.reduce((acc: string[], {line, level}: {line: string, level: string}) => {
+			if (excludeList.indexOf(line) === -1 && level === '3') {
+				acc.push(line); // NAME in WP:VIP#NAME
+			}
+			return acc;
+		}, []);
+
+	}).catch((code, err) => {
+		console.log(err);
+		return [];
+	});
+}
+
+/**
+ * Get a list of LTAs.
+ * @returns
+ */
+function getLtaList(): JQueryPromise<string[]> {
+	return lib.continuedRequest({
+		action: 'query',
+		list: 'allpages',
+		apprefix: 'LTA:',
+		apnamespace: '0',
+		apfilterredir: 'redirects',
+		aplimit: 'max',
+		formatversion: '2'
+	}, Infinity)
+	.then((response) => {
+		return response.reduce((acc: string[], res) => {
+			const resPgs = res && res.query && res.query.allpages;
+			(resPgs || []).forEach(({title}: {title: string}) => {
+				if (/^LTA:[^/]+$/.test(title)) {
+					acc.push(title.replace(/^LTA:/, '')); // NAME in LTA:NAME
+				}
+			});
+			return acc;
+		}, []);
+	});
 }
 
 // ******************************************************************************************

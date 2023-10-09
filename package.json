@@ -19,6 +19,7 @@
     "@types/jqueryui": "^1.12.18",
     "@types/node": "^20.8.0",
     "@types/oojs-ui": "^0.47.2",
+    "@types/select2": "^4.0.59",
     "@typescript-eslint/eslint-plugin": "^6.7.3",
     "@typescript-eslint/parser": "^6.7.3",
     "eslint": "^8.50.0",
