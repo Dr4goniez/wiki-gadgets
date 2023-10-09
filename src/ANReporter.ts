@@ -782,11 +782,14 @@ class Reporter {
 		this.page = document.createElement('select');
 		this.page.classList.add('anr-juxtaposed'); // Important for the dropdown to fill the remaining space
 		this.page.innerHTML =
-			'<option selected disabled hidden>選択してください</option>' +
+			'<option selected disabled hidden value="">選択してください</option>' +
 			'<option>' + ANI + '</option>' +
 			'<option>' + ANS + '</option>' +
 			'<option>' + AN3RR + '</option>';
 		Reporter.wrapElement(pageWrapper, this.page); // As important as above
+		$(this.page).off('change').on('change', () => {
+			this.switchSectionDropdown();
+		});
 		this.$fieldset.append(pageWrapper);
 
 		// Create target page anchor
@@ -807,6 +810,9 @@ class Reporter {
 		this.section.innerHTML = '<option selected disabled hidden>選択してください</option>';
 		this.section.disabled = true;
 		Reporter.wrapElement(sectionWrapper, this.section);
+		$(this.section).off('change').on('change', () => {
+			this.setPageLink();
+		});
 		this.$fieldset.append(sectionWrapper);
 
 		// Create section option for ANS
@@ -817,6 +823,9 @@ class Reporter {
 		Reporter.wrapElement(section2Wrapper, section2);
 		this.$sectionAns = $(section2);
 		this.$fieldset.append(section2Wrapper);
+		this.$sectionAns.off('change').on('change', () => {
+			this.setPageLink();
+		});
 		Reporter.select2(this.$sectionAns);
 
 		// Create a user pane (which is supposed to be the widest row)
@@ -861,16 +870,10 @@ class Reporter {
 		const predefinedWrapper = Reporter.createRow(true);
 		Reporter.createLeftLabel(predefinedWrapper, '定型文');
 		const predefined = document.createElement('select');
-		['選択して挿入'].concat(this.cfg.reasons).forEach((reason, i) => {
-			const option = document.createElement('option');
-			option.textContent = reason;
-			if (i === 0) {
-				option.selected = true;
-				option.disabled = true;
-				option.hidden = true;
-			}
-			predefined.add(option);
-		});
+		addOptions(predefined, [
+			{text: '選択して挿入', value: '', disabled: true, selected: true, hidden: true},
+			...this.cfg.reasons.map((el) => ({text: el}))
+		]);
 		Reporter.wrapElement(predefinedWrapper, predefined);
 		this.$predefined = $(predefined);
 		this.$fieldset.append(predefinedWrapper);
@@ -1008,6 +1011,19 @@ class Reporter {
 	}
 
 	/**
+	 * Bring a jQuery UI dialog to the center of the viewport.
+	 */
+	static centerDialog($dialog: JQuery<HTMLDivElement>): void {
+		$dialog.dialog({
+			position: {
+				my: 'top',
+				at: 'top+5%',
+				of: window
+			}
+		});
+	}
+
+	/**
 	 * Create a new Reporter dialog. This static method handles asynchronous procedures that are necessary
 	 * after calling the constructor.
 	 * @param e
@@ -1113,16 +1129,141 @@ class Reporter {
 	}
 
 	/**
-	 * Bring a jQuery UI dialog to the center of the viewport.
+	 * Get `YYYY年MM月D1日 - D2日新規依頼`, relative to the current day.
+	 * @param getLast Whether to get the preceding section, defaulted to `false`.
+	 * @returns 
 	 */
-	static centerDialog($dialog: JQuery<HTMLDivElement>): void {
-		$dialog.dialog({
-			position: {
-				my: 'top',
-				at: 'top+5%',
-				of: window
+	static getCurrentAniSection(getLast = false): string {
+
+		const d = new Date();
+		let subtract;
+		if (getLast) {
+			if (d.getDate() === 1 || d.getDate() === 2) {
+				subtract = 3;
+			} else if (d.getDate() === 31) {
+				subtract = 6;
+			} else {
+				subtract = 5;
 			}
-		});
+			d.setDate(d.getDate() - subtract);
+		}
+
+		const multiplier = Math.ceil(d.getDate() / 5); // 1 to 7
+		let lastDay, startDay;
+		if (multiplier < 6) {
+			lastDay = 5 * multiplier; // 5,10,15,20,25
+			startDay = lastDay - 4; // 1,6,11,16,21
+		} else {
+			lastDay = Reporter.getLastDay(d.getFullYear(), d.getMonth()); // 28-31
+			startDay = 26;
+		}
+		return `${d.getFullYear()}年${d.getMonth() + 1}月${startDay}日 - ${lastDay}日新規報告`;
+
+	}
+
+	/**
+	 * Get the last day of a given month in a given year.
+	 * @param year A 4-digit year.
+	 * @param month The month as a number between 0 and 11 (January to December).
+	 * @returns 
+	 */
+	static getLastDay(year: number, month: number): number {
+		return new Date(year, month + 1, 0).getDate();
+	}
+
+	/**
+	 * Get the page to which to forward the report.
+	 * @returns
+	 */
+	getPage(): string|null {
+		return this.page.options[this.page.selectedIndex].value || null;
+	}
+
+	setPageLink(): Reporter {
+		const page = this.getPage();
+		if (page) {
+			this.pageLink.classList.remove('anr-disabledanchor');
+			this.pageLink.href = mw.util.getUrl(page + (this.getSection(true) || ''));
+		} else {
+			this.pageLink.classList.add('anr-disabledanchor');
+			this.pageLink.href = '';
+		}
+		return this;
+	}
+
+	/**
+	 * Get the selected section.
+	 * @param addHash Add '#' to the beginning when there's a value to return. (Default: `false`)
+	 * @returns
+	 */
+	getSection(addHash = false): string|null {
+		let ret: string|null = null;
+		switch (this.getPage()) {
+			case ANI:
+				ret = this.section.options[this.section.selectedIndex].value || null;
+				break;
+			case ANS:
+				ret = this.$sectionAns[0].options[this.$sectionAns[0].selectedIndex].value || null;
+				break;
+			case AN3RR:
+				ret = '3RR';
+				break;
+			default: // Section not selected
+		}
+		return ret && (addHash ? '#' : '') + ret;
+	}
+
+	/**
+	 * Switch the section dropdown options in accordance with the selection in the page dropdown.
+	 * This method calls {@link setPageLink} when done.
+	 * @returns
+	 */
+	switchSectionDropdown(): Reporter {
+		const page = this.getPage();
+		if (page) {
+			switch (page) {
+				case ANI:
+					this.section.disabled = false;
+					this.section.innerHTML = '';
+					addOptions(this.section, [
+						{text: '選択してください', value: '', disabled: true, selected: true, hidden: true},
+						{text: Reporter.getCurrentAniSection()},
+						{text: '不適切な利用者名'},
+						{text: '公開アカウント'},
+						{text: '公開プロキシ・ゾンビマシン・ボット・不特定多数'},
+						{text: '犯罪行為またはその疑いのある投稿'}
+					]);
+					this.$sectionWrapper.show();
+					this.$sectionAnsWrapper.hide();
+					break;
+				case ANS: {
+					console.log(this.$sectionAns[0].options);
+					this.$sectionAns.val('');
+					// const firstOpt = this.$sectionAns[0].options[0];
+					// Object.assign(firstOpt, {disabled: false, selected: false, hidden: false});
+					// this.$sectionAns[0].selectedIndex = 0;
+					// Object.assign(firstOpt, {disabled: true, selected: true, hidden: true});
+					// firstOpt.disabled = false;
+					// firstOpt.selected = true;
+					// firstOpt.disabled = true;
+					// this.$sectionAns[0].options[0].selected = true;
+					this.$sectionWrapper.hide();
+					this.$sectionAnsWrapper.show();
+					break; }
+				case AN3RR:
+					this.section.disabled = false;
+					this.section.innerHTML = '<option>3RR</option>';
+					this.$sectionWrapper.show();
+					this.$sectionAnsWrapper.hide();
+			}
+		} else {
+			this.section.disabled = true;
+			this.section.innerHTML = '<option disabled selected hidden value=""></option>';
+			this.$sectionWrapper.show();
+			this.$sectionAnsWrapper.hide();
+		}
+		this.setPageLink();
+		return this;
 	}
 
 	/**
@@ -1205,6 +1346,34 @@ function copyToClipboard(str: string): void {
 	msg.innerHTML = `<code>${str}</code>をクリップボードにコピーしました。`;
 	mw.notify(msg, {type: 'success'});
 
+}
+
+interface OptionElementData {
+	text: string;
+	value?: string;
+	disabled?: boolean;
+	selected?: boolean;
+	hidden?: boolean;
+}
+/**
+ * Add \<option>s to a dropdown by referring to object data.
+ * @param dropdown 
+ * @param data `text` is obligatory, and the other properties are optional.
+ * @returns The passed dropdown.
+ */
+function addOptions(dropdown: HTMLSelectElement, data: OptionElementData[]): HTMLSelectElement {
+	data.forEach(({text, value, disabled, selected, hidden}) => {
+		const option = document.createElement('option');
+		option.textContent = text;
+		if (value !== undefined) {
+			option.value = value;
+		}
+		option.disabled = !!disabled;
+		option.selected = !!selected;
+		option.hidden = !!hidden;
+		dropdown.add(option);
+	});
+	return dropdown;
 }
 
 let checkboxCnt = 0;
