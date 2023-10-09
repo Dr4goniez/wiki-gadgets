@@ -4,7 +4,8 @@
   "description": "A workspace to develop scripts for Wikipedia.",
   "main": "index.js",
   "scripts": {
-    "build": "tsc -p ."
+    "build": "tsc -p .",
+    "test": "ts-node src/test.ts"
   },
   "repository": {
     "type": "git",
@@ -23,6 +24,7 @@
     "@typescript-eslint/eslint-plugin": "^6.7.3",
     "@typescript-eslint/parser": "^6.7.3",
     "eslint": "^8.50.0",
+    "ts-node": "^10.9.1",
     "types-mediawiki": "^1.4.0",
     "typescript": "^5.2.2",
     "wp-lib-extra": "^1.1.0"
