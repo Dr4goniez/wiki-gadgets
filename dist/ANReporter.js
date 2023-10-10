@@ -260,7 +260,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     label: 'ポートレットID (上級)',
                     align: 'top',
                     help: new OO.ui.HtmlSnippet('<a href="https://doc.wikimedia.org/mediawiki-core/master/js/#!/api/mw.util" target="_blank">mw.util.addPortletLink</a>の' +
-                        '<code>portletId</code>を指定します。未指定または値が無効の場合、使用中のスキンに応じて自動的にリンクの生成位置が決定されます。')
+                        '<code style="font-family: inherit;">portletId</code>を指定します。未指定または値が無効の場合、使用中のスキンに応じて自動的にリンクの生成位置が決定されます。')
                 }),
             ]);
             // Append the fieldset to the container (do this here and get DOM elements in it)
@@ -392,8 +392,16 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             $label.append(textNode);
             this.saveButton.setIcon(null).setLabel($label);
             // Get config
+            var reasons = this.reasons.getValue().split('\n').reduce(function (acc, r) {
+                var rsn = lib.clean(r);
+                if (rsn && !acc.includes(rsn)) {
+                    acc.push(rsn);
+                }
+                return acc;
+            }, []);
+            this.reasons.setValue(reasons.join('\n'));
             var cfg = {
-                reasons: this.reasons.getValue().split('\n').filter(function (el) { return lib.clean(el); }),
+                reasons: reasons,
                 blockCheck: this.blockCheck.isSelected(),
                 duplicateCheck: this.duplicateCheck.isSelected(),
                 watchUser: this.watchUser.isSelected(),
@@ -546,9 +554,15 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 'color: gray;' +
                 'text-decoration: line-through;' +
                 '}' +
-                '.anr-dialog-userpane-types {' +
+                '.anr-option-usertype {' +
                 'float: right;' +
                 'margin-left: 0.3em;' +
+                '}' +
+                '.anr-option-removable > .anr-option-label {' +
+                'cursor: pointer;' +
+                '}' +
+                '.anr-option-removable > .anr-option-label:hover {' +
+                'background-color: #80ccff;' +
                 '}' +
                 '.anr-checkbox {' +
                 'margin-right: 0.5em;' +
@@ -676,24 +690,53 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.wrapElement(this.$sectionAnsWrapper, this.$sectionAns);
             this.$fieldset.append(this.$sectionAnsWrapper);
             Reporter.select2(this.$sectionAns);
-            // Create a user pane (which is supposed to be the widest row)
+            // Create an 'add' button
             this.$fieldset.append(document.createElement('hr'));
-            this.$fieldset.append(new UserPane().$wrapper);
+            var $newUserWrapper = Reporter.createRow();
+            this.$newUser = $('<input>');
+            this.$newUser.prop('type', 'button').val('追加');
+            $newUserWrapper.append(this.$newUser);
+            this.$fieldset.append($newUserWrapper);
+            this.$fieldset.append(document.createElement('hr'));
+            // Create a user pane 
+            this.Users = new UserCollection($newUserWrapper);
+            this.Users.add();
+            this.$newUser.off('click').on('click', function () {
+                var U = _this.Users.add(); // Add a new user pane when the 'add' button is clicked
+                // Add event handler to remove the pane when the label is SHIFT-clicked
+                U.$wrapper.addClass('anr-option-removable');
+                // eslint-disable-next-line @typescript-eslint/no-this-alias
+                var self = _this;
+                U.$label
+                    .off('click').on('click', function (e) {
+                    if (e.shiftKey) {
+                        self.Users.remove(this.id);
+                    }
+                })
+                    .prop('title', 'SHIFTクリックで除去')
+                    .tooltip();
+            });
             var dialogWith = this.$fieldset.outerWidth(true);
             this.$fieldset.css('width', dialogWith); // Assign an absolute width to $content
             this.$progress.css('width', dialogWith);
-            this.$fieldset.append(document.createElement('hr'));
             Reporter.centerDialog(this.$dialog); // Recenter the dialog because the width has been changed
+            /**
+             * (Bound to the change event of a \<select> element.)
+             *
+             * Copy the selected value to the clipboard and reset the selection.
+             * @param this
+             */
+            var copyThenResetSelection = function () {
+                copyToClipboard(this.value);
+                this.selectedIndex = 0;
+            };
             // Create VIP copier
             this.$vipWrapper = Reporter.createRow(true);
             Reporter.createLeftLabel(this.$vipWrapper, 'VIP');
             this.$vip = $('<select>');
             this.$vip
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
-                .off('change').on('change', function () {
-                copyToClipboard(this.value);
-                this.selectedIndex = 0;
-            });
+                .off('change').on('change', copyThenResetSelection);
             Reporter.wrapElement(this.$vipWrapper, this.$vip);
             this.$fieldset.append(this.$vipWrapper);
             Reporter.select2(this.$vip);
@@ -703,10 +746,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$lta = $('<select>');
             this.$lta
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
-                .off('change').on('change', function () {
-                copyToClipboard(this.value);
-                this.selectedIndex = 0;
-            });
+                .off('change').on('change', copyThenResetSelection);
             Reporter.wrapElement(this.$ltaWrapper, this.$lta);
             this.$fieldset.append(this.$ltaWrapper);
             Reporter.select2(this.$lta);
@@ -714,8 +754,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             var $predefinedWrapper = Reporter.createRow(true);
             Reporter.createLeftLabel($predefinedWrapper, '定型文');
             this.$predefined = addOptions($('<select>'), __spreadArray([
-                { text: '選択して挿入', value: '', disabled: true, selected: true, hidden: true }
+                { text: '選択してコピー', value: '', disabled: true, selected: true, hidden: true }
             ], this.cfg.reasons.map(function (el) { return ({ text: el }); }), true));
+            this.$predefined.off('change').on('change', copyThenResetSelection);
             Reporter.wrapElement($predefinedWrapper, this.$predefined);
             this.$fieldset.append($predefinedWrapper);
             Reporter.select2(this.$predefined);
@@ -1079,6 +1120,12 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             return this;
         };
         /**
+         * Close the Reporter dialog. (The dialog will be destroyed.)
+         */
+        // close(): void {
+        // 	this.$dialog.dialog('close');
+        // }
+        /**
          * Destroy the Reporter dialog.
          */
         Reporter.prototype.destroy = function () {
@@ -1086,38 +1133,91 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         };
         return Reporter;
     }());
-    /**
-     * The UserPane class. An instance of this handles a User field row on the main dialog.
-     */
-    var UserPane = /** @class */ (function () {
+    var UserCollection = /** @class */ (function () {
+        function UserCollection($next) {
+            this.$next = $next;
+            this.collection = [];
+        }
         /**
-         * Create the following structure.
+         * Add a new user pane to the {@link Reporter} and {@link UserCollection} instances.
+         * @returns The newly-initialized {@link User} instance.
+         */
+        UserCollection.prototype.add = function () {
+            var U = new User(this.$next);
+            this.collection.push(U);
+            return U;
+        };
+        /**
+         * Remove a user pane from the {@link Reporter} and {@link UserCollection} instances.
+         * @param id
+         * @returns
+         */
+        UserCollection.prototype.remove = function (id) {
+            var idx = this.collection.findIndex(function (U) { return U.id === id; });
+            if (idx !== -1) { // Should never be -1
+                this.collection[idx].$wrapper.remove();
+                this.collection.splice(idx, 1);
+            }
+            return this;
+        };
+        return UserCollection;
+    }());
+    var userPaneCnt = 0;
+    /**
+     * The User class. An instance of this handles a User field row on the Reporter dialog.
+     */
+    var User = /** @class */ (function () {
+        /**
+         * Create a user pane of the Reporter dialog with the following structure.
          * ```html
-         * <div class="anr-dialog-userpane">
+         * <div class="anr-option-row">
          * 	<div class="anr-option-label">利用者</div> <!-- float: left; -->
-         * 	<div class="anr-dialog-userpane-types"> <!-- float: right; -->
+         * 	<div class="anr-option-usertype"> <!-- float: right; -->
          * 		<select>...</select>
          * 	</div>
          * 	<div class="anr-option-wrapper"> <!-- overflow: hidden; -->
-         * 		<input class="anr-dialog-userpane-user anr-juxtaposed"> <!-- width: 100%; -->
+         * 		<input class="anr-option-username anr-juxtaposed"> <!-- width: 100%; -->
          * 	</div>
          * </div>
+         * <!-- ADD BUTTON HERE -->
          * ```
+         * @param $next The element before which to create a user pane.
          */
-        function UserPane() {
-            this.$wrapper = $('<div>');
-            this.$wrapper.addClass('anr-dialog-userpane');
-            Reporter.createLeftLabel(this.$wrapper, '利用者');
-            var $typeWrapper = $('<div>').addClass('anr-dialog-userpane-types');
+        function User($next) {
+            this.$wrapper = Reporter.createRow();
+            /*!
+             * Make it possible to remove the user pane when the label is SHIFT-clicked.
+             * However, the event needs to be resolved by a prototype method of UserCollection,
+             * so the event handler is attached in the constructor of Reporter that initializes
+             * an instance of UserCollection.
+             */
+            this.id = 'anr-dialog-userpane-' + (userPaneCnt++);
+            this.$label = Reporter.createLeftLabel(this.$wrapper, '利用者').prop('id', this.id);
+            var $typeWrapper = $('<div>').addClass('anr-option-usertype');
             this.$type = $('<select>');
             addOptions(this.$type, ['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map(function (el) { return ({ text: el }); }));
             $typeWrapper.append(this.$type);
             this.$wrapper.append($typeWrapper);
             this.$input = $('<input>');
-            this.$input.prop('type', 'text').addClass('anr-dialog-userpane-user');
+            this.$input.prop('type', 'text').addClass('anr-option-username');
             Reporter.wrapElement(this.$wrapper, this.$input);
+            $next.before(this.$wrapper);
         }
-        return UserPane;
+        /**
+         * Get the username in the textbox.
+         * @returns
+         */
+        User.prototype.getName = function () {
+            return lib.clean(this.$input.val()) || null;
+        };
+        /**
+         * Get the UserAN type selected in the dropdown.
+         * @returns
+         */
+        User.prototype.getType = function () {
+            return this.$type.find('option:selected').val();
+        };
+        return User;
     }());
     /**
      * Copy a string to the clipboard.
@@ -1131,7 +1231,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         document.execCommand('copy'); // Copy it to the clipboard
         temp.remove();
         var msg = document.createElement('div');
-        msg.innerHTML = "<code>".concat(str, "</code>\u3092\u30AF\u30EA\u30C3\u30D7\u30DC\u30FC\u30C9\u306B\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\u3002");
+        msg.innerHTML = "<code style=\"font-family: inherit;\">".concat(str, "</code>\u3092\u30AF\u30EA\u30C3\u30D7\u30DC\u30FC\u30C9\u306B\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\u3002");
         mw.notify(msg, { type: 'success' });
     }
     /**
