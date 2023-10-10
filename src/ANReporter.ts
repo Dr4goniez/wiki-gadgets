@@ -588,7 +588,7 @@ function createStyleTag(cfg: ANReporterConfig): void {
 			'margin-bottom: 0.5em;' +
 		'}' +
 		// Dialog
-		'.anr-dialog-spinner {' +
+		'.anr-dialog-progress {' +
 			'padding: 1em;' +
 		'}' +
 		'#anr-dialog-optionfield {' +
@@ -601,6 +601,7 @@ function createStyleTag(cfg: ANReporterConfig): void {
 			'padding-bottom: 0;' +
 		'}' +
 		'#anr-dialog-optionfield hr {' +
+			'clear: all;' +
 			'margin: 0.8em 0;' +
 			'background-color: gray;' +
 		'}' +
@@ -686,22 +687,20 @@ class Reporter {
 	cfg: ANReporterConfig;
 	/** The Reporter dialog. */
 	$dialog: JQuery<HTMLDivElement>;
-	/** The wrapper of the div with a spinner. */
-	$spinner: JQuery<HTMLDivElement>;
-	/** The label of the spinner image. */
-	$spinnerLabel: JQuery<HTMLSpanElement>;
+	/** The wrapper of the div to show the progress of a dialog procedure. */
+	$progress: JQuery<HTMLDivElement>;
 	/** The inner content wrapper of the dialog. */
 	$content: JQuery<HTMLDivElement>;
 	/** The fieldset that contains main dialog options on $content. */
 	$fieldset: JQuery<HTMLFieldSetElement>;
 	/** The page selector dropdown. */
-	page: HTMLSelectElement;
+	$page: JQuery<HTMLSelectElement>;
 	/** The link to (the section in) the page to which to forward the report. */
-	pageLink: HTMLAnchorElement;
+	$pageLink: JQuery<HTMLAnchorElement>;
 	/** The wrapper row for the section selector dropdown for ANI and AN3RR. */
 	$sectionWrapper: JQuery<HTMLDivElement>;
 	/** The section selector dropdown for ANI and AN3RR. */
-	section: HTMLSelectElement;
+	$section: JQuery<HTMLSelectElement>;
 	/** The wrapper row for the select2 section selector dropdown for ANS. */
 	$sectionAnsWrapper: JQuery<HTMLDivElement>;
 	/** The select2 section selector dropdown for ANS. */
@@ -717,19 +716,19 @@ class Reporter {
 	/** The select2 predefined reason dropdown. */
 	$predefined: JQuery<HTMLSelectElement>;
 	/** The text field for report reasons. */
-	reason: HTMLTextAreaElement;
+	$reason: JQuery<HTMLTextAreaElement>;
 	/** The checkbox for whether to add a comment to the report summary. */
-	addComment: HTMLInputElement;
+	$addComment: JQuery<HTMLInputElement>;
 	/** The text field to specify an additional comment to the report summary. */
-	comment: HTMLTextAreaElement;
+	$comment: JQuery<HTMLTextAreaElement>;
 	/** The checkbox for whether to check the block statuses of reportees before submitting the report. */
-	checkBlock: HTMLInputElement;
+	$checkBlock: JQuery<HTMLInputElement>;
 	/** The checkbox for whether to check existing duplicate reports before submitting the report. */
-	checkDuplicates: HTMLInputElement;
+	$checkDuplicates: JQuery<HTMLInputElement>;
 	/** The checkbox for whether to watch the reportees. */
-	watchUser: HTMLInputElement;
+	$watchUser: JQuery<HTMLInputElement>;
 	/** The dropdown to specify the expiration time of watching the reportees. */
-	watchExpiry: HTMLSelectElement;
+	$watchExpiry: JQuery<HTMLSelectElement>;
 
 	/**
 	 * Initializes a `Reporter` instance. This constructor only creates the base components of the dialog, and
@@ -753,15 +752,14 @@ class Reporter {
 			}
 		});
 
-		// Create spinner container
-		this.$spinner = $('<div>');
-		this.$spinner.addClass('anr-dialog-spinner');
-		this.$spinnerLabel = $('<span>');
-		this.$spinnerLabel.text('読み込み中');
-		const spinnerImg = lib.getIcon('load');
-		spinnerImg.style.marginLeft = '0.5em';
-		this.$spinner.append(this.$spinnerLabel, spinnerImg);
-		this.$dialog.append(this.$spinner);
+		// Create progress container
+		this.$progress = $('<div>');
+		this.$progress.addClass('anr-dialog-progress');
+		this.$progress.append(
+			document.createTextNode('読み込み中'),
+			$(lib.getIcon('load')).css('margin-left', '0.5em')
+		);
+		this.$dialog.append(this.$progress);
 
 		// Create option container
 		this.$content = $('<div>');
@@ -777,158 +775,178 @@ class Reporter {
 		this.$content.append(this.$fieldset);
 
 		// Create target page option
-		const pageWrapper = Reporter.createRow();
-		Reporter.createLeftLabel(pageWrapper, '報告先');
-		this.page = document.createElement('select');
-		this.page.classList.add('anr-juxtaposed'); // Important for the dropdown to fill the remaining space
-		this.page.innerHTML =
-			'<option selected disabled hidden value="">選択してください</option>' +
-			'<option>' + ANI + '</option>' +
-			'<option>' + ANS + '</option>' +
-			'<option>' + AN3RR + '</option>';
-		Reporter.wrapElement(pageWrapper, this.page); // As important as above
-		$(this.page).off('change').on('change', () => {
-			this.switchSectionDropdown();
-		});
-		this.$fieldset.append(pageWrapper);
+		const $pageWrapper = Reporter.createRow();
+		Reporter.createLeftLabel($pageWrapper, '報告先');
+		this.$page = $('<select>');
+		this.$page
+			.addClass('anr-juxtaposed') // Important for the dropdown to fill the remaining 
+			.prop('innerHTML',
+				'<option selected disabled hidden value="">選択してください</option>' +
+				'<option>' + ANI + '</option>' +
+				'<option>' + ANS + '</option>' +
+				'<option>' + AN3RR + '</option>'
+			)
+			.off('change').on('change', () => {
+				this.switchSectionDropdown();
+			});
+		Reporter.wrapElement($pageWrapper, this.$page); // As important as above
+		this.$fieldset.append($pageWrapper);
 
 		// Create target page anchor
-		const pageLinkWrapper = Reporter.createRow();
-		Reporter.createLeftLabel(pageLinkWrapper, '&nbsp;');
-		this.pageLink = document.createElement('a');
-		this.pageLink.target = '_blank';
-		this.pageLink.textContent = '報告先を確認';
-		this.pageLink.classList.add('anr-disabledanchor'); // Disable the anchor by default
-		pageLinkWrapper.appendChild(this.pageLink);
-		this.$fieldset.append(pageLinkWrapper);
+		const $pageLinkWrapper = Reporter.createRow();
+		Reporter.createLeftLabel($pageLinkWrapper, '&nbsp;');
+		this.$pageLink = $('<a>');
+		this.$pageLink
+			.addClass('anr-disabledanchor') // Disable the anchor by default
+			.text('報告先を確認')
+			.prop('target', '_blank');
+		$pageLinkWrapper.append(this.$pageLink);
+		this.$fieldset.append($pageLinkWrapper);
 
 		// Create section option for ANI and AN3RR
-		const sectionWrapper = Reporter.createRow();
-		this.$sectionWrapper = $(sectionWrapper);
-		Reporter.createLeftLabel(sectionWrapper, '節');
-		this.section = document.createElement('select');
-		this.section.innerHTML = '<option selected disabled hidden>選択してください</option>';
-		this.section.disabled = true;
-		Reporter.wrapElement(sectionWrapper, this.section);
-		$(this.section).off('change').on('change', () => {
-			this.setPageLink();
-		});
-		this.$fieldset.append(sectionWrapper);
+		this.$sectionWrapper = Reporter.createRow();
+		Reporter.createLeftLabel(this.$sectionWrapper, '節');
+		this.$section = $('<select>');
+		this.$section
+			.prop({
+				innerHTML: '<option selected disabled hidden value="">選択してください</option>',
+				disabled: true
+			})
+			.off('change').on('change', () => {
+				this.setPageLink();
+			});
+		Reporter.wrapElement(this.$sectionWrapper, this.$section);
+		this.$fieldset.append(this.$sectionWrapper);
 
 		// Create section option for ANS
-		const section2Wrapper = Reporter.createRow(true);
-		this.$sectionAnsWrapper = $(section2Wrapper);
-		Reporter.createLeftLabel(section2Wrapper, '節');
-		const section2 = document.createElement('select'); // Options are created in `new`
-		Reporter.wrapElement(section2Wrapper, section2);
-		this.$sectionAns = $(section2);
-		this.$fieldset.append(section2Wrapper);
-		this.$sectionAns.off('change').on('change', () => {
-			this.setPageLink();
-		});
+		this.$sectionAnsWrapper = Reporter.createRow(true);
+		Reporter.createLeftLabel(this.$sectionAnsWrapper, '節');
+		this.$sectionAns = $('<select>');
+		this.$sectionAns
+			.prop('innerHTML',
+				'<option selected disabled hidden value="">選択してください</option>' +
+				'<optgroup label="系列が立てられていないもの">' +
+					'<option>著作権侵害・犯罪予告</option>' +
+					'<option>名誉毀損・なりすまし・個人情報</option>' +
+					'<option>妨害編集・いたずら</option>' +
+					'<option>その他</option>' +
+				'</optgroup>'
+			)
+			.off('change').on('change', () => {
+				this.setPageLink();
+			});
+		Reporter.wrapElement(this.$sectionAnsWrapper, this.$sectionAns);
+		this.$fieldset.append(this.$sectionAnsWrapper);
 		Reporter.select2(this.$sectionAns);
 
 		// Create a user pane (which is supposed to be the widest row)
 		this.$fieldset.append(document.createElement('hr'));
-		this.$fieldset.append(new UserPane().wrapper);
+		this.$fieldset.append(new UserPane().$wrapper);
 		const dialogWith = this.$fieldset.outerWidth(true)!;
 		this.$fieldset.css('width', dialogWith); // Assign an absolute width to $content
-		this.$spinner.css('width', dialogWith);
+		this.$progress.css('width', dialogWith);
 		this.$fieldset.append(document.createElement('hr'));
 		Reporter.centerDialog(this.$dialog); // Recenter the dialog because the width has been changed
 
 		// Create VIP copier
-		const vipWrapper = Reporter.createRow(true);
-		vipWrapper.style.clear = 'all';
-		this.$vipWrapper = $(vipWrapper);
-		Reporter.createLeftLabel(vipWrapper, 'VIP');
-		const vip = document.createElement('select'); // Options are created in `new`
-		Reporter.wrapElement(vipWrapper, vip);
-		this.$vip = $(vip);
-		this.$vip.off('change').on('change', function() {
-			copyToClipboard(this.value);
-			this.selectedIndex = 0;
-		});
-		this.$fieldset.append(vipWrapper);
+		this.$vipWrapper = Reporter.createRow(true);
+		Reporter.createLeftLabel(this.$vipWrapper, 'VIP');
+		this.$vip = $('<select>');
+		this.$vip
+			.prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
+			.off('change').on('change', function() {
+				copyToClipboard(this.value);
+				this.selectedIndex = 0;
+			});
+		Reporter.wrapElement(this.$vipWrapper, this.$vip);
+		this.$fieldset.append(this.$vipWrapper);
 		Reporter.select2(this.$vip);
 
 		// Create LTA copier
-		const ltaWrapper = Reporter.createRow(true);
-		this.$ltaWrapper = $(ltaWrapper);
-		Reporter.createLeftLabel(ltaWrapper, 'LTA');
-		const lta = document.createElement('select'); // Options are created in `new`
-		Reporter.wrapElement(ltaWrapper, lta);
-		this.$lta = $(lta);
-		this.$lta.off('change').on('change', function() {
-			copyToClipboard(this.value);
-			this.selectedIndex = 0;
-		});
-		this.$fieldset.append(ltaWrapper);
+		this.$ltaWrapper = Reporter.createRow(true);
+		Reporter.createLeftLabel(this.$ltaWrapper, 'LTA');
+		this.$lta = $('<select>');
+		this.$lta
+			.prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
+			.off('change').on('change', function() {
+				copyToClipboard(this.value);
+				this.selectedIndex = 0;
+			});
+		Reporter.wrapElement(this.$ltaWrapper, this.$lta);
+		this.$fieldset.append(this.$ltaWrapper);
 		Reporter.select2(this.$lta);
 
 		// Create predefined reason selector
-		const predefinedWrapper = Reporter.createRow(true);
-		Reporter.createLeftLabel(predefinedWrapper, '定型文');
-		const predefined = document.createElement('select');
-		addOptions(predefined, [
+		const $predefinedWrapper = Reporter.createRow(true);
+		Reporter.createLeftLabel($predefinedWrapper, '定型文');
+		this.$predefined = addOptions($('<select>'), [
 			{text: '選択して挿入', value: '', disabled: true, selected: true, hidden: true},
 			...this.cfg.reasons.map((el) => ({text: el}))
 		]);
-		Reporter.wrapElement(predefinedWrapper, predefined);
-		this.$predefined = $(predefined);
-		this.$fieldset.append(predefinedWrapper);
+		Reporter.wrapElement($predefinedWrapper, this.$predefined);
+		this.$fieldset.append($predefinedWrapper);
 		Reporter.select2(this.$predefined);
 
 		// Create reason field
-		const reasonWrapper = Reporter.createRow();
-		Reporter.createLeftLabel(reasonWrapper, '理由');
-		this.reason = document.createElement('textarea');
-		this.reason.id = 'anr-option-reason';
-		this.reason.rows = 5;
-		this.reason.placeholder = '署名不要';
-		reasonWrapper.appendChild(this.reason);
-		this.$fieldset.append(reasonWrapper);
+		const $reasonWrapper = Reporter.createRow();
+		Reporter.createLeftLabel($reasonWrapper, '理由');
+		this.$reason = $('<textarea>');
+		this.$reason.prop({
+			id: 'anr-option-reason',
+			rows: 5,
+			placeholder: '署名不要'
+		});
+		$reasonWrapper.append(this.$reason);
+		this.$fieldset.append($reasonWrapper);
 
 		// Create "add comment" option
 		const addCommentElements = createLabelledCheckbox('要約にコメントを追加', 'anr-option-addcomment');
-		this.addComment = addCommentElements.checkbox;
-		this.$fieldset.append(addCommentElements.wrapper);
-		this.comment = document.createElement('textarea');
-		this.comment.id = 'anr-option-comment';
-		this.comment.rows = 2;
-		addCommentElements.wrapper.appendChild(this.comment);
+		this.$addComment = addCommentElements.$checkbox;
+		this.$fieldset.append(addCommentElements.$wrapper);
+		this.$comment = $('<textarea>');
+		this.$comment.prop({
+			id: 'anr-option-comment',
+			rows: 2
+		});
+		addCommentElements.$wrapper.append(this.$comment);
 
 		// Create "block check" option
 		const checkBlockElements = createLabelledCheckbox('報告前にブロック状態をチェック', 'anr-option-checkblock');
-		this.checkBlock = checkBlockElements.checkbox;
-		this.$fieldset.append(checkBlockElements.wrapper);
+		this.$checkBlock = checkBlockElements.$checkbox;
+		this.$fieldset.append(checkBlockElements.$wrapper);
 
 		// Create "duplicate check" option
 		const checkDuplicatesElements = createLabelledCheckbox('報告前に重複報告をチェック', 'anr-option-checkduplicates');
-		this.checkDuplicates = checkDuplicatesElements.checkbox;
-		this.$fieldset.append(checkDuplicatesElements.wrapper);
+		this.$checkDuplicates = checkDuplicatesElements.$checkbox;
+		this.$fieldset.append(checkDuplicatesElements.$wrapper);
 
 		// Create "watch user" option
 		const watchUserElements = createLabelledCheckbox('報告対象者をウォッチ', 'anr-option-watchuser');
-		this.watchUser = watchUserElements.checkbox;
-		this.$fieldset.append(watchUserElements.wrapper);
-		this.watchExpiry = document.createElement('select');
-		this.watchExpiry.id = 'anr-option-watchexpiry';
-		this.watchExpiry.innerHTML =
-			'<option value="infinity">無期限</option>' +
-			'<option value="1 week">1週間</option>' +
-			'<option value="2 weeks">2週間</option>' +
-			'<option value="1 month">1か月</option>' +
-			'<option value="3 months">3か月</option>' +
-			'<option value="6 months">6か月</option>' +
-			'<option value="1 year">1年</option>';
-		const watchExpiryWrapper = document.createElement('div');
-		watchExpiryWrapper.id = 'anr-option-watchexpiry-wrapper';
-		watchExpiryWrapper.style.marginLeft = $(this.watchUser).outerWidth(true)! + 'px';
-		watchExpiryWrapper.style.marginTop = '0.3em';
-		watchExpiryWrapper.appendChild(document.createTextNode('期限: '));
-		watchExpiryWrapper.appendChild(this.watchExpiry);
-		watchUserElements.wrapper.appendChild(watchExpiryWrapper);
+		this.$watchUser = watchUserElements.$checkbox;
+		this.$fieldset.append(watchUserElements.$wrapper);
+		this.$watchExpiry = $('<select>');
+		this.$watchExpiry.prop({
+			id: 'anr-option-watchexpiry',
+			innerHTML:	'<option value="infinity">無期限</option>' +
+						'<option value="1 week">1週間</option>' +
+						'<option value="2 weeks">2週間</option>' +
+						'<option value="1 month">1か月</option>' +
+						'<option value="3 months">3か月</option>' +
+						'<option value="6 months">6か月</option>' +
+						'<option value="1 year">1年</option>'
+		});
+		const $watchExpiryWrapper = $('<div>');
+		$watchExpiryWrapper
+			.prop({id: 'anr-option-watchexpiry-wrapper'})
+			.css({
+				marginLeft: this.$watchUser.outerWidth(true)! + 'px',
+				marginTop: '0.3em'
+			})
+			.append(
+				document.createTextNode('期限: '),
+				this.$watchExpiry
+			);
+		watchUserElements.$wrapper.append($watchExpiryWrapper);
 
 		// Set all the left labels to the same width
 		const $labels = $('.anr-option-label');
@@ -938,14 +956,14 @@ class Reporter {
 			(el: HTMLElement) => el.offsetWidth // Collect the widths of all left labels
 		);
 		const optionWidth = Math.max(...optionsWidths); // Get the max value
-		$labels.css('width', optionWidth); // Set the value to all
+		$labels.css('min-width', optionWidth); // Set the value to all
 
 		// Make some wrappers invisible
 		this.$sectionAnsWrapper.hide();
 		this.$vipWrapper.hide();
 		this.$ltaWrapper.hide();
-		if (predefined.querySelectorAll('option').length < 2) {
-			$(predefinedWrapper).hide();
+		if (this.$predefined.find('option').length < 2) {
+			$predefinedWrapper.hide();
 		}
 		this.$content.hide();
 
@@ -956,24 +974,23 @@ class Reporter {
 	 * @param hasSelect2 `false` by default. If true, create `<div class="anr-option-row-withselect2"></div>`.
 	 * @returns The created row.
 	 */
-	static createRow(hasSelect2 = false): HTMLDivElement {
-		const row = document.createElement('div');
-		row.classList.add(!hasSelect2 ? 'anr-option-row' : 'anr-option-row-withselect2');
-		return row;
+	static createRow(hasSelect2 = false): JQuery<HTMLDivElement> {
+		const $row: JQuery<HTMLDivElement> = $('<div>');
+		$row.addClass(!hasSelect2 ? 'anr-option-row' : 'anr-option-row-withselect2');
+		return $row;
 	}
 
 	/**
 	 * Create a \<div> that works as a left-aligned label.
-	 * @param appendTo The element to which to append the label.
+	 * @param $appendTo The element to which to append the label.
 	 * @param labelText The text of the label (in fact the innerHTML).
 	 * @returns The created label.
 	 */
-	static createLeftLabel(appendTo: HTMLElement, labelText: string): HTMLDivElement {
-		const label = document.createElement('div');
-		label.classList.add('anr-option-label');
-		label.innerHTML = labelText;
-		appendTo.appendChild(label);
-		return label;
+	static createLeftLabel($appendTo: JQuery<HTMLElement>, labelText: string): JQuery<HTMLDivElement> {
+		const $label: JQuery<HTMLDivElement> = $('<div>');
+		$label.addClass('anr-option-label').prop('innerHTML', labelText);
+		$appendTo.append($label);
+		return $label;
 	}
 
 	/**
@@ -986,17 +1003,17 @@ class Reporter {
 	 * 	</div>
 	 * </div>
 	 * ```
-	 * @param appendTo The element to which to append the wrapper div.
-	 * @param element The element to wrap.
+	 * @param $appendTo The element to which to append the wrapper div.
+	 * @param $element The element to wrap.
 	 * @returns The wrapper div.
 	 */
-	static wrapElement(appendTo: HTMLDivElement, element: HTMLSelectElement|HTMLInputElement): HTMLDivElement {
-		const wrapper = document.createElement('div');
-		wrapper.classList.add('anr-option-wrapper');
-		element.classList.add('anr-juxtaposed');
-		wrapper.appendChild(element);
-		appendTo.appendChild(wrapper);
-		return wrapper;
+	static wrapElement($appendTo: JQuery<HTMLElement>, $element: JQuery<HTMLElement>): JQuery<HTMLDivElement> {
+		const $wrapper: JQuery<HTMLDivElement> = $('<div>');
+		$wrapper.addClass('anr-option-wrapper');
+		$element.addClass('anr-juxtaposed');
+		$wrapper.append($element);
+		$appendTo.append($wrapper);
+		return $wrapper;
 	}
 
 	/**
@@ -1041,14 +1058,6 @@ class Reporter {
 		.then((Wkt, vipList, ltaList) => {
 
 			// Initialize the ANS section dropdown
-			R.$sectionAns[0].innerHTML =
-				'<option selected disabled hidden>選択してください</option>' +
-				'<optgroup label="系列が立てられていないもの">' +
-					'<option>著作権侵害・犯罪予告</option>' +
-					'<option>名誉毀損・なりすまし・個人情報</option>' +
-					'<option>妨害編集・いたずら</option>' +
-					'<option>その他</option>' +
-				'</optgroup>';
 			if (Wkt) {
 				const exclude = [
 					'top',
@@ -1093,7 +1102,6 @@ class Reporter {
 
 			// Initialize the VIP copier dropdown
 			if (vipList.length) {
-				R.$vip[0].innerHTML = '<option selected disabled hidden>選択してコピー</option>';
 				const optgroup = document.createElement('optgroup');
 				optgroup.style.display = 'none'; // Wrap with optgroup to adjust font size
 				vipList.forEach((vip) => {
@@ -1108,7 +1116,6 @@ class Reporter {
 
 			// Initialize the LTA copier dropdown
 			if (ltaList.length) {
-				R.$lta[0].innerHTML = '<option selected disabled hidden>選択してコピー</option>';
 				const optgroup = document.createElement('optgroup');
 				optgroup.style.display = 'none'; // Wrap with optgroup to adjust font size
 				ltaList.forEach((lta) => {
@@ -1121,7 +1128,7 @@ class Reporter {
 				R.$ltaWrapper.show();
 			}
 
-			R.$spinner.hide();
+			R.$progress.empty().hide();
 			R.$content.show();
 
 		});
@@ -1151,8 +1158,8 @@ class Reporter {
 		const multiplier = Math.ceil(d.getDate() / 5); // 1 to 7
 		let lastDay, startDay;
 		if (multiplier < 6) {
-			lastDay = 5 * multiplier; // 5,10,15,20,25
-			startDay = lastDay - 4; // 1,6,11,16,21
+			lastDay = 5 * multiplier; // 5, 10, 15, 20, 25
+			startDay = lastDay - 4; // 1, 6, 11, 16, 21
 		} else {
 			lastDay = Reporter.getLastDay(d.getFullYear(), d.getMonth()); // 28-31
 			startDay = 26;
@@ -1176,17 +1183,23 @@ class Reporter {
 	 * @returns
 	 */
 	getPage(): string|null {
-		return this.page.options[this.page.selectedIndex].value || null;
+		return <string>this.$page.find('option:selected').val() || null;
 	}
 
+	/**
+	 * Set an href to {@link $pageLink}. If {@link $page} is not selected, disable the anchor.
+	 * @returns
+	 */
 	setPageLink(): Reporter {
 		const page = this.getPage();
 		if (page) {
-			this.pageLink.classList.remove('anr-disabledanchor');
-			this.pageLink.href = mw.util.getUrl(page + (this.getSection(true) || ''));
+			this.$pageLink
+				.removeClass('anr-disabledanchor')
+				.prop('href', mw.util.getUrl(page + (this.getSection(true) || '')));
 		} else {
-			this.pageLink.classList.add('anr-disabledanchor');
-			this.pageLink.href = '';
+			this.$pageLink
+				.addClass('anr-disabledanchor')
+				.prop('href', '');
 		}
 		return this;
 	}
@@ -1200,10 +1213,10 @@ class Reporter {
 		let ret: string|null = null;
 		switch (this.getPage()) {
 			case ANI:
-				ret = this.section.options[this.section.selectedIndex].value || null;
+				ret = <string>this.$section.find('option:selected').val() || null;
 				break;
 			case ANS:
-				ret = this.$sectionAns[0].options[this.$sectionAns[0].selectedIndex].value || null;
+				ret = <string>this.$sectionAns.find('option:selected').val() || null;
 				break;
 			case AN3RR:
 				ret = '3RR';
@@ -1223,9 +1236,8 @@ class Reporter {
 		if (page) {
 			switch (page) {
 				case ANI:
-					this.section.disabled = false;
-					this.section.innerHTML = '';
-					addOptions(this.section, [
+					this.$section.prop('disabled', false).empty();
+					addOptions(this.$section, [
 						{text: '選択してください', value: '', disabled: true, selected: true, hidden: true},
 						{text: Reporter.getCurrentAniSection()},
 						{text: '不適切な利用者名'},
@@ -1235,34 +1247,31 @@ class Reporter {
 					]);
 					this.$sectionWrapper.show();
 					this.$sectionAnsWrapper.hide();
+					this.setPageLink();
 					break;
-				case ANS: {
-					console.log(this.$sectionAns[0].options);
-					this.$sectionAns.val('');
-					// const firstOpt = this.$sectionAns[0].options[0];
-					// Object.assign(firstOpt, {disabled: false, selected: false, hidden: false});
-					// this.$sectionAns[0].selectedIndex = 0;
-					// Object.assign(firstOpt, {disabled: true, selected: true, hidden: true});
-					// firstOpt.disabled = false;
-					// firstOpt.selected = true;
-					// firstOpt.disabled = true;
-					// this.$sectionAns[0].options[0].selected = true;
+				case ANS:
+					this.$sectionAns.val('').trigger('change'); // For select2. This triggers `setPageLink`.
 					this.$sectionWrapper.hide();
 					this.$sectionAnsWrapper.show();
-					break; }
+					break;
 				case AN3RR:
-					this.section.disabled = false;
-					this.section.innerHTML = '<option>3RR</option>';
+					this.$section.prop({
+						disabled: false,
+						innerHTML: '<option>3RR</option>'
+					});
 					this.$sectionWrapper.show();
 					this.$sectionAnsWrapper.hide();
+					this.setPageLink();
 			}
 		} else {
-			this.section.disabled = true;
-			this.section.innerHTML = '<option disabled selected hidden value=""></option>';
+			this.$section.prop({
+				disabled: true,
+				innerHTML: '<option disabled selected hidden value="">選択してください</option>'
+			});
 			this.$sectionWrapper.show();
 			this.$sectionAnsWrapper.hide();
+			this.setPageLink();
 		}
-		this.setPageLink();
 		return this;
 	}
 
@@ -1281,13 +1290,11 @@ class Reporter {
 class UserPane {
 
 	/** The wrapper row. */
-	wrapper: HTMLDivElement;
+	$wrapper: JQuery<HTMLDivElement>;
 	/** The username input. */
-	input: HTMLInputElement;
+	$input: JQuery<HTMLInputElement>;
 	/** The type dropdown. */
-	type: HTMLSelectElement;
-	/** The options of the type dropdown. */
-	options: HTMLOptionElement[];
+	$type: JQuery<HTMLSelectElement>;
 
 	/**
 	 * Create the following structure.
@@ -1305,26 +1312,21 @@ class UserPane {
 	 */
 	constructor() {
 
-		this.wrapper = document.createElement('div');
-		this.wrapper.classList.add('anr-dialog-userpane');
-		Reporter.createLeftLabel(this.wrapper, '利用者');
+		this.$wrapper = $('<div>');
+		this.$wrapper.addClass('anr-dialog-userpane');
+		Reporter.createLeftLabel(this.$wrapper, '利用者');
 
-		const typeWrapper = document.createElement('div');
-		typeWrapper.classList.add('anr-dialog-userpane-types');
-		this.type = document.createElement('select');
-		this.options = ['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map((t) => {
-			const option = document.createElement('option');
-			option.textContent = t;
-			this.type.add(option);
-			return option;
-		});
-		typeWrapper.appendChild(this.type);
-		this.wrapper.appendChild(typeWrapper);
+		const $typeWrapper = $('<div>').addClass('anr-dialog-userpane-types');
+		this.$type = $('<select>');
+		addOptions(this.$type,
+			['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map((el) => ({text: el}))
+		);
+		$typeWrapper.append(this.$type);
+		this.$wrapper.append($typeWrapper);
 
-		this.input = document.createElement('input');
-		this.input.type = 'text';
-		this.input.classList.add('anr-dialog-userpane-user');
-		Reporter.wrapElement(this.wrapper, this.input);
+		this.$input = $('<input>');
+		this.$input.prop('type', 'text').addClass('anr-dialog-userpane-user');
+		Reporter.wrapElement(this.$wrapper, this.$input);
 
 	}
 }
@@ -1357,11 +1359,11 @@ interface OptionElementData {
 }
 /**
  * Add \<option>s to a dropdown by referring to object data.
- * @param dropdown 
+ * @param $dropdown 
  * @param data `text` is obligatory, and the other properties are optional.
  * @returns The passed dropdown.
  */
-function addOptions(dropdown: HTMLSelectElement, data: OptionElementData[]): HTMLSelectElement {
+function addOptions($dropdown: JQuery<HTMLSelectElement>, data: OptionElementData[]): JQuery<HTMLSelectElement> {
 	data.forEach(({text, value, disabled, selected, hidden}) => {
 		const option = document.createElement('option');
 		option.textContent = text;
@@ -1371,9 +1373,9 @@ function addOptions(dropdown: HTMLSelectElement, data: OptionElementData[]): HTM
 		option.disabled = !!disabled;
 		option.selected = !!selected;
 		option.hidden = !!hidden;
-		dropdown.add(option);
+		$dropdown[0].add(option);
 	});
-	return dropdown;
+	return $dropdown;
 }
 
 let checkboxCnt = 0;
@@ -1383,19 +1385,22 @@ let checkboxCnt = 0;
  * @param checkboxId An optional checkbox ID. If not provided, an automatically generated ID is used.
  * @returns 
  */
-function createLabelledCheckbox(labelText: string, checkboxId?: string): {wrapper: HTMLDivElement, checkbox: HTMLInputElement} {
-	const checkbox = document.createElement('input');
-	checkbox.type = 'checkbox';
-	checkbox.classList.add('anr-checkbox');
+function createLabelledCheckbox(labelText: string, checkboxId?: string): {$wrapper: JQuery<HTMLDivElement>, $checkbox: JQuery<HTMLInputElement>} {
 	const id = checkboxId && !document.getElementById(checkboxId) ? checkboxId : 'anr-checkbox-' + (checkboxCnt++);
-	checkbox.id = id;
-	const label = document.createElement('label');
-	label.htmlFor = id;
-	label.textContent = labelText;
-	const wrapper = Reporter.createRow();
-	wrapper.appendChild(checkbox);
-	wrapper.appendChild(label);
-	return {wrapper, checkbox};
+	const $checkbox: JQuery<HTMLInputElement> = $('<input>');
+	$checkbox
+		.prop({
+			id,
+			type: 'checkbox'
+		})
+		.addClass('anr-checkbox');
+	const $label = $('<label>');
+	$label
+		.attr('for', id)
+		.text(labelText);
+	const $wrapper = Reporter.createRow();
+	$wrapper.append($checkbox, $label);
+	return {$wrapper, $checkbox};
 }
 
 /**
