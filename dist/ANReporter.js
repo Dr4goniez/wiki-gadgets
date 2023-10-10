@@ -784,17 +784,21 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             // Create "block check" option
             var checkBlockElements = createLabelledCheckbox('報告前にブロック状態をチェック', 'anr-option-checkblock');
             this.$checkBlock = checkBlockElements.$checkbox;
+            this.$checkBlock.prop('checked', this.cfg.blockCheck);
             this.$fieldset.append(checkBlockElements.$wrapper);
             // Create "duplicate check" option
             var checkDuplicatesElements = createLabelledCheckbox('報告前に重複報告をチェック', 'anr-option-checkduplicates');
             this.$checkDuplicates = checkDuplicatesElements.$checkbox;
+            this.$checkDuplicates.prop('checked', this.cfg.duplicateCheck);
             this.$fieldset.append(checkDuplicatesElements.$wrapper);
             // Create "watch user" option
             var watchUserElements = createLabelledCheckbox('報告対象者をウォッチ', 'anr-option-watchuser');
             this.$watchUser = watchUserElements.$checkbox;
+            this.$watchUser.prop('checked', this.cfg.watchUser);
             this.$fieldset.append(watchUserElements.$wrapper);
             this.$watchExpiry = $('<select>');
-            this.$watchExpiry.prop({
+            this.$watchExpiry
+                .prop({
                 id: 'anr-option-watchexpiry',
                 innerHTML: '<option value="infinity">無期限</option>' +
                     '<option value="1 week">1週間</option>' +
@@ -803,7 +807,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     '<option value="3 months">3か月</option>' +
                     '<option value="6 months">6か月</option>' +
                     '<option value="1 year">1年</option>'
-            });
+            })
+                .val(this.cfg.watchExpiry);
             var $watchExpiryWrapper = $('<div>');
             $watchExpiryWrapper
                 .prop({ id: 'anr-option-watchexpiry-wrapper' })
@@ -811,7 +816,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 marginLeft: this.$watchUser.outerWidth(true) + 'px',
                 marginTop: '0.3em'
             })
-                .append(document.createTextNode('期限: '), this.$watchExpiry);
+                .append(document.createTextNode('期間: '), this.$watchExpiry);
             watchUserElements.$wrapper.append($watchExpiryWrapper);
             // Set all the left labels to the same width
             var $labels = $('.anr-option-label');
@@ -1199,10 +1204,61 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             $typeWrapper.append(this.$type);
             this.$wrapper.append($typeWrapper);
             this.$input = $('<input>');
-            this.$input.prop('type', 'text').addClass('anr-option-username');
+            this.$input
+                .addClass('anr-option-username') // Currently not used for anything
+                .prop({
+                type: 'text',
+                placeholder: '入力してください'
+            });
             Reporter.wrapElement(this.$wrapper, this.$input);
             $next.before(this.$wrapper);
         }
+        /**
+         * Check whether a user exists.
+         * @param username
+         * @returns `null` if the function reached the catch block.
+         */
+        User.exists = function (username) {
+            return new mw.Api().get({
+                action: 'query',
+                list: 'users',
+                ususers: username,
+                formatversion: '2'
+            }).then(function (res) {
+                var resUs = res && res.query && res.query.users;
+                return !!resUs && resUs[0] && resUs[0].userid !== void 0;
+            }).catch(function (_, err) {
+                console.log(err);
+                return null;
+            });
+        };
+        /**
+         * Extract a CIDR address from text.
+         *
+         * Regular expressions used in this method are adapted from `mediawiki.util`.
+         * - {@link https://doc.wikimedia.org/mediawiki-core/master/js/source/util.html#mw-util-method-isIPv4Address | mw.util.isIPv4Address}
+         * - {@link https://doc.wikimedia.org/mediawiki-core/master/js/source/util.html#mw-util-method-isIPv6Address | mw.util.isIPv6Address}
+         *
+         * @param text
+         * @returns The extracted CIDR, or `null` if there's no match.
+         */
+        User.extractCidr = function (text) {
+            var v4_byte = '(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|0?[0-9]?[0-9])';
+            var v4_regex = new RegExp('(?:' + v4_byte + '\\.){3}' + v4_byte + '\\/(?:3[0-2]|[12]?\\d)');
+            var v6_block = '\\/(?:12[0-8]|1[01][0-9]|[1-9]?\\d)';
+            var v6_regex = new RegExp('(?::(?::|(?::[0-9A-Fa-f]{1,4}){1,7})|[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,6}::|[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){7})' +
+                v6_block);
+            var v6_regex2 = new RegExp('[0-9A-Fa-f]{1,4}(?:::?[0-9A-Fa-f]{1,4}){1,6}' + v6_block);
+            var m;
+            if ((m = text.match(v4_regex)) ||
+                (m = text.match(v6_regex)) ||
+                (m = text.match(v6_regex2)) && /::/.test(m[0]) && !/::.*::/.test(m[0])) {
+                return m[0];
+            }
+            else {
+                return null;
+            }
+        };
         /**
          * Get the username in the textbox.
          * @returns
