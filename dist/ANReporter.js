@@ -498,6 +498,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 'margin-bottom: 0.5em;' +
                 '}' +
                 // Dialog
+                '.anr-hidden {' + // Currently used only for .anr-option-hideuser-wrapper and .anr-option-blockstatus-wrapper
+                'display: none;' +
+                '}' +
                 '.anr-dialog-progress {' +
                 'padding: 1em;' +
                 '}' +
@@ -517,6 +520,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '}' +
                 '.anr-option-row:not(:last-child) {' +
                 'margin-bottom: 0.15em;' +
+                '}' +
+                '.anr-option-hideuser-wrapper:not(.anr-hidden) + .anr-option-blockstatus-wrapper {' +
+                'margin-top: -0.15em;' + // Nullify the bottom margin
                 '}' +
                 '.anr-option-row-withselect2 {' +
                 'margin: 0.3em 0;' +
@@ -567,17 +573,18 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '.anr-checkbox {' +
                 'margin-right: 0.5em;' +
                 '}' +
-                '#anr-option-comment {' +
-                'display: none;' +
+                '.anr-dialog label {' +
+                'display: inline-block;' +
                 '}' +
-                '#anr-option-addcomment:checked ~ #anr-option-comment {' +
-                'display: block;' +
+                '.anr-dialog label > .anr-checkbox,' +
+                '.anr-dialog label > .anr-checkbox-label {' +
+                'vertical-align: middle;' +
                 '}' +
-                '#anr-option-watchexpiry-wrapper {' +
-                'display: none;' +
+                '.anr-option-hideuser > label {' +
+                'margin-left: 0.2em;' +
                 '}' +
-                '#anr-option-watchuser:checked ~ #anr-option-watchexpiry-wrapper {' +
-                'display: block;' +
+                '.anr-option-blockstatus > a {' +
+                'color: mediumvioletred;' +
                 '}' +
                 // Dialog colors
                 '.anr-dialog.ui-dialog-content,' +
@@ -635,7 +642,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$content.append(this.$fieldset);
             // Create target page option
             var $pageWrapper = Reporter.createRow();
-            Reporter.createLeftLabel($pageWrapper, '報告先');
+            var $pageLabel = Reporter.createLeftLabel($pageWrapper, '報告先');
             this.$page = $('<select>');
             this.$page
                 .addClass('anr-juxtaposed') // Important for the dropdown to fill the remaining 
@@ -646,11 +653,12 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 .off('change').on('change', function () {
                 _this.switchSectionDropdown();
             });
-            Reporter.wrapElement($pageWrapper, this.$page); // As important as above
+            var $pageDropdownWrapper = Reporter.wrapElement($pageWrapper, this.$page); // As important as above
             this.$fieldset.append($pageWrapper);
+            Reporter.verticalAlign($pageLabel, $pageDropdownWrapper);
             // Create target page anchor
             var $pageLinkWrapper = Reporter.createRow();
-            Reporter.createLeftLabel($pageLinkWrapper, '&nbsp;');
+            Reporter.createLeftLabel($pageLinkWrapper, '');
             this.$pageLink = $('<a>');
             this.$pageLink
                 .addClass('anr-disabledanchor') // Disable the anchor by default
@@ -660,7 +668,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$fieldset.append($pageLinkWrapper);
             // Create section option for ANI and AN3RR
             this.$sectionWrapper = Reporter.createRow();
-            Reporter.createLeftLabel(this.$sectionWrapper, '節');
+            var $sectionLabel = Reporter.createLeftLabel(this.$sectionWrapper, '節');
             this.$section = $('<select>');
             this.$section
                 .prop({
@@ -670,11 +678,12 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 .off('change').on('change', function () {
                 _this.setPageLink();
             });
-            Reporter.wrapElement(this.$sectionWrapper, this.$section);
+            var $sectionDropdownWrapper = Reporter.wrapElement(this.$sectionWrapper, this.$section);
             this.$fieldset.append(this.$sectionWrapper);
+            Reporter.verticalAlign($sectionLabel, $sectionDropdownWrapper);
             // Create section option for ANS
             this.$sectionAnsWrapper = Reporter.createRow(true);
-            Reporter.createLeftLabel(this.$sectionAnsWrapper, '節');
+            var $sectionAnsLabel = Reporter.createLeftLabel(this.$sectionAnsWrapper, '節');
             this.$sectionAns = $('<select>');
             this.$sectionAns
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してください</option>' +
@@ -687,9 +696,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 .off('change').on('change', function () {
                 _this.setPageLink();
             });
-            Reporter.wrapElement(this.$sectionAnsWrapper, this.$sectionAns);
+            var $sectionAnsDropdownWrapper = Reporter.wrapElement(this.$sectionAnsWrapper, this.$sectionAns);
             this.$fieldset.append(this.$sectionAnsWrapper);
             Reporter.select2(this.$sectionAns);
+            Reporter.verticalAlign($sectionAnsLabel, $sectionAnsDropdownWrapper);
             // Create an 'add' button
             this.$fieldset.append(document.createElement('hr'));
             var $newUserWrapper = Reporter.createRow();
@@ -713,8 +723,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                         self.Users.remove(this.id);
                     }
                 })
-                    .prop('title', 'SHIFTクリックで除去')
-                    .tooltip();
+                    .prop('title', 'SHIFTクリックで除去');
             });
             var dialogWith = this.$fieldset.outerWidth(true);
             this.$fieldset.css('width', dialogWith); // Assign an absolute width to $content
@@ -732,34 +741,37 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             };
             // Create VIP copier
             this.$vipWrapper = Reporter.createRow(true);
-            Reporter.createLeftLabel(this.$vipWrapper, 'VIP');
+            var $vipLabel = Reporter.createLeftLabel(this.$vipWrapper, 'VIP');
             this.$vip = $('<select>');
             this.$vip
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
                 .off('change').on('change', copyThenResetSelection);
-            Reporter.wrapElement(this.$vipWrapper, this.$vip);
+            var $vipDropdownWrapper = Reporter.wrapElement(this.$vipWrapper, this.$vip);
             this.$fieldset.append(this.$vipWrapper);
             Reporter.select2(this.$vip);
+            Reporter.verticalAlign($vipLabel, $vipDropdownWrapper);
             // Create LTA copier
             this.$ltaWrapper = Reporter.createRow(true);
-            Reporter.createLeftLabel(this.$ltaWrapper, 'LTA');
+            var $ltaLabel = Reporter.createLeftLabel(this.$ltaWrapper, 'LTA');
             this.$lta = $('<select>');
             this.$lta
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
                 .off('change').on('change', copyThenResetSelection);
-            Reporter.wrapElement(this.$ltaWrapper, this.$lta);
+            var $ltaDropdownWrapper = Reporter.wrapElement(this.$ltaWrapper, this.$lta);
             this.$fieldset.append(this.$ltaWrapper);
             Reporter.select2(this.$lta);
+            Reporter.verticalAlign($ltaLabel, $ltaDropdownWrapper);
             // Create predefined reason selector
             var $predefinedWrapper = Reporter.createRow(true);
-            Reporter.createLeftLabel($predefinedWrapper, '定型文');
+            var $predefinedLabel = Reporter.createLeftLabel($predefinedWrapper, '定型文');
             this.$predefined = addOptions($('<select>'), __spreadArray([
                 { text: '選択してコピー', value: '', disabled: true, selected: true, hidden: true }
             ], this.cfg.reasons.map(function (el) { return ({ text: el }); }), true));
             this.$predefined.off('change').on('change', copyThenResetSelection);
-            Reporter.wrapElement($predefinedWrapper, this.$predefined);
+            var $predefinedDropdownWrapper = Reporter.wrapElement($predefinedWrapper, this.$predefined);
             this.$fieldset.append($predefinedWrapper);
             Reporter.select2(this.$predefined);
+            Reporter.verticalAlign($predefinedLabel, $predefinedDropdownWrapper);
             // Create reason field
             var $reasonWrapper = Reporter.createRow();
             Reporter.createLeftLabel($reasonWrapper, '理由');
@@ -772,7 +784,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             $reasonWrapper.append(this.$reason);
             this.$fieldset.append($reasonWrapper);
             // Create "add comment" option
-            var addCommentElements = createLabelledCheckbox('要約にコメントを追加', 'anr-option-addcomment');
+            var addCommentElements = createLabelledCheckbox('要約にコメントを追加', { checkboxId: 'anr-option-addcomment' });
             this.$addComment = addCommentElements.$checkbox;
             this.$fieldset.append(addCommentElements.$wrapper);
             this.$comment = $('<textarea>');
@@ -781,18 +793,21 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 rows: 2
             });
             addCommentElements.$wrapper.append(this.$comment);
+            this.$addComment.off('change').on('change', function () {
+                _this.$comment.toggle(_this.$addComment.prop('checked'));
+            }).trigger('change');
             // Create "block check" option
-            var checkBlockElements = createLabelledCheckbox('報告前にブロック状態をチェック', 'anr-option-checkblock');
+            var checkBlockElements = createLabelledCheckbox('報告前にブロック状態をチェック', { checkboxId: 'anr-option-checkblock' });
             this.$checkBlock = checkBlockElements.$checkbox;
             this.$checkBlock.prop('checked', this.cfg.blockCheck);
             this.$fieldset.append(checkBlockElements.$wrapper);
             // Create "duplicate check" option
-            var checkDuplicatesElements = createLabelledCheckbox('報告前に重複報告をチェック', 'anr-option-checkduplicates');
+            var checkDuplicatesElements = createLabelledCheckbox('報告前に重複報告をチェック', { checkboxId: 'anr-option-checkduplicates' });
             this.$checkDuplicates = checkDuplicatesElements.$checkbox;
             this.$checkDuplicates.prop('checked', this.cfg.duplicateCheck);
             this.$fieldset.append(checkDuplicatesElements.$wrapper);
             // Create "watch user" option
-            var watchUserElements = createLabelledCheckbox('報告対象者をウォッチ', 'anr-option-watchuser');
+            var watchUserElements = createLabelledCheckbox('報告対象者をウォッチ', { checkboxId: 'anr-option-watchuser' });
             this.$watchUser = watchUserElements.$checkbox;
             this.$watchUser.prop('checked', this.cfg.watchUser);
             this.$fieldset.append(watchUserElements.$wrapper);
@@ -818,6 +833,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             })
                 .append(document.createTextNode('期間: '), this.$watchExpiry);
             watchUserElements.$wrapper.append($watchExpiryWrapper);
+            this.$watchUser.off('change').on('change', function () {
+                $watchExpiryWrapper.toggle(_this.$watchUser.prop('checked'));
+            }).trigger('change');
             // Set all the left labels to the same width
             var $labels = $('.anr-option-label');
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -835,8 +853,14 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$content.hide();
         }
         /**
-         * Create `<div class="anr-option-row"></div>`, used as a row.
-         * @param hasSelect2 `false` by default. If true, create `<div class="anr-option-row-withselect2"></div>`.
+         * Create a \<div> that works as a Reporter row.
+         * ```html
+         * <!-- hasSelect2: false -->
+         * <div class="anr-option-row"></div>
+         * <!-- hasSelect2: true -->
+         * <div class="anr-option-row-withselect2"></div>
+         * ```
+         * @param hasSelect2 `false` by default.
          * @returns The created row.
          */
         Reporter.createRow = function (hasSelect2) {
@@ -847,15 +871,33 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         };
         /**
          * Create a \<div> that works as a left-aligned label.
+         * ```html
+         * <div class="anr-option-label">labelText</div>
+         * ```
          * @param $appendTo The element to which to append the label.
-         * @param labelText The text of the label (in fact the innerHTML).
+         * @param labelText The text of the label (technically, the innerHTML). If an empty string is passed, `&nbsp;` is used.
          * @returns The created label.
          */
         Reporter.createLeftLabel = function ($appendTo, labelText) {
             var $label = $('<div>');
-            $label.addClass('anr-option-label').prop('innerHTML', labelText);
+            $label.addClass('anr-option-label').prop('innerHTML', labelText || '&nbsp;');
             $appendTo.append($label);
             return $label;
+        };
+        /**
+         * Compare the outerHeight of a left label div and that of a sibling div, and if the former is smaller than the latter,
+         * assign `padding-top` to the former.
+         *
+         * Note: **Both elements must be visible when this function is called**.
+         * @param $label
+         * @param $sibling
+         */
+        Reporter.verticalAlign = function ($label, $sibling) {
+            var labelHeight = $label.outerHeight();
+            var siblingHeight = $sibling.outerHeight();
+            if ($label.text() && labelHeight < siblingHeight) {
+                $label.css('padding-top', ((siblingHeight - labelHeight) / 2) + 'px');
+            }
         };
         /**
          * Wrap a \<select> element (next to a left label) with a div. This is for the element to fill the remaining space.
@@ -1149,6 +1191,12 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          */
         UserCollection.prototype.add = function () {
             var U = new User(this.$next);
+            if (this.collection.length) {
+                var minWidth_1 = this.collection[0].$label.outerWidth() + 'px';
+                $.each([U.$wrapper, U.$hideUserWrapper, U.$blockStatusWrapper], function () {
+                    $(this).children('.anr-option-label').css('min-width', minWidth_1);
+                });
+            }
             this.collection.push(U);
             return U;
         };
@@ -1160,7 +1208,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         UserCollection.prototype.remove = function (id) {
             var idx = this.collection.findIndex(function (U) { return U.id === id; });
             if (idx !== -1) { // Should never be -1
-                this.collection[idx].$wrapper.remove();
+                var U = this.collection[idx];
+                U.$wrapper.remove();
+                U.$hideUserWrapper.remove();
+                U.$blockStatusWrapper.remove();
                 this.collection.splice(idx, 1);
             }
             return this;
@@ -1184,12 +1235,28 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * 		<input class="anr-option-username anr-juxtaposed"> <!-- width: 100%; -->
          * 	</div>
          * </div>
+         * <div class="anr-option-row">
+         * 	<div class="anr-option-label"></div> <!-- float: left; -->
+         * 	<div class="anr-option-hideuser">
+         * 		<label>
+         * 			<input class="anr-checkbox">
+         * 			<span class="anr-checkbox-label">利用者名を隠す</span>
+         * 		</label>
+         * 	</div>
+         * </div>
+         * <div class="anr-option-row">
+         * 	<div class="anr-option-label"></div> <!-- float: left; -->
+         * 	<div class="anr-option-blockstatus">
+         * 		<a>ブロックあり</a>
+         * 	</div>
+         * </div>
          * <!-- ADD BUTTON HERE -->
          * ```
          * @param $next The element before which to create a user pane.
          */
         function User($next) {
             this.$wrapper = Reporter.createRow();
+            this.$wrapper.addClass('anr-option-userpane-wrapper');
             /*!
              * Make it possible to remove the user pane when the label is SHIFT-clicked.
              * However, the event needs to be resolved by a prototype method of UserCollection,
@@ -1199,8 +1266,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.id = 'anr-dialog-userpane-' + (userPaneCnt++);
             this.$label = Reporter.createLeftLabel(this.$wrapper, '利用者').prop('id', this.id);
             var $typeWrapper = $('<div>').addClass('anr-option-usertype');
-            this.$type = $('<select>');
-            addOptions(this.$type, ['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map(function (el) { return ({ text: el }); }));
+            this.$type = addOptions($('<select>'), ['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map(function (el) { return ({ text: el }); }));
             $typeWrapper.append(this.$type);
             this.$wrapper.append($typeWrapper);
             this.$input = $('<input>');
@@ -1210,8 +1276,26 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 type: 'text',
                 placeholder: '入力してください'
             });
-            Reporter.wrapElement(this.$wrapper, this.$input);
+            var $userWrapper = Reporter.wrapElement(this.$wrapper, this.$input);
             $next.before(this.$wrapper);
+            Reporter.verticalAlign(this.$label, $userWrapper);
+            this.$hideUserWrapper = Reporter.createRow();
+            this.$hideUserWrapper.addClass('anr-option-hideuser-wrapper');
+            Reporter.createLeftLabel(this.$hideUserWrapper, '');
+            var hideUserElements = createLabelledCheckbox('利用者名を隠す', { alterClasses: ['anr-option-hideuser'] });
+            this.$hideUser = hideUserElements.$checkbox;
+            this.$hideUserWrapper.append(hideUserElements.$wrapper);
+            $next.before(this.$hideUserWrapper);
+            this.$hideUserWrapper.hide();
+            this.$blockStatusWrapper = Reporter.createRow();
+            this.$blockStatusWrapper.addClass('anr-option-blockstatus-wrapper');
+            Reporter.createLeftLabel(this.$blockStatusWrapper, '');
+            this.$blockStatus = $('<a>');
+            this.$blockStatus.text('ブロックあり');
+            this.$blockStatusWrapper
+                .append($('<div>').addClass('anr-option-blockstatus').append(this.$blockStatus));
+            $next.before(this.$blockStatusWrapper);
+            this.$blockStatusWrapper.hide();
         }
         /**
          * Check whether a user exists.
@@ -1314,12 +1398,25 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     var checkboxCnt = 0;
     /**
      * Create a labelled checkbox.
+     * ```html
+     * <div class="anr-option-row">
+     * 	<label>
+     * 		<input class="anr-checkbox">
+     * 		<span class="anr-checkbox-label">labelText</span>
+     * 	</label>
+     * </div>
+     * ```
      * @param labelText The label text.
-     * @param checkboxId An optional checkbox ID. If not provided, an automatically generated ID is used.
+     * @param options
      * @returns
      */
-    function createLabelledCheckbox(labelText, checkboxId) {
-        var id = checkboxId && !document.getElementById(checkboxId) ? checkboxId : 'anr-checkbox-' + (checkboxCnt++);
+    function createLabelledCheckbox(labelText, options) {
+        if (options === void 0) { options = {}; }
+        var id = options.checkboxId && !document.getElementById(options.checkboxId) ? options.checkboxId : 'anr-checkbox-' + (checkboxCnt++);
+        var $label = $('<label>');
+        $label.attr('for', id);
+        var $wrapper = Reporter.createRow();
+        $wrapper.removeClass().addClass((options.alterClasses || ['anr-option-row']).join(' ')).append($label);
         var $checkbox = $('<input>');
         $checkbox
             .prop({
@@ -1327,12 +1424,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             type: 'checkbox'
         })
             .addClass('anr-checkbox');
-        var $label = $('<label>');
-        $label
-            .attr('for', id)
-            .text(labelText);
-        var $wrapper = Reporter.createRow();
-        $wrapper.append($checkbox, $label);
+        var $checkboxLabel = $('<span>');
+        $checkboxLabel.addClass('anr-checkbox-label').text(labelText);
+        $label.append($checkbox, $checkboxLabel);
         return { $wrapper: $wrapper, $checkbox: $checkbox };
     }
     /**
