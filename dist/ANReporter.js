@@ -498,13 +498,13 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 'margin-bottom: 0.5em;' +
                 '}' +
                 // Dialog
-                '.anr-hidden {' + // Currently used only for .anr-option-hideuser-wrapper and .anr-option-blockstatus-wrapper
+                '.anr-hidden {' + // Used to show/hide elements on the dialog (by Reporter.toggle)
                 'display: none;' +
                 '}' +
-                '.anr-dialog-progress {' +
+                '#anr-dialog-progress {' + // One of the main dialog field
                 'padding: 1em;' +
                 '}' +
-                '#anr-dialog-optionfield {' +
+                '#anr-dialog-optionfield {' + // The immediate child of #anr-dialog-content
                 'padding: 1em;' +
                 'margin: 0;' +
                 'border: 1px solid gray;' +
@@ -514,11 +514,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 'padding-bottom: 0;' +
                 '}' +
                 '#anr-dialog-optionfield hr {' +
-                'clear: all;' +
                 'margin: 0.8em 0;' +
                 'background-color: gray;' +
                 '}' +
-                '.anr-option-row:not(:last-child) {' +
+                '.anr-option-row:not(:last-child) {' + // Margin below every option row
                 'margin-bottom: 0.15em;' +
                 '}' +
                 '.anr-option-hideuser-wrapper:not(.anr-hidden) + .anr-option-blockstatus-wrapper {' +
@@ -527,7 +526,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '.anr-option-row-withselect2 {' +
                 'margin: 0.3em 0;' +
                 '}' +
-                '.anr-option-label {' +
+                '.anr-option-label {' + // The label div of a row
                 'margin-right: 1em;' +
                 'float: left;' + // For a juxtaposed div to fill the remaining space
                 '}' +
@@ -535,6 +534,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 'overflow: hidden;' + // Implicit width of 100% (for the child element below)
                 '}' +
                 '#anr-option-reason, ' +
+                '#anr-option-comment,' +
                 '.anr-juxtaposed {' + // Assigned by Reporter.wrapElement.
                 'box-sizing: border-box;' +
                 'width: 100%;' + // Fill the remaining space ("float" and "overflow" are essential for this to work)
@@ -560,20 +560,23 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 'color: gray;' +
                 'text-decoration: line-through;' +
                 '}' +
-                '.anr-option-usertype {' +
+                '.anr-option-usertype {' + // UserAN type selector in user pane
                 'float: right;' +
                 'margin-left: 0.3em;' +
                 '}' +
-                '.anr-option-removable > .anr-option-label {' +
+                '.anr-option-usertype-none {' +
+                'border: 2px solid red;' +
+                '}' +
+                '.anr-option-removable > .anr-option-label {' + // Change cursor for the label of a user pane that's removable
                 'cursor: pointer;' +
                 '}' +
                 '.anr-option-removable > .anr-option-label:hover {' +
-                'background-color: #80ccff;' +
+                'background-color: #80ccff;' + // Bluish on hover
                 '}' +
                 '.anr-checkbox {' +
                 'margin-right: 0.5em;' +
                 '}' +
-                '.anr-dialog label {' +
+                '.anr-dialog label {' + // Get 'vertical-align' to work, ensuring itself as a block element
                 'display: inline-block;' +
                 '}' +
                 '.anr-dialog label > .anr-checkbox,' +
@@ -626,12 +629,13 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             });
             // Create progress container
             this.$progress = $('<div>');
-            this.$progress.addClass('anr-dialog-progress');
-            this.$progress.append(document.createTextNode('読み込み中'), $(lib.getIcon('load')).css('margin-left', '0.5em'));
+            this.$progress
+                .prop('id', 'anr-dialog-progress')
+                .append(document.createTextNode('読み込み中'), $(lib.getIcon('load')).css('margin-left', '0.5em'));
             this.$dialog.append(this.$progress);
             // Create option container
             this.$content = $('<div>');
-            this.$content.addClass('anr-dialog-content');
+            this.$content.prop('id', 'anr-dialog-content');
             this.$dialog.append(this.$content);
             // Create fieldset
             this.$fieldset = $('<fieldset>');
@@ -794,7 +798,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             });
             addCommentElements.$wrapper.append(this.$comment);
             this.$addComment.off('change').on('change', function () {
-                _this.$comment.toggle(_this.$addComment.prop('checked'));
+                Reporter.toggle(_this.$comment, _this.$addComment.prop('checked'));
             }).trigger('change');
             // Create "block check" option
             var checkBlockElements = createLabelledCheckbox('報告前にブロック状態をチェック', { checkboxId: 'anr-option-checkblock' });
@@ -834,7 +838,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 .append(document.createTextNode('期間: '), this.$watchExpiry);
             watchUserElements.$wrapper.append($watchExpiryWrapper);
             this.$watchUser.off('change').on('change', function () {
-                $watchExpiryWrapper.toggle(_this.$watchUser.prop('checked'));
+                Reporter.toggle($watchExpiryWrapper, _this.$watchUser.prop('checked'));
             }).trigger('change');
             // Set all the left labels to the same width
             var $labels = $('.anr-option-label');
@@ -844,14 +848,23 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             var optionWidth = Math.max.apply(Math, optionsWidths); // Get the max value
             $labels.css('min-width', optionWidth); // Set the value to all
             // Make some wrappers invisible
-            this.$sectionAnsWrapper.hide();
-            this.$vipWrapper.hide();
-            this.$ltaWrapper.hide();
+            Reporter.toggle(this.$sectionAnsWrapper, false);
+            Reporter.toggle(this.$vipWrapper, false);
+            Reporter.toggle(this.$ltaWrapper, false);
             if (this.$predefined.find('option').length < 2) {
-                $predefinedWrapper.hide();
+                Reporter.toggle($predefinedWrapper, false);
             }
-            this.$content.hide();
+            Reporter.toggle(this.$content, false);
         }
+        /**
+         * Toggle the visibility of an element by (de)assigning the `anr-hidden` class.
+         * @param $element The element of which to toggle the visibility.
+         * @param show Whether to show the element.
+         * @returns The passed element.
+         */
+        Reporter.toggle = function ($element, show) {
+            return $element.toggleClass('anr-hidden', !show);
+        };
         /**
          * Create a \<div> that works as a Reporter row.
          * ```html
@@ -1009,7 +1022,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                         optgroup_2.appendChild(option);
                     });
                     R.$vip[0].add(optgroup_2);
-                    R.$vipWrapper.show();
+                    Reporter.toggle(R.$vipWrapper, true);
                 }
                 // Initialize the LTA copier dropdown
                 if (ltaList.length) {
@@ -1022,10 +1035,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                         optgroup_3.appendChild(option);
                     });
                     R.$lta[0].add(optgroup_3);
-                    R.$ltaWrapper.show();
+                    Reporter.toggle(R.$ltaWrapper, true);
                 }
-                R.$progress.empty().hide();
-                R.$content.show();
+                Reporter.toggle(R.$progress, false).empty();
+                Reporter.toggle(R.$content, true);
             });
         };
         /**
@@ -1136,22 +1149,22 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                             { text: '公開プロキシ・ゾンビマシン・ボット・不特定多数' },
                             { text: '犯罪行為またはその疑いのある投稿' }
                         ]);
-                        this.$sectionWrapper.show();
-                        this.$sectionAnsWrapper.hide();
+                        Reporter.toggle(this.$sectionWrapper, true);
+                        Reporter.toggle(this.$sectionAnsWrapper, false);
                         this.setPageLink();
                         break;
                     case ANS:
                         this.$sectionAns.val('').trigger('change'); // For select2. This triggers `setPageLink`.
-                        this.$sectionWrapper.hide();
-                        this.$sectionAnsWrapper.show();
+                        Reporter.toggle(this.$sectionWrapper, false);
+                        Reporter.toggle(this.$sectionAnsWrapper, true);
                         break;
                     case AN3RR:
                         this.$section.prop({
                             disabled: false,
                             innerHTML: '<option>3RR</option>'
                         });
-                        this.$sectionWrapper.show();
-                        this.$sectionAnsWrapper.hide();
+                        Reporter.toggle(this.$sectionWrapper, true);
+                        Reporter.toggle(this.$sectionAnsWrapper, false);
                         this.setPageLink();
                 }
             }
@@ -1160,8 +1173,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     disabled: true,
                     innerHTML: '<option disabled selected hidden value="">選択してください</option>'
                 });
-                this.$sectionWrapper.show();
-                this.$sectionAnsWrapper.hide();
+                Reporter.toggle(this.$sectionWrapper, true);
+                Reporter.toggle(this.$sectionAnsWrapper, false);
                 this.setPageLink();
             }
             return this;
@@ -1255,6 +1268,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * @param $next The element before which to create a user pane.
          */
         function User($next) {
+            var _this = this;
             this.$wrapper = Reporter.createRow();
             this.$wrapper.addClass('anr-option-userpane-wrapper');
             /*!
@@ -1267,14 +1281,27 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$label = Reporter.createLeftLabel(this.$wrapper, '利用者').prop('id', this.id);
             var $typeWrapper = $('<div>').addClass('anr-option-usertype');
             this.$type = addOptions($('<select>'), ['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map(function (el) { return ({ text: el }); }));
+            this.$type // Initialize
+                .prop('disabled', true) // Disable
+                .off('change').on('change', function () {
+                _this.$type.toggleClass('anr-option-usertype-none', !_this.$type.prop('disabled') && _this.$type.val() === 'none'); // Red border when 'none' is selected
+            })
+                .children('option').eq(5).prop('selected', true); // Select 'none'
             $typeWrapper.append(this.$type);
             this.$wrapper.append($typeWrapper);
             this.$input = $('<input>');
+            var inputTimeout;
             this.$input
                 .addClass('anr-option-username') // Currently not used for anything
                 .prop({
                 type: 'text',
                 placeholder: '入力してください'
+            })
+                .off('input').on('input', function () {
+                clearTimeout(inputTimeout);
+                inputTimeout = setTimeout(function () {
+                    _this.switchType();
+                }, 350);
             });
             var $userWrapper = Reporter.wrapElement(this.$wrapper, this.$input);
             $next.before(this.$wrapper);
@@ -1286,35 +1313,133 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$hideUser = hideUserElements.$checkbox;
             this.$hideUserWrapper.append(hideUserElements.$wrapper);
             $next.before(this.$hideUserWrapper);
-            this.$hideUserWrapper.hide();
+            Reporter.toggle(this.$hideUserWrapper, false);
             this.$blockStatusWrapper = Reporter.createRow();
             this.$blockStatusWrapper.addClass('anr-option-blockstatus-wrapper');
             Reporter.createLeftLabel(this.$blockStatusWrapper, '');
             this.$blockStatus = $('<a>');
-            this.$blockStatus.text('ブロックあり');
+            this.$blockStatus.prop('target', '_blank').text('ブロックあり');
             this.$blockStatusWrapper
                 .append($('<div>').addClass('anr-option-blockstatus').append(this.$blockStatus));
             $next.before(this.$blockStatusWrapper);
-            this.$blockStatusWrapper.hide();
+            Reporter.toggle(this.$blockStatusWrapper, false);
         }
         /**
-         * Check whether a user exists.
+         * Evaluate a username, classify it into a type, and check the block status of the relevant user.
          * @param username
-         * @returns `null` if the function reached the catch block.
+         * @returns
          */
-        User.exists = function (username) {
-            return new mw.Api().get({
+        User.getInfo = function (username) {
+            var params = {
                 action: 'query',
-                list: 'users',
+                list: 'users|blocks',
                 ususers: username,
                 formatversion: '2'
-            }).then(function (res) {
+            };
+            var isIp = mw.util.isIPAddress(username, true);
+            if (isIp) {
+                params.bkip = username;
+            }
+            else if (/[@/#<>[\]|{}:]/.test(username)) { // Contains a character that can't be used in a username
+                return $.Deferred().resolve({
+                    type: 'other',
+                    blocked: null
+                });
+            }
+            else {
+                params.bkusers = username;
+            }
+            return new mw.Api().get(params)
+                .then(function (res) {
                 var resUs = res && res.query && res.query.users;
-                return !!resUs && resUs[0] && resUs[0].userid !== void 0;
-            }).catch(function (_, err) {
-                console.log(err);
-                return null;
+                var resBl = res && res.query && res.query.blocks;
+                if (resUs && resBl) {
+                    return {
+                        type: isIp ? 'ip' : resUs[0].userid !== void 0 ? 'user' : 'other',
+                        blocked: !!resBl.length
+                    };
+                }
+                else {
+                    throw new Error('APIリクエストにおける不明なエラー');
+                }
+            })
+                .catch(function (_, err) {
+                console.error(err);
+                mw.notify('ユーザー情報の取得に失敗しました。', { type: 'error' });
+                return {
+                    type: 'other',
+                    blocked: null
+                };
             });
+        };
+        /**
+         * Update the user pane in accordance with the value in the username field. This method:
+         * - figures out the type of the relevant username: `ip`, `user`, or `other` (uses an AJAX call).
+         * - enables/disables options in the UserAN type selector dropdown with reference to the user type.
+         * - checks the block status of the relevant user (if any) and shows/hides the block status link.
+         */
+        User.prototype.switchType = function () {
+            var _this = this;
+            /**
+             * A mapping from a user type to array indexes that represent UserAN types to show in the type selector dropdown.
+             * - 0: `UNL`
+             * - 1: `User2`
+             * - 2: `IP2`
+             * - 3: `logid`
+             * - 4: `diff`
+             * - 5: `none`
+             *
+             * Note that the element at index 0 is what's selected at initialization.
+             */
+            var typeMap = {
+                ip: [2, 5],
+                user: [0, 1, 5],
+                other: [5, 3, 4]
+            };
+            var username = lib.clean(this.$input.val(), false);
+            this.$hideUser.prop('checked', false); // Uncheck the hideuser checkbox
+            if (!username || /^\s+$/.test(username)) { // Blank or whitespace only
+                this.$input.val('');
+                this.$type.prop('disabled', true).children('option').eq(5).prop('selected', true); // Disable dropdown and select 'none'
+                this.$type.trigger('change');
+                Reporter.toggle(this.$hideUserWrapper, false); // Hide the hideuser checkbox
+                // logid/diffid link
+                Reporter.toggle(this.$blockStatusWrapper, false); // Hide the block status link
+            }
+            else { // Some username is in the input
+                User.getInfo(username).then(function (obj) {
+                    _this.$type
+                        .prop('disabled', false) // Enable dropdown
+                        .children('option').each(function (i, opt) {
+                        // Set up the UserAN type dropdown
+                        var idx = typeMap[obj.type].indexOf(i);
+                        opt.hidden = idx === -1; // Show/hide options
+                        if (idx === 0) {
+                            opt.selected = true; // Select option in accordance with typeMap
+                        }
+                    });
+                    _this.$type.trigger('change');
+                    // Type-dependent setup
+                    if (obj.type === 'user' || obj.type === 'ip') {
+                        Reporter.toggle(_this.$hideUserWrapper, obj.type === 'user');
+                        // logid/diffid link
+                        _this.$blockStatus.prop('href', mw.util.getUrl('Special:Contribs/' + username));
+                        if (obj.blocked === null) {
+                            _this.$blockStatus.text('ブロック状態不明');
+                            Reporter.toggle(_this.$blockStatusWrapper, true);
+                        }
+                        else {
+                            _this.$blockStatus.text('ブロックあり');
+                            Reporter.toggle(_this.$blockStatusWrapper, obj.blocked);
+                        }
+                    }
+                    else { // other
+                        Reporter.toggle(_this.$hideUserWrapper, false);
+                        Reporter.toggle(_this.$blockStatusWrapper, false);
+                        // logid/diffid link
+                    }
+                });
+            }
         };
         /**
          * Extract a CIDR address from text.
