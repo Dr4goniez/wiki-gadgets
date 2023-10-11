@@ -702,6 +702,11 @@ function createStyleTag(cfg: ANReporterConfig): void {
 	document.head.appendChild(style);
 }
 
+interface EventIds {
+	logid?: number;
+	diffid?: number;
+}
+
 /**
  * The Reporter class. Manipulates the ANR dialog.
  */
@@ -733,6 +738,8 @@ class Reporter {
 	$newUser: JQuery<HTMLInputElement>;
 	/** The collection of user panes. */
 	Users: UserCollection;
+	/** The storage of event IDs associated with users. */
+	ids: {[username: string]: EventIds;};
 	/** The wrapper row for the select2 VIP dropdown. */
 	$vipWrapper: JQuery<HTMLDivElement>;
 	/** The select2 VIP dropdown. */
@@ -901,6 +908,8 @@ class Reporter {
 		this.$fieldset.css('width', dialogWith); // Assign an absolute width to $content
 		this.$progress.css('width', dialogWith);
 		Reporter.centerDialog(this.$dialog); // Recenter the dialog because the width has been changed
+
+		this.ids = {};
 
 		/**
 		 * (Bound to the change event of a \<select> element.)
@@ -1159,6 +1168,20 @@ class Reporter {
 		e.preventDefault();
 
 		const R = new Reporter();
+
+		const heading: HTMLHeadingElement|null = 
+			document.querySelector('.mw-first-heading') ||
+			document.querySelector('.firstHeading') ||
+			document.querySelector('#firstHeading');
+		const relevantUser =
+			<string|null>mw.config.get('wgRelevantUserName') ||
+			mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' && heading && heading.textContent && User.extractCidr(heading.textContent);
+		if (relevantUser) {
+			const U = R.Users.collection[0];
+			U.$input.val(relevantUser);
+			U.processInputChange();
+		}
+		
 		$.when(
 			lib.Wikitext.newFromTitle(ANS),
 			getVipList(),
@@ -1385,6 +1408,44 @@ class Reporter {
 	}
 
 	/**
+	 * Search for the oldest account creation logid and the diffid of the newest edit of a user.
+	 * @param username
+	 * @returns
+	 */
+	getIds(username: string): JQueryPromise<EventIds> {
+		const ret: EventIds = {};
+		return new mw.Api().get({
+			action: 'query',
+			list: 'logevents|usercontribs',
+			leprop: 'ids',
+			letype: 'newusers',
+			ledir: 'newer',
+			lelimit: 1,
+			leuser: username,
+			uclimit: 1,
+			ucuser: username,
+			ucprop: 'ids',
+			formatversion: '2'
+		}).then((res) => {
+			const resLgev = res && res.query && res.query.logevents;
+			const resCont = res && res.query && res.query.usercontribs;
+			if (resLgev && resLgev[0] && resLgev[0].logid !== void 0) {
+				ret.logid = resLgev[0].logid;
+			}
+			if (resCont && resCont[0] && resCont[0].revid !== void 0) {
+				ret.diffid = resCont[0].revid;
+			}
+			if (Object.keys(ret).length) {
+				this.ids[username] = {...ret};
+			}
+			return ret;
+		}).catch((_, err) => {
+			console.error(err);
+			return ret;
+		});
+	}
+
+	/**
 	 * Close the Reporter dialog. (The dialog will be destroyed.)
 	 */
 	// close(): void {
@@ -1465,6 +1526,10 @@ class User {
 	$hideUserWrapper: JQuery<HTMLDivElement>;
 	/** The "hideuser" checkbox. */
 	$hideUser: JQuery<HTMLInputElement>;
+
+	$idLinkWrapper: JQuery<HTMLDivElement>;
+	$idLink: JQuery<HTMLAnchorElement>;
+
 	/** The wrapper row of the "blockstatus" anchor. */
 	$blockStatusWrapper: JQuery<HTMLDivElement>;
 	/** The "blockstatus" anchor. */
@@ -1520,7 +1585,7 @@ class User {
 		this.$type // Initialize
 			.prop('disabled', true) // Disable
 			.off('change').on('change', () => {
-				this.$type.toggleClass('anr-option-usertype-none', !this.$type.prop('disabled') && this.$type.val() === 'none'); // Red border when 'none' is selected
+				this.processTypeChange();
 			})
 			.children('option').eq(5).prop('selected', true); // Select 'none'
 		$typeWrapper.append(this.$type);
@@ -1536,7 +1601,7 @@ class User {
 			.off('input').on('input', () => {
 				clearTimeout(inputTimeout);
 				inputTimeout = setTimeout(() => {
-					this.switchType();
+					this.processInputChange();
 				}, 350);
 			});
 		const $userWrapper = Reporter.wrapElement(this.$wrapper, this.$input);
@@ -1551,6 +1616,18 @@ class User {
 		this.$hideUserWrapper.append(hideUserElements.$wrapper);
 		$next.before(this.$hideUserWrapper);
 		Reporter.toggle(this.$hideUserWrapper, false);
+
+		this.$idLinkWrapper = Reporter.createRow();
+		this.$idLinkWrapper.addClass('anr-option-idlink-wrapper');
+		Reporter.createLeftLabel(this.$idLinkWrapper, '');
+		this.$idLink = $('<a>');
+		this.$idLink.prop('target', '_blank');
+		this.$idLinkWrapper
+			.append(
+				$('<div>').addClass('anr-option-idlink').append(this.$idLink)
+			);
+		$next.before(this.$idLinkWrapper);
+		Reporter.toggle(this.$idLinkWrapper, false);
 
 		this.$blockStatusWrapper = Reporter.createRow();
 		this.$blockStatusWrapper.addClass('anr-option-blockstatus-wrapper');
@@ -1612,13 +1689,20 @@ class User {
 			});
 	}
 
+	processTypeChange(): void {
+		// Red border when 'none' is selected
+		this.$type.toggleClass('anr-option-usertype-none', !this.$type.prop('disabled') && this.$type.val() === 'none');
+	}
+
 	/**
 	 * Update the user pane in accordance with the value in the username field. This method:
 	 * - figures out the type of the relevant username: `ip`, `user`, or `other` (uses an AJAX call).
 	 * - enables/disables options in the UserAN type selector dropdown with reference to the user type.
 	 * - checks the block status of the relevant user (if any) and shows/hides the block status link.
 	 */
-	switchType(): void {
+	processInputChange(): JQueryPromise<void> {
+
+		const def = $.Deferred();
 
 		/**
 		 * A mapping from a user type to array indexes that represent UserAN types to show in the type selector dropdown.
@@ -1637,6 +1721,7 @@ class User {
 			other: [5, 3, 4]
 		};
 		const username = lib.clean(<string>this.$input.val(), false);
+		Reporter.toggle(this.$idLinkWrapper, false); // Hide the id link
 		this.$hideUser.prop('checked', false); // Uncheck the hideuser checkbox
 
 		if (!username || /^\s+$/.test(username)) { // Blank or whitespace only
@@ -1645,8 +1730,8 @@ class User {
 			this.$type.prop('disabled', true).children('option').eq(5).prop('selected', true); // Disable dropdown and select 'none'
 			this.$type.trigger('change');
 			Reporter.toggle(this.$hideUserWrapper, false); // Hide the hideuser checkbox
-			// logid/diffid link
 			Reporter.toggle(this.$blockStatusWrapper, false); // Hide the block status link
+			def.resolve(void 0);
 
 		} else { // Some username is in the input
 
@@ -1669,7 +1754,6 @@ class User {
 				// Type-dependent setup
 				if (obj.type === 'user' || obj.type === 'ip') {
 					Reporter.toggle(this.$hideUserWrapper, obj.type === 'user');
-					// logid/diffid link
 					this.$blockStatus.prop('href', mw.util.getUrl('Special:Contribs/' + username));
 					if (obj.blocked === null) {
 						this.$blockStatus.text('ブロック状態不明');
@@ -1681,12 +1765,15 @@ class User {
 				} else { // other
 					Reporter.toggle(this.$hideUserWrapper, false);
 					Reporter.toggle(this.$blockStatusWrapper, false);
-					// logid/diffid link
 				}
+
+				def.resolve(void 0);
 
 			});
 
 		}
+
+		return def.promise();
 
 	}
 

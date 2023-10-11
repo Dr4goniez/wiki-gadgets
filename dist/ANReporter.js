@@ -1,4 +1,15 @@
 "use strict";
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
         if (ar || !(i in from)) {
@@ -733,6 +744,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$fieldset.css('width', dialogWith); // Assign an absolute width to $content
             this.$progress.css('width', dialogWith);
             Reporter.centerDialog(this.$dialog); // Recenter the dialog because the width has been changed
+            this.ids = {};
             /**
              * (Bound to the change event of a \<select> element.)
              *
@@ -964,6 +976,16 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         Reporter.new = function (e) {
             e.preventDefault();
             var R = new Reporter();
+            var heading = document.querySelector('.mw-first-heading') ||
+                document.querySelector('.firstHeading') ||
+                document.querySelector('#firstHeading');
+            var relevantUser = mw.config.get('wgRelevantUserName') ||
+                mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' && heading && heading.textContent && User.extractCidr(heading.textContent);
+            if (relevantUser) {
+                var U = R.Users.collection[0];
+                U.$input.val(relevantUser);
+                U.processInputChange();
+            }
             $.when(lib.Wikitext.newFromTitle(ANS), getVipList(), getLtaList())
                 .then(function (Wkt, vipList, ltaList) {
                 // Initialize the ANS section dropdown
@@ -1180,6 +1202,44 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             return this;
         };
         /**
+         * Search for the oldest account creation logid and the diffid of the newest edit of a user.
+         * @param username
+         * @returns
+         */
+        Reporter.prototype.getIds = function (username) {
+            var _this = this;
+            var ret = {};
+            return new mw.Api().get({
+                action: 'query',
+                list: 'logevents|usercontribs',
+                leprop: 'ids',
+                letype: 'newusers',
+                ledir: 'newer',
+                lelimit: 1,
+                leuser: username,
+                uclimit: 1,
+                ucuser: username,
+                ucprop: 'ids',
+                formatversion: '2'
+            }).then(function (res) {
+                var resLgev = res && res.query && res.query.logevents;
+                var resCont = res && res.query && res.query.usercontribs;
+                if (resLgev && resLgev[0] && resLgev[0].logid !== void 0) {
+                    ret.logid = resLgev[0].logid;
+                }
+                if (resCont && resCont[0] && resCont[0].revid !== void 0) {
+                    ret.diffid = resCont[0].revid;
+                }
+                if (Object.keys(ret).length) {
+                    _this.ids[username] = __assign({}, ret);
+                }
+                return ret;
+            }).catch(function (_, err) {
+                console.error(err);
+                return ret;
+            });
+        };
+        /**
          * Close the Reporter dialog. (The dialog will be destroyed.)
          */
         // close(): void {
@@ -1284,7 +1344,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$type // Initialize
                 .prop('disabled', true) // Disable
                 .off('change').on('change', function () {
-                _this.$type.toggleClass('anr-option-usertype-none', !_this.$type.prop('disabled') && _this.$type.val() === 'none'); // Red border when 'none' is selected
+                _this.processTypeChange();
             })
                 .children('option').eq(5).prop('selected', true); // Select 'none'
             $typeWrapper.append(this.$type);
@@ -1300,7 +1360,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 .off('input').on('input', function () {
                 clearTimeout(inputTimeout);
                 inputTimeout = setTimeout(function () {
-                    _this.switchType();
+                    _this.processInputChange();
                 }, 350);
             });
             var $userWrapper = Reporter.wrapElement(this.$wrapper, this.$input);
@@ -1314,6 +1374,15 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$hideUserWrapper.append(hideUserElements.$wrapper);
             $next.before(this.$hideUserWrapper);
             Reporter.toggle(this.$hideUserWrapper, false);
+            this.$idLinkWrapper = Reporter.createRow();
+            this.$idLinkWrapper.addClass('anr-option-idlink-wrapper');
+            Reporter.createLeftLabel(this.$idLinkWrapper, '');
+            this.$idLink = $('<a>');
+            this.$idLink.prop('target', '_blank');
+            this.$idLinkWrapper
+                .append($('<div>').addClass('anr-option-idlink').append(this.$idLink));
+            $next.before(this.$idLinkWrapper);
+            Reporter.toggle(this.$idLinkWrapper, false);
             this.$blockStatusWrapper = Reporter.createRow();
             this.$blockStatusWrapper.addClass('anr-option-blockstatus-wrapper');
             Reporter.createLeftLabel(this.$blockStatusWrapper, '');
@@ -1372,14 +1441,19 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 };
             });
         };
+        User.prototype.processTypeChange = function () {
+            // Red border when 'none' is selected
+            this.$type.toggleClass('anr-option-usertype-none', !this.$type.prop('disabled') && this.$type.val() === 'none');
+        };
         /**
          * Update the user pane in accordance with the value in the username field. This method:
          * - figures out the type of the relevant username: `ip`, `user`, or `other` (uses an AJAX call).
          * - enables/disables options in the UserAN type selector dropdown with reference to the user type.
          * - checks the block status of the relevant user (if any) and shows/hides the block status link.
          */
-        User.prototype.switchType = function () {
+        User.prototype.processInputChange = function () {
             var _this = this;
+            var def = $.Deferred();
             /**
              * A mapping from a user type to array indexes that represent UserAN types to show in the type selector dropdown.
              * - 0: `UNL`
@@ -1397,14 +1471,15 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 other: [5, 3, 4]
             };
             var username = lib.clean(this.$input.val(), false);
+            Reporter.toggle(this.$idLinkWrapper, false); // Hide the id link
             this.$hideUser.prop('checked', false); // Uncheck the hideuser checkbox
             if (!username || /^\s+$/.test(username)) { // Blank or whitespace only
                 this.$input.val('');
                 this.$type.prop('disabled', true).children('option').eq(5).prop('selected', true); // Disable dropdown and select 'none'
                 this.$type.trigger('change');
                 Reporter.toggle(this.$hideUserWrapper, false); // Hide the hideuser checkbox
-                // logid/diffid link
                 Reporter.toggle(this.$blockStatusWrapper, false); // Hide the block status link
+                def.resolve(void 0);
             }
             else { // Some username is in the input
                 User.getInfo(username).then(function (obj) {
@@ -1422,7 +1497,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     // Type-dependent setup
                     if (obj.type === 'user' || obj.type === 'ip') {
                         Reporter.toggle(_this.$hideUserWrapper, obj.type === 'user');
-                        // logid/diffid link
                         _this.$blockStatus.prop('href', mw.util.getUrl('Special:Contribs/' + username));
                         if (obj.blocked === null) {
                             _this.$blockStatus.text('ブロック状態不明');
@@ -1436,10 +1510,11 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     else { // other
                         Reporter.toggle(_this.$hideUserWrapper, false);
                         Reporter.toggle(_this.$blockStatusWrapper, false);
-                        // logid/diffid link
                     }
+                    def.resolve(void 0);
                 });
             }
+            return def.promise();
         };
         /**
          * Extract a CIDR address from text.
