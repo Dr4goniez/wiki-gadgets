@@ -974,18 +974,20 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * @param e
          */
         Reporter.new = function (e) {
+            // Cancel portletlink click event
             e.preventDefault();
+            // Create a Reporter dialog
             var R = new Reporter();
+            // Get a username associated with the current page if any
             var heading = document.querySelector('.mw-first-heading') ||
                 document.querySelector('.firstHeading') ||
                 document.querySelector('#firstHeading');
             var relevantUser = mw.config.get('wgRelevantUserName') ||
                 mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' && heading && heading.textContent && User.extractCidr(heading.textContent);
-            if (relevantUser) {
-                var U = R.Users.collection[0];
-                U.$input.val(relevantUser);
-                U.processInputChange();
-            }
+            var U = R.Users.collection[0];
+            U.$input.val(relevantUser || '');
+            var def = U.processInputChange();
+            // Process additional asynchronous procedures for Reporter
             $.when(lib.Wikitext.newFromTitle(ANS), getVipList(), getLtaList())
                 .then(function (Wkt, vipList, ltaList) {
                 // Initialize the ANS section dropdown
@@ -1059,8 +1061,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     R.$lta[0].add(optgroup_3);
                     Reporter.toggle(R.$ltaWrapper, true);
                 }
-                Reporter.toggle(R.$progress, false).empty();
-                Reporter.toggle(R.$content, true);
+                def.then(function () {
+                    Reporter.toggle(R.$progress, false).empty();
+                    Reporter.toggle(R.$content, true);
+                });
             });
         };
         /**

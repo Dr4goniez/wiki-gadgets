@@ -1165,10 +1165,13 @@ class Reporter {
 	 */
 	static new(e: MouseEvent) {
 
+		// Cancel portletlink click event
 		e.preventDefault();
 
+		// Create a Reporter dialog
 		const R = new Reporter();
 
+		// Get a username associated with the current page if any
 		const heading: HTMLHeadingElement|null = 
 			document.querySelector('.mw-first-heading') ||
 			document.querySelector('.firstHeading') ||
@@ -1176,12 +1179,11 @@ class Reporter {
 		const relevantUser =
 			<string|null>mw.config.get('wgRelevantUserName') ||
 			mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' && heading && heading.textContent && User.extractCidr(heading.textContent);
-		if (relevantUser) {
-			const U = R.Users.collection[0];
-			U.$input.val(relevantUser);
-			U.processInputChange();
-		}
-		
+		const U = R.Users.collection[0];
+		U.$input.val(relevantUser || '');
+		const def = U.processInputChange();
+
+		// Process additional asynchronous procedures for Reporter
 		$.when(
 			lib.Wikitext.newFromTitle(ANS),
 			getVipList(),
@@ -1260,8 +1262,10 @@ class Reporter {
 				Reporter.toggle(R.$ltaWrapper, true);
 			}
 
-			Reporter.toggle(R.$progress, false).empty();
-			Reporter.toggle(R.$content, true);
+			def.then(() => { // Ensure that processInputChange has been resolved as well
+				Reporter.toggle(R.$progress, false).empty();
+				Reporter.toggle(R.$content, true);
+			});
 
 		});
 
