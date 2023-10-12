@@ -635,7 +635,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 width: 'auto',
                 modal: true,
                 close: function () {
-                    _this.destroy();
+                    // Destory the dialog and its contents when closed by any means
+                    $(this).empty().dialog('destroy');
                 }
             });
             // Create progress container
@@ -660,7 +661,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             var $pageLabel = Reporter.createLeftLabel($pageWrapper, '報告先');
             this.$page = $('<select>');
             this.$page
-                .addClass('anr-juxtaposed') // Important for the dropdown to fill the remaining 
+                .addClass('anr-juxtaposed') // Important for the dropdown to fill the remaining space
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してください</option>' +
                 '<option>' + ANI + '</option>' +
                 '<option>' + ANS + '</option>' +
@@ -717,28 +718,39 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.verticalAlign($sectionAnsLabel, $sectionAnsDropdownWrapper);
             // Create an 'add' button
             this.$fieldset.append(document.createElement('hr'));
-            var $newUserWrapper = Reporter.createRow();
-            this.$newUser = $('<input>');
-            this.$newUser.prop('type', 'button').val('追加');
-            $newUserWrapper.append(this.$newUser);
-            this.$fieldset.append($newUserWrapper);
+            var $addButtonWrapper = Reporter.createRow();
+            this.$addButton = $('<input>');
+            this.$addButton.prop('type', 'button').val('追加');
+            $addButtonWrapper.append(this.$addButton);
+            this.$fieldset.append($addButtonWrapper);
             this.$fieldset.append(document.createElement('hr'));
             // Create a user pane 
-            this.Users = new UserCollection($newUserWrapper);
-            this.Users.add();
-            this.$newUser.off('click').on('click', function () {
-                var U = _this.Users.add(); // Add a new user pane when the 'add' button is clicked
-                // Add event handler to remove the pane when the label is SHIFT-clicked
-                U.$wrapper.addClass('anr-option-removable');
-                // eslint-disable-next-line @typescript-eslint/no-this-alias
-                var self = _this;
-                U.$label
-                    .off('click').on('click', function (e) {
-                    if (e.shiftKey) {
-                        self.Users.remove(this.id);
+            this.Users = [
+                new User($addButtonWrapper, { removable: false })
+            ];
+            // eslint-disable-next-line @typescript-eslint/no-this-alias
+            var self = this;
+            this.$addButton.off('click').on('click', function () {
+                new User($addButtonWrapper, {
+                    addCallback: function (User) {
+                        var minWidth = User.$label.outerWidth() + 'px';
+                        $.each([User.$wrapper, User.$hideUserWrapper, User.$blockStatusWrapper], function () {
+                            $(this).children('.anr-option-label').css('min-width', minWidth);
+                        });
+                        self.Users.push(User);
+                    },
+                    removeCallback: function (User) {
+                        var idx = self.Users.findIndex(function (U) { return U.id === User.id; });
+                        if (idx !== -1) { // Should never be -1
+                            var U = self.Users[idx];
+                            U.$wrapper.remove();
+                            U.$hideUserWrapper.remove();
+                            U.$blockStatusWrapper.remove();
+                            self.Users.splice(idx, 1);
+                        }
+                        console.log(self.Users);
                     }
-                })
-                    .prop('title', 'SHIFTクリックで除去');
+                });
             });
             var dialogWith = this.$fieldset.outerWidth(true);
             this.$fieldset.css('width', dialogWith); // Assign an absolute width to $content
@@ -984,7 +996,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 document.querySelector('#firstHeading');
             var relevantUser = mw.config.get('wgRelevantUserName') ||
                 mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' && heading && heading.textContent && User.extractCidr(heading.textContent);
-            var U = R.Users.collection[0];
+            var U = R.Users[0];
             U.$input.val(relevantUser || '');
             var def = U.processInputChange();
             // Process additional asynchronous procedures for Reporter
@@ -1243,57 +1255,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 return ret;
             });
         };
-        /**
-         * Close the Reporter dialog. (The dialog will be destroyed.)
-         */
-        // close(): void {
-        // 	this.$dialog.dialog('close');
-        // }
-        /**
-         * Destroy the Reporter dialog.
-         */
-        Reporter.prototype.destroy = function () {
-            this.$dialog.empty().dialog('destroy');
-        };
         return Reporter;
-    }());
-    var UserCollection = /** @class */ (function () {
-        function UserCollection($next) {
-            this.$next = $next;
-            this.collection = [];
-        }
-        /**
-         * Add a new user pane to the {@link Reporter} and {@link UserCollection} instances.
-         * @returns The newly-initialized {@link User} instance.
-         */
-        UserCollection.prototype.add = function () {
-            var U = new User(this.$next);
-            if (this.collection.length) {
-                var minWidth_1 = this.collection[0].$label.outerWidth() + 'px';
-                $.each([U.$wrapper, U.$hideUserWrapper, U.$blockStatusWrapper], function () {
-                    $(this).children('.anr-option-label').css('min-width', minWidth_1);
-                });
-            }
-            this.collection.push(U);
-            return U;
-        };
-        /**
-         * Remove a user pane from the {@link Reporter} and {@link UserCollection} instances.
-         * @param id
-         * @returns
-         */
-        UserCollection.prototype.remove = function (id) {
-            var idx = this.collection.findIndex(function (U) { return U.id === id; });
-            if (idx !== -1) { // Should never be -1
-                var U = this.collection[idx];
-                U.$wrapper.remove();
-                U.$hideUserWrapper.remove();
-                U.$blockStatusWrapper.remove();
-                this.collection.splice(idx, 1);
-            }
-            return this;
-        };
-        return UserCollection;
     }());
     var userPaneCnt = 0;
     /**
@@ -1330,19 +1292,28 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * <!-- ADD BUTTON HERE -->
          * ```
          * @param $next The element before which to create a user pane.
+         * @param options
          */
-        function User($next) {
+        function User($next, options) {
             var _this = this;
+            options = Object.assign({ removable: true }, options || {});
             this.$wrapper = Reporter.createRow();
             this.$wrapper.addClass('anr-option-userpane-wrapper');
-            /*!
-             * Make it possible to remove the user pane when the label is SHIFT-clicked.
-             * However, the event needs to be resolved by a prototype method of UserCollection,
-             * so the event handler is attached in the constructor of Reporter that initializes
-             * an instance of UserCollection.
-             */
             this.id = 'anr-dialog-userpane-' + (userPaneCnt++);
             this.$label = Reporter.createLeftLabel(this.$wrapper, '利用者').prop('id', this.id);
+            if (options.removable) {
+                this.$wrapper.addClass('anr-option-removable');
+                this.$label
+                    .prop('title', 'SHIFTクリックで除去')
+                    .off('click').on('click', function (e) {
+                    if (e.shiftKey) { // Remove the user pane when the label is shift-clicked
+                        _this.$wrapper.remove();
+                        if (options && options.removeCallback) {
+                            options.removeCallback(_this);
+                        }
+                    }
+                });
+            }
             var $typeWrapper = $('<div>').addClass('anr-option-usertype');
             this.$type = addOptions($('<select>'), ['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map(function (el) { return ({ text: el }); }));
             this.$type // Initialize
@@ -1396,6 +1367,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 .append($('<div>').addClass('anr-option-blockstatus').append(this.$blockStatus));
             $next.before(this.$blockStatusWrapper);
             Reporter.toggle(this.$blockStatusWrapper, false);
+            if (options.addCallback) {
+                options.addCallback(this);
+            }
         }
         /**
          * Evaluate a username, classify it into a type, and check the block status of the relevant user.

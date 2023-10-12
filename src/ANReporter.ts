@@ -735,9 +735,9 @@ class Reporter {
 	/** The select2 section selector dropdown for ANS. */
 	$sectionAns: JQuery<HTMLSelectElement>;
 	/** The button to add a new user pane. */
-	$newUser: JQuery<HTMLInputElement>;
+	$addButton: JQuery<HTMLInputElement>;
 	/** The collection of user panes. */
-	Users: UserCollection;
+	Users: User[];
 	/** The storage of event IDs associated with users. */
 	ids: {[username: string]: EventIds;};
 	/** The wrapper row for the select2 VIP dropdown. */
@@ -782,8 +782,9 @@ class Reporter {
 			height: 'auto',
 			width: 'auto',
 			modal: true,
-			close: () => {
-				this.destroy();
+			close: function() {
+				// Destory the dialog and its contents when closed by any means
+				$(this).empty().dialog('destroy');
 			}
 		});
 
@@ -815,7 +816,7 @@ class Reporter {
 		const $pageLabel = Reporter.createLeftLabel($pageWrapper, '報告先');
 		this.$page = $('<select>');
 		this.$page
-			.addClass('anr-juxtaposed') // Important for the dropdown to fill the remaining 
+			.addClass('anr-juxtaposed') // Important for the dropdown to fill the remaining space
 			.prop('innerHTML',
 				'<option selected disabled hidden value="">選択してください</option>' +
 				'<option>' + ANI + '</option>' +
@@ -880,29 +881,39 @@ class Reporter {
 
 		// Create an 'add' button
 		this.$fieldset.append(document.createElement('hr'));
-		const $newUserWrapper = Reporter.createRow();
-		this.$newUser = $('<input>');
-		this.$newUser.prop('type', 'button').val('追加');
-		$newUserWrapper.append(this.$newUser);
-		this.$fieldset.append($newUserWrapper);
+		const $addButtonWrapper = Reporter.createRow();
+		this.$addButton = $('<input>');
+		this.$addButton.prop('type', 'button').val('追加');
+		$addButtonWrapper.append(this.$addButton);
+		this.$fieldset.append($addButtonWrapper);
 		this.$fieldset.append(document.createElement('hr'));
 
 		// Create a user pane 
-		this.Users = new UserCollection($newUserWrapper);
-		this.Users.add();
-		this.$newUser.off('click').on('click', () => {
-			const U = this.Users.add(); // Add a new user pane when the 'add' button is clicked
-			// Add event handler to remove the pane when the label is SHIFT-clicked
-			U.$wrapper.addClass('anr-option-removable');
-			// eslint-disable-next-line @typescript-eslint/no-this-alias
-			const self = this;
-			U.$label
-				.off('click').on('click', function(e) {
-					if (e.shiftKey) {
-						self.Users.remove(this.id);
+		this.Users = [
+			new User($addButtonWrapper, {removable: false})
+		];
+		// eslint-disable-next-line @typescript-eslint/no-this-alias
+		const self = this;
+		this.$addButton.off('click').on('click', () => {
+			new User($addButtonWrapper, {
+				addCallback(User) {
+					const minWidth = User.$label.outerWidth()! + 'px';
+					$.each([User.$wrapper, User.$hideUserWrapper, User.$blockStatusWrapper], function() {
+						$(this).children('.anr-option-label').css('min-width', minWidth);
+					});
+					self.Users.push(User);
+				},
+				removeCallback(User) {
+					const idx = self.Users.findIndex((U) => U.id === User.id);
+					if (idx !== -1) { // Should never be -1
+						const U = self.Users[idx];
+						U.$wrapper.remove();
+						U.$hideUserWrapper.remove();
+						U.$blockStatusWrapper.remove();
+						self.Users.splice(idx, 1);
 					}
-				})
-				.prop('title', 'SHIFTクリックで除去');
+				}
+			});
 		});
 		const dialogWith = this.$fieldset.outerWidth(true)!;
 		this.$fieldset.css('width', dialogWith); // Assign an absolute width to $content
@@ -1179,7 +1190,7 @@ class Reporter {
 		const relevantUser =
 			<string|null>mw.config.get('wgRelevantUserName') ||
 			mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' && heading && heading.textContent && User.extractCidr(heading.textContent);
-		const U = R.Users.collection[0];
+		const U = R.Users[0];
 		U.$input.val(relevantUser || '');
 		const def = U.processInputChange();
 
@@ -1449,65 +1460,26 @@ class Reporter {
 		});
 	}
 
-	/**
-	 * Close the Reporter dialog. (The dialog will be destroyed.)
-	 */
-	// close(): void {
-	// 	this.$dialog.dialog('close');
-	// }
-
-	/**
-	 * Destroy the Reporter dialog.
-	 */
-	destroy(): void {
-		this.$dialog.empty().dialog('destroy');
-	}
-
 }
 
-class UserCollection {
-
-	$next: JQuery<HTMLElement>;
-	collection: User[];
-
-	constructor($next: JQuery<HTMLElement>) {
-		this.$next = $next;
-		this.collection = [];
-	}
-
+/** The options for {@link User.constructor}. */
+interface UserOptions {
 	/**
-	 * Add a new user pane to the {@link Reporter} and {@link UserCollection} instances.
-	 * @returns The newly-initialized {@link User} instance.
-	 */
-	add(): User {
-		const U = new User(this.$next);
-		if (this.collection.length) {
-			const minWidth = this.collection[0].$label.outerWidth()! + 'px';
-			$.each([U.$wrapper, U.$hideUserWrapper, U.$blockStatusWrapper], function() {
-				$(this).children('.anr-option-label').css('min-width', minWidth);
-			});
-		}
-		this.collection.push(U);
-		return U;
-	}
-
-	/**
-	 * Remove a user pane from the {@link Reporter} and {@link UserCollection} instances.
-	 * @param id
+	 * The callback function to execute when the constructor has generated the user pane.
+	 * @param User
 	 * @returns
 	 */
-	remove(id: string): UserCollection {
-		const idx = this.collection.findIndex((U) => U.id === id);
-		if (idx !== -1) { // Should never be -1
-			const U = this.collection[idx];
-			U.$wrapper.remove();
-			U.$hideUserWrapper.remove();
-			U.$blockStatusWrapper.remove();
-			this.collection.splice(idx, 1);
-		}
-		return this;
-	}
-
+	addCallback?: (User: User) => void;
+	/**
+	 * The callback function to execute when the user pane has been removed from the DOM.
+	 * @param User
+	 * @returns
+	 */
+	removeCallback?: (User: User) => void;
+	/**
+	 * Whether the user pane should be removable. (Default: `true`)
+	 */
+	removable?: boolean;
 }
 
 let userPaneCnt = 0;
@@ -1569,19 +1541,34 @@ class User {
 	 * <!-- ADD BUTTON HERE -->
 	 * ```
 	 * @param $next The element before which to create a user pane.
+	 * @param options
 	 */
-	constructor($next: JQuery<HTMLElement>) {
+	constructor($next: JQuery<HTMLElement>, options?: UserOptions) {
+
+		options = Object.assign(
+			{removable: true},
+			options || {}
+		);
 
 		this.$wrapper = Reporter.createRow();
 		this.$wrapper.addClass('anr-option-userpane-wrapper');
-		/*!
-		 * Make it possible to remove the user pane when the label is SHIFT-clicked.
-		 * However, the event needs to be resolved by a prototype method of UserCollection,
-		 * so the event handler is attached in the constructor of Reporter that initializes
-		 * an instance of UserCollection.
-		 */
+
 		this.id = 'anr-dialog-userpane-' + (userPaneCnt++);
 		this.$label = Reporter.createLeftLabel(this.$wrapper, '利用者').prop('id', this.id);
+		if (options.removable) {
+			this.$wrapper.addClass('anr-option-removable');
+			this.$label
+				.prop('title', 'SHIFTクリックで除去')
+				.off('click').on('click', (e) => {
+					if (e.shiftKey) { // Remove the user pane when the label is shift-clicked
+						this.$wrapper.remove();
+						if (options && options.removeCallback) {
+							options.removeCallback(this);
+						}
+					}
+				});
+		}
+
 		const $typeWrapper = $('<div>').addClass('anr-option-usertype');
 		this.$type = addOptions($('<select>'),
 			['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map((el) => ({text: el}))
@@ -1644,6 +1631,10 @@ class User {
 			);
 		$next.before(this.$blockStatusWrapper);
 		Reporter.toggle(this.$blockStatusWrapper, false);
+
+		if (options.addCallback) {
+			options.addCallback(this);
+		}
 
 	}
 
