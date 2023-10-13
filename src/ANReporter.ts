@@ -12,6 +12,8 @@ const ANS = 'Wikipedia:管理者伝言板/投稿ブロック/ソックパペッ�
 const AN3RR = 'Wikipedia:管理者伝言板/3RR';
 
 let lib: WpLibExtra;
+let mwString: MwString;
+let idList: IdList;
 
 // ******************************************************************************************
 
@@ -26,18 +28,18 @@ function init() {
 		return;
 	}
 
+	// Shouldn't run on API pages
+	if (location.href.indexOf('/api.php') !== -1) {
+		return;
+	}
+
 	/** Whether the user is on the config page. */
 	const onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(ANReporterConfig|ANRC)$/i.test(mw.config.get('wgTitle'));
 
-	const libName = 'ext.gadget.WpLibExtra';
-	mw.loader.using(libName).then((require) => { // Load the library
+	// Load the libary and dependent modules, then go on to the main procedure
+	loadLibrary(false).then((libReady) => {
 
-		// Validate the library
-		lib = require(libName);
-		if (typeof (lib && lib.version) !== 'string') {
-			console.error(`${ANR}: ライブラリの読み込みに失敗しました。`);
-			return;
-		}
+		if (!libReady) return;
 
 		// Main procedure
 		if (onConfig) {
@@ -57,6 +59,7 @@ function init() {
 		} else {
 			// If not on the config page, create a portlet link to open the ANR dialog after loading dependent modules
 			const modules = [
+				'mediawiki.String', // IdList
 				'mediawiki.user', // mw.user.options
 				'mediawiki.util', // addPortletLink
 				'mediawiki.api', // API queries
@@ -67,7 +70,8 @@ function init() {
 				mw.loader.using(modules),
 				mw.loader.getScript('https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.js'),
 				$.ready
-			).then(() => {
+			).then((require) => {
+				mwString = require(modules[0]);
 				const portlet = createPortletLink();
 				if (!portlet) {
 					console.error(`${ANR}: ポートレットリンクの作成に失敗しました。`);
@@ -75,6 +79,7 @@ function init() {
 				}
 				createStyleTag(Config.merge());
 				$('head').append('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.css">');
+				idList = new IdList();
 				portlet.addEventListener('click', Reporter.new);
 			}).catch((...err) => {
 				console.warn(err);
@@ -84,6 +89,38 @@ function init() {
 
 	});
 
+}
+
+/**
+ * Load the library.
+ * @param dev Whether to load the dev version of the library.
+ * @returns
+ */
+function loadLibrary(dev = false): JQueryPromise<boolean> {
+	const libName = 'ext.gadget.WpLibExtra' + (dev ? 'Dev': '');
+	const loadLocal = (): JQueryPromise<boolean> => {
+		return mw.loader.using(libName)
+			.then((require) => { // Load the library
+				lib = require(libName);
+				if (typeof (lib && lib.version) !== 'string') { // Validate the library
+					console.error(`${ANR}: ライブラリの読み込みに失敗しました。`);
+					return false;
+				}
+				return true;
+			})
+			.catch((...err) => {
+				console.error(err);
+				return false;
+			});
+	};
+	if (dev) {
+		return mw.loader.getScript('https://test.wikipedia.org/w/load.php?modules=' + libName).then(loadLocal).catch((...err) => {
+			console.error(err);
+			return false;
+		});
+	} else {
+		return loadLocal();
+	}
 }
 
 /**
@@ -615,8 +652,20 @@ function createStyleTag(cfg: ANReporterConfig): void {
 			'margin: 0.8em 0;' +
 			'background-color: gray;' +
 		'}' +
-		'.anr-option-row:not(:last-child) {' + // Margin below every option row
+		'.anr-option-row:not(:last-child), ' + // Margin below every option row
+		'.anr-option-row-inner {' + 
 			'margin-bottom: 0.15em;' +
+		'}' +
+		'.anr-option-userpane-wrapper {' +
+			'position: relative;' +
+		'}' +
+		'.anr-option-userpane-overlay {' +
+			'width: 100%;' +
+			'height: 100%;' +
+			'position: absolute;' +
+			'top: 0;' +
+			'left: 0;' +
+			'z-index: 10;' +
 		'}' +
 		'.anr-option-hideuser-wrapper:not(.anr-hidden) + .anr-option-blockstatus-wrapper {' +
 			'margin-top: -0.15em;' + // Nullify the bottom margin
@@ -702,9 +751,171 @@ function createStyleTag(cfg: ANReporterConfig): void {
 	document.head.appendChild(style);
 }
 
+/** Object that stores event IDs associated with a user. */
 interface EventIds {
 	logid?: number;
 	diffid?: number;
+}
+
+/**
+ * The IdList class. Administrates username-ID conversions.
+ */
+class IdList {
+
+	/**
+	 * The list object of objects, keyed by usernames.
+	 * 
+	 * The usernames are formatted by `lib.clean` and spaces in it are represented by underscores.
+	 */
+	list: {
+		[username: string]: EventIds;
+	};
+
+	/** Initialize a new `IdList` instance. */
+	constructor() {
+		this.list = {};
+	}
+
+	/**
+	 * Format a username by calling `lib.clean`, replacing spaces with underscores, and capitalizing the first letter.
+	 * @param username
+	 * @returns The formatted username.
+	 */
+	static formatUsername(username: string): string {
+		return mwString.ucFirst(lib.clean(username).replace(/ /g, '_'));
+	}
+
+	/**
+	 * Get event IDs of a user.
+	 * @param username
+	 * @returns
+	 */
+	getIds(username: string): JQueryPromise<EventIds> {
+		username = IdList.formatUsername(username);
+		for (const user in this.list) {
+			if (user === username) {
+				const {logid, diffid} = this.list[user];
+				if (typeof logid === 'number' || typeof diffid === 'number') {
+					return $.Deferred().resolve({...this.list[user]});
+				}
+			}
+		}
+		return this.fetchIds(username);
+	}
+
+	/**
+	 * Search for the oldest account creation logid and the diffid of the newest edit of a user.
+	 * @param username
+	 * @returns
+	 */
+	private fetchIds(username: string): JQueryPromise<EventIds> {
+		const ret: EventIds = {};
+		return new mw.Api().get({
+			action: 'query',
+			list: 'logevents|usercontribs',
+			leprop: 'ids',
+			letype: 'newusers',
+			ledir: 'newer',
+			lelimit: 1,
+			leuser: username,
+			uclimit: 1,
+			ucuser: username,
+			ucprop: 'ids',
+			formatversion: '2'
+		}).then((res) => {
+			const resLgev = res && res.query && res.query.logevents;
+			const resCont = res && res.query && res.query.usercontribs;
+			if (resLgev && resLgev[0] && resLgev[0].logid !== void 0) {
+				ret.logid = resLgev[0].logid;
+			}
+			if (resCont && resCont[0] && resCont[0].revid !== void 0) {
+				ret.diffid = resCont[0].revid;
+			}
+			if (Object.keys(ret).length) {
+				this.list[username] = {...ret};
+			}
+			return ret;
+		}).catch((_, err) => {
+			console.error(err);
+			return ret;
+		});
+	}
+
+	/**
+	 * Get a username from a log/diff ID.
+	 * @param id
+	 * @param type
+	 * @returns
+	 */
+	getUsername(id: number, type: 'logid'|'diffid'): JQueryPromise<string|null> {
+		for (const user in this.list) {
+			const relId = this.list[user][type];
+			if (relId === id) {
+				return $.Deferred().resolve(user);
+			}
+		}
+		const fetcher = type === 'logid' ? this.scrapeUsername : this.fetchEditorName;
+		return fetcher(id).then((username) => {
+			if (username) {
+				this.list[IdList.formatUsername(username)][type] = id;
+			}
+			return username;
+		});
+	}
+
+	/**
+	 * Scrape [[Special:Log]] by a logid and attempt to get the associated username (if any).
+	 * @param logid
+	 * @returns
+	 */
+	private scrapeUsername(logid: number): JQueryPromise<string|null> {
+		const url = mw.util.getUrl('特別:ログ', {logid: logid.toString()});
+		return $.get(url)
+			.then((html) => {
+				const $newusers = $(html).find('.mw-logline-newusers').last();
+				if ($newusers.length) {
+					switch ($newusers.data('mw-logaction')) {
+						case 'newusers/create':
+						case 'newusers/autocreate':
+						case 'newusers/create2': // Created by an existing user
+						case 'newusers/byemail': // Created by an existing user and password sent off
+							return $newusers.children('a.mw-userlink').eq(0).text();
+						case 'newusers/forcecreatelocal':
+							return $newusers.children('a').last().text().replace(/^利用者:/, '');
+						default:
+					}
+				}
+				return null;
+			})
+			.catch((...err) => {
+				console.log(err);
+				return null;
+			});
+	}
+
+	/**
+	 * Convert a revision ID to a username.
+	 * @param diffid
+	 * @returns
+	 */
+	private fetchEditorName(diffid: number): JQueryPromise<string|null> {
+		return new mw.Api().get({
+			action: 'query',
+			prop: 'revisions',
+			revids: diffid,
+			formatversion: '2'
+		}).then((res) => {
+			const resPg = res && res.query && res.query.pages;
+			if (!resPg || !resPg.length) return null;
+			const resRev = resPg[0].revisions;
+			const user = Array.isArray(resRev) && !!resRev.length && <string|undefined>resRev[0].user;
+			return user || null;
+		}).catch((_, err) => {
+			console.log(err);
+			return null;
+		});
+	}
+	
 }
 
 /**
@@ -813,7 +1024,7 @@ class Reporter {
 
 		// Create target page option
 		const $pageWrapper = Reporter.createRow();
-		const $pageLabel = Reporter.createLeftLabel($pageWrapper, '報告先');
+		const $pageLabel = Reporter.createRowLabel($pageWrapper, '報告先');
 		this.$page = $('<select>');
 		this.$page
 			.addClass('anr-juxtaposed') // Important for the dropdown to fill the remaining space
@@ -832,7 +1043,7 @@ class Reporter {
 
 		// Create target page anchor
 		const $pageLinkWrapper = Reporter.createRow();
-		Reporter.createLeftLabel($pageLinkWrapper, '');
+		Reporter.createRowLabel($pageLinkWrapper, '');
 		this.$pageLink = $('<a>');
 		this.$pageLink
 			.addClass('anr-disabledanchor') // Disable the anchor by default
@@ -843,7 +1054,7 @@ class Reporter {
 
 		// Create section option for ANI and AN3RR
 		this.$sectionWrapper = Reporter.createRow();
-		const $sectionLabel = Reporter.createLeftLabel(this.$sectionWrapper, '節');
+		const $sectionLabel = Reporter.createRowLabel(this.$sectionWrapper, '節');
 		this.$section = $('<select>');
 		this.$section
 			.prop({
@@ -859,7 +1070,7 @@ class Reporter {
 
 		// Create section option for ANS
 		this.$sectionAnsWrapper = Reporter.createRow(true);
-		const $sectionAnsLabel = Reporter.createLeftLabel(this.$sectionAnsWrapper, '節');
+		const $sectionAnsLabel = Reporter.createRowLabel(this.$sectionAnsWrapper, '節');
 		this.$sectionAns = $('<select>');
 		this.$sectionAns
 			.prop('innerHTML',
@@ -929,13 +1140,13 @@ class Reporter {
 		 * @param this
 		 */
 		const copyThenResetSelection = function(this: HTMLSelectElement) {
-			copyToClipboard(this.value);
+			lib.copyToClipboard(this.value, 'ja');
 			this.selectedIndex = 0;
 		};
 
 		// Create VIP copier
 		this.$vipWrapper = Reporter.createRow(true);
-		const $vipLabel = Reporter.createLeftLabel(this.$vipWrapper, 'VIP');
+		const $vipLabel = Reporter.createRowLabel(this.$vipWrapper, 'VIP');
 		this.$vip = $('<select>');
 		this.$vip
 			.prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
@@ -947,7 +1158,7 @@ class Reporter {
 
 		// Create LTA copier
 		this.$ltaWrapper = Reporter.createRow(true);
-		const $ltaLabel = Reporter.createLeftLabel(this.$ltaWrapper, 'LTA');
+		const $ltaLabel = Reporter.createRowLabel(this.$ltaWrapper, 'LTA');
 		this.$lta = $('<select>');
 		this.$lta
 			.prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
@@ -959,7 +1170,7 @@ class Reporter {
 
 		// Create predefined reason selector
 		const $predefinedWrapper = Reporter.createRow(true);
-		const $predefinedLabel = Reporter.createLeftLabel($predefinedWrapper, '定型文');
+		const $predefinedLabel = Reporter.createRowLabel($predefinedWrapper, '定型文');
 		this.$predefined = addOptions($('<select>'), [
 			{text: '選択してコピー', value: '', disabled: true, selected: true, hidden: true},
 			...this.cfg.reasons.map((el) => ({text: el}))
@@ -972,7 +1183,7 @@ class Reporter {
 
 		// Create reason field
 		const $reasonWrapper = Reporter.createRow();
-		Reporter.createLeftLabel($reasonWrapper, '理由');
+		Reporter.createRowLabel($reasonWrapper, '理由');
 		this.$reason = $('<textarea>');
 		this.$reason.prop({
 			id: 'anr-option-reason',
@@ -1042,12 +1253,12 @@ class Reporter {
 			Reporter.toggle($watchExpiryWrapper, this.$watchUser.prop('checked'));
 		}).trigger('change');
 
-		// Set all the left labels to the same width
+		// Set all the row labels to the same width
 		const $labels = $('.anr-option-label');
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const optionsWidths = Array.prototype.map.call<JQuery<HTMLElement>, any[], number[]>(
 			$labels,
-			(el: HTMLElement) => el.offsetWidth // Collect the widths of all left labels
+			(el: HTMLElement) => el.offsetWidth // Collect the widths of all row labels
 		);
 		const optionWidth = Math.max(...optionsWidths); // Get the max value
 		$labels.css('min-width', optionWidth); // Set the value to all
@@ -1099,7 +1310,7 @@ class Reporter {
 	 * @param labelText The text of the label (technically, the innerHTML). If an empty string is passed, `&nbsp;` is used.
 	 * @returns The created label.
 	 */
-	static createLeftLabel($appendTo: JQuery<HTMLElement>, labelText: string): JQuery<HTMLDivElement> {
+	static createRowLabel($appendTo: JQuery<HTMLElement>, labelText: string): JQuery<HTMLDivElement> {
 		const $label: JQuery<HTMLDivElement> = $('<div>');
 		$label.addClass('anr-option-label').prop('innerHTML', labelText || '&nbsp;');
 		$appendTo.append($label);
@@ -1107,7 +1318,7 @@ class Reporter {
 	}
 
 	/**
-	 * Compare the outerHeight of a left label div and that of a sibling div, and if the former is smaller than the latter,
+	 * Compare the outerHeight of a row label div and that of a sibling div, and if the former is smaller than the latter,
 	 * assign `padding-top` to the former.
 	 * 
 	 * Note: **Both elements must be visible when this function is called**.
@@ -1123,7 +1334,7 @@ class Reporter {
 	}
 
 	/**
-	 * Wrap a \<select> element (next to a left label) with a div. This is for the element to fill the remaining space.
+	 * Wrap a (non-block) element (next to a row label) with a div. This is for the element to fill the remaining space.
 	 * ```html
 	 * <div class="anr-option-row">
 	 * 	<div class="anr-option-label"></div> <!-- float: left; -->
@@ -1197,8 +1408,8 @@ class Reporter {
 		// Process additional asynchronous procedures for Reporter
 		$.when(
 			lib.Wikitext.newFromTitle(ANS),
-			getVipList(),
-			getLtaList()
+			lib.getVipList(),
+			lib.getLtaList()
 		)
 		.then((Wkt, vipList, ltaList) => {
 
@@ -1422,44 +1633,6 @@ class Reporter {
 		return this;
 	}
 
-	/**
-	 * Search for the oldest account creation logid and the diffid of the newest edit of a user.
-	 * @param username
-	 * @returns
-	 */
-	getIds(username: string): JQueryPromise<EventIds> {
-		const ret: EventIds = {};
-		return new mw.Api().get({
-			action: 'query',
-			list: 'logevents|usercontribs',
-			leprop: 'ids',
-			letype: 'newusers',
-			ledir: 'newer',
-			lelimit: 1,
-			leuser: username,
-			uclimit: 1,
-			ucuser: username,
-			ucprop: 'ids',
-			formatversion: '2'
-		}).then((res) => {
-			const resLgev = res && res.query && res.query.logevents;
-			const resCont = res && res.query && res.query.usercontribs;
-			if (resLgev && resLgev[0] && resLgev[0].logid !== void 0) {
-				ret.logid = resLgev[0].logid;
-			}
-			if (resCont && resCont[0] && resCont[0].revid !== void 0) {
-				ret.diffid = resCont[0].revid;
-			}
-			if (Object.keys(ret).length) {
-				this.ids[username] = {...ret};
-			}
-			return ret;
-		}).catch((_, err) => {
-			console.error(err);
-			return ret;
-		});
-	}
-
 }
 
 /** The options for {@link User.constructor}. */
@@ -1490,6 +1663,8 @@ class User {
 
 	/** The main wrapper that contains the user pane as a row. */
 	$wrapper: JQuery<HTMLDivElement>;
+	/** The overlay of the user pane. */
+	$overlay: JQuery<HTMLDivElement>;
 	/** The ID on {@link $label}. */
 	id: string;
 	/** The label. */
@@ -1514,7 +1689,7 @@ class User {
 	/**
 	 * Create a user pane of the Reporter dialog with the following structure.
 	 * ```html
-	 * <div class="anr-option-row">
+	 * <div class="anr-option-row anr-option-userpane-wrapper">
 	 * 	<div class="anr-option-label">利用者</div> <!-- float: left; -->
 	 * 	<div class="anr-option-usertype"> <!-- float: right; -->
 	 * 		<select>...</select>
@@ -1522,20 +1697,27 @@ class User {
 	 * 	<div class="anr-option-wrapper"> <!-- overflow: hidden; -->
 	 * 		<input class="anr-option-username anr-juxtaposed"> <!-- width: 100%; -->
 	 * 	</div>
-	 * </div>
-	 * <div class="anr-option-row">
-	 * 	<div class="anr-option-label"></div> <!-- float: left; -->
-	 * 	<div class="anr-option-hideuser">
-	 * 		<label>
-	 * 			<input class="anr-checkbox">
-	 * 			<span class="anr-checkbox-label">利用者名を隠す</span>
-	 * 		</label>
+	 * 	<!-- row boundary -->
+	 * 	<div class="anr-option-row-inner anr-option-hideuser-wrapper">
+	 * 		<div class="anr-option-label">&nbsp;</div> <!-- float: left; -->
+	 * 		<div class="anr-option-hideuser">
+	 * 			<label>
+	 * 				<input class="anr-checkbox">
+	 * 				<span class="anr-checkbox-label">利用者名を隠す</span>
+	 * 			</label>
+	 * 		</div>
 	 * 	</div>
-	 * </div>
-	 * <div class="anr-option-row">
-	 * 	<div class="anr-option-label"></div> <!-- float: left; -->
-	 * 	<div class="anr-option-blockstatus">
-	 * 		<a>ブロックあり</a>
+	 * 	<div class="anr-option-row-inner anr-option-idlink-wrapper">
+	 * 		<div class="anr-option-label">&nbsp;</div>
+	 * 		<div class="anr-option-idlink">
+	 * 			<a></a>
+	 * 		</div>
+	 * 	</div>
+	 * 	<div class="anr-option-row-inner anr-option-blockstatus-wrapper">
+	 * 		<div class="anr-option-label">&nbsp;</div>
+	 * 		<div class="anr-option-blockstatus">
+	 * 			<a>ブロックあり</a>
+	 * 		</div>
 	 * 	</div>
 	 * </div>
 	 * <!-- ADD BUTTON HERE -->
@@ -1552,9 +1734,13 @@ class User {
 
 		this.$wrapper = Reporter.createRow();
 		this.$wrapper.addClass('anr-option-userpane-wrapper');
+		this.$overlay = $('<div>');
+		this.$overlay.addClass('anr-option-userpane-overlay');
+		Reporter.toggle(this.$overlay, false);
+		this.$wrapper.append(this.$overlay);
 
 		this.id = 'anr-dialog-userpane-' + (userPaneCnt++);
-		this.$label = Reporter.createLeftLabel(this.$wrapper, '利用者').prop('id', this.id);
+		this.$label = Reporter.createRowLabel(this.$wrapper, '利用者').prop('id', this.id);
 		if (options.removable) {
 			this.$wrapper.addClass('anr-option-removable');
 			this.$label
@@ -1600,42 +1786,52 @@ class User {
 		Reporter.verticalAlign(this.$label, $userWrapper);
 
 		this.$hideUserWrapper = Reporter.createRow();
-		this.$hideUserWrapper.addClass('anr-option-hideuser-wrapper');
-		Reporter.createLeftLabel(this.$hideUserWrapper, '');
+		this.$hideUserWrapper.removeAttr('class').addClass('anr-option-row-inner anr-option-hideuser-wrapper');
+		Reporter.createRowLabel(this.$hideUserWrapper, '');
 		const hideUserElements = createLabelledCheckbox('利用者名を隠す', {alterClasses: ['anr-option-hideuser']});
 		this.$hideUser = hideUserElements.$checkbox;
 		this.$hideUserWrapper.append(hideUserElements.$wrapper);
-		$next.before(this.$hideUserWrapper);
+		this.$wrapper.append(this.$hideUserWrapper);
 		Reporter.toggle(this.$hideUserWrapper, false);
 
 		this.$idLinkWrapper = Reporter.createRow();
-		this.$idLinkWrapper.addClass('anr-option-idlink-wrapper');
-		Reporter.createLeftLabel(this.$idLinkWrapper, '');
+		this.$idLinkWrapper.removeAttr('class').addClass('anr-option-row-inner anr-option-idlink-wrapper');
+		Reporter.createRowLabel(this.$idLinkWrapper, '');
 		this.$idLink = $('<a>');
 		this.$idLink.prop('target', '_blank');
 		this.$idLinkWrapper
 			.append(
 				$('<div>').addClass('anr-option-idlink').append(this.$idLink)
 			);
-		$next.before(this.$idLinkWrapper);
+		this.$wrapper.append(this.$idLinkWrapper);
 		Reporter.toggle(this.$idLinkWrapper, false);
 
 		this.$blockStatusWrapper = Reporter.createRow();
-		this.$blockStatusWrapper.addClass('anr-option-blockstatus-wrapper');
-		Reporter.createLeftLabel(this.$blockStatusWrapper, '');
+		this.$blockStatusWrapper.removeAttr('class').addClass('anr-option-row-inner anr-option-blockstatus-wrapper');
+		Reporter.createRowLabel(this.$blockStatusWrapper, '');
 		this.$blockStatus = $('<a>');
 		this.$blockStatus.prop('target', '_blank').text('ブロックあり');
 		this.$blockStatusWrapper
 			.append(
 				$('<div>').addClass('anr-option-blockstatus').append(this.$blockStatus)
 			);
-		$next.before(this.$blockStatusWrapper);
+		this.$wrapper.append(this.$blockStatusWrapper);
 		Reporter.toggle(this.$blockStatusWrapper, false);
 
 		if (options.addCallback) {
 			options.addCallback(this);
 		}
 
+	}
+
+	/**
+	 * Toggle the visibility of the overlay.
+	 * @param show
+	 * @returns
+	 */
+	setOverlay(show: boolean): User {
+		Reporter.toggle(this.$overlay, show);
+		return this;
 	}
 
 	/**
@@ -1684,9 +1880,28 @@ class User {
 			});
 	}
 
+	/**
+	 * Update the visibility of user pane items when the selection is changed in the type dropdown.
+	 */
 	processTypeChange(): void {
-		// Red border when 'none' is selected
-		this.$type.toggleClass('anr-option-usertype-none', !this.$type.prop('disabled') && this.$type.val() === 'none');
+
+		const selectedType = <string>this.$type.val();
+		switch (selectedType) {
+			case 'UNL':
+			case 'User2':
+				Reporter.toggle(this.$hideUserWrapper, true);
+				break;
+			case 'IP2':
+				break;
+			case 'logid':
+				break;
+			case 'diff':
+				break;
+			default: // 'none'
+				// Red border when 'none' is selected
+				this.$type.toggleClass('anr-option-usertype-none', !this.$type.prop('disabled'));
+		}
+		
 	}
 
 	/**
@@ -1823,25 +2038,6 @@ class User {
 
 }
 
-/**
- * Copy a string to the clipboard.
- * @param str
- */
-function copyToClipboard(str: string): void {
-
-	const temp = document.createElement('textarea');
-	document.body.appendChild(temp); // Create a temporarily hidden text field
-	temp.value = str; // Put the passed string to the text field
-	temp.select(); // Select the text
-	document.execCommand('copy'); // Copy it to the clipboard
-	temp.remove();
-
-	const msg = document.createElement('div');
-	msg.innerHTML = `<code style="font-family: inherit;">${str}</code>をクリップボードにコピーしました。`;
-	mw.notify(msg, {type: 'success'});
-
-}
-
 interface OptionElementData {
 	text: string;
 	value?: string;
@@ -1899,7 +2095,7 @@ function createLabelledCheckbox(labelText: string, options: LabelledCheckboxOpti
 	const $label: JQuery<HTMLLabelElement> = $('<label>');
 	$label.attr('for', id);
 	const $wrapper = Reporter.createRow();
-	$wrapper.removeClass().addClass((options.alterClasses || ['anr-option-row']).join(' ')).append($label);
+	$wrapper.removeAttr('class').addClass((options.alterClasses || ['anr-option-row']).join(' ')).append($label);
 	const $checkbox: JQuery<HTMLInputElement> = $('<input>');
 	$checkbox
 		.prop({
@@ -1911,77 +2107,6 @@ function createLabelledCheckbox(labelText: string, options: LabelledCheckboxOpti
 	$checkboxLabel.addClass('anr-checkbox-label').text(labelText);
 	$label.append($checkbox, $checkboxLabel);
 	return {$wrapper, $checkbox};
-}
-
-/**
- * Get a list of VIPs.
- * @returns
- */
-function getVipList(): JQueryPromise<string[]> {
-	return new mw.Api().get({
-		action: 'parse',
-		page: 'Wikipedia:進行中の荒らし行為',
-		prop: 'sections',
-		formatversion: '2'
-	}).then((res) => {
-
-		const resSect = res && res.parse && res.parse.sections; // undefined or array of objects
-		if (!resSect) return[];
-
-		// Define sections tiltles that are irrelevant to VIP names
-		const excludeList = [
-			'記述について',
-			'急を要する二段階',
-			'配列',
-			'ブロック等の手段',
-			'このページに利用者名を加える',
-			'注意と選択',
-			'警告の方法',
-			'未登録（匿名・IP）ユーザーの場合',
-			'登録済み（ログイン）ユーザーの場合',
-			'警告中',
-			'関連項目'
-		];
-
-		// Return a list
-		return resSect.reduce((acc: string[], {line, level}: {line: string, level: string}) => {
-			if (excludeList.indexOf(line) === -1 && level === '3') {
-				acc.push(line); // NAME in WP:VIP#NAME
-			}
-			return acc;
-		}, []);
-
-	}).catch((code, err) => {
-		console.log(err);
-		return [];
-	});
-}
-
-/**
- * Get a list of LTAs.
- * @returns
- */
-function getLtaList(): JQueryPromise<string[]> {
-	return lib.continuedRequest({
-		action: 'query',
-		list: 'allpages',
-		apprefix: 'LTA:',
-		apnamespace: '0',
-		apfilterredir: 'redirects',
-		aplimit: 'max',
-		formatversion: '2'
-	}, Infinity)
-	.then((response) => {
-		return response.reduce((acc: string[], res) => {
-			const resPgs = res && res.query && res.query.allpages;
-			(resPgs || []).forEach(({title}: {title: string}) => {
-				if (/^LTA:[^/]+$/.test(title)) {
-					acc.push(title.replace(/^LTA:/, '')); // NAME in LTA:NAME
-				}
-			});
-			return acc;
-		}, []);
-	});
 }
 
 // ******************************************************************************************

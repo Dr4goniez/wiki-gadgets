@@ -29,6 +29,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     var ANS = 'Wikipedia:管理者伝言板/投稿ブロック/ソックパペット';
     var AN3RR = 'Wikipedia:管理者伝言板/3RR';
     var lib;
+    var mwString;
+    var idList;
     // ******************************************************************************************
     // Main functions
     /** Initialize the script. */
@@ -38,16 +40,16 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             mw.notify('あなたは自動承認されていません。AN Reporterを終了します。', { type: 'warn' });
             return;
         }
+        // Shouldn't run on API pages
+        if (location.href.indexOf('/api.php') !== -1) {
+            return;
+        }
         /** Whether the user is on the config page. */
         var onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(ANReporterConfig|ANRC)$/i.test(mw.config.get('wgTitle'));
-        var libName = 'ext.gadget.WpLibExtra';
-        mw.loader.using(libName).then(function (require) {
-            // Validate the library
-            lib = require(libName);
-            if (typeof (lib && lib.version) !== 'string') {
-                console.error("".concat(ANR, ": \u30E9\u30A4\u30D6\u30E9\u30EA\u306E\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002"));
+        // Load the libary and dependent modules, then go on to the main procedure
+        loadLibrary(true).then(function (libReady) {
+            if (!libReady)
                 return;
-            }
             // Main procedure
             if (onConfig) {
                 // If on the config page, create the interface after loading dependent modules
@@ -66,14 +68,16 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             }
             else {
                 // If not on the config page, create a portlet link to open the ANR dialog after loading dependent modules
-                var modules = [
+                var modules_1 = [
+                    'mediawiki.String',
                     'mediawiki.user',
                     'mediawiki.util',
                     'mediawiki.api',
                     'mediawiki.Title',
                     'jquery.ui',
                 ];
-                $.when(mw.loader.using(modules), mw.loader.getScript('https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.js'), $.ready).then(function () {
+                $.when(mw.loader.using(modules_1), mw.loader.getScript('https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.js'), $.ready).then(function (require) {
+                    mwString = require(modules_1[0]);
                     var portlet = createPortletLink();
                     if (!portlet) {
                         console.error("".concat(ANR, ": \u30DD\u30FC\u30C8\u30EC\u30C3\u30C8\u30EA\u30F3\u30AF\u306E\u4F5C\u6210\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002"));
@@ -81,6 +85,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     }
                     createStyleTag(Config.merge());
                     $('head').append('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.css">');
+                    idList = new IdList();
                     portlet.addEventListener('click', Reporter.new);
                 }).catch(function () {
                     var err = [];
@@ -92,6 +97,47 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 });
             }
         });
+    }
+    /**
+     * Load the library.
+     * @param dev Whether to load the dev version of the library.
+     * @returns
+     */
+    function loadLibrary(dev) {
+        if (dev === void 0) { dev = false; }
+        var libName = 'ext.gadget.WpLibExtra' + (dev ? 'Dev' : '');
+        var loadLocal = function () {
+            return mw.loader.using(libName)
+                .then(function (require) {
+                lib = require(libName);
+                if (typeof (lib && lib.version) !== 'string') { // Validate the library
+                    console.error("".concat(ANR, ": \u30E9\u30A4\u30D6\u30E9\u30EA\u306E\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002"));
+                    return false;
+                }
+                return true;
+            })
+                .catch(function () {
+                var err = [];
+                for (var _i = 0; _i < arguments.length; _i++) {
+                    err[_i] = arguments[_i];
+                }
+                console.error(err);
+                return false;
+            });
+        };
+        if (dev) {
+            return mw.loader.getScript('https://test.wikipedia.org/w/load.php?modules=' + libName).then(loadLocal).catch(function () {
+                var err = [];
+                for (var _i = 0; _i < arguments.length; _i++) {
+                    err[_i] = arguments[_i];
+                }
+                console.error(err);
+                return false;
+            });
+        }
+        else {
+            return loadLocal();
+        }
     }
     /**
      * Get the first heading and content body, replacing the latter with a 'now loading' message.
@@ -528,8 +574,20 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 'margin: 0.8em 0;' +
                 'background-color: gray;' +
                 '}' +
-                '.anr-option-row:not(:last-child) {' + // Margin below every option row
+                '.anr-option-row:not(:last-child), ' + // Margin below every option row
+                '.anr-option-row-inner {' +
                 'margin-bottom: 0.15em;' +
+                '}' +
+                '.anr-option-userpane-wrapper {' +
+                'position: relative;' +
+                '}' +
+                '.anr-option-userpane-overlay {' +
+                'width: 100%;' +
+                'height: 100%;' +
+                'position: absolute;' +
+                'top: 0;' +
+                'left: 0;' +
+                'z-index: 10;' +
                 '}' +
                 '.anr-option-hideuser-wrapper:not(.anr-hidden) + .anr-option-blockstatus-wrapper {' +
                 'margin-top: -0.15em;' + // Nullify the bottom margin
@@ -615,6 +673,157 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         document.head.appendChild(style);
     }
     /**
+     * The IdList class. Administrates username-ID conversions.
+     */
+    var IdList = /** @class */ (function () {
+        /** Initialize a new `IdList` instance. */
+        function IdList() {
+            this.list = {};
+        }
+        /**
+         * Format a username by calling `lib.clean`, replacing spaces with underscores, and capitalizing the first letter.
+         * @param username
+         * @returns The formatted username.
+         */
+        IdList.formatUsername = function (username) {
+            return mwString.ucFirst(lib.clean(username).replace(/ /g, '_'));
+        };
+        /**
+         * Get event IDs of a user.
+         * @param username
+         * @returns
+         */
+        IdList.prototype.getIds = function (username) {
+            username = IdList.formatUsername(username);
+            for (var user in this.list) {
+                if (user === username) {
+                    var _a = this.list[user], logid = _a.logid, diffid = _a.diffid;
+                    if (typeof logid === 'number' || typeof diffid === 'number') {
+                        return $.Deferred().resolve(__assign({}, this.list[user]));
+                    }
+                }
+            }
+            return this.fetchIds(username);
+        };
+        /**
+         * Search for the oldest account creation logid and the diffid of the newest edit of a user.
+         * @param username
+         * @returns
+         */
+        IdList.prototype.fetchIds = function (username) {
+            var _this = this;
+            var ret = {};
+            return new mw.Api().get({
+                action: 'query',
+                list: 'logevents|usercontribs',
+                leprop: 'ids',
+                letype: 'newusers',
+                ledir: 'newer',
+                lelimit: 1,
+                leuser: username,
+                uclimit: 1,
+                ucuser: username,
+                ucprop: 'ids',
+                formatversion: '2'
+            }).then(function (res) {
+                var resLgev = res && res.query && res.query.logevents;
+                var resCont = res && res.query && res.query.usercontribs;
+                if (resLgev && resLgev[0] && resLgev[0].logid !== void 0) {
+                    ret.logid = resLgev[0].logid;
+                }
+                if (resCont && resCont[0] && resCont[0].revid !== void 0) {
+                    ret.diffid = resCont[0].revid;
+                }
+                if (Object.keys(ret).length) {
+                    _this.list[username] = __assign({}, ret);
+                }
+                return ret;
+            }).catch(function (_, err) {
+                console.error(err);
+                return ret;
+            });
+        };
+        /**
+         * Get a username from a log/diff ID.
+         * @param id
+         * @param type
+         * @returns
+         */
+        IdList.prototype.getUsername = function (id, type) {
+            var _this = this;
+            for (var user in this.list) {
+                var relId = this.list[user][type];
+                if (relId === id) {
+                    return $.Deferred().resolve(user);
+                }
+            }
+            var fetcher = type === 'logid' ? this.scrapeUsername : this.fetchEditorName;
+            return fetcher(id).then(function (username) {
+                if (username) {
+                    _this.list[IdList.formatUsername(username)][type] = id;
+                }
+                return username;
+            });
+        };
+        /**
+         * Scrape [[Special:Log]] by a logid and attempt to get the associated username (if any).
+         * @param logid
+         * @returns
+         */
+        IdList.prototype.scrapeUsername = function (logid) {
+            var url = mw.util.getUrl('特別:ログ', { logid: logid.toString() });
+            return $.get(url)
+                .then(function (html) {
+                var $newusers = $(html).find('.mw-logline-newusers').last();
+                if ($newusers.length) {
+                    switch ($newusers.data('mw-logaction')) {
+                        case 'newusers/create':
+                        case 'newusers/autocreate':
+                        case 'newusers/create2': // Created by an existing user
+                        case 'newusers/byemail': // Created by an existing user and password sent off
+                            return $newusers.children('a.mw-userlink').eq(0).text();
+                        case 'newusers/forcecreatelocal':
+                            return $newusers.children('a').last().text().replace(/^利用者:/, '');
+                        default:
+                    }
+                }
+                return null;
+            })
+                .catch(function () {
+                var err = [];
+                for (var _i = 0; _i < arguments.length; _i++) {
+                    err[_i] = arguments[_i];
+                }
+                console.log(err);
+                return null;
+            });
+        };
+        /**
+         * Convert a revision ID to a username.
+         * @param diffid
+         * @returns
+         */
+        IdList.prototype.fetchEditorName = function (diffid) {
+            return new mw.Api().get({
+                action: 'query',
+                prop: 'revisions',
+                revids: diffid,
+                formatversion: '2'
+            }).then(function (res) {
+                var resPg = res && res.query && res.query.pages;
+                if (!resPg || !resPg.length)
+                    return null;
+                var resRev = resPg[0].revisions;
+                var user = Array.isArray(resRev) && !!resRev.length && resRev[0].user;
+                return user || null;
+            }).catch(function (_, err) {
+                console.log(err);
+                return null;
+            });
+        };
+        return IdList;
+    }());
+    /**
      * The Reporter class. Manipulates the ANR dialog.
      */
     var Reporter = /** @class */ (function () {
@@ -658,7 +867,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$content.append(this.$fieldset);
             // Create target page option
             var $pageWrapper = Reporter.createRow();
-            var $pageLabel = Reporter.createLeftLabel($pageWrapper, '報告先');
+            var $pageLabel = Reporter.createRowLabel($pageWrapper, '報告先');
             this.$page = $('<select>');
             this.$page
                 .addClass('anr-juxtaposed') // Important for the dropdown to fill the remaining space
@@ -674,7 +883,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.verticalAlign($pageLabel, $pageDropdownWrapper);
             // Create target page anchor
             var $pageLinkWrapper = Reporter.createRow();
-            Reporter.createLeftLabel($pageLinkWrapper, '');
+            Reporter.createRowLabel($pageLinkWrapper, '');
             this.$pageLink = $('<a>');
             this.$pageLink
                 .addClass('anr-disabledanchor') // Disable the anchor by default
@@ -684,7 +893,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$fieldset.append($pageLinkWrapper);
             // Create section option for ANI and AN3RR
             this.$sectionWrapper = Reporter.createRow();
-            var $sectionLabel = Reporter.createLeftLabel(this.$sectionWrapper, '節');
+            var $sectionLabel = Reporter.createRowLabel(this.$sectionWrapper, '節');
             this.$section = $('<select>');
             this.$section
                 .prop({
@@ -699,7 +908,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.verticalAlign($sectionLabel, $sectionDropdownWrapper);
             // Create section option for ANS
             this.$sectionAnsWrapper = Reporter.createRow(true);
-            var $sectionAnsLabel = Reporter.createLeftLabel(this.$sectionAnsWrapper, '節');
+            var $sectionAnsLabel = Reporter.createRowLabel(this.$sectionAnsWrapper, '節');
             this.$sectionAns = $('<select>');
             this.$sectionAns
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してください</option>' +
@@ -748,7 +957,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                             U.$blockStatusWrapper.remove();
                             self.Users.splice(idx, 1);
                         }
-                        console.log(self.Users);
                     }
                 });
             });
@@ -764,12 +972,12 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
              * @param this
              */
             var copyThenResetSelection = function () {
-                copyToClipboard(this.value);
+                lib.copyToClipboard(this.value, 'ja');
                 this.selectedIndex = 0;
             };
             // Create VIP copier
             this.$vipWrapper = Reporter.createRow(true);
-            var $vipLabel = Reporter.createLeftLabel(this.$vipWrapper, 'VIP');
+            var $vipLabel = Reporter.createRowLabel(this.$vipWrapper, 'VIP');
             this.$vip = $('<select>');
             this.$vip
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
@@ -780,7 +988,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.verticalAlign($vipLabel, $vipDropdownWrapper);
             // Create LTA copier
             this.$ltaWrapper = Reporter.createRow(true);
-            var $ltaLabel = Reporter.createLeftLabel(this.$ltaWrapper, 'LTA');
+            var $ltaLabel = Reporter.createRowLabel(this.$ltaWrapper, 'LTA');
             this.$lta = $('<select>');
             this.$lta
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
@@ -791,7 +999,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.verticalAlign($ltaLabel, $ltaDropdownWrapper);
             // Create predefined reason selector
             var $predefinedWrapper = Reporter.createRow(true);
-            var $predefinedLabel = Reporter.createLeftLabel($predefinedWrapper, '定型文');
+            var $predefinedLabel = Reporter.createRowLabel($predefinedWrapper, '定型文');
             this.$predefined = addOptions($('<select>'), __spreadArray([
                 { text: '選択してコピー', value: '', disabled: true, selected: true, hidden: true }
             ], this.cfg.reasons.map(function (el) { return ({ text: el }); }), true));
@@ -802,7 +1010,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.verticalAlign($predefinedLabel, $predefinedDropdownWrapper);
             // Create reason field
             var $reasonWrapper = Reporter.createRow();
-            Reporter.createLeftLabel($reasonWrapper, '理由');
+            Reporter.createRowLabel($reasonWrapper, '理由');
             this.$reason = $('<textarea>');
             this.$reason.prop({
                 id: 'anr-option-reason',
@@ -864,10 +1072,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$watchUser.off('change').on('change', function () {
                 Reporter.toggle($watchExpiryWrapper, _this.$watchUser.prop('checked'));
             }).trigger('change');
-            // Set all the left labels to the same width
+            // Set all the row labels to the same width
             var $labels = $('.anr-option-label');
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            var optionsWidths = Array.prototype.map.call($labels, function (el) { return el.offsetWidth; } // Collect the widths of all left labels
+            var optionsWidths = Array.prototype.map.call($labels, function (el) { return el.offsetWidth; } // Collect the widths of all row labels
             );
             var optionWidth = Math.max.apply(Math, optionsWidths); // Get the max value
             $labels.css('min-width', optionWidth); // Set the value to all
@@ -915,14 +1123,14 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * @param labelText The text of the label (technically, the innerHTML). If an empty string is passed, `&nbsp;` is used.
          * @returns The created label.
          */
-        Reporter.createLeftLabel = function ($appendTo, labelText) {
+        Reporter.createRowLabel = function ($appendTo, labelText) {
             var $label = $('<div>');
             $label.addClass('anr-option-label').prop('innerHTML', labelText || '&nbsp;');
             $appendTo.append($label);
             return $label;
         };
         /**
-         * Compare the outerHeight of a left label div and that of a sibling div, and if the former is smaller than the latter,
+         * Compare the outerHeight of a row label div and that of a sibling div, and if the former is smaller than the latter,
          * assign `padding-top` to the former.
          *
          * Note: **Both elements must be visible when this function is called**.
@@ -937,7 +1145,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             }
         };
         /**
-         * Wrap a \<select> element (next to a left label) with a div. This is for the element to fill the remaining space.
+         * Wrap a (non-block) element (next to a row label) with a div. This is for the element to fill the remaining space.
          * ```html
          * <div class="anr-option-row">
          * 	<div class="anr-option-label"></div> <!-- float: left; -->
@@ -1000,7 +1208,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             U.$input.val(relevantUser || '');
             var def = U.processInputChange();
             // Process additional asynchronous procedures for Reporter
-            $.when(lib.Wikitext.newFromTitle(ANS), getVipList(), getLtaList())
+            $.when(lib.Wikitext.newFromTitle(ANS), lib.getVipList(), lib.getLtaList())
                 .then(function (Wkt, vipList, ltaList) {
                 // Initialize the ANS section dropdown
                 if (Wkt) {
@@ -1217,44 +1425,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             }
             return this;
         };
-        /**
-         * Search for the oldest account creation logid and the diffid of the newest edit of a user.
-         * @param username
-         * @returns
-         */
-        Reporter.prototype.getIds = function (username) {
-            var _this = this;
-            var ret = {};
-            return new mw.Api().get({
-                action: 'query',
-                list: 'logevents|usercontribs',
-                leprop: 'ids',
-                letype: 'newusers',
-                ledir: 'newer',
-                lelimit: 1,
-                leuser: username,
-                uclimit: 1,
-                ucuser: username,
-                ucprop: 'ids',
-                formatversion: '2'
-            }).then(function (res) {
-                var resLgev = res && res.query && res.query.logevents;
-                var resCont = res && res.query && res.query.usercontribs;
-                if (resLgev && resLgev[0] && resLgev[0].logid !== void 0) {
-                    ret.logid = resLgev[0].logid;
-                }
-                if (resCont && resCont[0] && resCont[0].revid !== void 0) {
-                    ret.diffid = resCont[0].revid;
-                }
-                if (Object.keys(ret).length) {
-                    _this.ids[username] = __assign({}, ret);
-                }
-                return ret;
-            }).catch(function (_, err) {
-                console.error(err);
-                return ret;
-            });
-        };
         return Reporter;
     }());
     var userPaneCnt = 0;
@@ -1265,7 +1435,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         /**
          * Create a user pane of the Reporter dialog with the following structure.
          * ```html
-         * <div class="anr-option-row">
+         * <div class="anr-option-row anr-option-userpane-wrapper">
          * 	<div class="anr-option-label">利用者</div> <!-- float: left; -->
          * 	<div class="anr-option-usertype"> <!-- float: right; -->
          * 		<select>...</select>
@@ -1273,20 +1443,27 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * 	<div class="anr-option-wrapper"> <!-- overflow: hidden; -->
          * 		<input class="anr-option-username anr-juxtaposed"> <!-- width: 100%; -->
          * 	</div>
-         * </div>
-         * <div class="anr-option-row">
-         * 	<div class="anr-option-label"></div> <!-- float: left; -->
-         * 	<div class="anr-option-hideuser">
-         * 		<label>
-         * 			<input class="anr-checkbox">
-         * 			<span class="anr-checkbox-label">利用者名を隠す</span>
-         * 		</label>
+         * 	<!-- row boundary -->
+         * 	<div class="anr-option-row-inner anr-option-hideuser-wrapper">
+         * 		<div class="anr-option-label">&nbsp;</div> <!-- float: left; -->
+         * 		<div class="anr-option-hideuser">
+         * 			<label>
+         * 				<input class="anr-checkbox">
+         * 				<span class="anr-checkbox-label">利用者名を隠す</span>
+         * 			</label>
+         * 		</div>
          * 	</div>
-         * </div>
-         * <div class="anr-option-row">
-         * 	<div class="anr-option-label"></div> <!-- float: left; -->
-         * 	<div class="anr-option-blockstatus">
-         * 		<a>ブロックあり</a>
+         * 	<div class="anr-option-row-inner anr-option-idlink-wrapper">
+         * 		<div class="anr-option-label">&nbsp;</div>
+         * 		<div class="anr-option-idlink">
+         * 			<a></a>
+         * 		</div>
+         * 	</div>
+         * 	<div class="anr-option-row-inner anr-option-blockstatus-wrapper">
+         * 		<div class="anr-option-label">&nbsp;</div>
+         * 		<div class="anr-option-blockstatus">
+         * 			<a>ブロックあり</a>
+         * 		</div>
          * 	</div>
          * </div>
          * <!-- ADD BUTTON HERE -->
@@ -1299,8 +1476,12 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             options = Object.assign({ removable: true }, options || {});
             this.$wrapper = Reporter.createRow();
             this.$wrapper.addClass('anr-option-userpane-wrapper');
+            this.$overlay = $('<div>');
+            this.$overlay.addClass('anr-option-userpane-overlay');
+            Reporter.toggle(this.$overlay, false);
+            this.$wrapper.append(this.$overlay);
             this.id = 'anr-dialog-userpane-' + (userPaneCnt++);
-            this.$label = Reporter.createLeftLabel(this.$wrapper, '利用者').prop('id', this.id);
+            this.$label = Reporter.createRowLabel(this.$wrapper, '利用者').prop('id', this.id);
             if (options.removable) {
                 this.$wrapper.addClass('anr-option-removable');
                 this.$label
@@ -1342,35 +1523,44 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             $next.before(this.$wrapper);
             Reporter.verticalAlign(this.$label, $userWrapper);
             this.$hideUserWrapper = Reporter.createRow();
-            this.$hideUserWrapper.addClass('anr-option-hideuser-wrapper');
-            Reporter.createLeftLabel(this.$hideUserWrapper, '');
+            this.$hideUserWrapper.removeAttr('class').addClass('anr-option-row-inner anr-option-hideuser-wrapper');
+            Reporter.createRowLabel(this.$hideUserWrapper, '');
             var hideUserElements = createLabelledCheckbox('利用者名を隠す', { alterClasses: ['anr-option-hideuser'] });
             this.$hideUser = hideUserElements.$checkbox;
             this.$hideUserWrapper.append(hideUserElements.$wrapper);
-            $next.before(this.$hideUserWrapper);
+            this.$wrapper.append(this.$hideUserWrapper);
             Reporter.toggle(this.$hideUserWrapper, false);
             this.$idLinkWrapper = Reporter.createRow();
-            this.$idLinkWrapper.addClass('anr-option-idlink-wrapper');
-            Reporter.createLeftLabel(this.$idLinkWrapper, '');
+            this.$idLinkWrapper.removeAttr('class').addClass('anr-option-row-inner anr-option-idlink-wrapper');
+            Reporter.createRowLabel(this.$idLinkWrapper, '');
             this.$idLink = $('<a>');
             this.$idLink.prop('target', '_blank');
             this.$idLinkWrapper
                 .append($('<div>').addClass('anr-option-idlink').append(this.$idLink));
-            $next.before(this.$idLinkWrapper);
+            this.$wrapper.append(this.$idLinkWrapper);
             Reporter.toggle(this.$idLinkWrapper, false);
             this.$blockStatusWrapper = Reporter.createRow();
-            this.$blockStatusWrapper.addClass('anr-option-blockstatus-wrapper');
-            Reporter.createLeftLabel(this.$blockStatusWrapper, '');
+            this.$blockStatusWrapper.removeAttr('class').addClass('anr-option-row-inner anr-option-blockstatus-wrapper');
+            Reporter.createRowLabel(this.$blockStatusWrapper, '');
             this.$blockStatus = $('<a>');
             this.$blockStatus.prop('target', '_blank').text('ブロックあり');
             this.$blockStatusWrapper
                 .append($('<div>').addClass('anr-option-blockstatus').append(this.$blockStatus));
-            $next.before(this.$blockStatusWrapper);
+            this.$wrapper.append(this.$blockStatusWrapper);
             Reporter.toggle(this.$blockStatusWrapper, false);
             if (options.addCallback) {
                 options.addCallback(this);
             }
         }
+        /**
+         * Toggle the visibility of the overlay.
+         * @param show
+         * @returns
+         */
+        User.prototype.setOverlay = function (show) {
+            Reporter.toggle(this.$overlay, show);
+            return this;
+        };
         /**
          * Evaluate a username, classify it into a type, and check the block status of the relevant user.
          * @param username
@@ -1419,9 +1609,26 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 };
             });
         };
+        /**
+         * Update the visibility of user pane items when the selection is changed in the type dropdown.
+         */
         User.prototype.processTypeChange = function () {
-            // Red border when 'none' is selected
-            this.$type.toggleClass('anr-option-usertype-none', !this.$type.prop('disabled') && this.$type.val() === 'none');
+            var selectedType = this.$type.val();
+            switch (selectedType) {
+                case 'UNL':
+                case 'User2':
+                    Reporter.toggle(this.$hideUserWrapper, true);
+                    break;
+                case 'IP2':
+                    break;
+                case 'logid':
+                    break;
+                case 'diff':
+                    break;
+                default: // 'none'
+                    // Red border when 'none' is selected
+                    this.$type.toggleClass('anr-option-usertype-none', !this.$type.prop('disabled'));
+            }
         };
         /**
          * Update the user pane in accordance with the value in the username field. This method:
@@ -1538,21 +1745,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         return User;
     }());
     /**
-     * Copy a string to the clipboard.
-     * @param str
-     */
-    function copyToClipboard(str) {
-        var temp = document.createElement('textarea');
-        document.body.appendChild(temp); // Create a temporarily hidden text field
-        temp.value = str; // Put the passed string to the text field
-        temp.select(); // Select the text
-        document.execCommand('copy'); // Copy it to the clipboard
-        temp.remove();
-        var msg = document.createElement('div');
-        msg.innerHTML = "<code style=\"font-family: inherit;\">".concat(str, "</code>\u3092\u30AF\u30EA\u30C3\u30D7\u30DC\u30FC\u30C9\u306B\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\u3002");
-        mw.notify(msg, { type: 'success' });
-    }
-    /**
      * Add \<option>s to a dropdown by referring to object data.
      * @param $dropdown
      * @param data `text` is obligatory, and the other properties are optional.
@@ -1594,7 +1786,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         var $label = $('<label>');
         $label.attr('for', id);
         var $wrapper = Reporter.createRow();
-        $wrapper.removeClass().addClass((options.alterClasses || ['anr-option-row']).join(' ')).append($label);
+        $wrapper.removeAttr('class').addClass((options.alterClasses || ['anr-option-row']).join(' ')).append($label);
         var $checkbox = $('<input>');
         $checkbox
             .prop({
@@ -1606,74 +1798,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         $checkboxLabel.addClass('anr-checkbox-label').text(labelText);
         $label.append($checkbox, $checkboxLabel);
         return { $wrapper: $wrapper, $checkbox: $checkbox };
-    }
-    /**
-     * Get a list of VIPs.
-     * @returns
-     */
-    function getVipList() {
-        return new mw.Api().get({
-            action: 'parse',
-            page: 'Wikipedia:進行中の荒らし行為',
-            prop: 'sections',
-            formatversion: '2'
-        }).then(function (res) {
-            var resSect = res && res.parse && res.parse.sections; // undefined or array of objects
-            if (!resSect)
-                return [];
-            // Define sections tiltles that are irrelevant to VIP names
-            var excludeList = [
-                '記述について',
-                '急を要する二段階',
-                '配列',
-                'ブロック等の手段',
-                'このページに利用者名を加える',
-                '注意と選択',
-                '警告の方法',
-                '未登録（匿名・IP）ユーザーの場合',
-                '登録済み（ログイン）ユーザーの場合',
-                '警告中',
-                '関連項目'
-            ];
-            // Return a list
-            return resSect.reduce(function (acc, _a) {
-                var line = _a.line, level = _a.level;
-                if (excludeList.indexOf(line) === -1 && level === '3') {
-                    acc.push(line); // NAME in WP:VIP#NAME
-                }
-                return acc;
-            }, []);
-        }).catch(function (code, err) {
-            console.log(err);
-            return [];
-        });
-    }
-    /**
-     * Get a list of LTAs.
-     * @returns
-     */
-    function getLtaList() {
-        return lib.continuedRequest({
-            action: 'query',
-            list: 'allpages',
-            apprefix: 'LTA:',
-            apnamespace: '0',
-            apfilterredir: 'redirects',
-            aplimit: 'max',
-            formatversion: '2'
-        }, Infinity)
-            .then(function (response) {
-            return response.reduce(function (acc, res) {
-                var resPgs = res && res.query && res.query.allpages;
-                (resPgs || []).forEach(function (_a) {
-                    var title = _a.title;
-                    if (/^LTA:[^/]+$/.test(title)) {
-                        acc.push(title.replace(/^LTA:/, '')); // NAME in LTA:NAME
-                    }
-                });
-                return acc;
-            }, []);
-        });
     }
     // ******************************************************************************************
     // Entry point
