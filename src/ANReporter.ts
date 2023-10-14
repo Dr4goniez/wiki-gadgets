@@ -36,7 +36,7 @@ function init() {
 	/** Whether the user is on the config page. */
 	const onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(ANReporterConfig|ANRC)$/i.test(mw.config.get('wgTitle'));
 
-	// Load the libary and dependent modules, then go on to the main procedure
+	// Load the library and dependent modules, then go on to the main procedure
 	loadLibrary(false).then((libReady) => {
 
 		if (!libReady) return;
@@ -642,7 +642,7 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'#anr-dialog-optionfield {' + // The immediate child of #anr-dialog-content
 			'padding: 1em;' +
 			'margin: 0;' +
-			'border: 1px solid gray;' +
+			'border: 1px solid #cccccc;' +
 		'}' +
 		'#anr-dialog-optionfield > legend {' +
 			'font-weight: bold;' +
@@ -650,11 +650,13 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'}' +
 		'#anr-dialog-optionfield hr {' +
 			'margin: 0.8em 0;' +
-			'background-color: gray;' +
+			'background-color: #cccccc;' +
 		'}' +
-		'.anr-option-row:not(:last-child), ' + // Margin below every option row
-		'.anr-option-row-inner {' + 
+		'.anr-option-row:not(:last-child) {' + // Margin below every option row
 			'margin-bottom: 0.15em;' +
+		'}' +
+		'.anr-option-row > .anr-option-row-inner:not(.anr-hidden):first-child {' +
+			'margin-top: 0.15em;' +
 		'}' +
 		'.anr-option-userpane-wrapper {' +
 			'position: relative;' +
@@ -666,9 +668,6 @@ function createStyleTag(cfg: ANReporterConfig): void {
 			'top: 0;' +
 			'left: 0;' +
 			'z-index: 10;' +
-		'}' +
-		'.anr-option-hideuser-wrapper:not(.anr-hidden) + .anr-option-blockstatus-wrapper {' +
-			'margin-top: -0.15em;' + // Nullify the bottom margin
 		'}' +
 		'.anr-option-row-withselect2 {' +
 			'margin: 0.3em 0;' +
@@ -711,8 +710,10 @@ function createStyleTag(cfg: ANReporterConfig): void {
 			'float: right;' +
 			'margin-left: 0.3em;' +
 		'}' +
+		'.anr-option-invalidid,' +
 		'.anr-option-usertype-none {' +
 			'border: 2px solid red;' +
+			'border-radius: 3px;' +
 		'}' +
 		'.anr-option-removable > .anr-option-label {' + // Change cursor for the label of a user pane that's removable
 			'cursor: pointer;' +
@@ -777,21 +778,12 @@ class IdList {
 	}
 
 	/**
-	 * Format a username by calling `lib.clean`, replacing spaces with underscores, and capitalizing the first letter.
-	 * @param username
-	 * @returns The formatted username.
-	 */
-	static formatUsername(username: string): string {
-		return mwString.ucFirst(lib.clean(username).replace(/ /g, '_'));
-	}
-
-	/**
 	 * Get event IDs of a user.
 	 * @param username
 	 * @returns
 	 */
 	getIds(username: string): JQueryPromise<EventIds> {
-		username = IdList.formatUsername(username);
+		username = User.formatName(username);
 		for (const user in this.list) {
 			if (user === username) {
 				const {logid, diffid} = this.list[user];
@@ -848,19 +840,42 @@ class IdList {
 	 * @returns
 	 */
 	getUsername(id: number, type: 'logid'|'diffid'): JQueryPromise<string|null> {
-		for (const user in this.list) {
-			const relId = this.list[user][type];
-			if (relId === id) {
-				return $.Deferred().resolve(user);
-			}
+
+		// Attempt to convert the ID without making an HTTP request
+		const registeredUsername = this.getRegisteredUsername(id, type);
+		if (registeredUsername) {
+			return $.Deferred().resolve(registeredUsername);
 		}
+
+		// Attempt to convert the ID through an HTTP request
 		const fetcher = type === 'logid' ? this.scrapeUsername : this.fetchEditorName;
 		return fetcher(id).then((username) => {
 			if (username) {
-				this.list[IdList.formatUsername(username)][type] = id;
+				username = User.formatName(username);
+				if (!this.list[username]) {
+					this.list[username] = {};
+				}
+				this.list[username][type] = id;
 			}
 			return username;
 		});
+
+	}
+
+	/**
+	 * Attempt to convert an ID to a username based on the current username-ID list (no HTTP request).
+	 * @param id 
+	 * @param type 
+	 * @returns 
+	 */
+	getRegisteredUsername(id: number, type: 'logid'|'diffid'): string|null {
+		for (const user in this.list) {
+			const relId = this.list[user][type];
+			if (relId === id) {
+				return user;
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -916,6 +931,14 @@ class IdList {
 		});
 	}
 	
+}
+
+/**
+ * The object returned by {@link Reporter.getBlockStatus}.
+ */
+interface BlockStatus {
+    usertype: 'ip'|'user'|'other';
+    blocked: boolean|null;
 }
 
 /**
@@ -983,6 +1006,7 @@ class Reporter {
 	constructor() {
 
 		this.cfg = Config.merge();
+		Reporter.blockStatus = {}; // Reset
 
 		// Create dialog contour
 		this.$dialog = $('<div>');
@@ -1109,8 +1133,8 @@ class Reporter {
 			new User($addButtonWrapper, {
 				addCallback(User) {
 					const minWidth = User.$label.outerWidth()! + 'px';
-					$.each([User.$wrapper, User.$hideUserWrapper, User.$blockStatusWrapper], function() {
-						$(this).children('.anr-option-label').css('min-width', minWidth);
+					$.each([User.$wrapper, User.$hideUserWrapper, User.$idLinkWrapper, User.$blockStatusWrapper], (_, $wrapper) => {
+						$wrapper.children('.anr-option-label').css('min-width', minWidth);
 					});
 					self.Users.push(User);
 				},
@@ -1119,8 +1143,6 @@ class Reporter {
 					if (idx !== -1) { // Should never be -1
 						const U = self.Users[idx];
 						U.$wrapper.remove();
-						U.$hideUserWrapper.remove();
-						U.$blockStatusWrapper.remove();
 						self.Users.splice(idx, 1);
 					}
 				}
@@ -1400,7 +1422,7 @@ class Reporter {
 			document.querySelector('#firstHeading');
 		const relevantUser =
 			<string|null>mw.config.get('wgRelevantUserName') ||
-			mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' && heading && heading.textContent && User.extractCidr(heading.textContent);
+			mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' && heading && heading.textContent && extractCidr(heading.textContent);
 		const U = R.Users[0];
 		U.$input.val(relevantUser || '');
 		const def = U.processInputChange();
@@ -1487,6 +1509,24 @@ class Reporter {
 			def.then(() => { // Ensure that processInputChange has been resolved as well
 				Reporter.toggle(R.$progress, false).empty();
 				Reporter.toggle(R.$content, true);
+				R.$dialog.dialog({
+					buttons: [
+						{
+							text: '報告',
+							click: () => {}
+						},
+						{
+							text: 'プレビュー',
+							click: () => {}
+						},
+						{
+							text: '閉じる',
+							click: function() {
+								$(this).dialog('close');
+							}
+						}
+					]
+				});
 			});
 
 		});
@@ -1541,7 +1581,7 @@ class Reporter {
 	 * @returns
 	 */
 	getPage(): string|null {
-		return <string>this.$page.find('option:selected').val() || null;
+		return <string>this.$page.val() || null;
 	}
 
 	/**
@@ -1571,10 +1611,10 @@ class Reporter {
 		let ret: string|null = null;
 		switch (this.getPage()) {
 			case ANI:
-				ret = <string>this.$section.find('option:selected').val() || null;
+				ret = <string>this.$section.val() || null;
 				break;
 			case ANS:
-				ret = <string>this.$sectionAns.find('option:selected').val() || null;
+				ret = <string>this.$sectionAns.val() || null;
 				break;
 			case AN3RR:
 				ret = '3RR';
@@ -1633,6 +1673,64 @@ class Reporter {
 		return this;
 	}
 
+	/** Storage of the return value of {@link getBlockStatus}. */
+	static blockStatus: {[username: string]: BlockStatus;} = {};
+
+	/**
+	 * Evaluate a username, classify it into a type, and check the block status of the relevant user.
+	 * @param username Automatically formatted by {@link User.formatName}.
+	 * @returns
+	 */
+	static getBlockStatus(username: string): JQueryPromise<BlockStatus> {
+
+		username = User.formatName(username);
+		const isIp = mw.util.isIPAddress(username, true);
+		const bkpara: {bkusers?: string; bkip?: string;} = {};
+		if (!username || !isIp && User.containsInvalidCharacter(username)) { // Blank or invalid
+			return $.Deferred().resolve({
+				usertype: 'other',
+				blocked: null
+			});
+		} else if (Reporter.blockStatus[username]) {
+			return $.Deferred().resolve({...Reporter.blockStatus[username]});
+		} else if (isIp) {
+			bkpara.bkip = username;
+		} else {
+			bkpara.bkusers = username;
+		}
+
+		const params = Object.assign({
+			action: 'query',
+			list: 'users|blocks',
+			ususers: username,
+			formatversion: '2'
+		}, bkpara);
+		return new mw.Api().get(params)
+			.then((res) => {
+				const resUs = res && res.query && res.query.users;
+				const resBl = res && res.query && res.query.blocks;
+				if (resUs && resBl) {
+					const ret: BlockStatus = {
+						usertype: isIp ? 'ip' : resUs[0].userid !== void 0 ? 'user' : 'other',
+						blocked: !!resBl.length
+					};
+					Reporter.blockStatus[username] = {...ret};
+					return ret;
+				} else {
+					throw new Error('APIリクエストにおける不明なエラー');
+				}
+			})
+			.catch((_, err) => {
+				console.error(err);
+				mw.notify('ユーザー情報の取得に失敗しました。', {type: 'error'});
+				return {
+					usertype: 'other',
+					blocked: null
+				};
+			});
+
+	}
+
 }
 
 /** The options for {@link User.constructor}. */
@@ -1655,6 +1753,11 @@ interface UserOptions {
 	removable?: boolean;
 }
 
+/**
+ * UserAN type argument values.
+ */
+type type = 'UNL'|'User2'|'IP2'|'logid'|'diff'|'none';
+
 let userPaneCnt = 0;
 /**
  * The User class. An instance of this handles a User field row on the Reporter dialog.
@@ -1667,20 +1770,22 @@ class User {
 	$overlay: JQuery<HTMLDivElement>;
 	/** The ID on {@link $label}. */
 	id: string;
-	/** The label. */
+	/** The row label. */
 	$label: JQuery<HTMLDivElement>;
 	/** The username input. */
 	$input: JQuery<HTMLInputElement>;
 	/** The type dropdown. */
 	$type: JQuery<HTMLSelectElement>;
-	/** The wrapper row of the "hideuser" checkbox. */
+	/** The wrapper row of the hideuser checkbox. */
 	$hideUserWrapper: JQuery<HTMLDivElement>;
-	/** The "hideuser" checkbox. */
+	/** The hideuser checkbox. */
 	$hideUser: JQuery<HTMLInputElement>;
-
+	/** The label of the hideuser checkbox. */
+	$hideUserLabel: JQuery<HTMLSpanElement>;
+	/** The wrapper row of the ID link. */
 	$idLinkWrapper: JQuery<HTMLDivElement>;
+	/** The ID link. */
 	$idLink: JQuery<HTMLAnchorElement>;
-
 	/** The wrapper row of the "blockstatus" anchor. */
 	$blockStatusWrapper: JQuery<HTMLDivElement>;
 	/** The "blockstatus" anchor. */
@@ -1732,6 +1837,7 @@ class User {
 			options || {}
 		);
 
+		// Create user pane row
 		this.$wrapper = Reporter.createRow();
 		this.$wrapper.addClass('anr-option-userpane-wrapper');
 		this.$overlay = $('<div>');
@@ -1739,6 +1845,7 @@ class User {
 		Reporter.toggle(this.$overlay, false);
 		this.$wrapper.append(this.$overlay);
 
+		// Append a label div
 		this.id = 'anr-dialog-userpane-' + (userPaneCnt++);
 		this.$label = Reporter.createRowLabel(this.$wrapper, '利用者').prop('id', this.id);
 		if (options.removable) {
@@ -1755,6 +1862,7 @@ class User {
 				});
 		}
 
+		// Append a type dropdown
 		const $typeWrapper = $('<div>').addClass('anr-option-usertype');
 		this.$type = addOptions($('<select>'),
 			['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map((el) => ({text: el}))
@@ -1767,6 +1875,8 @@ class User {
 			.children('option').eq(5).prop('selected', true); // Select 'none'
 		$typeWrapper.append(this.$type);
 		this.$wrapper.append($typeWrapper);
+
+		// Append a username input
 		this.$input = $('<input>');
 		let inputTimeout: NodeJS.Timeout;
 		this.$input
@@ -1785,15 +1895,21 @@ class User {
 		$next.before(this.$wrapper);
 		Reporter.verticalAlign(this.$label, $userWrapper);
 
+		// Append a hide-user checkbox
 		this.$hideUserWrapper = Reporter.createRow();
 		this.$hideUserWrapper.removeAttr('class').addClass('anr-option-row-inner anr-option-hideuser-wrapper');
 		Reporter.createRowLabel(this.$hideUserWrapper, '');
 		const hideUserElements = createLabelledCheckbox('利用者名を隠す', {alterClasses: ['anr-option-hideuser']});
 		this.$hideUser = hideUserElements.$checkbox;
+		this.$hideUser.off('change').on('change', () => {
+			this.processHideUserChange();
+		});
+		this.$hideUserLabel = hideUserElements.$label;
 		this.$hideUserWrapper.append(hideUserElements.$wrapper);
 		this.$wrapper.append(this.$hideUserWrapper);
 		Reporter.toggle(this.$hideUserWrapper, false);
 
+		// Append an ID link
 		this.$idLinkWrapper = Reporter.createRow();
 		this.$idLinkWrapper.removeAttr('class').addClass('anr-option-row-inner anr-option-idlink-wrapper');
 		Reporter.createRowLabel(this.$idLinkWrapper, '');
@@ -1806,6 +1922,7 @@ class User {
 		this.$wrapper.append(this.$idLinkWrapper);
 		Reporter.toggle(this.$idLinkWrapper, false);
 
+		// Append a block status link
 		this.$blockStatusWrapper = Reporter.createRow();
 		this.$blockStatusWrapper.removeAttr('class').addClass('anr-option-row-inner anr-option-blockstatus-wrapper');
 		Reporter.createRowLabel(this.$blockStatusWrapper, '');
@@ -1825,6 +1942,295 @@ class User {
 	}
 
 	/**
+	 * Format a username by calling `lib.clean`, replacing underscores with spaces, and capitalizing the first letter.
+	 * @param username
+	 * @returns The formatted username.
+	 */
+	static formatName(username: string): string {
+		return mwString.ucFirst(lib.clean(username.replace(/_/g, ' ')));
+	}
+
+	/**
+	 * Get the username in the textbox (underscores are replaced by spaces).
+	 * @returns
+	 */
+	getName(): string|null {
+		return User.formatName(<string>this.$input.val()) || null;
+	}
+
+	/**
+	 * Set a value into the username input. Note that this method does not call {@link processInputChange}.
+	 * @param val
+	 * @returns
+	 */
+	setName(val: string): User {
+		this.$input.val(val);
+		return this;
+	}
+
+	/**
+	 * Get the UserAN type selected in the dropdown.
+	 * @returns
+	 */
+	getType(): string {
+		return <string>this.$type.val();
+	}
+
+	/**
+	 * Select a type in the UserAN type dropdown. Note that this method does not call {@link processTypeChange}.
+	 * @param type
+	 * @returns
+	 */
+	setType(type: type): User {
+		this.$type.val(type);
+		return this;
+	}
+
+	/**
+	 * Change the hidden state of the options in the type dropdown.
+	 * @param types An array of type options to make visible. The element at index 0 will be selected.
+	 */
+	setTypeOptions(types: type[]): User {
+		this.$type.children('option').each((_, opt) => { // Loop all the options
+			// Set up the UserAN type dropdown
+			const idx = types.indexOf(<type>opt.value);
+			opt.hidden = idx === -1; // Show/hide options
+			if (idx === 0) {
+				opt.selected = true; // Select types[0]
+			}
+		});
+		return this;
+	}
+
+	/**
+	 * Update the visibility of auxiliary wrappers when the selection is changed in the type dropdown.
+	 */
+	processTypeChange(): User {
+		const selectedType = this.processAuxiliaryElements().getType();
+		this.$type.toggleClass('anr-option-usertype-none', false);
+		switch (selectedType) {
+			case 'UNL':
+			case 'User2':
+				Reporter.toggle(this.$hideUserWrapper, true);
+				Reporter.toggle(this.$idLinkWrapper, false);
+				Reporter.toggle(this.$blockStatusWrapper, !!this.$blockStatus.text());
+				break;
+			case 'IP2':
+				Reporter.toggle(this.$hideUserWrapper, false);
+				Reporter.toggle(this.$idLinkWrapper, false);
+				Reporter.toggle(this.$blockStatusWrapper, !!this.$blockStatus.text());
+				break;
+			case 'logid':
+			case 'diff':
+				Reporter.toggle(this.$hideUserWrapper, true);
+				Reporter.toggle(this.$idLinkWrapper, true);
+				Reporter.toggle(this.$blockStatusWrapper, !!this.$blockStatus.text());
+				break;
+			default: // 'none'
+				Reporter.toggle(this.$hideUserWrapper, false);
+				Reporter.toggle(this.$idLinkWrapper, false);
+				Reporter.toggle(this.$blockStatusWrapper, false);
+				this.$type.toggleClass('anr-option-usertype-none', !this.$type.prop('disabled'));
+		}
+		return this;
+	}
+
+	/**
+	 * Update the properties of auxiliary elements in the user pane.
+	 * - Toggle the application of a red border on the username input.
+	 * - Toggle the checked and disabled states of the hideuser checkbox.
+	 * - Change the display text, the href, and the disabled state of the event ID link.
+	 * - Set up the display text and the href of the block status link (by {@link processBlockStatus}).
+	 * @returns
+	 */
+	processAuxiliaryElements(): User {
+
+		const selectedType = this.getType();
+		const inputVal = this.getName() || '';
+		const clss = 'anr-option-invalidid';
+
+		if (['logid', 'diff'].includes(selectedType)) {
+
+			// Set up $input, $hideUser, and $idLink
+			const isNotNumber = !/^\d*$/.test(inputVal);
+			this.$input.toggleClass(clss, isNotNumber);
+			this.$hideUser.prop({
+				disabled: isNotNumber,
+				checked: true
+			});
+			const idTitle = (selectedType === 'logid' ? '特別:転送/logid/' : '特別:差分/') + inputVal;
+			this.$idLink
+				.text(idTitle)
+				.prop('href', mw.util.getUrl(idTitle))
+				.toggleClass('anr-disabledanchor', isNotNumber);
+			
+			// Set up $blockStatus
+			if (!isNotNumber) {
+				const idType: 'logid'|'diffid' = selectedType === 'diff' ? 'diffid' : <'logid'>selectedType;
+				const username = idList.getRegisteredUsername(parseInt(inputVal), idType);
+				if (username) {
+					this.processBlockStatus(username);
+				} else {
+					this.$blockStatus.text('');
+				}
+			}
+			
+		} else {
+			this.$input.toggleClass(clss, false);
+			this.$hideUser.prop({
+				disabled: false,
+				checked: false
+			});
+			this.$idLink.toggleClass('anr-disabledanchor', false);
+			this.processBlockStatus(inputVal);
+		}
+
+		return this;
+
+	}
+
+	/**
+	 * Set up the display text and the href of the block status link
+	 * @param username
+	 */
+	processBlockStatus(username: string): User {
+		username = User.formatName(username);
+		const status = Reporter.blockStatus[username];
+		if (status) {
+			if (status.usertype === 'user' || status.usertype === 'ip') {
+				this.$blockStatus.prop('href', mw.util.getUrl('特別:投稿記録/' + username));
+				switch (status.blocked) {
+					case true:
+						this.$blockStatus.text('ブロックあり');
+						break;
+					case false:
+						this.$blockStatus.text('');
+						break;
+					default: // null
+						this.$blockStatus.text('ブロック状態不明');
+				}
+			} else { // other
+				this.$blockStatus.text('');
+			}
+		} else { // Block status yet to be fetched
+			this.$blockStatus.text('');
+		}
+		return this;
+	}
+
+	/**
+	 * Evaluate the input value, figure out its user type (and block status if relevant), and change selection
+	 * in the type dropdown (which proceeds to {@link processTypeChange}).
+	 */
+	processInputChange(): JQueryPromise<User> {
+
+		const def = $.Deferred();
+
+		const typeMap: Record<'ip'|'user'|'other', type[]> = {
+			ip: ['IP2', 'none'],
+			user: ['UNL', 'User2', 'none'],
+			other: ['none', 'logid', 'diff']
+		};
+		const username = this.getName();
+		if (!username) { // Blank
+
+			this.setType('none').$type.prop('disabled', true); // Disable dropdown and select 'none'
+			this.processTypeChange();
+			def.resolve(this);
+
+		} else { // Some username is in the input
+
+			Reporter.getBlockStatus(username).then((obj) => { // Get the type of the user with their block status
+				if (/^\d+$/.test(username) && obj.usertype === 'user') {
+					typeMap.user.push('logid', 'diff');
+				}
+				this.setTypeOptions(typeMap[obj.usertype]).$type.prop('disabled', false); 
+				this.processTypeChange();
+				def.resolve(this);
+			});
+
+		}
+
+		return def.promise();
+
+	}
+
+	/**
+	 * Process the change event of the hideuser checkbox and do a username-ID conversion.
+	 */
+	processHideUserChange(): JQueryPromise<User> {
+
+		// Show a spinner aside the hideuser checkbox label
+		const $processing = $(lib.getIcon('load')).css('margin-left', '0.5em');
+		this.$hideUserLabel.append($processing);
+		this.setOverlay(true);
+
+		/*!*
+		 * Error handlers. If the catch block is ever reached, there should be some problem with either processInputChange
+		 * or processTypeChange because the hideuser checkbox should be unclickable when the variables would be substituted
+		 * by an unexpected value.
+		 */
+		const inputVal = this.getName();
+		let selectedType = this.getType();
+		const checked = this.$hideUser.prop('checked');
+		try {
+			if (typeof inputVal !== 'string') {
+				// The username input should never be empty
+				throw new TypeError('User.getName returned null.');
+			} else if (!checked && !['logid', 'diff'].includes(selectedType)) {
+				// The type dropdown should have either value when the box can be unchecked
+				throw new Error('User.getType returned neither "logid" nor "diff".');
+			} else if (!checked && !/^\d+$/.test(inputVal)) {
+				// The username input should only be of numbers when the box can be unchecked
+				throw new Error('User.getName returned a non-number.');
+			}
+		}
+		catch (err) {
+			console.error(err);
+			mw.notify('変換試行時にエラーが発生しました。スクリプトのバグの可能性があります。', {type: 'error'});
+			this.$hideUser.prop('checked', !checked);
+			$processing.remove();
+			this.setOverlay(false);
+			return $.Deferred().resolve(this);
+		}
+
+		if (checked) { // username to ID
+			return idList.getIds(inputVal).then(({logid, diffid}) => {
+				if (typeof logid === 'number') {
+					this.setName(logid.toString()).setTypeOptions(['logid', 'diff', 'none']).processTypeChange();
+					mw.notify(`利用者名「${inputVal}」をログIDに変換しました。`, {type: 'success'});
+				} else if (typeof diffid === 'number') {
+					this.setName(diffid.toString()).setTypeOptions(['diff', 'logid', 'none']).processTypeChange();
+					mw.notify(`利用者名「${inputVal}」を差分IDに変換しました。`, {type: 'success'});
+				} else {
+					this.$hideUser.prop('checked', !checked);
+					mw.notify(`利用者名「${inputVal}」をIDに変換できませんでした。`, {type: 'warn'});
+				}
+				$processing.remove();
+				return this.setOverlay(false);
+			});
+		} else { // ID to username
+			selectedType = selectedType === 'diff' ? 'diffid' : selectedType;
+			const selectedTypeJa = selectedType === 'logid' ? 'ログ' : '差分';
+			return idList.getUsername(parseInt(inputVal), <"logid"|"diffid">selectedType).then((username) => {
+				if (username) {
+					return this.setName(username).processInputChange().then(() => {
+						mw.notify(`${selectedTypeJa}ID「${inputVal}」を利用者名に変換しました。`, {type: 'success'});
+						$processing.remove();
+						return this.setOverlay(false);
+					});
+				} else {
+					this.$hideUser.prop('checked', !checked);
+					mw.notify(`${selectedTypeJa}ID「${inputVal}」を利用者名に変換できませんでした。`, {type: 'warn'});
+					$processing.remove();
+					return this.setOverlay(false);
+				}
+			});
+		}
+
+	}
+
+	/**
 	 * Toggle the visibility of the overlay.
 	 * @param show
 	 * @returns
@@ -1835,205 +2241,14 @@ class User {
 	}
 
 	/**
-	 * Evaluate a username, classify it into a type, and check the block status of the relevant user.
+	 * Check the validity of a username (by checking the inclusion of `/[@/#<>[\]|{}:]/`).
+	 * 
+	 * Note that IP(v6) addresses should not be passed.
 	 * @param username
 	 * @returns
 	 */
-	static getInfo(username: string): JQueryPromise<{type: 'ip'|'user'|'other'; blocked: boolean|null;}> {
-		const params: {[key: string]: string;} = {
-			action: 'query',
-			list: 'users|blocks',
-			ususers: username,
-			formatversion: '2'
-		};
-		const isIp = mw.util.isIPAddress(username, true);
-		if (isIp) {
-			params.bkip = username;
-		} else if (/[@/#<>[\]|{}:]/.test(username)) { // Contains a character that can't be used in a username
-			return $.Deferred().resolve({
-				type: 'other',
-				blocked: null
-			});
-		} else {
-			params.bkusers = username;
-		}
-		return new mw.Api().get(params)
-			.then((res) => {
-				const resUs = res && res.query && res.query.users;
-				const resBl = res && res.query && res.query.blocks;
-				if (resUs && resBl) {
-					return {
-						type: isIp ? 'ip' : resUs[0].userid !== void 0 ? 'user' : 'other',
-						blocked: !!resBl.length
-					};
-				} else {
-					throw new Error('APIリクエストにおける不明なエラー');
-				}
-			})
-			.catch((_, err) => {
-				console.error(err);
-				mw.notify('ユーザー情報の取得に失敗しました。', {type: 'error'});
-				return {
-					type: 'other',
-					blocked: null
-				};
-			});
-	}
-
-	/**
-	 * Update the visibility of user pane items when the selection is changed in the type dropdown.
-	 */
-	processTypeChange(): void {
-
-		const selectedType = <string>this.$type.val();
-		switch (selectedType) {
-			case 'UNL':
-			case 'User2':
-				Reporter.toggle(this.$hideUserWrapper, true);
-				break;
-			case 'IP2':
-				break;
-			case 'logid':
-				break;
-			case 'diff':
-				break;
-			default: // 'none'
-				// Red border when 'none' is selected
-				this.$type.toggleClass('anr-option-usertype-none', !this.$type.prop('disabled'));
-		}
-		
-	}
-
-	/**
-	 * Update the user pane in accordance with the value in the username field. This method:
-	 * - figures out the type of the relevant username: `ip`, `user`, or `other` (uses an AJAX call).
-	 * - enables/disables options in the UserAN type selector dropdown with reference to the user type.
-	 * - checks the block status of the relevant user (if any) and shows/hides the block status link.
-	 */
-	processInputChange(): JQueryPromise<void> {
-
-		const def = $.Deferred();
-
-		/**
-		 * A mapping from a user type to array indexes that represent UserAN types to show in the type selector dropdown.
-		 * - 0: `UNL`
-		 * - 1: `User2`
-		 * - 2: `IP2`
-		 * - 3: `logid`
-		 * - 4: `diff`
-		 * - 5: `none`
-		 * 
-		 * Note that the element at index 0 is what's selected at initialization.
-		 */
-		const typeMap = {
-			ip: [2, 5],
-			user: [0, 1, 5],
-			other: [5, 3, 4]
-		};
-		const username = lib.clean(<string>this.$input.val(), false);
-		Reporter.toggle(this.$idLinkWrapper, false); // Hide the id link
-		this.$hideUser.prop('checked', false); // Uncheck the hideuser checkbox
-
-		if (!username || /^\s+$/.test(username)) { // Blank or whitespace only
-
-			this.$input.val('');
-			this.$type.prop('disabled', true).children('option').eq(5).prop('selected', true); // Disable dropdown and select 'none'
-			this.$type.trigger('change');
-			Reporter.toggle(this.$hideUserWrapper, false); // Hide the hideuser checkbox
-			Reporter.toggle(this.$blockStatusWrapper, false); // Hide the block status link
-			def.resolve(void 0);
-
-		} else { // Some username is in the input
-
-			User.getInfo(username).then((obj) => {
-
-				this.$type
-					.prop('disabled', false) // Enable dropdown
-					.children('option').each(function(i, opt) { // Loop all the options
-
-						// Set up the UserAN type dropdown
-						const idx = typeMap[obj.type].indexOf(i);
-						opt.hidden = idx === -1; // Show/hide options
-						if (idx === 0) {
-							opt.selected = true; // Select option in accordance with typeMap
-						}
-
-					});
-				this.$type.trigger('change');
-
-				// Type-dependent setup
-				if (obj.type === 'user' || obj.type === 'ip') {
-					Reporter.toggle(this.$hideUserWrapper, obj.type === 'user');
-					this.$blockStatus.prop('href', mw.util.getUrl('Special:Contribs/' + username));
-					if (obj.blocked === null) {
-						this.$blockStatus.text('ブロック状態不明');
-						Reporter.toggle(this.$blockStatusWrapper, true);
-					} else {
-						this.$blockStatus.text('ブロックあり');
-						Reporter.toggle(this.$blockStatusWrapper, obj.blocked);
-					}
-				} else { // other
-					Reporter.toggle(this.$hideUserWrapper, false);
-					Reporter.toggle(this.$blockStatusWrapper, false);
-				}
-
-				def.resolve(void 0);
-
-			});
-
-		}
-
-		return def.promise();
-
-	}
-
-	/**
-	 * Extract a CIDR address from text.
-	 *
-	 * Regular expressions used in this method are adapted from `mediawiki.util`.
-	 * - {@link https://doc.wikimedia.org/mediawiki-core/master/js/source/util.html#mw-util-method-isIPv4Address | mw.util.isIPv4Address}
-	 * - {@link https://doc.wikimedia.org/mediawiki-core/master/js/source/util.html#mw-util-method-isIPv6Address | mw.util.isIPv6Address}
-	 * 
-	 * @param text
-	 * @returns The extracted CIDR, or `null` if there's no match.
-	 */
-	static extractCidr(text: string): string|null {
-
-		const v4_byte = '(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|0?[0-9]?[0-9])';
-		const v4_regex = new RegExp('(?:' + v4_byte + '\\.){3}' + v4_byte + '\\/(?:3[0-2]|[12]?\\d)');
-		const v6_block = '\\/(?:12[0-8]|1[01][0-9]|[1-9]?\\d)';
-		const v6_regex = new RegExp(
-			'(?::(?::|(?::[0-9A-Fa-f]{1,4}){1,7})|[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,6}::|[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){7})' +
-			v6_block
-		);
-		const v6_regex2 = new RegExp('[0-9A-Fa-f]{1,4}(?:::?[0-9A-Fa-f]{1,4}){1,6}' + v6_block);
-	
-		let m;
-		if ((m = text.match(v4_regex)) ||
-			(m = text.match(v6_regex)) ||
-			(m = text.match(v6_regex2)) && /::/.test(m[0]) && !/::.*::/.test(m[0])
-		) {
-			return m[0];
-		} else {
-			return null;
-		}
-	
-	}
-
-	/**
-	 * Get the username in the textbox.
-	 * @returns
-	 */
-	getName(): string|null {
-		return lib.clean(<string>this.$input.val()) || null;
-	}
-
-	/**
-	 * Get the UserAN type selected in the dropdown.
-	 * @returns
-	 */
-	getType(): string {
-		return <string>this.$type.find('option:selected').val();
+	static containsInvalidCharacter(username: string): boolean {
+		return /[@/#<>[\]|{}:]/.test(username);
 	}
 
 }
@@ -2090,12 +2305,13 @@ let checkboxCnt = 0;
 function createLabelledCheckbox(labelText: string, options: LabelledCheckboxOptions = {}): {
 	$wrapper: JQuery<HTMLDivElement>;
 	$checkbox: JQuery<HTMLInputElement>;
+	$label: JQuery<HTMLSpanElement>;
 } {
 	const id = options.checkboxId && !document.getElementById(options.checkboxId) ? options.checkboxId : 'anr-checkbox-' + (checkboxCnt++);
-	const $label: JQuery<HTMLLabelElement> = $('<label>');
-	$label.attr('for', id);
+	const $outerLabel: JQuery<HTMLLabelElement> = $('<label>');
+	$outerLabel.attr('for', id);
 	const $wrapper = Reporter.createRow();
-	$wrapper.removeAttr('class').addClass((options.alterClasses || ['anr-option-row']).join(' ')).append($label);
+	$wrapper.removeAttr('class').addClass((options.alterClasses || ['anr-option-row']).join(' ')).append($outerLabel);
 	const $checkbox: JQuery<HTMLInputElement> = $('<input>');
 	$checkbox
 		.prop({
@@ -2103,10 +2319,43 @@ function createLabelledCheckbox(labelText: string, options: LabelledCheckboxOpti
 			type: 'checkbox'
 		})
 		.addClass('anr-checkbox');
-	const $checkboxLabel = $('<span>');
-	$checkboxLabel.addClass('anr-checkbox-label').text(labelText);
-	$label.append($checkbox, $checkboxLabel);
-	return {$wrapper, $checkbox};
+	const $label = $('<span>');
+	$label.addClass('anr-checkbox-label').text(labelText);
+	$outerLabel.append($checkbox, $label);
+	return {$wrapper, $checkbox, $label};
+}
+
+/**
+ * Extract a CIDR address from text.
+ *
+ * Regular expressions used in this method are adapted from `mediawiki.util`.
+ * - {@link https://doc.wikimedia.org/mediawiki-core/master/js/source/util.html#mw-util-method-isIPv4Address | mw.util.isIPv4Address}
+ * - {@link https://doc.wikimedia.org/mediawiki-core/master/js/source/util.html#mw-util-method-isIPv6Address | mw.util.isIPv6Address}
+ * 
+ * @param text
+ * @returns The extracted CIDR, or `null` if there's no match.
+ */
+function extractCidr(text: string): string|null {
+
+	const v4_byte = '(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|0?[0-9]?[0-9])';
+	const v4_regex = new RegExp('(?:' + v4_byte + '\\.){3}' + v4_byte + '\\/(?:3[0-2]|[12]?\\d)');
+	const v6_block = '\\/(?:12[0-8]|1[01][0-9]|[1-9]?\\d)';
+	const v6_regex = new RegExp(
+		'(?::(?::|(?::[0-9A-Fa-f]{1,4}){1,7})|[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,6}::|[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){7})' +
+		v6_block
+	);
+	const v6_regex2 = new RegExp('[0-9A-Fa-f]{1,4}(?:::?[0-9A-Fa-f]{1,4}){1,6}' + v6_block);
+
+	let m;
+	if ((m = text.match(v4_regex)) ||
+		(m = text.match(v6_regex)) ||
+		(m = text.match(v6_regex2)) && /::/.test(m[0]) && !/::.*::/.test(m[0])
+	) {
+		return m[0];
+	} else {
+		return null;
+	}
+
 }
 
 // ******************************************************************************************
