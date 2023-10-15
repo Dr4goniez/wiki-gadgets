@@ -558,7 +558,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '.anr-hidden {' + // Used to show/hide elements on the dialog (by Reporter.toggle)
                 'display: none;' +
                 '}' +
-                '#anr-dialog-progress {' + // One of the main dialog field
+                '#anr-dialog-progress,' + // One of the main dialog field
+                '#anr-dialog-preview-content {' +
                 'padding: 1em;' +
                 '}' +
                 '#anr-dialog-optionfield {' + // The immediate child of #anr-dialog-content
@@ -849,7 +850,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.blockStatus = {}; // Reset
             // Create dialog contour
             this.$dialog = $('<div>');
-            this.$dialog.attr('title', ANR).css('max-height', '70vh');
+            this.$dialog.prop('title', ANR).css('max-height', '70vh');
             this.$dialog.dialog({
                 dialogClass: 'anr-dialog',
                 resizable: false,
@@ -975,7 +976,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$fieldset.css('width', dialogWith); // Assign an absolute width to $content
             this.$progress.css('width', dialogWith);
             Reporter.centerDialog(this.$dialog); // Recenter the dialog because the width has been changed
-            this.ids = {};
             /**
              * (Bound to the change event of a \<select> element.)
              *
@@ -1084,12 +1084,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 Reporter.toggle($watchExpiryWrapper, _this.$watchUser.prop('checked'));
             }).trigger('change');
             // Set all the row labels to the same width
-            var $labels = $('.anr-option-label');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            var optionsWidths = Array.prototype.map.call($labels, function (el) { return el.offsetWidth; } // Collect the widths of all row labels
-            );
-            var optionWidth = Math.max.apply(Math, optionsWidths); // Get the max value
-            $labels.css('min-width', optionWidth); // Set the value to all
+            Reporter.setWidestWidth($('.anr-option-label'));
             // Make some wrappers invisible
             Reporter.toggle(this.$sectionAnsWrapper, false);
             Reporter.toggle(this.$vipWrapper, false);
@@ -1099,6 +1094,17 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             }
             Reporter.toggle(this.$content, false);
         }
+        /**
+         * Taken several HTML elements, set the width that is widest among the elements to all of them.
+         * @param $elements
+         */
+        Reporter.setWidestWidth = function ($elements) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            var optionsWidths = Array.prototype.map.call($elements, function (el) { return el.offsetWidth; } // Collect the widths of all the elements
+            );
+            var optionWidth = Math.max.apply(Math, optionsWidths); // Get the max value
+            $elements.css('min-width', optionWidth); // Set the value to all
+        };
         /**
          * Toggle the visibility of an element by (de)assigning the `anr-hidden` class.
          * @param $element The element of which to toggle the visibility.
@@ -1136,7 +1142,13 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          */
         Reporter.createRowLabel = function ($appendTo, labelText) {
             var $label = $('<div>');
-            $label.addClass('anr-option-label').prop('innerHTML', labelText || '&nbsp;');
+            $label.addClass('anr-option-label');
+            if (typeof labelText === 'string') {
+                $label.prop('innerHTML', labelText || '&nbsp;');
+            }
+            else {
+                $label.append(labelText);
+            }
             $appendTo.append($label);
             return $label;
         };
@@ -1293,28 +1305,39 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     Reporter.toggle(R.$ltaWrapper, true);
                 }
                 def.then(function () {
-                    Reporter.toggle(R.$progress, false).empty();
+                    Reporter.toggle(R.$progress, false);
                     Reporter.toggle(R.$content, true);
-                    R.$dialog.dialog({
-                        buttons: [
-                            {
-                                text: '報告',
-                                click: function () { }
-                            },
-                            {
-                                text: 'プレビュー',
-                                click: function () { }
-                            },
-                            {
-                                text: '閉じる',
-                                click: function () {
-                                    $(this).dialog('close');
-                                }
-                            }
-                        ]
-                    });
+                    R.setMainButtons();
                 });
             });
+        };
+        /**
+         * Set the main dialog buttons.
+         */
+        Reporter.prototype.setMainButtons = function () {
+            var _this = this;
+            this.$dialog.dialog({
+                buttons: [
+                    {
+                        text: '報告',
+                        click: function () { return _this.report(); }
+                    },
+                    {
+                        text: 'プレビュー',
+                        click: function () { return _this.preview(); }
+                    },
+                    {
+                        text: '閉じる',
+                        click: function () { return _this.close(); }
+                    }
+                ]
+            });
+        };
+        /**
+         * Close the Reporter dialog (will be destroyed).
+         */
+        Reporter.prototype.close = function () {
+            this.$dialog.dialog('close');
         };
         /**
          * Get `YYYY年MM月D1日 - D2日新規依頼`, relative to the current day.
@@ -1507,6 +1530,298 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     usertype: 'other',
                     blocked: null
                 };
+            });
+        };
+        Reporter.prototype.report = function () {
+            var _this = this;
+            // Collect dialog data and check for errors
+            var data = this.collectData();
+            if (!data)
+                return;
+            // Create progress dialog
+            this.$progress.empty();
+            this.$dialog.dialog({ buttons: [] });
+            var $dupUsers = Reporter.createRow();
+            var $dupUsersLabel = Reporter.createRowLabel($dupUsers, lib.getIcon('load'));
+            var $dupUsersText = $('<div>').text('利用者名重複').css('width', '100%');
+            $dupUsers.append($dupUsersText);
+            this.$progress.append($dupUsers);
+            var $dupUsersList = Reporter.createRow();
+            var $dupUsersListLabel = Reporter.createRowLabel($dupUsersList, '');
+            var $dupUsersListUl = $('<ul>').css('width', '100%');
+            $dupUsersList.append($dupUsersListUl);
+            this.$progress.append($dupUsersList);
+            Reporter.toggle($dupUsersList, false); //$dupUsersListUl
+            var $blockedUsers = Reporter.createRow();
+            var $blockedLabel = Reporter.createRowLabel($blockedUsers, '待機中');
+            var $blockedText = $('<div>').text('既存ブロック').css('width', '100%');
+            $blockedUsers.append($blockedText);
+            this.$progress.append($blockedUsers);
+            var $blockedList = Reporter.createRow();
+            var $blockedListLabel = Reporter.createRowLabel($blockedList, '');
+            var $blockedListBody = $('<ul>').css('width', '100%');
+            $blockedList.append($blockedListBody);
+            this.$progress.append($blockedList);
+            Reporter.toggle($blockedList, false);
+            var $dupReports = Reporter.createRow();
+            var $dupReportsLabel = Reporter.createRowLabel($dupReports, '待機中');
+            var $dupReportsText = $('<div>').text('重複報告').css('width', '100%');
+            $dupReports.append($dupReportsText);
+            this.$progress.append($dupReports);
+            var $dupReportsList = Reporter.createRow();
+            var $dupReportsListLabel = Reporter.createRowLabel($dupReportsList, '');
+            var $dupReportsListBody = $('<ul>').css('width', '100%');
+            $dupReportsList.append($dupReportsListBody);
+            this.$progress.append($dupReportsList);
+            Reporter.toggle($dupReportsList, false);
+            var $report = Reporter.createRow();
+            var $reportLabel = Reporter.createRowLabel($report, 'スキップ'); // Label text is temporary
+            var $reportText = $('<div>').text('報告').css('width', '100%');
+            $report.append($reportText);
+            this.$progress.append($report);
+            Reporter.toggle(this.$content, false);
+            Reporter.toggle(this.$progress, true);
+            Reporter.setWidestWidth(this.$progress.find('.anr-option-label'));
+            $reportLabel.text('待機中'); // Replace the temporary label text
+            this.processIds(data).then(function (_a) {
+                var users = _a.users, info = _a.info;
+                var proceed = function () {
+                    var def = $.Deferred();
+                    if (!users.length) {
+                        $dupUsersLabel.empty().append(lib.getIcon('check'));
+                        def.resolve(true);
+                    }
+                    else {
+                        $dupUsersLabel.empty().append(getExcl());
+                        users.forEach(function (arr) {
+                            var $li = $('<li>').text(arr.join(', '));
+                            $dupUsersListUl.append($li);
+                        });
+                        Reporter.toggle($dupUsersList, true);
+                        _this.$dialog.dialog({
+                            buttons: [
+                                {
+                                    text: '続行',
+                                    click: function () {
+                                        $dupUsersListUl.empty();
+                                        Reporter.toggle($dupUsersList, false);
+                                        _this.$dialog.dialog({ buttons: [] });
+                                        def.resolve(true);
+                                    }
+                                },
+                                {
+                                    text: '戻る',
+                                    click: function () {
+                                        $dupUsersListUl.empty();
+                                        Reporter.toggle($dupUsersList, false);
+                                        Reporter.toggle(_this.$progress, false);
+                                        Reporter.toggle(_this.$content, true);
+                                        _this.setMainButtons();
+                                        def.resolve(false);
+                                    }
+                                },
+                                {
+                                    text: '閉じる',
+                                    click: function () {
+                                        _this.close();
+                                        def.resolve(false);
+                                    }
+                                }
+                            ]
+                        });
+                    }
+                    return def.promise();
+                };
+                proceed().then(function (bool) {
+                    if (!bool)
+                        return;
+                });
+            });
+        };
+        Reporter.prototype.preview = function () {
+            var data = this.collectData();
+            if (!data)
+                return;
+            var $preview = $('<div>')
+                .prop('title', ANR + ' - Preview')
+                .css({
+                'max-height': '80vh',
+                'max-width': '80vw'
+            })
+                .dialog({
+                dialogClass: 'anr-dialog anr-dialog-preview',
+                height: 'auto',
+                width: 'auto',
+                modal: true,
+                close: function () {
+                    // Destory the dialog and its contents when closed by any means
+                    $(this).empty().dialog('destroy');
+                }
+            });
+            var $previewContent = $('<div>')
+                .prop('id', 'anr-dialog-preview-content')
+                .text('読み込み中')
+                .append($(lib.getIcon('load')).css('margin-left', '0.5em'));
+            $preview.append($previewContent);
+        };
+        /**
+         * Collect option values.
+         * @returns `null` if there's some error.
+         */
+        Reporter.prototype.collectData = function () {
+            //  -- Check first for required fields --
+            var page = this.getPage();
+            var section = this.getSection();
+            var shiftClick = $.Event('click');
+            shiftClick.shiftKey = true;
+            var hasInvalidId = false;
+            var users = this.Users.reduceRight(function (acc, User) {
+                var inputVal = User.getName();
+                var selectedType = User.getType();
+                if (!inputVal) { // Username is blank
+                    User.$label.trigger(shiftClick); // Remove the user pane
+                }
+                else if (['logid', 'diff'].includes(selectedType) && !/^\d+$/.test(inputVal)) { // Invalid ID
+                    hasInvalidId = true;
+                }
+                else { // Valid
+                    acc.push({
+                        user: inputVal,
+                        type: selectedType
+                    });
+                }
+                return acc;
+            }, []).reverse();
+            var reason = this.$reason.val();
+            reason = lib.clean(reason.replace(/[\s-~]*$/, '')); // Remove signature (if any)
+            this.$reason.val(reason);
+            // Look for errors
+            var $errList = $('<ul>');
+            if (!page) {
+                $errList.append($('<li>報告先のページ名が未指定</li>'));
+            }
+            if (!section) {
+                $errList.append($('<li>報告先のセクション名が未指定</li>'));
+            }
+            if (!users.length) {
+                $errList.append($('<li>報告対象者が未指定</li>'));
+            }
+            if (hasInvalidId) {
+                $errList.append($('<li>数字ではないID</li>'));
+            }
+            if (!reason) {
+                $errList.append($('<li>報告理由が未指定</li>'));
+            }
+            var errLen = $errList.children('li').length;
+            if (errLen) {
+                var $err = $('<div>')
+                    .text('以下のエラーを修正してください。')
+                    .append($errList);
+                mw.notify($err, { type: 'error', autoHideSeconds: errLen > 2 ? 'long' : 'short' });
+                return null;
+            }
+            //  -- Collect secondary data --
+            reason += '--~~~~'; // Add signature to reason
+            var summary = lib.clean(this.$comment.val()); // This is incomplete
+            var blockCheck = this.$checkBlock.prop('checked');
+            var duplicateCheck = this.$checkDuplicates.prop('checked');
+            var watchUser = this.$watchUser.prop('checked');
+            var watch = watchUser ? this.$watchExpiry.val() : null;
+            // Return
+            return {
+                page: page,
+                section: section,
+                users: users,
+                reason: reason,
+                summary: summary,
+                blockCheck: blockCheck,
+                duplicateCheck: duplicateCheck,
+                watch: watch
+            };
+        };
+        /**
+         * Convert all IDs to usernames and check whether the username fields have any duplicate values.
+         * @param data
+         * @returns
+         */
+        Reporter.prototype.processIds = function (data) {
+            var deferreds = data.users.map(function (obj) {
+                if (obj.type === 'logid' || obj.type === 'diff') {
+                    return idList.getUsername(parseInt(obj.user), obj.type === 'diff' ? 'diffid' : 'logid'); // Convert ID
+                }
+                else if (obj.type === 'none') {
+                    return $.Deferred().resolve(null); // Immediate resolve
+                }
+                else {
+                    return $.Deferred().resolve(obj.user); // Immediate resolve
+                }
+            }, []);
+            return $.when.apply($, deferreds).then(function () {
+                var info = [];
+                for (var _i = 0; _i < arguments.length; _i++) {
+                    info[_i] = arguments[_i];
+                }
+                /**
+                 * An array of indexes that have already been checked.
+                 *
+                 * Suppose that the `data` array is as below:
+                 * ```js
+                 * [
+                 * 	{user: 'Foo', type: 'UNL'},
+                 * 	{user: '10000', type: 'logid'}, // Logid/10000 = Foo
+                 * 	{user: 'Bar', type: 'UNL'},
+                 * 	{user: '20000', type: 'diff'} // Diff/20000 = Foo
+                 * ]
+                 * ```
+                 * where the comments on the right represent the return values of the deferreds. Then, when
+                 * we check `data[0]` and look for its duplicates in `data[1-3]`, `1` and `3` should be pushed
+                 * into the `skip` array so that when we check `data[1]`, we can skip it. Otherwise, the
+                 * resulting array will be:
+                 * ```
+                 * [
+                 * 	['Foo', 'Logid/10000', 'Diff/20000'],
+                 * 	['Logid/10000', 'Diff/20000']
+                 * ]
+                 * ```
+                 * while we only want:
+                 * ```
+                 * [
+                 * 	['Foo', 'Logid/10000', 'Diff/20000']
+                 * ]
+                 * ```
+                 */
+                var skip = [];
+                var users = info.reduce(function (acc, username, i, arr) {
+                    if (username && !skip.includes(i)) { // username isn't null and not to be skipped
+                        var ret = [];
+                        for (var j = i; j < arr.length; j++) { // Check array elements from the current index
+                            if (j === i && arr.lastIndexOf(username) !== j ||
+                                j !== i && arr[j] === username) { // Found a duplicate username
+                                skip.push(j);
+                                var inputVal = data.users[j].user;
+                                var toPush = void 0;
+                                switch (data.users[j].type) { // Convert the username back to an ID if necessary
+                                    case 'logid':
+                                        toPush = "Logid/".concat(inputVal);
+                                        break;
+                                    case 'diff':
+                                        toPush = "\u5DEE\u5206/".concat(inputVal);
+                                        break;
+                                    default:
+                                        toPush = inputVal;
+                                }
+                                if (!ret.includes(toPush)) {
+                                    ret.push(toPush);
+                                }
+                            }
+                        }
+                        if (ret.length) {
+                            acc.push(ret);
+                        }
+                    }
+                    return acc;
+                }, []);
+                return { users: users, info: info };
             });
         };
         /** Storage of the return value of {@link getBlockStatus}. */
@@ -1903,19 +2218,19 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 });
             }
             else { // ID to username
-                selectedType = selectedType === 'diff' ? 'diffid' : selectedType;
-                var selectedTypeJa_1 = selectedType === 'logid' ? 'ログ' : '差分';
-                return idList.getUsername(parseInt(inputVal), selectedType).then(function (username) {
+                var idType = selectedType === 'diff' ? 'diffid' : selectedType;
+                var idTypeJa_1 = selectedType === 'logid' ? 'ログ' : '差分';
+                return idList.getUsername(parseInt(inputVal), idType).then(function (username) {
                     if (username) {
                         return _this.setName(username).processInputChange().then(function () {
-                            mw.notify("".concat(selectedTypeJa_1, "ID\u300C").concat(inputVal, "\u300D\u3092\u5229\u7528\u8005\u540D\u306B\u5909\u63DB\u3057\u307E\u3057\u305F\u3002"), { type: 'success' });
+                            mw.notify("".concat(idTypeJa_1, "ID\u300C").concat(inputVal, "\u300D\u3092\u5229\u7528\u8005\u540D\u306B\u5909\u63DB\u3057\u307E\u3057\u305F\u3002"), { type: 'success' });
                             $processing.remove();
                             return _this.setOverlay(false);
                         });
                     }
                     else {
                         _this.$hideUser.prop('checked', !checked);
-                        mw.notify("".concat(selectedTypeJa_1, "ID\u300C").concat(inputVal, "\u300D\u3092\u5229\u7528\u8005\u540D\u306B\u5909\u63DB\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"), { type: 'warn' });
+                        mw.notify("".concat(idTypeJa_1, "ID\u300C").concat(inputVal, "\u300D\u3092\u5229\u7528\u8005\u540D\u306B\u5909\u63DB\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"), { type: 'warn' });
                         $processing.remove();
                         return _this.setOverlay(false);
                     }
@@ -2024,6 +2339,12 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         else {
             return null;
         }
+    }
+    function getExcl() {
+        var img = document.createElement('img');
+        img.src = 'https://upload.wikimedia.org/wikipedia/commons/c/c3/Crystal_important.png';
+        img.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
+        return img;
     }
     // ******************************************************************************************
     // Entry point

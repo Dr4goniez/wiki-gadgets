@@ -636,7 +636,8 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'.anr-hidden {' + // Used to show/hide elements on the dialog (by Reporter.toggle)
 			'display: none;' +
 		'}' +
-		'#anr-dialog-progress {' + // One of the main dialog field
+		'#anr-dialog-progress,' + // One of the main dialog field
+		'#anr-dialog-preview-content {' +
 			'padding: 1em;' +
 		'}' +
 		'#anr-dialog-optionfield {' + // The immediate child of #anr-dialog-content
@@ -736,6 +737,13 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'}' +
 		'.anr-option-blockstatus > a {' +
 			'color: mediumvioletred;' +
+		'}' +
+		'.anr-dialog-progress-text {' +
+			'width: 100%;' +
+		'}' +
+		'.anr-dialog-progress-list {' +
+			'display: inline-block;' +
+			'margin-top: 0;' +
 		'}' +
 		// Dialog colors
 		'.anr-dialog.ui-dialog-content,' +
@@ -972,8 +980,6 @@ class Reporter {
 	$addButton: JQuery<HTMLInputElement>;
 	/** The collection of user panes. */
 	Users: User[];
-	/** The storage of event IDs associated with users. */
-	ids: {[username: string]: EventIds;};
 	/** The wrapper row for the select2 VIP dropdown. */
 	$vipWrapper: JQuery<HTMLDivElement>;
 	/** The select2 VIP dropdown. */
@@ -1010,7 +1016,7 @@ class Reporter {
 
 		// Create dialog contour
 		this.$dialog = $('<div>');
-		this.$dialog.attr('title', ANR).css('max-height', '70vh');
+		this.$dialog.prop('title', ANR).css('max-height', '70vh');
 		this.$dialog.dialog({
 			dialogClass: 'anr-dialog',
 			resizable: false,
@@ -1153,8 +1159,6 @@ class Reporter {
 		this.$progress.css('width', dialogWith);
 		Reporter.centerDialog(this.$dialog); // Recenter the dialog because the width has been changed
 
-		this.ids = {};
-
 		/**
 		 * (Bound to the change event of a \<select> element.)
 		 * 
@@ -1276,14 +1280,7 @@ class Reporter {
 		}).trigger('change');
 
 		// Set all the row labels to the same width
-		const $labels = $('.anr-option-label');
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const optionsWidths = Array.prototype.map.call<JQuery<HTMLElement>, any[], number[]>(
-			$labels,
-			(el: HTMLElement) => el.offsetWidth // Collect the widths of all row labels
-		);
-		const optionWidth = Math.max(...optionsWidths); // Get the max value
-		$labels.css('min-width', optionWidth); // Set the value to all
+		Reporter.setWidestWidth($('.anr-option-label'));
 
 		// Make some wrappers invisible
 		Reporter.toggle(this.$sectionAnsWrapper, false);
@@ -1294,6 +1291,20 @@ class Reporter {
 		}
 		Reporter.toggle(this.$content, false);
 
+	}
+
+	/**
+	 * Taken several HTML elements, set the width that is widest among the elements to all of them.
+	 * @param $elements
+	 */
+	static setWidestWidth($elements: JQuery<HTMLElement>): void {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const optionsWidths = Array.prototype.map.call<JQuery<HTMLElement>, any[], number[]>(
+			$elements,
+			(el: HTMLElement) => el.offsetWidth // Collect the widths of all the elements
+		);
+		const optionWidth = Math.max(...optionsWidths); // Get the max value
+		$elements.css('min-width', optionWidth); // Set the value to all
 	}
 
 	/**
@@ -1332,9 +1343,14 @@ class Reporter {
 	 * @param labelText The text of the label (technically, the innerHTML). If an empty string is passed, `&nbsp;` is used.
 	 * @returns The created label.
 	 */
-	static createRowLabel($appendTo: JQuery<HTMLElement>, labelText: string): JQuery<HTMLDivElement> {
+	static createRowLabel($appendTo: JQuery<HTMLElement>, labelText: string|HTMLElement): JQuery<HTMLDivElement> {
 		const $label: JQuery<HTMLDivElement> = $('<div>');
-		$label.addClass('anr-option-label').prop('innerHTML', labelText || '&nbsp;');
+		$label.addClass('anr-option-label');
+		if (typeof labelText === 'string') {
+			$label.prop('innerHTML', labelText || '&nbsp;');
+		} else {
+			$label.append(labelText);
+		}
 		$appendTo.append($label);
 		return $label;
 	}
@@ -1507,30 +1523,42 @@ class Reporter {
 			}
 
 			def.then(() => { // Ensure that processInputChange has been resolved as well
-				Reporter.toggle(R.$progress, false).empty();
+				Reporter.toggle(R.$progress, false);
 				Reporter.toggle(R.$content, true);
-				R.$dialog.dialog({
-					buttons: [
-						{
-							text: '報告',
-							click: () => {}
-						},
-						{
-							text: 'プレビュー',
-							click: () => {}
-						},
-						{
-							text: '閉じる',
-							click: function() {
-								$(this).dialog('close');
-							}
-						}
-					]
-				});
+				R.setMainButtons();
 			});
 
 		});
 
+	}
+
+	/**
+	 * Set the main dialog buttons.
+	 */
+	setMainButtons(): void {
+		this.$dialog.dialog({
+			buttons: [
+				{
+					text: '報告',
+					click: () => this.report()
+				},
+				{
+					text: 'プレビュー',
+					click: () => this.preview()
+				},
+				{
+					text: '閉じる',
+					click: () => this.close()
+				}
+			]
+		});
+	}
+
+	/**
+	 * Close the Reporter dialog (will be destroyed).
+	 */
+	close() {
+		this.$dialog.dialog('close');
 	}
 
 	/**
@@ -1731,6 +1759,358 @@ class Reporter {
 
 	}
 
+	report() {
+
+		// Collect dialog data and check for errors
+		const data = this.collectData();
+		if (!data) return;
+
+		// Create progress dialog
+		this.$progress.empty();
+		this.$dialog.dialog({buttons: []});
+
+		const $dupUsers = Reporter.createRow();
+		const $dupUsersLabel = Reporter.createRowLabel($dupUsers, lib.getIcon('load'));
+		const $dupUsersText = $('<div>').text('利用者名重複').addClass('anr-dialog-progress-text');
+		$dupUsers.append($dupUsersText);
+		this.$progress.append($dupUsers);
+
+		const $dupUsersList = Reporter.createRow();
+		const $dupUsersListLabel = Reporter.createRowLabel($dupUsersList, '');
+		const $dupUsersListUl = $('<ul>').addClass('anr-dialog-progress-list');
+		$dupUsersList.append($dupUsersListUl);
+		this.$progress.append($dupUsersList);
+		Reporter.toggle($dupUsersList, false);//$dupUsersListUl
+
+		const $blockedUsers = Reporter.createRow();
+		const $blockedLabel = Reporter.createRowLabel($blockedUsers, '待機中');
+		const $blockedText = $('<div>').text('既存ブロック').addClass('anr-dialog-progress-text');
+		$blockedUsers.append($blockedText);
+		this.$progress.append($blockedUsers);
+
+		const $blockedList = Reporter.createRow();
+		const $blockedListLabel = Reporter.createRowLabel($blockedList, '');
+		const $blockedListBody = $('<ul>').addClass('anr-dialog-progress-list');
+		$blockedList.append($blockedListBody);
+		this.$progress.append($blockedList);
+		Reporter.toggle($blockedList, false);
+
+		const $dupReports = Reporter.createRow();
+		const $dupReportsLabel = Reporter.createRowLabel($dupReports, '待機中');
+		const $dupReportsText = $('<div>').text('重複報告').addClass('anr-dialog-progress-text');
+		$dupReports.append($dupReportsText);
+		this.$progress.append($dupReports);
+
+		const $dupReportsList = Reporter.createRow();
+		const $dupReportsListLabel = Reporter.createRowLabel($dupReportsList, '');
+		const $dupReportsListBody = $('<ul>').addClass('anr-dialog-progress-list');
+		$dupReportsList.append($dupReportsListBody);
+		this.$progress.append($dupReportsList);
+		Reporter.toggle($dupReportsList, false);
+
+		const $report = Reporter.createRow();
+		const $reportLabel = Reporter.createRowLabel($report, 'スキップ'); // Label text is temporary
+		const $reportText = $('<div>').text('報告').addClass('anr-dialog-progress-text');
+		$report.append($reportText);
+		this.$progress.append($report);
+
+		Reporter.toggle(this.$content, false);
+		Reporter.toggle(this.$progress, true);
+		Reporter.setWidestWidth(this.$progress.find('.anr-option-label'));
+		$reportLabel.text('待機中'); // Replace the temporary label text
+
+		this.processIds(data).then(({users, info}) => {
+
+			const proceed = (): JQueryPromise<boolean> => {
+				const def = $.Deferred();
+				if (!users.length) {
+					$dupUsersLabel.empty().append(lib.getIcon('check'));
+					def.resolve(true);
+				} else {
+					$dupUsersLabel.empty().append(getExcl());
+					users.forEach((arr) => {
+						const $li = $('<li>').text(arr.join(', '));
+						$dupUsersListUl.append($li);
+					});
+					Reporter.toggle($dupUsersList, true);
+					this.$dialog.dialog({
+						buttons: [
+							{
+								text: '続行',
+								click: () => {
+									$dupUsersListUl.empty();
+									Reporter.toggle($dupUsersList, false);
+									this.$dialog.dialog({buttons: []});
+									def.resolve(true);
+								}
+							},
+							{
+								text: '戻る',
+								click: () => {
+									$dupUsersListUl.empty();
+									Reporter.toggle($dupUsersList, false);
+									Reporter.toggle(this.$progress, false);
+									Reporter.toggle(this.$content, true);
+									this.setMainButtons();
+									def.resolve(false);
+								}
+							},
+							{
+								text: '閉じる',
+								click: () => {
+									this.close();
+									def.resolve(false);
+								}
+							}
+						]
+					});
+					mw.notify('利用者名の重複を検出しました。', {type: 'warn'});
+				}
+				return def.promise();
+			};
+			
+			proceed().then((bool) => {
+
+				if (!bool) return;
+
+			});
+			
+		});
+
+	}
+
+	preview() {
+
+		const data = this.collectData();
+		if (!data) return;
+
+		const $preview = $('<div>')
+			.prop('title', ANR + ' - Preview')
+			.css({
+				'max-height': '80vh',
+				'max-width': '80vw'
+			})
+			.dialog({
+				dialogClass: 'anr-dialog anr-dialog-preview',
+				height: 'auto',
+				width: 'auto',
+				modal: true,
+				close: function() {
+					// Destory the dialog and its contents when closed by any means
+					$(this).empty().dialog('destroy');
+				}
+			});
+		const $previewContent = $('<div>')
+			.prop('id', 'anr-dialog-preview-content')
+			.text('読み込み中')
+			.append($(lib.getIcon('load')).css('margin-left', '0.5em'));
+		$preview.append($previewContent);
+
+	}
+
+	/**
+	 * Collect option values.
+	 * @returns `null` if there's some error.
+	 */
+	collectData(): ReportData|null {
+
+		//  -- Check first for required fields --
+
+		const page = this.getPage();
+		const section = this.getSection();
+
+		const shiftClick = $.Event('click');
+		shiftClick.shiftKey = true;
+		let hasInvalidId = false;
+		const users = this.Users.reduceRight((acc: UserInfo[], User) => {
+			const inputVal = User.getName();
+			const selectedType = User.getType();
+			if (!inputVal) { // Username is blank
+				User.$label.trigger(shiftClick); // Remove the user pane
+			} else if (['logid', 'diff'].includes(selectedType) && !/^\d+$/.test(inputVal)) { // Invalid ID
+				hasInvalidId = true;
+			} else { // Valid
+				acc.push({
+					user: inputVal,
+					type: selectedType
+				});
+			}
+			return acc;
+		}, []).reverse();
+
+		let reason = <string>this.$reason.val();
+		reason = lib.clean(reason.replace(/[\s-~]*$/, '')); // Remove signature (if any)
+		this.$reason.val(reason);
+
+		// Look for errors
+		const $errList = $('<ul>');
+		if (!page) {
+			$errList.append($('<li>報告先のページ名が未指定</li>'));
+		}
+		if (!section) {
+			$errList.append($('<li>報告先のセクション名が未指定</li>'));
+		}
+		if (!users.length) {
+			$errList.append($('<li>報告対象者が未指定</li>'));
+		}
+		if (hasInvalidId) {
+			$errList.append($('<li>数字ではないID</li>'));
+		}
+		if (!reason) {
+			$errList.append($('<li>報告理由が未指定</li>'));
+		}
+		const errLen = $errList.children('li').length;
+		if (errLen) {
+			const $err = $('<div>')
+				.text('以下のエラーを修正してください。')
+				.append($errList);
+			mw.notify($err, {type: 'error', autoHideSeconds: errLen > 2 ? 'long' : 'short'});
+			return null;
+		}
+
+		//  -- Collect secondary data --
+
+		reason += '--~~~~'; // Add signature to reason
+		const summary = lib.clean(<string>this.$comment.val()); // This is incomplete
+		const blockCheck = this.$checkBlock.prop('checked');
+		const duplicateCheck = this.$checkDuplicates.prop('checked');
+		const watchUser = this.$watchUser.prop('checked');
+		const watch = watchUser ? <string>this.$watchExpiry.val() : null;
+
+		// Return
+		return {
+			page: page!,
+			section: section!,
+			users,
+			reason,
+			summary,
+			blockCheck,
+			duplicateCheck,
+			watch
+		};
+
+	}
+
+	/**
+	 * Convert all IDs to usernames and check whether the username fields have any duplicate values.
+	 * @param data
+	 * @returns
+	 */
+	processIds(data: ReportData): JQueryPromise<ProcessesIds> {
+		const deferreds: JQueryPromise<string|null>[] = data.users.map((obj) => { // Create an array of $.Deferred out of input values
+			if (obj.type === 'logid' || obj.type === 'diff') {
+				return idList.getUsername(parseInt(obj.user), obj.type === 'diff' ? 'diffid' : 'logid'); // Convert ID
+			} else if (obj.type === 'none') {
+				return $.Deferred().resolve(null); // Immediate resolve
+			} else {
+				return $.Deferred().resolve(obj.user); // Immediate resolve
+			}
+		}, []);
+		return $.when(...deferreds).then((...info) => { // When all the deferreds have been resolved
+			/**
+			 * An array of indexes that have already been checked.
+			 * 
+			 * Suppose that the `data` array is as below:
+			 * ```js
+			 * [
+			 * 	{user: 'Foo', type: 'UNL'},
+			 * 	{user: '10000', type: 'logid'}, // Logid/10000 = Foo
+			 * 	{user: 'Bar', type: 'UNL'},
+			 * 	{user: '20000', type: 'diff'} // Diff/20000 = Foo
+			 * ]
+			 * ```
+			 * where the comments on the right represent the return values of the deferreds. Then, when
+			 * we check `data[0]` and look for its duplicates in `data[1-3]`, `1` and `3` should be pushed
+			 * into the `skip` array so that when we check `data[1]`, we can skip it. Otherwise, the
+			 * resulting array will be:
+			 * ```
+			 * [
+			 * 	['Foo', 'Logid/10000', 'Diff/20000'],
+			 * 	['Logid/10000', 'Diff/20000']
+			 * ]
+			 * ```
+			 * while we only want:
+			 * ```
+			 * [
+			 * 	['Foo', 'Logid/10000', 'Diff/20000']
+			 * ]
+			 * ```
+			 */
+			const skip: number[] = [];
+			const users = info.reduce((acc: string[][], username, i, arr) => {
+				if (username && !skip.includes(i)) { // username isn't null and not to be skipped
+					const ret: string[] = [];
+					for (let j = i; j < arr.length; j++) { // Check array elements from the current index
+						if (j === i && arr.lastIndexOf(username) !== j ||
+							j !== i && arr[j] === username
+						) { // Found a duplicate username
+							skip.push(j);
+							const inputVal = data.users[j].user;
+							let toPush;
+							switch (data.users[j].type) { // Convert the username back to an ID if necessary
+								case 'logid':
+									toPush = `Logid/${inputVal}`;
+									break;
+								case 'diff':
+									toPush = `差分/${inputVal}`;
+									break;
+								default:
+									toPush = inputVal;
+							}
+							if (!ret.includes(toPush)) {
+								ret.push(toPush);
+							}
+						}
+					}
+					if (ret.length) {
+						acc.push(ret);
+					}
+				}
+				return acc;
+			}, []);
+			return {users, info};
+		});
+		
+	}
+
+}
+
+/** The object that stores data created out of the field values on the dialog. */
+interface ReportData {
+	/** The page to which to forward the report. */
+	page: string;
+	/** The section in the page to which to add the report. */
+	section: string;
+	/** An array of objects that store collected usernames and types. */
+	users: UserInfo[];
+	/** The value in the reason field with a signature added. */
+	reason: string;
+	/** The value in the additional comment field (without reportee links, ad links, etc). */
+	summary: string;
+	/** The checked state of the block check option. */
+	blockCheck: boolean;
+	/** The checked state of the duplicate report check option. */
+	duplicateCheck: boolean;
+	/** The value of the watchuser option. If turned on, the property has an expiration time, otherwise `null`. */
+	watch: string|null;
+}
+/** The object that stores the username and type in a user pane. */
+interface UserInfo {
+	user: string;
+	type: antype;
+}
+/** The object returned by {@link Reporter.processIds}. */
+interface ProcessesIds {
+	/** 
+	 * An array of arrays of duplicate usernames in the user panes, which is used to let the script user know
+	 * which usernames are duplicates in {@link Reporter.report}.
+	 */
+	users: string[][];
+	/**
+	 * An array of usernames in which all IDs have been converted. For `type=none` or IDs that failed to be converted,
+	 * the value is `null`.
+	 */
+	info: (string|null)[];
 }
 
 /** The options for {@link User.constructor}. */
@@ -1756,7 +2136,7 @@ interface UserOptions {
 /**
  * UserAN type argument values.
  */
-type type = 'UNL'|'User2'|'IP2'|'logid'|'diff'|'none';
+type antype = 'UNL'|'User2'|'IP2'|'logid'|'diff'|'none';
 
 let userPaneCnt = 0;
 /**
@@ -1972,8 +2352,8 @@ class User {
 	 * Get the UserAN type selected in the dropdown.
 	 * @returns
 	 */
-	getType(): string {
-		return <string>this.$type.val();
+	getType(): antype {
+		return <antype>this.$type.val();
 	}
 
 	/**
@@ -1981,7 +2361,7 @@ class User {
 	 * @param type
 	 * @returns
 	 */
-	setType(type: type): User {
+	setType(type: antype): User {
 		this.$type.val(type);
 		return this;
 	}
@@ -1990,10 +2370,10 @@ class User {
 	 * Change the hidden state of the options in the type dropdown.
 	 * @param types An array of type options to make visible. The element at index 0 will be selected.
 	 */
-	setTypeOptions(types: type[]): User {
+	setTypeOptions(types: antype[]): User {
 		this.$type.children('option').each((_, opt) => { // Loop all the options
 			// Set up the UserAN type dropdown
-			const idx = types.indexOf(<type>opt.value);
+			const idx = types.indexOf(<antype>opt.value);
 			opt.hidden = idx === -1; // Show/hide options
 			if (idx === 0) {
 				opt.selected = true; // Select types[0]
@@ -2126,7 +2506,7 @@ class User {
 
 		const def = $.Deferred();
 
-		const typeMap: Record<'ip'|'user'|'other', type[]> = {
+		const typeMap: Record<'ip'|'user'|'other', antype[]> = {
 			ip: ['IP2', 'none'],
 			user: ['UNL', 'User2', 'none'],
 			other: ['none', 'logid', 'diff']
@@ -2171,7 +2551,7 @@ class User {
 		 * by an unexpected value.
 		 */
 		const inputVal = this.getName();
-		let selectedType = this.getType();
+		const selectedType = this.getType();
 		const checked = this.$hideUser.prop('checked');
 		try {
 			if (typeof inputVal !== 'string') {
@@ -2210,18 +2590,18 @@ class User {
 				return this.setOverlay(false);
 			});
 		} else { // ID to username
-			selectedType = selectedType === 'diff' ? 'diffid' : selectedType;
-			const selectedTypeJa = selectedType === 'logid' ? 'ログ' : '差分';
-			return idList.getUsername(parseInt(inputVal), <"logid"|"diffid">selectedType).then((username) => {
+			const idType: "logid"|"diffid" = selectedType === 'diff' ? 'diffid' : <"logid">selectedType;
+			const idTypeJa = selectedType === 'logid' ? 'ログ' : '差分';
+			return idList.getUsername(parseInt(inputVal), idType).then((username) => {
 				if (username) {
 					return this.setName(username).processInputChange().then(() => {
-						mw.notify(`${selectedTypeJa}ID「${inputVal}」を利用者名に変換しました。`, {type: 'success'});
+						mw.notify(`${idTypeJa}ID「${inputVal}」を利用者名に変換しました。`, {type: 'success'});
 						$processing.remove();
 						return this.setOverlay(false);
 					});
 				} else {
 					this.$hideUser.prop('checked', !checked);
-					mw.notify(`${selectedTypeJa}ID「${inputVal}」を利用者名に変換できませんでした。`, {type: 'warn'});
+					mw.notify(`${idTypeJa}ID「${inputVal}」を利用者名に変換できませんでした。`, {type: 'warn'});
 					$processing.remove();
 					return this.setOverlay(false);
 				}
@@ -2356,6 +2736,13 @@ function extractCidr(text: string): string|null {
 		return null;
 	}
 
+}
+
+function getExcl() {
+	const img = document.createElement('img');
+	img.src = 'https://upload.wikimedia.org/wikipedia/commons/c/c3/Crystal_important.png';
+	img.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
+	return img;
 }
 
 // ******************************************************************************************
