@@ -136,7 +136,7 @@ function loadConfigInterface(): {
 	document.title = 'ANReporterConfig' + ' - ' + mw.config.get('wgSiteName');
 
 	// Get the first heading and content body
-	const heading: HTMLHeadingElement|null = 
+	const heading: HTMLHeadingElement|null =
 		document.querySelector('.mw-first-heading') ||
 		document.querySelector('.firstHeading') ||
 		document.querySelector('#firstHeading');
@@ -629,7 +629,8 @@ function createStyleTag(cfg: ANReporterConfig): void {
 			'display: inline-block;' +
 			'border: 1px solid silver;' +
 		'}' +
-		'.anrc-buttonwrapper:not(:last-child) {' + // Margin below buttons
+		'.anrc-buttonwrapper:not(:last-child),' + // Margin below buttons
+		'#anr-dialog-progress-field tr:not(:last-child) {' +
 			'margin-bottom: 0.5em;' +
 		'}' +
 		// Dialog
@@ -640,16 +641,18 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'#anr-dialog-preview-content {' +
 			'padding: 1em;' +
 		'}' +
-		'#anr-dialog-optionfield {' + // The immediate child of #anr-dialog-content
+		'#anr-dialog-optionfield,' + // The immediate child of #anr-dialog-content
+		'#anr-dialog-progress-field {' +
 			'padding: 1em;' +
 			'margin: 0;' +
 			'border: 1px solid #cccccc;' +
 		'}' +
-		'#anr-dialog-optionfield > legend {' +
+		'#anr-dialog-optionfield > legend,' +
+		'#anr-dialog-progress-field > legend {' +
 			'font-weight: bold;' +
 			'padding-bottom: 0;' +
 		'}' +
-		'#anr-dialog-optionfield hr {' +
+		'.anr-dialog hr {' +
 			'margin: 0.8em 0;' +
 			'background-color: #cccccc;' +
 		'}' +
@@ -686,7 +689,7 @@ function createStyleTag(cfg: ANReporterConfig): void {
 			'box-sizing: border-box;' +
 			'width: 100%;' + // Fill the remaining space ("float" and "overflow" are essential for this to work)
 		'}' +
-		'.select2-container,' + // Set up the font size of select2 options 
+		'.select2-container,' + // Set up the font size of select2 options
 		'.anr-select2 .select2-selection--single {' +
 			'height: auto !important;' +
 		'}' +
@@ -738,12 +741,19 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'.anr-option-blockstatus > a {' +
 			'color: mediumvioletred;' +
 		'}' +
-		'.anr-dialog-progress-text {' +
-			'width: 100%;' +
+		'#anr-dialog-progress-field img {' +
+			'margin: 0 0.5em;' +
 		'}' +
-		'.anr-dialog-progress-list {' +
-			'display: inline-block;' +
+		'#anr-dialog-progress-field ul {' +
 			'margin-top: 0;' +
+		'}' +
+		'#anr-dialog-preview-body > div {' +
+			'border: 1px solid silver;' +
+			'padding: 0.2em 0.5em;' +
+			'background: white;' +
+		'}' +
+		'#anr-dialog-preview-body .autocomment a {' +  // Change the color of the section link in summary
+			'color: gray;' +
 		'}' +
 		// Dialog colors
 		'.anr-dialog.ui-dialog-content,' +
@@ -773,7 +783,7 @@ class IdList {
 
 	/**
 	 * The list object of objects, keyed by usernames.
-	 * 
+	 *
 	 * The usernames are formatted by `lib.clean` and spaces in it are represented by underscores.
 	 */
 	list: {
@@ -872,9 +882,9 @@ class IdList {
 
 	/**
 	 * Attempt to convert an ID to a username based on the current username-ID list (no HTTP request).
-	 * @param id 
-	 * @param type 
-	 * @returns 
+	 * @param id
+	 * @param type
+	 * @returns
 	 */
 	getRegisteredUsername(id: number, type: 'logid'|'diffid'): string|null {
 		for (const user in this.list) {
@@ -938,7 +948,7 @@ class IdList {
 			return null;
 		});
 	}
-	
+
 }
 
 /**
@@ -947,6 +957,43 @@ class IdList {
 interface BlockStatus {
     usertype: 'ip'|'user'|'other';
     blocked: boolean|null;
+}
+/** The object that stores data created out of the field values on the dialog. */
+interface ReportData {
+	/** The page to which to forward the report. */
+	page: string;
+	/** The section in the page to which to add the report. */
+	section: string;
+	/** An array of objects that store collected usernames and types. */
+	users: UserInfo[];
+	/** The value in the reason field with a signature added. */
+	reason: string;
+	/** The value in the additional comment field (without reportee links, ad links, etc). */
+	summary: string;
+	/** The checked state of the block check option. */
+	blockCheck: boolean;
+	/** The checked state of the duplicate report check option. */
+	duplicateCheck: boolean;
+	/** The value of the watchuser option. If turned on, the property has an expiration time, otherwise `null`. */
+	watch: string|null;
+}
+/** The object that stores the username and type in a user pane. */
+interface UserInfo {
+	user: string;
+	type: antype;
+}
+/** The object returned by {@link Reporter.processIds}. */
+interface ProcessedIds {
+	/**
+	 * An array of arrays of duplicate usernames in the user panes, which is used to let the script user know
+	 * which usernames are duplicates in {@link Reporter.report}.
+	 */
+	users: string[][];
+	/**
+	 * An array of usernames in which all IDs have been converted. For `type=none` or IDs that failed to be converted,
+	 * the value is `null`.
+	 */
+	info: (string|null)[];
 }
 
 /**
@@ -1129,7 +1176,7 @@ class Reporter {
 		this.$fieldset.append($addButtonWrapper);
 		this.$fieldset.append(document.createElement('hr'));
 
-		// Create a user pane 
+		// Create a user pane
 		this.Users = [
 			new User($addButtonWrapper, {removable: false})
 		];
@@ -1161,7 +1208,7 @@ class Reporter {
 
 		/**
 		 * (Bound to the change event of a \<select> element.)
-		 * 
+		 *
 		 * Copy the selected value to the clipboard and reset the selection.
 		 * @param this
 		 */
@@ -1358,7 +1405,7 @@ class Reporter {
 	/**
 	 * Compare the outerHeight of a row label div and that of a sibling div, and if the former is smaller than the latter,
 	 * assign `padding-top` to the former.
-	 * 
+	 *
 	 * Note: **Both elements must be visible when this function is called**.
 	 * @param $label
 	 * @param $sibling
@@ -1432,7 +1479,7 @@ class Reporter {
 		const R = new Reporter();
 
 		// Get a username associated with the current page if any
-		const heading: HTMLHeadingElement|null = 
+		const heading: HTMLHeadingElement|null =
 			document.querySelector('.mw-first-heading') ||
 			document.querySelector('.firstHeading') ||
 			document.querySelector('#firstHeading');
@@ -1564,7 +1611,7 @@ class Reporter {
 	/**
 	 * Get `YYYY年MM月D1日 - D2日新規依頼`, relative to the current day.
 	 * @param getLast Whether to get the preceding section, defaulted to `false`.
-	 * @returns 
+	 * @returns
 	 */
 	static getCurrentAniSection(getLast = false): string {
 
@@ -1598,7 +1645,7 @@ class Reporter {
 	 * Get the last day of a given month in a given year.
 	 * @param year A 4-digit year.
 	 * @param month The month as a number between 0 and 11 (January to December).
-	 * @returns 
+	 * @returns
 	 */
 	static getLastDay(year: number, month: number): number {
 		return new Date(year, month + 1, 0).getDate();
@@ -1759,154 +1806,7 @@ class Reporter {
 
 	}
 
-	report() {
-
-		// Collect dialog data and check for errors
-		const data = this.collectData();
-		if (!data) return;
-
-		// Create progress dialog
-		this.$progress.empty();
-		this.$dialog.dialog({buttons: []});
-
-		const $dupUsers = Reporter.createRow();
-		const $dupUsersLabel = Reporter.createRowLabel($dupUsers, lib.getIcon('load'));
-		const $dupUsersText = $('<div>').text('利用者名重複').addClass('anr-dialog-progress-text');
-		$dupUsers.append($dupUsersText);
-		this.$progress.append($dupUsers);
-
-		const $dupUsersList = Reporter.createRow();
-		const $dupUsersListLabel = Reporter.createRowLabel($dupUsersList, '');
-		const $dupUsersListUl = $('<ul>').addClass('anr-dialog-progress-list');
-		$dupUsersList.append($dupUsersListUl);
-		this.$progress.append($dupUsersList);
-		Reporter.toggle($dupUsersList, false);//$dupUsersListUl
-
-		const $blockedUsers = Reporter.createRow();
-		const $blockedLabel = Reporter.createRowLabel($blockedUsers, '待機中');
-		const $blockedText = $('<div>').text('既存ブロック').addClass('anr-dialog-progress-text');
-		$blockedUsers.append($blockedText);
-		this.$progress.append($blockedUsers);
-
-		const $blockedList = Reporter.createRow();
-		const $blockedListLabel = Reporter.createRowLabel($blockedList, '');
-		const $blockedListBody = $('<ul>').addClass('anr-dialog-progress-list');
-		$blockedList.append($blockedListBody);
-		this.$progress.append($blockedList);
-		Reporter.toggle($blockedList, false);
-
-		const $dupReports = Reporter.createRow();
-		const $dupReportsLabel = Reporter.createRowLabel($dupReports, '待機中');
-		const $dupReportsText = $('<div>').text('重複報告').addClass('anr-dialog-progress-text');
-		$dupReports.append($dupReportsText);
-		this.$progress.append($dupReports);
-
-		const $dupReportsList = Reporter.createRow();
-		const $dupReportsListLabel = Reporter.createRowLabel($dupReportsList, '');
-		const $dupReportsListBody = $('<ul>').addClass('anr-dialog-progress-list');
-		$dupReportsList.append($dupReportsListBody);
-		this.$progress.append($dupReportsList);
-		Reporter.toggle($dupReportsList, false);
-
-		const $report = Reporter.createRow();
-		const $reportLabel = Reporter.createRowLabel($report, 'スキップ'); // Label text is temporary
-		const $reportText = $('<div>').text('報告').addClass('anr-dialog-progress-text');
-		$report.append($reportText);
-		this.$progress.append($report);
-
-		Reporter.toggle(this.$content, false);
-		Reporter.toggle(this.$progress, true);
-		Reporter.setWidestWidth(this.$progress.find('.anr-option-label'));
-		$reportLabel.text('待機中'); // Replace the temporary label text
-
-		this.processIds(data).then(({users, info}) => {
-
-			const proceed = (): JQueryPromise<boolean> => {
-				const def = $.Deferred();
-				if (!users.length) {
-					$dupUsersLabel.empty().append(lib.getIcon('check'));
-					def.resolve(true);
-				} else {
-					$dupUsersLabel.empty().append(getExcl());
-					users.forEach((arr) => {
-						const $li = $('<li>').text(arr.join(', '));
-						$dupUsersListUl.append($li);
-					});
-					Reporter.toggle($dupUsersList, true);
-					this.$dialog.dialog({
-						buttons: [
-							{
-								text: '続行',
-								click: () => {
-									$dupUsersListUl.empty();
-									Reporter.toggle($dupUsersList, false);
-									this.$dialog.dialog({buttons: []});
-									def.resolve(true);
-								}
-							},
-							{
-								text: '戻る',
-								click: () => {
-									$dupUsersListUl.empty();
-									Reporter.toggle($dupUsersList, false);
-									Reporter.toggle(this.$progress, false);
-									Reporter.toggle(this.$content, true);
-									this.setMainButtons();
-									def.resolve(false);
-								}
-							},
-							{
-								text: '閉じる',
-								click: () => {
-									this.close();
-									def.resolve(false);
-								}
-							}
-						]
-					});
-					mw.notify('利用者名の重複を検出しました。', {type: 'warn'});
-				}
-				return def.promise();
-			};
-			
-			proceed().then((bool) => {
-
-				if (!bool) return;
-
-			});
-			
-		});
-
-	}
-
-	preview() {
-
-		const data = this.collectData();
-		if (!data) return;
-
-		const $preview = $('<div>')
-			.prop('title', ANR + ' - Preview')
-			.css({
-				'max-height': '80vh',
-				'max-width': '80vw'
-			})
-			.dialog({
-				dialogClass: 'anr-dialog anr-dialog-preview',
-				height: 'auto',
-				width: 'auto',
-				modal: true,
-				close: function() {
-					// Destory the dialog and its contents when closed by any means
-					$(this).empty().dialog('destroy');
-				}
-			});
-		const $previewContent = $('<div>')
-			.prop('id', 'anr-dialog-preview-content')
-			.text('読み込み中')
-			.append($(lib.getIcon('load')).css('margin-left', '0.5em'));
-		$preview.append($previewContent);
-
-	}
+	// -- Methods related to the dialog buttons of "report" and "preview"
 
 	/**
 	 * Collect option values.
@@ -1996,7 +1896,7 @@ class Reporter {
 	 * @param data
 	 * @returns
 	 */
-	processIds(data: ReportData): JQueryPromise<ProcessesIds> {
+	processIds(data: ReportData): JQueryPromise<ProcessedIds> {
 		const deferreds: JQueryPromise<string|null>[] = data.users.map((obj) => { // Create an array of $.Deferred out of input values
 			if (obj.type === 'logid' || obj.type === 'diff') {
 				return idList.getUsername(parseInt(obj.user), obj.type === 'diff' ? 'diffid' : 'logid'); // Convert ID
@@ -2009,7 +1909,7 @@ class Reporter {
 		return $.when(...deferreds).then((...info) => { // When all the deferreds have been resolved
 			/**
 			 * An array of indexes that have already been checked.
-			 * 
+			 *
 			 * Suppose that the `data` array is as below:
 			 * ```js
 			 * [
@@ -2070,47 +1970,394 @@ class Reporter {
 			}, []);
 			return {users, info};
 		});
-		
+
 	}
 
-}
-
-/** The object that stores data created out of the field values on the dialog. */
-interface ReportData {
-	/** The page to which to forward the report. */
-	page: string;
-	/** The section in the page to which to add the report. */
-	section: string;
-	/** An array of objects that store collected usernames and types. */
-	users: UserInfo[];
-	/** The value in the reason field with a signature added. */
-	reason: string;
-	/** The value in the additional comment field (without reportee links, ad links, etc). */
-	summary: string;
-	/** The checked state of the block check option. */
-	blockCheck: boolean;
-	/** The checked state of the duplicate report check option. */
-	duplicateCheck: boolean;
-	/** The value of the watchuser option. If turned on, the property has an expiration time, otherwise `null`. */
-	watch: string|null;
-}
-/** The object that stores the username and type in a user pane. */
-interface UserInfo {
-	user: string;
-	type: antype;
-}
-/** The object returned by {@link Reporter.processIds}. */
-interface ProcessesIds {
-	/** 
-	 * An array of arrays of duplicate usernames in the user panes, which is used to let the script user know
-	 * which usernames are duplicates in {@link Reporter.report}.
-	 */
-	users: string[][];
 	/**
-	 * An array of usernames in which all IDs have been converted. For `type=none` or IDs that failed to be converted,
-	 * the value is `null`.
+	 * Create the report text and summary out of the return values of {@link collectData} and {@link processIds}.
+	 * @param data The (null-proof) return value of {@link collectData}.
+	 * @param info The partial return value of {@link processIds}.
+	 * @returns The report text and summary.
 	 */
-	info: (string|null)[];
+	createReport(data: ReportData, info: ProcessedIds['info']): {text: string; summary: string;} {
+
+		// Create UserANs and summary links
+		const templates: Template[] = [];
+		const links: string[] = [];
+		for (let i = 0; i < data.users.length; i++) {
+			const obj = data.users[i];
+
+			const Temp = new lib.Template('UserAN').addArgs([
+				{
+					name: 't',
+					value: obj.type
+				},
+				{
+					name: '1',
+					value: obj.user,
+					forceUnnamed: true
+				}
+			]);
+			templates.push(Temp);
+
+			switch (obj.type) {
+				case 'UNL':
+				case 'User2':
+				case 'IP2':
+					// If this username is the first occurrence in the "info" array in which IDs have been converted to usernames
+					if (info.indexOf(info[i]) === i) {
+						links.push(`[[特別:投稿記録/${obj.user}|${obj.user}]]`);
+					}
+					break;
+				case 'logid':
+					// The ID failed to be converted to a username or the converted username is the first occurrence and not a duplicate
+					if (info[i] === null || info.indexOf(info[i]) === i) {
+						links.push(`[[特別:転送/logid/${obj.user}|Logid/${obj.user}]]`);
+					}
+					break;
+				case 'diff':
+					if (info[i] === null || info.indexOf(info[i]) === i) {
+						links.push(`[[特別:差分/${obj.user}|差分/${obj.user}]]の投稿者`);
+					}
+					break;
+				default: // none
+					if (info[i] === null || info.indexOf(info[i]) === i) {
+						links.push(obj.user);
+					}
+
+			}
+		}
+
+		// Create the report text
+		let text = '';
+		templates.forEach((Temp, i) => {
+			text += `${i === 0 ? '' : '\n'}* ${Temp.toString()}`;
+		});
+		text += templates.length > 1 ? '\n:' : ' - ';
+		text += data.reason;
+
+		// Create the report summary
+		let summary = '';
+		const fixed = [ // The fixed, always existing parts of the summary
+			`/*${data.section}*/+`,
+			' ([[利用者:Dragoniez/scripts/AN_Reporter|AN Reporter]])'
+		];
+		const fixedLen = fixed.join('').length; // The length of the fixed summary
+		const summaryComment = data.summary ? ' - ' + data.summary : '';
+		for (let i = 0; i < links.length; i++) { // Loop the reportee links
+			const userLinks =
+				links.slice(0, i + 1).join(', ') + // The first "i + 1" links
+				(links.slice(i + 1).length ? `, ほか${links.slice(i + 1).length}アカウント` : ''); // and the number of the remaining links if any
+			const totalLen = fixedLen + userLinks.length + summaryComment.length; // The total length of the summary
+			if (i === 0 && totalLen > 500) { // The summary exceeds the word count limit only with the first link
+				const maxLen = 500 - fixedLen - userLinks.length;
+				const trunc = summaryComment.slice(0, maxLen - 3) + '...'; // Truncate the additional comment
+				const augFixed = fixed.slice(); // Copy the fixed summary array
+				augFixed.splice(1, 0, userLinks, trunc); // Augment the copied array by inserting the first user link and the truncated comment
+				summary = augFixed.join(''); // Join the array elements and that will be the whole of the summary
+				break;
+			} else if (totalLen > 500) {
+				// The word count limit is exceeded when we add a non-first link
+				// In this case, use the summary created in the last loop
+				break;
+			} else { // If the word count limit isn't exceeded in the first loop, the code always reaches this block
+				const augFixed = fixed.slice();
+				augFixed.splice(1, 0, userLinks, summaryComment);
+				summary = augFixed.join('');
+			}
+		}
+
+		return {text, summary};
+
+	}
+
+	// The 3 methods above are used both in "report" and "preview" (the former needs additional functions, and they are defined below).
+
+	/**
+	 * Preview the report.
+	 * @returns
+	 */
+	preview() {
+
+		const data = this.collectData();
+		if (!data) return;
+
+		const $preview = $('<div>')
+			.prop('title', ANR + ' - Preview')
+			.css({
+				'max-height': '80vh',
+				'max-width': '80vw'
+			})
+			.dialog({
+				dialogClass: 'anr-dialog anr-dialog-preview',
+				height: 'auto',
+				width: 'auto',
+				modal: true,
+				close: function() {
+					// Destory the dialog and its contents when closed by any means
+					$(this).empty().dialog('destroy');
+				}
+			});
+		const $previewContent = $('<div>')
+			.prop('id', 'anr-dialog-preview-content')
+			.text('読み込み中')
+			.append($(lib.getIcon('load')).css('margin-left', '0.5em'));
+		$preview.append($previewContent);
+
+		this.processIds(data).then(({info}) => {
+			const {text, summary} = this.createReport(data, info);
+			new mw.Api().get({
+				action: 'parse',
+				title: data.page,
+				text,
+				summary,
+				prop: 'text',
+				disablelimitreport: true,
+				disableeditsection: true,
+				disabletoc: true,
+				formatversion: '2'
+			}).then((res) => {
+				const content = res && res.parse && res.parse.text;
+				const comment = res && res.parse && res.parse.parsedsummary;
+				if (content && comment) {
+
+					const $header = $('<div>')
+						.prop('id', 'anr-dialog-preview-header')
+						.append($(
+							'<p>' +
+								'注意1: このプレビュー上のリンクは全て新しいタブで開かれます<br>' +
+								'注意2: 報告先が <a href="' + mw.util.getUrl('WP:AN/S#OTH') + '" target="_blank">WP:AN/S#その他</a> の場合、' +
+								'このプレビューには表示されませんが「他M月D日」のヘッダーは必要に応じて自動挿入されます' +
+							'</p>')
+						);
+					const $body = $('<div>').prop('id', 'anr-dialog-preview-body');
+					$body.append(
+						$(content),
+						$('<div>')
+							.css('margin-top', '0.8em')
+							.append($(comment))
+					);
+
+					$previewContent
+						.empty()
+						.append($header, $('<hr>'), $body)
+						.find('a').prop('target', '_blank'); // Open all links on a new tab
+
+					$preview.dialog({
+						buttons: [
+							{
+								text: '閉じる',
+								click: () => {
+									$preview.dialog('close');
+								}
+							}
+						],
+						position: {
+							at: 'center',
+							my: 'center',
+							of: window
+						}
+					});
+
+				} else {
+					throw new Error('action=parseのエラー');
+				}
+			}).catch((_, err) => {
+				console.log(err);
+				$previewContent
+					.empty()
+					.text('プレビューの読み込みに失敗しました。')
+					.append($(lib.getIcon('cross')).css('margin-left', '0.5em'));
+				$preview.dialog({
+					buttons: [
+						{
+							text: '閉じる',
+							click: () => {
+								$preview.dialog('close');
+							}
+						}
+					]
+				});
+			});
+		});
+
+	}
+
+	/**
+	 * Submit the report.
+	 * @returns
+	 */
+	report() {
+
+		// Collect dialog data and check for errors
+		const data = this.collectData();
+		if (!data) return;
+
+		// Create progress dialog
+		this.$progress.empty();
+		Reporter.toggle(this.$content, false);
+		Reporter.toggle(this.$progress, true);
+		this.$dialog.dialog({buttons: []});
+
+		const $progressField = $('<fieldset>').prop('id', 'anr-dialog-progress-field');
+		this.$progress.append($progressField);
+		$progressField.append(
+			$('<legend>').text('報告の進捗'),
+			$('<div>').prop('id', 'anr-dialog-progress-icons').append(
+				lib.getIcon('check'),
+				document.createTextNode('処理通過'),
+				getImage('exclamation'),
+				document.createTextNode('要確認'),
+				getImage('bar'),
+				document.createTextNode('スキップ'),
+				getImage('clock'),
+				document.createTextNode('待機中'),
+				lib.getIcon('cross'),
+				document.createTextNode('処理失敗')
+			),
+			$('<hr>')
+		);
+		const $progressTable = $('<table>');
+		$progressField.append($progressTable);
+
+		const $dupUsersRow = $('<tr>');
+		$progressTable.append($dupUsersRow);
+		const $dupUsersLabel = $('<td>').append(lib.getIcon('load'));
+		const $dupUsersText = $('<td>').text('利用者名重複');
+		$dupUsersRow.append($dupUsersLabel, $dupUsersText);
+
+		const $dupUsersListRow = $('<tr>');
+		$progressTable.append($dupUsersListRow);
+		const $dupUsersListText = $('<td>');
+		$dupUsersListRow.append($('<td>'), $dupUsersListText);
+		const $dupUsersList = $('<ul>');
+		$dupUsersListText.append($dupUsersList);
+		Reporter.toggle($dupUsersListRow, false);
+
+		const $blockedUsersRow = $('<tr>');
+		$progressTable.append($blockedUsersRow);
+		const $blockedUsersLabel = $('<td>').append(data.blockCheck ? getImage('clock') : getImage('bar'));
+		const $blockedUsersText = $('<td>').text('既存ブロック');
+		$blockedUsersRow.append($blockedUsersLabel, $blockedUsersText);
+
+		const $blockedUsersListRow = $('<tr>');
+		$progressTable.append($blockedUsersListRow);
+		const $blockedUsersListText = $('<td>');
+		$blockedUsersListRow.append($('<td>'), $blockedUsersListText);
+		const $blockedUsersList = $('<ul>');
+		$blockedUsersListText.append($blockedUsersList);
+		Reporter.toggle($blockedUsersListRow , false);
+
+		const $dupReportsRow = $('<tr>');
+		$progressTable.append($dupReportsRow);
+		const $dupReportsLabel = $('<td>').append(data.duplicateCheck ? getImage('clock') : getImage('bar'));
+		const $dupReportsText = $('<td>').text('重複報告');
+		$dupReportsRow.append($dupReportsLabel, $dupReportsText);
+
+		const $dupReportsListRow = $('<tr>');
+		$progressTable.append($dupReportsListRow);
+		const $dupReportsListText = $('<td>');
+		$dupReportsListRow.append($('<td>'), $dupReportsListText);
+		const $dupReportsList = $('<ul>');
+		$dupReportsListText.append($dupReportsList);
+		Reporter.toggle($dupReportsListRow , false);
+
+		const $reportRow = $('<tr>');
+		$progressTable.append($reportRow);
+		const $reportLabel = $('<td>').append(getImage('clock'));
+		const $reportText = $('<td>').text('報告');
+		$reportRow.append($reportLabel, $reportText);
+
+		const $reportListRow = $('<tr>');
+		$progressTable.append($reportListRow);
+		const $reportListText = $('<td>');
+		$reportListRow.append($('<td>'), $reportListText);
+		const $reportList = $('<ul>');
+		$reportListText.append($reportList);
+		Reporter.toggle($reportListRow , false);
+
+		this.processIds(data).then(({users, info}) => {
+
+			const proceed = (): JQueryPromise<boolean> => {
+				const def = $.Deferred();
+				if (!users.length) {
+					$dupUsersLabel.empty().append(lib.getIcon('check'));
+					def.resolve(true);
+				} else {
+					$dupUsersLabel.empty().append(getImage('exclamation'));
+					users.forEach((arr) => {
+						const $li = $('<li>').text(arr.join(', '));
+						$dupUsersList.append($li);
+					});
+					Reporter.toggle($dupUsersListRow, true);
+					this.$dialog.dialog({
+						buttons: [
+							{
+								text: '続行',
+								click: () => {
+									$dupUsersList.empty();
+									Reporter.toggle($dupUsersListRow, false);
+									this.$dialog.dialog({buttons: []});
+									def.resolve(true);
+								}
+							},
+							{
+								text: '戻る',
+								click: () => {
+									$dupUsersList.empty();
+									Reporter.toggle($dupUsersListRow, false);
+									Reporter.toggle(this.$progress, false);
+									Reporter.toggle(this.$content, true);
+									this.setMainButtons();
+									def.resolve(false);
+								}
+							},
+							{
+								text: '閉じる',
+								click: () => {
+									this.close();
+									def.resolve(false);
+								}
+							}
+						]
+					});
+					mw.notify('利用者名の重複を検出しました。', {type: 'warn'});
+				}
+				return def.promise();
+			};
+
+			proceed().then((bool) => {
+
+				if (!bool) return;
+				console.log(this.createReport(data, info));
+
+			});
+
+		});
+
+	}
+
+	/**
+	 *
+	 * @param usersArr The `info` property array of the return value of {@link processIds}.
+	 */
+	checkBlocks(usersArr: (string|null)[]) {
+		const users: string[] = [];
+		const ips: string[] = [];
+		for (const user of usersArr) {
+			if (!user) {
+				// Do nothing
+			} else if (mw.util.isIPAddress(user, true)) {
+				if (!ips.includes(user)) ips.push(user);
+			} else if (User.containsInvalidCharacter(user)) {
+				// Do nothing
+			} else {
+				if (!users.includes(user)) users.push(user);
+			}
+		}
+
+	}
+
 }
 
 /** The options for {@link User.constructor}. */
@@ -2443,7 +2690,7 @@ class User {
 				.text(idTitle)
 				.prop('href', mw.util.getUrl(idTitle))
 				.toggleClass('anr-disabledanchor', isNotNumber);
-			
+
 			// Set up $blockStatus
 			if (!isNotNumber) {
 				const idType: 'logid'|'diffid' = selectedType === 'diff' ? 'diffid' : <'logid'>selectedType;
@@ -2454,7 +2701,7 @@ class User {
 					this.$blockStatus.text('');
 				}
 			}
-			
+
 		} else {
 			this.$input.toggleClass(clss, false);
 			this.$hideUser.prop({
@@ -2524,7 +2771,7 @@ class User {
 				if (/^\d+$/.test(username) && obj.usertype === 'user') {
 					typeMap.user.push('logid', 'diff');
 				}
-				this.setTypeOptions(typeMap[obj.usertype]).$type.prop('disabled', false); 
+				this.setTypeOptions(typeMap[obj.usertype]).$type.prop('disabled', false);
 				this.processTypeChange();
 				def.resolve(this);
 			});
@@ -2622,7 +2869,7 @@ class User {
 
 	/**
 	 * Check the validity of a username (by checking the inclusion of `/[@/#<>[\]|{}:]/`).
-	 * 
+	 *
 	 * Note that IP(v6) addresses should not be passed.
 	 * @param username
 	 * @returns
@@ -2642,7 +2889,7 @@ interface OptionElementData {
 }
 /**
  * Add \<option>s to a dropdown by referring to object data.
- * @param $dropdown 
+ * @param $dropdown
  * @param data `text` is obligatory, and the other properties are optional.
  * @returns The passed dropdown.
  */
@@ -2680,7 +2927,7 @@ let checkboxCnt = 0;
  * ```
  * @param labelText The label text.
  * @param options
- * @returns 
+ * @returns
  */
 function createLabelledCheckbox(labelText: string, options: LabelledCheckboxOptions = {}): {
 	$wrapper: JQuery<HTMLDivElement>;
@@ -2711,7 +2958,7 @@ function createLabelledCheckbox(labelText: string, options: LabelledCheckboxOpti
  * Regular expressions used in this method are adapted from `mediawiki.util`.
  * - {@link https://doc.wikimedia.org/mediawiki-core/master/js/source/util.html#mw-util-method-isIPv4Address | mw.util.isIPv4Address}
  * - {@link https://doc.wikimedia.org/mediawiki-core/master/js/source/util.html#mw-util-method-isIPv6Address | mw.util.isIPv6Address}
- * 
+ *
  * @param text
  * @returns The extracted CIDR, or `null` if there's no match.
  */
@@ -2738,9 +2985,18 @@ function extractCidr(text: string): string|null {
 
 }
 
-function getExcl() {
+function getImage(iconType: 'exclamation'|'bar'|'clock') {
 	const img = document.createElement('img');
-	img.src = 'https://upload.wikimedia.org/wikipedia/commons/c/c3/Crystal_important.png';
+	switch (iconType) {
+		case 'exclamation':
+			img.src = 'https://upload.wikimedia.org/wikipedia/commons/c/c6/OOjs_UI_icon_alert-warning-black.svg';
+			break;
+		case 'bar':
+			img.src = 'https://upload.wikimedia.org/wikipedia/commons/e/e5/OOjs_UI_icon_subtract.svg';
+			break;
+		case 'clock':
+			img.src = 'https://upload.wikimedia.org/wikipedia/commons/8/85/OOjs_UI_icon_clock-progressive.svg';
+	}
 	img.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
 	return img;
 }

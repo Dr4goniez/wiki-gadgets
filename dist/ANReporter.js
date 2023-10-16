@@ -551,7 +551,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 'display: inline-block;' +
                 'border: 1px solid silver;' +
                 '}' +
-                '.anrc-buttonwrapper:not(:last-child) {' + // Margin below buttons
+                '.anrc-buttonwrapper:not(:last-child),' + // Margin below buttons
+                '#anr-dialog-progress-field tr:not(:last-child) {' +
                 'margin-bottom: 0.5em;' +
                 '}' +
                 // Dialog
@@ -562,16 +563,18 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '#anr-dialog-preview-content {' +
                 'padding: 1em;' +
                 '}' +
-                '#anr-dialog-optionfield {' + // The immediate child of #anr-dialog-content
+                '#anr-dialog-optionfield,' + // The immediate child of #anr-dialog-content
+                '#anr-dialog-progress-field {' +
                 'padding: 1em;' +
                 'margin: 0;' +
                 'border: 1px solid #cccccc;' +
                 '}' +
-                '#anr-dialog-optionfield > legend {' +
+                '#anr-dialog-optionfield > legend,' +
+                '#anr-dialog-progress-field > legend {' +
                 'font-weight: bold;' +
                 'padding-bottom: 0;' +
                 '}' +
-                '#anr-dialog-optionfield hr {' +
+                '.anr-dialog hr {' +
                 'margin: 0.8em 0;' +
                 'background-color: #cccccc;' +
                 '}' +
@@ -659,6 +662,20 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '}' +
                 '.anr-option-blockstatus > a {' +
                 'color: mediumvioletred;' +
+                '}' +
+                '#anr-dialog-progress-field img {' +
+                'margin: 0 0.5em;' +
+                '}' +
+                '#anr-dialog-progress-field ul {' +
+                'margin-top: 0;' +
+                '}' +
+                '#anr-dialog-preview-body > div {' +
+                'border: 1px solid silver;' +
+                'padding: 0.2em 0.5em;' +
+                'background: white;' +
+                '}' +
+                '#anr-dialog-preview-body .autocomment a {' + // Change the color of the section link in summary
+                'color: gray;' +
                 '}' +
                 // Dialog colors
                 '.anr-dialog.ui-dialog-content,' +
@@ -1540,49 +1557,62 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 return;
             // Create progress dialog
             this.$progress.empty();
-            this.$dialog.dialog({ buttons: [] });
-            var $dupUsers = Reporter.createRow();
-            var $dupUsersLabel = Reporter.createRowLabel($dupUsers, lib.getIcon('load'));
-            var $dupUsersText = $('<div>').text('利用者名重複').css('width', '100%');
-            $dupUsers.append($dupUsersText);
-            this.$progress.append($dupUsers);
-            var $dupUsersList = Reporter.createRow();
-            var $dupUsersListLabel = Reporter.createRowLabel($dupUsersList, '');
-            var $dupUsersListUl = $('<ul>').css('width', '100%');
-            $dupUsersList.append($dupUsersListUl);
-            this.$progress.append($dupUsersList);
-            Reporter.toggle($dupUsersList, false); //$dupUsersListUl
-            var $blockedUsers = Reporter.createRow();
-            var $blockedLabel = Reporter.createRowLabel($blockedUsers, '待機中');
-            var $blockedText = $('<div>').text('既存ブロック').css('width', '100%');
-            $blockedUsers.append($blockedText);
-            this.$progress.append($blockedUsers);
-            var $blockedList = Reporter.createRow();
-            var $blockedListLabel = Reporter.createRowLabel($blockedList, '');
-            var $blockedListBody = $('<ul>').css('width', '100%');
-            $blockedList.append($blockedListBody);
-            this.$progress.append($blockedList);
-            Reporter.toggle($blockedList, false);
-            var $dupReports = Reporter.createRow();
-            var $dupReportsLabel = Reporter.createRowLabel($dupReports, '待機中');
-            var $dupReportsText = $('<div>').text('重複報告').css('width', '100%');
-            $dupReports.append($dupReportsText);
-            this.$progress.append($dupReports);
-            var $dupReportsList = Reporter.createRow();
-            var $dupReportsListLabel = Reporter.createRowLabel($dupReportsList, '');
-            var $dupReportsListBody = $('<ul>').css('width', '100%');
-            $dupReportsList.append($dupReportsListBody);
-            this.$progress.append($dupReportsList);
-            Reporter.toggle($dupReportsList, false);
-            var $report = Reporter.createRow();
-            var $reportLabel = Reporter.createRowLabel($report, 'スキップ'); // Label text is temporary
-            var $reportText = $('<div>').text('報告').css('width', '100%');
-            $report.append($reportText);
-            this.$progress.append($report);
             Reporter.toggle(this.$content, false);
             Reporter.toggle(this.$progress, true);
-            Reporter.setWidestWidth(this.$progress.find('.anr-option-label'));
-            $reportLabel.text('待機中'); // Replace the temporary label text
+            this.$dialog.dialog({ buttons: [] });
+            var $progressField = $('<fieldset>').prop('id', 'anr-dialog-progress-field');
+            this.$progress.append($progressField);
+            $progressField.append($('<legend>').text('報告の進捗'), $('<div>').prop('id', 'anr-dialog-progress-icons').append(lib.getIcon('check'), document.createTextNode('処理通過'), getImage('exclamation'), document.createTextNode('要確認'), getImage('bar'), document.createTextNode('スキップ'), getImage('clock'), document.createTextNode('待機中'), lib.getIcon('cross'), document.createTextNode('処理失敗')), $('<hr>'));
+            var $progressTable = $('<table>');
+            $progressField.append($progressTable);
+            var $dupUsersRow = $('<tr>');
+            $progressTable.append($dupUsersRow);
+            var $dupUsersLabel = $('<td>').append(lib.getIcon('load'));
+            var $dupUsersText = $('<td>').text('利用者名重複');
+            $dupUsersRow.append($dupUsersLabel, $dupUsersText);
+            var $dupUsersListRow = $('<tr>');
+            $progressTable.append($dupUsersListRow);
+            var $dupUsersListText = $('<td>');
+            $dupUsersListRow.append($('<td>'), $dupUsersListText);
+            var $dupUsersList = $('<ul>');
+            $dupUsersListText.append($dupUsersList);
+            Reporter.toggle($dupUsersListRow, false);
+            var $blockedUsersRow = $('<tr>');
+            $progressTable.append($blockedUsersRow);
+            var $blockedUsersLabel = $('<td>').append(data.blockCheck ? getImage('clock') : getImage('bar'));
+            var $blockedUsersText = $('<td>').text('既存ブロック');
+            $blockedUsersRow.append($blockedUsersLabel, $blockedUsersText);
+            var $blockedUsersListRow = $('<tr>');
+            $progressTable.append($blockedUsersListRow);
+            var $blockedUsersListText = $('<td>');
+            $blockedUsersListRow.append($('<td>'), $blockedUsersListText);
+            var $blockedUsersList = $('<ul>');
+            $blockedUsersListText.append($blockedUsersList);
+            Reporter.toggle($blockedUsersListRow, false);
+            var $dupReportsRow = $('<tr>');
+            $progressTable.append($dupReportsRow);
+            var $dupReportsLabel = $('<td>').append(data.duplicateCheck ? getImage('clock') : getImage('bar'));
+            var $dupReportsText = $('<td>').text('重複報告');
+            $dupReportsRow.append($dupReportsLabel, $dupReportsText);
+            var $dupReportsListRow = $('<tr>');
+            $progressTable.append($dupReportsListRow);
+            var $dupReportsListText = $('<td>');
+            $dupReportsListRow.append($('<td>'), $dupReportsListText);
+            var $dupReportsList = $('<ul>');
+            $dupReportsListText.append($dupReportsList);
+            Reporter.toggle($dupReportsListRow, false);
+            var $reportRow = $('<tr>');
+            $progressTable.append($reportRow);
+            var $reportLabel = $('<td>').append(getImage('clock'));
+            var $reportText = $('<td>').text('報告');
+            $reportRow.append($reportLabel, $reportText);
+            var $reportListRow = $('<tr>');
+            $progressTable.append($reportListRow);
+            var $reportListText = $('<td>');
+            $reportListRow.append($('<td>'), $reportListText);
+            var $reportList = $('<ul>');
+            $reportListText.append($reportList);
+            Reporter.toggle($reportListRow, false);
             this.processIds(data).then(function (_a) {
                 var users = _a.users, info = _a.info;
                 var proceed = function () {
@@ -1592,19 +1622,19 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                         def.resolve(true);
                     }
                     else {
-                        $dupUsersLabel.empty().append(getExcl());
+                        $dupUsersLabel.empty().append(getImage('exclamation'));
                         users.forEach(function (arr) {
                             var $li = $('<li>').text(arr.join(', '));
-                            $dupUsersListUl.append($li);
+                            $dupUsersList.append($li);
                         });
-                        Reporter.toggle($dupUsersList, true);
+                        Reporter.toggle($dupUsersListRow, true);
                         _this.$dialog.dialog({
                             buttons: [
                                 {
                                     text: '続行',
                                     click: function () {
-                                        $dupUsersListUl.empty();
-                                        Reporter.toggle($dupUsersList, false);
+                                        $dupUsersList.empty();
+                                        Reporter.toggle($dupUsersListRow, false);
                                         _this.$dialog.dialog({ buttons: [] });
                                         def.resolve(true);
                                     }
@@ -1612,8 +1642,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                                 {
                                     text: '戻る',
                                     click: function () {
-                                        $dupUsersListUl.empty();
-                                        Reporter.toggle($dupUsersList, false);
+                                        $dupUsersList.empty();
+                                        Reporter.toggle($dupUsersListRow, false);
                                         Reporter.toggle(_this.$progress, false);
                                         Reporter.toggle(_this.$content, true);
                                         _this.setMainButtons();
@@ -1629,16 +1659,19 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                                 }
                             ]
                         });
+                        mw.notify('利用者名の重複を検出しました。', { type: 'warn' });
                     }
                     return def.promise();
                 };
                 proceed().then(function (bool) {
                     if (!bool)
                         return;
+                    console.log(_this.createReport(data, info));
                 });
             });
         };
         Reporter.prototype.preview = function () {
+            var _this = this;
             var data = this.collectData();
             if (!data)
                 return;
@@ -1663,6 +1696,81 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 .text('読み込み中')
                 .append($(lib.getIcon('load')).css('margin-left', '0.5em'));
             $preview.append($previewContent);
+            this.processIds(data).then(function (_a) {
+                var info = _a.info;
+                var _b = _this.createReport(data, info), text = _b.text, summary = _b.summary;
+                new mw.Api().get({
+                    action: 'parse',
+                    title: data.page,
+                    text: text,
+                    summary: summary,
+                    prop: 'text',
+                    disablelimitreport: true,
+                    disableeditsection: true,
+                    disabletoc: true,
+                    formatversion: '2'
+                }).then(function (res) {
+                    var content = res && res.parse && res.parse.text;
+                    var comment = res && res.parse && res.parse.parsedsummary;
+                    if (content && comment) {
+                        var $header = $('<div>')
+                            .prop('id', 'anr-dialog-preview-header')
+                            .append($('<p>' +
+                            '注意1: このプレビュー上のリンクは全て新しいタブで開かれます<br>' +
+                            '注意2: 報告先が <a href="' + mw.util.getUrl('WP:AN/S#OTH') + '" target="_blank">WP:AN/S#その他</a> の場合、' +
+                            'このプレビューには表示されませんが「他M月D日」のヘッダーは必要に応じて自動挿入されます' +
+                            '</p>'));
+                        var $body = $('<div>').prop('id', 'anr-dialog-preview-body');
+                        var $content = $(content).css({
+                            border: '1px solid silver',
+                            padding: '0.2em 0.5em',
+                            background: 'white'
+                        });
+                        var $comment = $('<div>')
+                            .css('margin-top', '0.8em')
+                            .append($(comment));
+                        $body.append($content, $comment);
+                        $previewContent
+                            .empty()
+                            .append($header, $('<hr>'), $body)
+                            .find('a').prop('target', '_blank'); // Open all links on a new tab
+                        $preview.dialog({
+                            buttons: [
+                                {
+                                    text: '閉じる',
+                                    click: function () {
+                                        $preview.dialog('close');
+                                    }
+                                }
+                            ],
+                            position: {
+                                at: 'center',
+                                my: 'center',
+                                of: window
+                            }
+                        });
+                    }
+                    else {
+                        throw new Error('action=parseのエラー');
+                    }
+                }).catch(function (_, err) {
+                    console.log(err);
+                    $previewContent
+                        .empty()
+                        .text('プレビューの読み込みに失敗しました。')
+                        .append($(lib.getIcon('cross')).css('margin-left', '0.5em'));
+                    $preview.dialog({
+                        buttons: [
+                            {
+                                text: '閉じる',
+                                click: function () {
+                                    $preview.dialog('close');
+                                }
+                            }
+                        ]
+                    });
+                });
+            });
         };
         /**
          * Collect option values.
@@ -1823,6 +1931,121 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 }, []);
                 return { users: users, info: info };
             });
+        };
+        /**
+         * Create the report text and summary out of the return values of {@link collectData} and {@link processIds}.
+         * @param data The (null-proof) return value of {@link collectData}.
+         * @param info The partial return value of {@link processIds}.
+         * @returns The report text and summary.
+         */
+        Reporter.prototype.createReport = function (data, info) {
+            // Create UserANs and summary links
+            var templates = [];
+            var links = [];
+            for (var i = 0; i < data.users.length; i++) {
+                var obj = data.users[i];
+                var Temp = new lib.Template('UserAN').addArgs([
+                    {
+                        name: 't',
+                        value: obj.type
+                    },
+                    {
+                        name: '1',
+                        value: obj.user,
+                        forceUnnamed: true
+                    }
+                ]);
+                templates.push(Temp);
+                switch (obj.type) {
+                    case 'UNL':
+                    case 'User2':
+                    case 'IP2':
+                        // If this username is the first occurrence in the "info" array in which IDs have been converted to usernames
+                        if (info.indexOf(info[i]) === i) {
+                            links.push("[[\u7279\u5225:\u6295\u7A3F\u8A18\u9332/".concat(obj.user, "|").concat(obj.user, "]]"));
+                        }
+                        break;
+                    case 'logid':
+                        // The ID failed to be converted to a username or the converted username is the first occurrence and not a duplicate
+                        if (info[i] === null || info.indexOf(info[i]) === i) {
+                            links.push("[[\u7279\u5225:\u8EE2\u9001/logid/".concat(obj.user, "|Logid/").concat(obj.user, "]]"));
+                        }
+                        break;
+                    case 'diff':
+                        if (info[i] === null || info.indexOf(info[i]) === i) {
+                            links.push("[[\u7279\u5225:\u5DEE\u5206/".concat(obj.user, "|\u5DEE\u5206/").concat(obj.user, "]]\u306E\u6295\u7A3F\u8005"));
+                        }
+                        break;
+                    default: // none
+                        if (info[i] === null || info.indexOf(info[i]) === i) {
+                            links.push(obj.user);
+                        }
+                }
+            }
+            // Create the report text
+            var text = '';
+            templates.forEach(function (Temp, i) {
+                text += "".concat(i === 0 ? '' : '\n', "* ").concat(Temp.toString());
+            });
+            text += templates.length > 1 ? '\n:' : ' - ';
+            text += data.reason;
+            // Create the report summary
+            var summary = '';
+            var fixed = [
+                "/*".concat(data.section, "*/+"),
+                ' ([[利用者:Dragoniez/scripts/AN_Reporter|AN Reporter]])'
+            ];
+            var fixedLen = fixed.join('').length; // The length of the fixed summary
+            var summaryComment = data.summary ? ' - ' + data.summary : '';
+            for (var i = 0; i < links.length; i++) { // Loop the reportee links
+                var userLinks = links.slice(0, i + 1).join(', ') + // The first "i + 1" links
+                    (links.slice(i + 1).length ? ", \u307B\u304B".concat(links.slice(i + 1).length, "\u30A2\u30AB\u30A6\u30F3\u30C8") : ''); // and the number of the remaining links if any
+                var totalLen = fixedLen + userLinks.length + summaryComment.length; // The total length of the summary
+                if (i === 0 && totalLen > 500) { // The summary exceeds the word count limit only with the first link
+                    var maxLen = 500 - fixedLen - userLinks.length;
+                    var trunc = summaryComment.slice(0, maxLen - 3) + '...'; // Truncate the additional comment
+                    var augFixed = fixed.slice(); // Copy the fixed summary array
+                    augFixed.splice(1, 0, userLinks, trunc); // Augment the copied array by inserting the first user link and the truncated comment
+                    summary = augFixed.join(''); // Join the array elements and that will be the whole of the summary
+                    break;
+                }
+                else if (totalLen > 500) {
+                    // The word count limit is exceeded when we add a non-first link
+                    // In this case, use the summary created in the last loop
+                    break;
+                }
+                else { // If the word count limit isn't exceeded in the first loop, the code always reaches this block
+                    var augFixed = fixed.slice();
+                    augFixed.splice(1, 0, userLinks, summaryComment);
+                    summary = augFixed.join('');
+                }
+            }
+            return { text: text, summary: summary };
+        };
+        /**
+         *
+         * @param usersArr The `info` property array of the return value of {@link processIds}.
+         */
+        Reporter.prototype.checkBlocks = function (usersArr) {
+            var users = [];
+            var ips = [];
+            for (var _i = 0, usersArr_1 = usersArr; _i < usersArr_1.length; _i++) {
+                var user = usersArr_1[_i];
+                if (!user) {
+                    // Do nothing
+                }
+                else if (mw.util.isIPAddress(user, true)) {
+                    if (!ips.includes(user))
+                        ips.push(user);
+                }
+                else if (User.containsInvalidCharacter(user)) {
+                    // Do nothing
+                }
+                else {
+                    if (!users.includes(user))
+                        users.push(user);
+                }
+            }
         };
         /** Storage of the return value of {@link getBlockStatus}. */
         Reporter.blockStatus = {};
@@ -2340,9 +2563,18 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             return null;
         }
     }
-    function getExcl() {
+    function getImage(iconType) {
         var img = document.createElement('img');
-        img.src = 'https://upload.wikimedia.org/wikipedia/commons/c/c3/Crystal_important.png';
+        switch (iconType) {
+            case 'exclamation':
+                img.src = 'https://upload.wikimedia.org/wikipedia/commons/c/c6/OOjs_UI_icon_alert-warning-black.svg';
+                break;
+            case 'bar':
+                img.src = 'https://upload.wikimedia.org/wikipedia/commons/e/e5/OOjs_UI_icon_subtract.svg';
+                break;
+            case 'clock':
+                img.src = 'https://upload.wikimedia.org/wikipedia/commons/8/85/OOjs_UI_icon_clock-progressive.svg';
+        }
         img.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
         return img;
     }
