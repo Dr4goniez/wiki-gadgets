@@ -10,6 +10,10 @@ const ANR = 'AN Reporter';
 const ANI = 'Wikipedia:管理者伝言板/投稿ブロック';
 const ANS = 'Wikipedia:管理者伝言板/投稿ブロック/ソックパペット';
 const AN3RR = 'Wikipedia:管理者伝言板/3RR';
+/**
+ * This variable being a string means that we're in a debugging mode. (cf. {@link Reporter.collectData})
+ */
+const ANTEST: string|false = false;//'利用者:DragoTest/test/WPANI';
 
 let lib: WpLibExtra;
 let mwString: MwString;
@@ -766,6 +770,9 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'.anr-dialog .ui-dialog-titlebar.ui-widget-header,' +
 		'.anr-dialog .ui-dialog-titlebar-close {' +
 			`background: ${cfg.headerColor} !important;` +
+		'}' +
+		'.anr-preview-duplicate {' +
+			`background-color: ${cfg.headerColor};` +
 		'}';
 	document.head.appendChild(style);
 }
@@ -1879,7 +1886,7 @@ class Reporter {
 
 		// Return
 		return {
-			page: page!,
+			page: ANTEST || page!,
 			section: section!,
 			users,
 			reason,
@@ -2276,9 +2283,12 @@ class Reporter {
 		$reportListText.append($reportList);
 		Reporter.toggle($reportListRow , false);
 
+		// Process IDs that need to be converted to usernames
 		this.processIds(data).then(({users, info}) => {
 
-			const proceed = (): JQueryPromise<boolean> => {
+			// Post-procedure of username-ID conversions and duplicate username check
+			((): JQueryPromise<boolean> => {
+
 				const def = $.Deferred();
 				if (!users.length) {
 					$dupUsersLabel.empty().append(lib.getIcon('check'));
@@ -2324,12 +2334,16 @@ class Reporter {
 					mw.notify('利用者名の重複を検出しました。', {type: 'warn'});
 				}
 				return def.promise();
-			};
 
-			proceed().then((bool) => {
+			})()
+			.then((duplicateUsernamesResolved) => {
 
-				if (!bool) return;
+				if (!duplicateUsernamesResolved) return;
 				console.log(this.createReport(data, info));
+
+				(() => {
+
+				})();
 
 			});
 
@@ -2339,12 +2353,13 @@ class Reporter {
 
 	/**
 	 *
-	 * @param usersArr The `info` property array of the return value of {@link processIds}.
+	 * @param userInfoArray The `info` property array of the return value of {@link processIds}.
 	 */
-	checkBlocks(usersArr: (string|null)[]) {
+	checkBlocks(userInfoArray: ProcessedIds['info']): JQueryPromise<string[]> {
+
 		const users: string[] = [];
 		const ips: string[] = [];
-		for (const user of usersArr) {
+		for (const user of userInfoArray) {
 			if (!user) {
 				// Do nothing
 			} else if (mw.util.isIPAddress(user, true)) {
@@ -2356,6 +2371,185 @@ class Reporter {
 			}
 		}
 
+		const processUsers = (usersArr: string[]): JQueryPromise<string[]> => {
+			if (!usersArr.length) {
+				return $.Deferred().resolve([]);
+			}
+			return lib.massRequest({
+				action: 'query',
+				list: 'blocks',
+				bkusers: usersArr,
+				bklimit: 'max',
+				formatversion: '2'
+			}, 'bkusers')
+			.then((response) => {
+				return response.reduce((acc: string[], res) => {
+					const resBk = res && res.query && res.query.blocks;
+					(resBk || []).forEach(({user}: {user?: string;}) => {
+						if (user) {
+							acc.push(user);
+						}
+					});
+					return acc;
+				}, []);
+			});
+		};
+
+		const processIps = (ipsArr: string[]): JQueryPromise<string[]> => {
+			if (!ipsArr.length) {
+				return $.Deferred().resolve([]);
+			}
+			return lib.massRequest({
+				action: 'query',
+				list: 'blocks',
+				bkip: ipsArr,
+				bklimit: 1,
+				formatversion: '2'
+			}, 'bkip', 1)
+			.then((response) => {
+				return response.reduce((acc: string[], res, i) => {
+					const resBk = res && res.query && res.query.blocks;
+					if (resBk && resBk[0]) {
+						acc.push(ipsArr[i]);
+					}
+					return acc;
+				}, []);
+			});
+		};
+
+		return $.when(processUsers(users), processIps(ips)).then((blockedUsers, blockedIps) => {
+			return blockedUsers.concat(blockedIps);
+		});
+
+	}
+
+	/**
+	 * Check for duplicate reports.
+	 * @param data The return value of {@link collectData}.
+	 * @param info The partial return value of {@link processIds}.
+	 * @returns `string` if duplicate reports are found, a `Wikitext` instance if no duplicate reports are found,
+	 * `false` if the page isn't found, and `null` if there's an issue with the connection.
+	 */
+	checkDuplicateReports(data: ReportData, info: ProcessedIds['info']): JQueryPromise<string|Wikitext|false|null> {
+		return lib.Wikitext.newFromTitle('').then((Wkt) => {
+
+			// Wikitext instance failed to be initialized
+			if (!Wkt) return Wkt; // false or null
+
+			// Find UserANs that contain duplicate reports
+			const UserANs = Wkt.parseTemplates({
+				namePredicate: (name) => name === 'UserAN',
+				recursivePredicate: (Temp) => !Temp || Temp.getName('clean') !== 'UserAN',
+				hierarchy: [
+					['1', 'user', 'User'],
+					['t', 'type', 'Type'],
+					['状態', 's', 'status', 'Status']
+				],
+				templatePredicate: (Temp) => {
+	
+					// Get 1= and t= parameter values of this UserAN
+					let param1 = '';
+					let paramT: antype = 'User2';
+					let converted: string|null = null;
+					for (const {name, value} of Temp.args) {
+						if (value) {
+							if (name === '2') {
+								return false; // Ignore closed ones
+							} else if (/^(1|[uU]ser)$/.test(name)) {
+								param1 = value;
+							} else if (/^(t|[tT]ype)$/.test(name)) {
+								if (/^unl|usernolink$/i.test(value)) {
+									paramT = 'UNL';
+								} else if (/^ip(user)2$/i.test(value)) {
+									paramT = 'IP2';
+								} else if (/^log(id)?$/i.test(value)) {
+									if (!/^\d+$/.test(value)) return false;
+									paramT = 'logid';
+									converted = idList.getRegisteredUsername(parseInt(value), 'logid');
+								} else if (/^diff?$/i.test(value)) {
+									if (!/^\d+$/.test(value)) return false;
+									paramT = 'diff';
+									converted = idList.getRegisteredUsername(parseInt(value), 'diffid');
+								} else if (/^none$/i.test(value)) {
+									paramT = 'none';
+								}
+							}
+						}
+					}
+					if (!param1) {
+						return false;
+					} else if (mw.util.isIPv6Address(param1, true)) {
+						param1 = param1.toUpperCase();
+					}
+					param1 = User.formatName(param1);
+
+					// Evaluation
+					const isDuplicate = data.users.some(({user, type}) => {
+						switch (paramT) {
+							case 'UNL':
+							case 'User2':
+							case 'IP2':
+							case 'none':
+								return user === param1 && /^(UNL|User2|IP2|none)$/.test(type);
+							case 'logid':
+							case 'diff':
+								return user === param1 && type === paramT || converted && info.includes(converted);
+						}
+					});
+					return isDuplicate;
+	
+				}
+			});
+			if (!UserANs.length) return Wkt;
+
+			// Highlight the duplicate UserANs
+			let wikitext = Wkt.wikitext;
+			const spanStart = '<span class="anr-preview-duplicate">';
+			UserANs.reverse().forEach((Temp) => {
+				wikitext = Temp.replaceIn(wikitext, {with: `${spanStart}${Temp.renderOriginal()}</span>`});
+			});
+			if (wikitext === Wkt.wikitext) return Wkt;
+
+			// The sections in which to search for duplicate reports
+			const tarSectionsAll = {
+				[ANI]: [
+					Reporter.getCurrentAniSection(true),
+					Reporter.getCurrentAniSection(false),
+					'不適切な利用者名',
+					'公開アカウント',
+					'公開プロキシ・ゾンビマシン・ボット・不特定多数',
+					'犯罪行為またはその疑いのある投稿'
+				],
+				[ANS]: [
+					'著作権侵害・犯罪予告',
+					'名誉毀損・なりすまし・個人情報',
+					'妨害編集・いたずら',
+					'その他'
+				],
+				[AN3RR]: ['3RR']
+			};
+			const testKey: string = ANTEST ? eval(ANTEST.slice(ANTEST.lastIndexOf('/') + 1)) : '';
+			const tarSections = tarSectionsAll[(testKey || data.page) as keyof typeof tarSectionsAll];
+			if (!tarSections) {
+				console.error(`"tarSectionsAll['${data.page}']" is undefined.`);
+			} else if ((data.page === ANS || testKey === ANS) && !tarSections.includes(data.section)) {
+				tarSections.push(data.section);
+			}
+
+			// Filter out the content of the relevant sections
+			const ret = new lib.Wikitext(wikitext).parseSections().reduce((acc: string[], {title, content}) => {
+				if (tarSections.includes(title) && content.includes(spanStart)) {
+					acc.push(content.trim());
+				}
+				return acc;
+			}, []);
+			if (!ret.length) {
+				return Wkt;
+			} else {
+				return ret.join('\n\n');
+			}
+
+		});
 	}
 
 }
@@ -2570,11 +2764,16 @@ class User {
 
 	/**
 	 * Format a username by calling `lib.clean`, replacing underscores with spaces, and capitalizing the first letter.
+	 * If the username is an IPv6 address, all letters will be captalized.
 	 * @param username
 	 * @returns The formatted username.
 	 */
 	static formatName(username: string): string {
-		return mwString.ucFirst(lib.clean(username.replace(/_/g, ' ')));
+		let user = mwString.ucFirst(lib.clean(username.replace(/_/g, ' ')));
+		if (mw.util.isIPv6Address(user, true)) {
+			user = user.toUpperCase();
+		}
+		return user;
 	}
 
 	/**
