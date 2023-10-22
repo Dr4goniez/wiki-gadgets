@@ -27,6 +27,6 @@
     "ts-node": "^10.9.1",
     "types-mediawiki": "^1.4.0",
     "typescript": "^5.2.2",
-    "wp-lib-extra": "^1.2.0"
+    "wp-lib-extra": "^1.2.1"
   }
 }
