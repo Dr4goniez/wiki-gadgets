@@ -28,6 +28,11 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     var ANI = 'Wikipedia:管理者伝言板/投稿ブロック';
     var ANS = 'Wikipedia:管理者伝言板/投稿ブロック/ソックパペット';
     var AN3RR = 'Wikipedia:管理者伝言板/3RR';
+    /**
+     * This variable being a string means that we're in a debugging mode. (cf. {@link Reporter.collectData})
+     */
+    var ANTEST = 'ANS';
+    var ad = ' ([[利用者:Dragoniez/scripts/AN_Reporter|AN Reporter]])';
     var lib;
     var mwString;
     var idList;
@@ -559,8 +564,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '.anr-hidden {' + // Used to show/hide elements on the dialog (by Reporter.toggle)
                 'display: none;' +
                 '}' +
-                '#anr-dialog-progress,' + // One of the main dialog field
-                '#anr-dialog-preview-content {' +
+                '#anr-dialog-preview-content,' +
+                '#anr-dialog-drpreview-content {' +
                 'padding: 1em;' +
                 '}' +
                 '#anr-dialog-optionfield,' + // The immediate child of #anr-dialog-content
@@ -611,7 +616,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 'box-sizing: border-box;' +
                 'width: 100%;' + // Fill the remaining space ("float" and "overflow" are essential for this to work)
                 '}' +
-                '.select2-container,' + // Set up the font size of select2 options 
+                '.select2-container,' + // Set up the font size of select2 options
                 '.anr-select2 .select2-selection--single {' +
                 'height: auto !important;' +
                 '}' +
@@ -669,13 +674,17 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '#anr-dialog-progress-field ul {' +
                 'margin-top: 0;' +
                 '}' +
-                '#anr-dialog-preview-body > div {' +
+                '#anr-dialog-preview-body > div,' +
+                '#anr-dialog-drpreview-body > div {' +
                 'border: 1px solid silver;' +
                 'padding: 0.2em 0.5em;' +
                 'background: white;' +
                 '}' +
                 '#anr-dialog-preview-body .autocomment a {' + // Change the color of the section link in summary
                 'color: gray;' +
+                '}' +
+                '#anr-dialog-progress-error-message {' +
+                'color: mediumvioletred;' +
                 '}' +
                 // Dialog colors
                 '.anr-dialog.ui-dialog-content,' +
@@ -688,6 +697,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '.anr-dialog .ui-dialog-titlebar.ui-widget-header,' +
                 '.anr-dialog .ui-dialog-titlebar-close {' +
                 "background: ".concat(cfg.headerColor, " !important;") +
+                '}' +
+                '.anr-preview-duplicate {' +
+                "background-color: ".concat(cfg.headerColor, ";") +
                 '}';
         document.head.appendChild(style);
     }
@@ -867,9 +879,11 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.blockStatus = {}; // Reset
             // Create dialog contour
             this.$dialog = $('<div>');
-            this.$dialog.prop('title', ANR).css('max-height', '70vh');
-            this.$dialog.dialog({
+            this.$dialog
+                .css('max-height', '70vh')
+                .dialog({
                 dialogClass: 'anr-dialog',
+                title: ANR,
                 resizable: false,
                 height: 'auto',
                 width: 'auto',
@@ -883,6 +897,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$progress = $('<div>');
             this.$progress
                 .prop('id', 'anr-dialog-progress')
+                .css('padding', '1em')
                 .append(document.createTextNode('読み込み中'), $(lib.getIcon('load')).css('margin-left', '0.5em'));
             this.$dialog.append(this.$progress);
             // Create option container
@@ -964,7 +979,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             $addButtonWrapper.append(this.$addButton);
             this.$fieldset.append($addButtonWrapper);
             this.$fieldset.append(document.createElement('hr'));
-            // Create a user pane 
+            // Create a user pane
             this.Users = [
                 new User($addButtonWrapper, { removable: false })
             ];
@@ -1114,6 +1129,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         /**
          * Taken several HTML elements, set the width that is widest among the elements to all of them.
          * @param $elements
+         * @returns The width.
          */
         Reporter.setWidestWidth = function ($elements) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1121,6 +1137,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             );
             var optionWidth = Math.max.apply(Math, optionsWidths); // Get the max value
             $elements.css('min-width', optionWidth); // Set the value to all
+            return optionWidth;
         };
         /**
          * Toggle the visibility of an element by (de)assigning the `anr-hidden` class.
@@ -1218,12 +1235,15 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         };
         /**
          * Bring a jQuery UI dialog to the center of the viewport.
+         * @param $dialog
+         * @param absoluteCenter Whether to apply `center` instead of `top+5%`, defaulted to `false`.
          */
-        Reporter.centerDialog = function ($dialog) {
+        Reporter.centerDialog = function ($dialog, absoluteCenter) {
+            if (absoluteCenter === void 0) { absoluteCenter = false; }
             $dialog.dialog({
                 position: {
-                    my: 'top',
-                    at: 'top+5%',
+                    my: absoluteCenter ? 'center' : 'top',
+                    at: absoluteCenter ? 'center' : 'top+5%',
                     of: window
                 }
             });
@@ -1323,6 +1343,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 }
                 def.then(function () {
                     Reporter.toggle(R.$progress, false);
+                    R.$progress.css('padding', '');
                     Reporter.toggle(R.$content, true);
                     R.setMainButtons();
                 });
@@ -1549,229 +1570,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 };
             });
         };
-        Reporter.prototype.report = function () {
-            var _this = this;
-            // Collect dialog data and check for errors
-            var data = this.collectData();
-            if (!data)
-                return;
-            // Create progress dialog
-            this.$progress.empty();
-            Reporter.toggle(this.$content, false);
-            Reporter.toggle(this.$progress, true);
-            this.$dialog.dialog({ buttons: [] });
-            var $progressField = $('<fieldset>').prop('id', 'anr-dialog-progress-field');
-            this.$progress.append($progressField);
-            $progressField.append($('<legend>').text('報告の進捗'), $('<div>').prop('id', 'anr-dialog-progress-icons').append(lib.getIcon('check'), document.createTextNode('処理通過'), getImage('exclamation'), document.createTextNode('要確認'), getImage('bar'), document.createTextNode('スキップ'), getImage('clock'), document.createTextNode('待機中'), lib.getIcon('cross'), document.createTextNode('処理失敗')), $('<hr>'));
-            var $progressTable = $('<table>');
-            $progressField.append($progressTable);
-            var $dupUsersRow = $('<tr>');
-            $progressTable.append($dupUsersRow);
-            var $dupUsersLabel = $('<td>').append(lib.getIcon('load'));
-            var $dupUsersText = $('<td>').text('利用者名重複');
-            $dupUsersRow.append($dupUsersLabel, $dupUsersText);
-            var $dupUsersListRow = $('<tr>');
-            $progressTable.append($dupUsersListRow);
-            var $dupUsersListText = $('<td>');
-            $dupUsersListRow.append($('<td>'), $dupUsersListText);
-            var $dupUsersList = $('<ul>');
-            $dupUsersListText.append($dupUsersList);
-            Reporter.toggle($dupUsersListRow, false);
-            var $blockedUsersRow = $('<tr>');
-            $progressTable.append($blockedUsersRow);
-            var $blockedUsersLabel = $('<td>').append(data.blockCheck ? getImage('clock') : getImage('bar'));
-            var $blockedUsersText = $('<td>').text('既存ブロック');
-            $blockedUsersRow.append($blockedUsersLabel, $blockedUsersText);
-            var $blockedUsersListRow = $('<tr>');
-            $progressTable.append($blockedUsersListRow);
-            var $blockedUsersListText = $('<td>');
-            $blockedUsersListRow.append($('<td>'), $blockedUsersListText);
-            var $blockedUsersList = $('<ul>');
-            $blockedUsersListText.append($blockedUsersList);
-            Reporter.toggle($blockedUsersListRow, false);
-            var $dupReportsRow = $('<tr>');
-            $progressTable.append($dupReportsRow);
-            var $dupReportsLabel = $('<td>').append(data.duplicateCheck ? getImage('clock') : getImage('bar'));
-            var $dupReportsText = $('<td>').text('重複報告');
-            $dupReportsRow.append($dupReportsLabel, $dupReportsText);
-            var $dupReportsListRow = $('<tr>');
-            $progressTable.append($dupReportsListRow);
-            var $dupReportsListText = $('<td>');
-            $dupReportsListRow.append($('<td>'), $dupReportsListText);
-            var $dupReportsList = $('<ul>');
-            $dupReportsListText.append($dupReportsList);
-            Reporter.toggle($dupReportsListRow, false);
-            var $reportRow = $('<tr>');
-            $progressTable.append($reportRow);
-            var $reportLabel = $('<td>').append(getImage('clock'));
-            var $reportText = $('<td>').text('報告');
-            $reportRow.append($reportLabel, $reportText);
-            var $reportListRow = $('<tr>');
-            $progressTable.append($reportListRow);
-            var $reportListText = $('<td>');
-            $reportListRow.append($('<td>'), $reportListText);
-            var $reportList = $('<ul>');
-            $reportListText.append($reportList);
-            Reporter.toggle($reportListRow, false);
-            this.processIds(data).then(function (_a) {
-                var users = _a.users, info = _a.info;
-                var proceed = function () {
-                    var def = $.Deferred();
-                    if (!users.length) {
-                        $dupUsersLabel.empty().append(lib.getIcon('check'));
-                        def.resolve(true);
-                    }
-                    else {
-                        $dupUsersLabel.empty().append(getImage('exclamation'));
-                        users.forEach(function (arr) {
-                            var $li = $('<li>').text(arr.join(', '));
-                            $dupUsersList.append($li);
-                        });
-                        Reporter.toggle($dupUsersListRow, true);
-                        _this.$dialog.dialog({
-                            buttons: [
-                                {
-                                    text: '続行',
-                                    click: function () {
-                                        $dupUsersList.empty();
-                                        Reporter.toggle($dupUsersListRow, false);
-                                        _this.$dialog.dialog({ buttons: [] });
-                                        def.resolve(true);
-                                    }
-                                },
-                                {
-                                    text: '戻る',
-                                    click: function () {
-                                        $dupUsersList.empty();
-                                        Reporter.toggle($dupUsersListRow, false);
-                                        Reporter.toggle(_this.$progress, false);
-                                        Reporter.toggle(_this.$content, true);
-                                        _this.setMainButtons();
-                                        def.resolve(false);
-                                    }
-                                },
-                                {
-                                    text: '閉じる',
-                                    click: function () {
-                                        _this.close();
-                                        def.resolve(false);
-                                    }
-                                }
-                            ]
-                        });
-                        mw.notify('利用者名の重複を検出しました。', { type: 'warn' });
-                    }
-                    return def.promise();
-                };
-                proceed().then(function (bool) {
-                    if (!bool)
-                        return;
-                    console.log(_this.createReport(data, info));
-                });
-            });
-        };
-        Reporter.prototype.preview = function () {
-            var _this = this;
-            var data = this.collectData();
-            if (!data)
-                return;
-            var $preview = $('<div>')
-                .prop('title', ANR + ' - Preview')
-                .css({
-                'max-height': '80vh',
-                'max-width': '80vw'
-            })
-                .dialog({
-                dialogClass: 'anr-dialog anr-dialog-preview',
-                height: 'auto',
-                width: 'auto',
-                modal: true,
-                close: function () {
-                    // Destory the dialog and its contents when closed by any means
-                    $(this).empty().dialog('destroy');
-                }
-            });
-            var $previewContent = $('<div>')
-                .prop('id', 'anr-dialog-preview-content')
-                .text('読み込み中')
-                .append($(lib.getIcon('load')).css('margin-left', '0.5em'));
-            $preview.append($previewContent);
-            this.processIds(data).then(function (_a) {
-                var info = _a.info;
-                var _b = _this.createReport(data, info), text = _b.text, summary = _b.summary;
-                new mw.Api().get({
-                    action: 'parse',
-                    title: data.page,
-                    text: text,
-                    summary: summary,
-                    prop: 'text',
-                    disablelimitreport: true,
-                    disableeditsection: true,
-                    disabletoc: true,
-                    formatversion: '2'
-                }).then(function (res) {
-                    var content = res && res.parse && res.parse.text;
-                    var comment = res && res.parse && res.parse.parsedsummary;
-                    if (content && comment) {
-                        var $header = $('<div>')
-                            .prop('id', 'anr-dialog-preview-header')
-                            .append($('<p>' +
-                            '注意1: このプレビュー上のリンクは全て新しいタブで開かれます<br>' +
-                            '注意2: 報告先が <a href="' + mw.util.getUrl('WP:AN/S#OTH') + '" target="_blank">WP:AN/S#その他</a> の場合、' +
-                            'このプレビューには表示されませんが「他M月D日」のヘッダーは必要に応じて自動挿入されます' +
-                            '</p>'));
-                        var $body = $('<div>').prop('id', 'anr-dialog-preview-body');
-                        var $content = $(content).css({
-                            border: '1px solid silver',
-                            padding: '0.2em 0.5em',
-                            background: 'white'
-                        });
-                        var $comment = $('<div>')
-                            .css('margin-top', '0.8em')
-                            .append($(comment));
-                        $body.append($content, $comment);
-                        $previewContent
-                            .empty()
-                            .append($header, $('<hr>'), $body)
-                            .find('a').prop('target', '_blank'); // Open all links on a new tab
-                        $preview.dialog({
-                            buttons: [
-                                {
-                                    text: '閉じる',
-                                    click: function () {
-                                        $preview.dialog('close');
-                                    }
-                                }
-                            ],
-                            position: {
-                                at: 'center',
-                                my: 'center',
-                                of: window
-                            }
-                        });
-                    }
-                    else {
-                        throw new Error('action=parseのエラー');
-                    }
-                }).catch(function (_, err) {
-                    console.log(err);
-                    $previewContent
-                        .empty()
-                        .text('プレビューの読み込みに失敗しました。')
-                        .append($(lib.getIcon('cross')).css('margin-left', '0.5em'));
-                    $preview.dialog({
-                        buttons: [
-                            {
-                                text: '閉じる',
-                                click: function () {
-                                    $preview.dialog('close');
-                                }
-                            }
-                        ]
-                    });
-                });
-            });
-        };
+        // -- Methods related to the dialog buttons of "report" and "preview"
         /**
          * Collect option values.
          * @returns `null` if there's some error.
@@ -1837,7 +1636,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             var watch = watchUser ? this.$watchExpiry.val() : null;
             // Return
             return {
-                page: page,
+                page: formatANTEST() || page,
                 section: section,
                 users: users,
                 reason: reason,
@@ -1993,7 +1792,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             var summary = '';
             var fixed = [
                 "/*".concat(data.section, "*/+"),
-                ' ([[利用者:Dragoniez/scripts/AN_Reporter|AN Reporter]])'
+                ad
             ];
             var fixedLen = fixed.join('').length; // The length of the fixed summary
             var summaryComment = data.summary ? ' - ' + data.summary : '';
@@ -2022,15 +1821,482 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             }
             return { text: text, summary: summary };
         };
+        // The 3 methods above are used both in "report" and "preview" (the former needs additional functions, and they are defined below).
         /**
-         *
-         * @param usersArr The `info` property array of the return value of {@link processIds}.
+         * Preview the report.
+         * @returns
          */
-        Reporter.prototype.checkBlocks = function (usersArr) {
+        Reporter.prototype.preview = function () {
+            var _this = this;
+            var data = this.collectData();
+            if (!data)
+                return;
+            var $preview = $('<div>')
+                .css({
+                maxHeight: '70vh',
+                maxWidth: '80vw'
+            })
+                .dialog({
+                dialogClass: 'anr-dialog anr-dialog-preview',
+                title: ANR + ' - Preview',
+                height: 'auto',
+                width: 'auto',
+                modal: true,
+                close: function () {
+                    // Destory the dialog and its contents when closed by any means
+                    $(this).empty().dialog('destroy');
+                }
+            });
+            var $previewContent = $('<div>')
+                .prop('id', 'anr-dialog-preview-content')
+                .text('読み込み中')
+                .append($(lib.getIcon('load')).css('margin-left', '0.5em'));
+            $preview.append($previewContent);
+            this.processIds(data).then(function (_a) {
+                var info = _a.info;
+                var _b = _this.createReport(data, info), text = _b.text, summary = _b.summary;
+                new mw.Api().post({
+                    action: 'parse',
+                    title: data.page,
+                    text: text,
+                    summary: summary,
+                    prop: 'text',
+                    disablelimitreport: true,
+                    disableeditsection: true,
+                    disabletoc: true,
+                    formatversion: '2'
+                }).then(function (res) {
+                    var content = res && res.parse && res.parse.text;
+                    var comment = res && res.parse && res.parse.parsedsummary;
+                    if (content && comment) {
+                        var $header = $('<div>')
+                            .prop('id', 'anr-dialog-preview-header')
+                            .append($('<p>' +
+                            '注意1: このプレビュー上のリンクは全て新しいタブで開かれます<br>' +
+                            '注意2: 報告先が <a href="' + mw.util.getUrl('WP:AN/S#OTH') + '" target="_blank">WP:AN/S#その他</a> の場合、' +
+                            'このプレビューには表示されませんが「他M月D日」のヘッダーは必要に応じて自動挿入されます' +
+                            '</p>'));
+                        var $body = $('<div>').prop('id', 'anr-dialog-preview-body');
+                        $body.append($(content), $('<div>')
+                            .css('margin-top', '0.8em')
+                            .append($(comment)));
+                        $previewContent
+                            .empty()
+                            .append($header, $('<hr>'), $body)
+                            .find('a').prop('target', '_blank'); // Open all links on a new tab
+                        $preview.dialog({
+                            buttons: [
+                                {
+                                    text: '閉じる',
+                                    click: function () {
+                                        $preview.dialog('close');
+                                    }
+                                }
+                            ]
+                        });
+                        Reporter.centerDialog($preview, true);
+                    }
+                    else {
+                        throw new Error('action=parseのエラー');
+                    }
+                }).catch(function (_, err) {
+                    console.log(err);
+                    $previewContent
+                        .empty()
+                        .text('プレビューの読み込みに失敗しました。')
+                        .append($(lib.getIcon('cross')).css('margin-left', '0.5em'));
+                    $preview.dialog({
+                        buttons: [
+                            {
+                                text: '閉じる',
+                                click: function () {
+                                    $preview.dialog('close');
+                                }
+                            }
+                        ]
+                    });
+                });
+            });
+        };
+        /**
+         * Submit the report.
+         * @returns
+         */
+        Reporter.prototype.report = function () {
+            var _this = this;
+            // Collect dialog data and check for errors
+            var data = this.collectData();
+            if (!data)
+                return;
+            // Create progress dialog
+            this.$progress.empty();
+            Reporter.toggle(this.$content, false);
+            Reporter.toggle(this.$progress, true);
+            this.$dialog.dialog({ buttons: [] });
+            var $progressField = $('<fieldset>').prop('id', 'anr-dialog-progress-field');
+            this.$progress.append($progressField);
+            $progressField.append($('<legend>').text('報告の進捗'), $('<div>').prop('id', 'anr-dialog-progress-icons').append(lib.getIcon('check'), document.createTextNode('処理通過'), getImage('exclamation'), document.createTextNode('要確認'), getImage('bar'), document.createTextNode('スキップ'), getImage('clock'), document.createTextNode('待機中'), lib.getIcon('cross'), document.createTextNode('処理失敗')), $('<hr>'));
+            var $progressTable = $('<table>');
+            $progressField.append($progressTable);
+            var $dupUsersRow = $('<tr>');
+            $progressTable.append($dupUsersRow);
+            var $dupUsersLabel = $('<td>').append(lib.getIcon('load'));
+            var $dupUsersText = $('<td>').text('利用者名重複');
+            $dupUsersRow.append($dupUsersLabel, $dupUsersText);
+            var $dupUsersListRow = $('<tr>');
+            $progressTable.append($dupUsersListRow);
+            var $dupUsersListText = $('<td>');
+            $dupUsersListRow.append($('<td>'), $dupUsersListText);
+            var $dupUsersList = $('<ul>');
+            $dupUsersListText.append($dupUsersList);
+            Reporter.toggle($dupUsersListRow, false);
+            var $blockedUsersRow = $('<tr>');
+            $progressTable.append($blockedUsersRow);
+            var $blockedUsersLabel = $('<td>').append(data.blockCheck ? getImage('clock') : getImage('bar'));
+            var $blockedUsersText = $('<td>').text('既存ブロック');
+            $blockedUsersRow.append($blockedUsersLabel, $blockedUsersText);
+            var $blockedUsersListRow = $('<tr>');
+            $progressTable.append($blockedUsersListRow);
+            var $blockedUsersListText = $('<td>');
+            $blockedUsersListRow.append($('<td>'), $blockedUsersListText);
+            var $blockedUsersList = $('<ul>');
+            $blockedUsersListText.append($blockedUsersList);
+            Reporter.toggle($blockedUsersListRow, false);
+            var $dupReportsRow = $('<tr>');
+            $progressTable.append($dupReportsRow);
+            var $dupReportsLabel = $('<td>').append(data.duplicateCheck ? getImage('clock') : getImage('bar'));
+            var $dupReportsText = $('<td>').text('重複報告');
+            $dupReportsRow.append($dupReportsLabel, $dupReportsText);
+            var $dupReportsButtonRow = $('<tr>');
+            $progressTable.append($dupReportsButtonRow);
+            var $dupReportsButtonCell = $('<td>');
+            $dupReportsButtonRow.append($('<td>'), $dupReportsButtonCell);
+            Reporter.toggle($dupReportsButtonRow, false);
+            var $reportRow = $('<tr>');
+            $progressTable.append($reportRow);
+            var $reportLabel = $('<td>').append(getImage('clock'));
+            var $reportText = $('<td>').text('報告');
+            $reportRow.append($reportLabel, $reportText);
+            var $errorWrapper = $('<div>').prop('id', 'anr-dialog-progress-error');
+            $progressField.append($errorWrapper);
+            var $errorMessage = $('<p>').prop('id', 'anr-dialog-progress-error-message');
+            var $errorReportText = $('<textarea>');
+            $errorReportText.prop({
+                id: 'anr-dialog-progress-error-text',
+                rows: 5,
+                disabled: true
+            });
+            var $errorReportSummary = $('<textarea>');
+            $errorReportSummary.prop({
+                id: 'anr-dialog-progress-error-summary',
+                rows: 3,
+                disabled: true
+            });
+            $errorWrapper.append($('<hr>'), $errorMessage, $('<label>').text('手動編集用'), $errorReportText, $errorReportSummary);
+            Reporter.toggle($errorWrapper, false);
+            // Process IDs that need to be converted to usernames
+            this.processIds(data).then(function (_a) {
+                var users = _a.users, info = _a.info;
+                // Post-procedure of username-ID conversions and duplicate username check
+                (function () {
+                    var def = $.Deferred();
+                    if (!users.length) {
+                        $dupUsersLabel.empty().append(lib.getIcon('check'));
+                        def.resolve(true);
+                    }
+                    else {
+                        $dupUsersLabel.empty().append(getImage('exclamation'));
+                        users.forEach(function (arr) {
+                            var $li = $('<li>').text(arr.join(', '));
+                            $dupUsersList.append($li);
+                        });
+                        Reporter.toggle($dupUsersListRow, true);
+                        _this.$dialog.dialog({
+                            buttons: [
+                                {
+                                    text: '続行',
+                                    click: function () {
+                                        Reporter.toggle($dupUsersListRow, false);
+                                        _this.$dialog.dialog({ buttons: [] });
+                                        def.resolve(true);
+                                    }
+                                },
+                                {
+                                    text: '戻る',
+                                    click: function () {
+                                        Reporter.toggle(_this.$progress, false);
+                                        Reporter.toggle(_this.$content, true);
+                                        _this.setMainButtons();
+                                        def.resolve(false);
+                                    }
+                                },
+                                {
+                                    text: '閉じる',
+                                    click: function () {
+                                        _this.close();
+                                        def.resolve(false);
+                                    }
+                                }
+                            ]
+                        });
+                        mw.notify('利用者名の重複を検出しました。', { type: 'warn' });
+                    }
+                    return def.promise();
+                })()
+                    .then(function (duplicateUsernamesResolved) {
+                    if (!duplicateUsernamesResolved)
+                        return;
+                    var deferreds = [];
+                    if (data.blockCheck && data.duplicateCheck) {
+                        $blockedUsersLabel.empty().append(lib.getIcon('load'));
+                        $dupReportsLabel.empty().append(lib.getIcon('load'));
+                        deferreds.push(_this.checkBlocks(info), _this.checkDuplicateReports(data, info));
+                    }
+                    else if (data.blockCheck) {
+                        $blockedUsersLabel.empty().append(lib.getIcon('load'));
+                        deferreds.push(_this.checkBlocks(info), $.Deferred().resolve(void 0));
+                    }
+                    else if (data.duplicateCheck) {
+                        $dupReportsLabel.empty().append(lib.getIcon('load'));
+                        deferreds.push($.Deferred().resolve(void 0), _this.checkDuplicateReports(data, info));
+                    }
+                    else {
+                        deferreds.push($.Deferred().resolve(void 0), $.Deferred().resolve(void 0));
+                    }
+                    $.when.apply($, deferreds).then(function (blocked, dup) {
+                        (function () {
+                            var def = $.Deferred();
+                            var stop = false;
+                            // Process the result of block check
+                            if (blocked) {
+                                if (!blocked.length) {
+                                    $blockedUsersLabel.empty().append(lib.getIcon('check'));
+                                }
+                                else {
+                                    $blockedUsersLabel.empty().append(getImage('exclamation'));
+                                    blocked.forEach(function (user) {
+                                        $blockedUsersList.append($('<li>').append($('<a>')
+                                            .prop({
+                                            href: mw.util.getUrl('特別:投稿記録/' + user),
+                                            target: '_blank'
+                                        })
+                                            .text(user)));
+                                    });
+                                    Reporter.toggle($blockedUsersListRow, true);
+                                    mw.notify('ブロック済みの利用者を検出しました。', { type: 'warn' });
+                                    stop = true;
+                                }
+                            }
+                            // Process the result of duplicate report check
+                            if (dup instanceof lib.Wikitext) {
+                                $dupReportsLabel.empty().append(lib.getIcon('check'));
+                            }
+                            else if (typeof dup === 'string') {
+                                $dupReportsLabel.empty().append(getImage('exclamation'));
+                                $dupReportsButtonCell.append($('<input>')
+                                    .prop('type', 'button')
+                                    .val('確認')
+                                    .off('click').on('click', function () {
+                                    _this.previewDuplicateReports(data, dup);
+                                }));
+                                Reporter.toggle($dupReportsButtonRow, true);
+                                mw.notify('重複報告を検出しました。', { type: 'warn' });
+                                stop = true;
+                            }
+                            else if (dup === false || dup === null) {
+                                $dupReportsLabel.empty().append(lib.getIcon('cross'));
+                                mw.notify("\u91CD\u8907\u5831\u544A\u30C1\u30A7\u30C3\u30AF\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002(".concat(dup === null ? '通信エラー' : 'ページ非存在', ")"), { type: 'error' });
+                                stop = true;
+                            }
+                            if (!stop && dup instanceof lib.Wikitext) {
+                                def.resolve(dup);
+                            }
+                            else if (!stop) {
+                                def.resolve(void 0);
+                            }
+                            else {
+                                _this.$dialog.dialog({
+                                    buttons: [
+                                        {
+                                            text: '続行',
+                                            click: function () {
+                                                Reporter.toggle($blockedUsersListRow, false);
+                                                Reporter.toggle($dupReportsButtonRow, false);
+                                                _this.$dialog.dialog({ buttons: [] });
+                                                def.resolve(void 0);
+                                            }
+                                        },
+                                        {
+                                            text: '戻る',
+                                            click: function () {
+                                                Reporter.toggle(_this.$progress, false);
+                                                Reporter.toggle(_this.$content, true);
+                                                _this.setMainButtons();
+                                                def.reject(); // Reject
+                                            }
+                                        },
+                                        {
+                                            text: '閉じる',
+                                            click: function () {
+                                                _this.close();
+                                                def.reject(); // Reject
+                                            }
+                                        }
+                                    ]
+                                });
+                            }
+                            return def.promise();
+                        })()
+                            .done(function (inheritedWkt) {
+                            $reportLabel.empty().append(lib.getIcon('load'));
+                            var report = _this.createReport(data, info);
+                            var reportText = report.text;
+                            var summary = report.summary;
+                            var errorHandler = function (err) {
+                                console.error(err);
+                                $reportLabel.empty().append(lib.getIcon('cross'));
+                                $errorMessage.text(err.message);
+                                $errorReportText.val(reportText);
+                                $errorReportSummary.val(summary.replace(new RegExp(mw.util.escapeRegExp(ad) + '$'), ''));
+                                Reporter.toggle($errorWrapper, true);
+                                mw.notify('報告に失敗しました。', { type: 'error' });
+                                _this.$dialog.dialog({
+                                    buttons: [
+                                        {
+                                            text: '再試行',
+                                            click: function () { return _this.report(); }
+                                        },
+                                        {
+                                            text: '報告先',
+                                            click: function () {
+                                                window.open(_this.$pageLink.prop('href'), '_blank');
+                                            }
+                                        },
+                                        {
+                                            text: '戻る',
+                                            click: function () {
+                                                Reporter.toggle(_this.$progress, false);
+                                                Reporter.toggle(_this.$content, true);
+                                                _this.setMainButtons();
+                                            }
+                                        },
+                                        {
+                                            text: '閉じる',
+                                            click: function () {
+                                                _this.close();
+                                            }
+                                        }
+                                    ]
+                                });
+                            };
+                            var $when = inheritedWkt ?
+                                $.when($.Deferred().resolve(inheritedWkt)) :
+                                $.when(lib.Wikitext.newFromTitle(data.page));
+                            $when.then(function (Wkt) {
+                                // Validate the Wikitext instance
+                                if (Wkt === false) {
+                                    throw new Error("\u30DA\u30FC\u30B8\u300C".concat(data.page, "\u300D\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F\u3002"));
+                                }
+                                else if (Wkt === null) {
+                                    throw new Error('通信エラーが発生しました。');
+                                }
+                                // Get the number of the section to edit
+                                var sectionNum = -1;
+                                var sectionContent = '';
+                                for (var _i = 0, _a = Wkt.parseSections(); _i < _a.length; _i++) {
+                                    var _b = _a[_i], title = _b.title, index = _b.index, content = _b.content;
+                                    if (title === data.section) {
+                                        sectionNum = index;
+                                        sectionContent = content;
+                                        break;
+                                    }
+                                }
+                                if (sectionNum === -1) {
+                                    throw new Error("\u7BC0\u300C".concat(data.section, "\u300D\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F\u3002"));
+                                }
+                                // Create the new content of the section to edit
+                                if (data.page === ANS || formatANTEST(true) === ANS) {
+                                    // Add div if the target section is 'その他' but lacks div for the current date
+                                    var d = new Date();
+                                    var today = (d.getMonth() + 1) + '月' + d.getDate() + '日';
+                                    var miscHeader = '{{bgcolor|#eee|{{Visible anchor|他' + today + '}}|div}}';
+                                    if (data.section === 'その他' && !sectionContent.includes(miscHeader)) {
+                                        reportText = '; ' + miscHeader + '\n\n' + reportText;
+                                    }
+                                    // Get the report text to submit
+                                    var sockInfoArr = new lib.Wikitext(sectionContent).parseTemplates({
+                                        namePredicate: function (name) { return name === 'SockInfo/M'; },
+                                        recursivePredicate: function (Temp) { return !Temp || Temp.getName('clean') !== 'SockInfo/M'; }
+                                    });
+                                    if (!sockInfoArr.length) {
+                                        throw new Error("\u7BC0\u300C".concat(data.section, "\u300D\u5185\u306B\u30C6\u30F3\u30D7\u30EC\u30FC\u30C8\u300CSockInfo/M\u300D\u304C\u5B58\u5728\u3057\u306A\u3044\u305F\u3081\u5831\u544A\u5834\u6240\u3092\u7279\u5B9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"));
+                                    }
+                                    else if (sockInfoArr.length > 1) {
+                                        throw new Error("\u7BC0\u300C".concat(data.section, "\u300D\u5185\u306B\u30C6\u30F3\u30D7\u30EC\u30FC\u30C8\u300CSockInfo/M\u300D\u304C\u8907\u6570\u500B\u3042\u308B\u305F\u3081\u5831\u544A\u5834\u6240\u3092\u7279\u5B9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"));
+                                    }
+                                    var sockInfo = sockInfoArr[0];
+                                    sectionContent = sockInfo.replaceIn(sectionContent, {
+                                        with: sockInfo.renderOriginal().replace(/\s*?\}{2}$/, '') + '\n\n' + reportText + '\n\n}}'
+                                    });
+                                }
+                                else {
+                                    sectionContent = lib.clean(sectionContent) + '\n\n' + reportText;
+                                }
+                                _this.watchUsers(data, info);
+                                var _c = Wkt.getRevision(), basetimestamp = _c.basetimestamp, curtimestamp = _c.curtimestamp;
+                                new mw.Api().postWithEditToken({
+                                    action: 'edit',
+                                    title: data.page,
+                                    section: sectionNum,
+                                    text: sectionContent,
+                                    summary: summary,
+                                    basetimestamp: basetimestamp,
+                                    curtimestamp: curtimestamp,
+                                    formatversion: '2'
+                                }).then(function (res) {
+                                    if (res && res.edit && res.edit.result === 'Success') {
+                                        $reportLabel.empty().append(lib.getIcon('check'));
+                                        mw.notify('報告が完了しました。', { type: 'success' });
+                                        _this.$dialog.dialog({
+                                            buttons: [
+                                                {
+                                                    text: '報告先',
+                                                    click: function () {
+                                                        window.open(_this.$pageLink.prop('href'), '_blank');
+                                                    }
+                                                },
+                                                {
+                                                    text: '閉じる',
+                                                    click: function () {
+                                                        _this.close();
+                                                    }
+                                                }
+                                            ]
+                                        });
+                                    }
+                                    else {
+                                        errorHandler(new Error("\u5831\u544A\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002(\u4E0D\u660E\u306A\u30A8\u30E9\u30FC)"));
+                                    }
+                                }).catch(function (code, err) {
+                                    console.warn(err);
+                                    errorHandler(new Error("\u5831\u544A\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002(".concat(code, ")")));
+                                });
+                            }).catch(errorHandler);
+                        });
+                    });
+                });
+            });
+        };
+        /**
+         * Check the block statuses of the reportees.
+         * @param userInfoArray The `info` property array of the return value of {@link processIds}.
+         * @returns An array of blocked users and IPs.
+         */
+        Reporter.prototype.checkBlocks = function (userInfoArray) {
             var users = [];
             var ips = [];
-            for (var _i = 0, usersArr_1 = usersArr; _i < usersArr_1.length; _i++) {
-                var user = usersArr_1[_i];
+            for (var _i = 0, userInfoArray_1 = userInfoArray; _i < userInfoArray_1.length; _i++) {
+                var user = userInfoArray_1[_i];
                 if (!user) {
                     // Do nothing
                 }
@@ -2046,8 +2312,305 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                         users.push(user);
                 }
             }
+            var processUsers = function (usersArr) {
+                if (!usersArr.length) {
+                    return $.Deferred().resolve([]);
+                }
+                return lib.massRequest({
+                    action: 'query',
+                    list: 'blocks',
+                    bkusers: usersArr,
+                    bklimit: 'max',
+                    formatversion: '2'
+                }, 'bkusers')
+                    .then(function (response) {
+                    return response.reduce(function (acc, res) {
+                        var resBk = res && res.query && res.query.blocks;
+                        (resBk || []).forEach(function (_a) {
+                            var user = _a.user;
+                            if (user) {
+                                acc.push(user);
+                            }
+                        });
+                        return acc;
+                    }, []);
+                });
+            };
+            var processIps = function (ipsArr) {
+                if (!ipsArr.length) {
+                    return $.Deferred().resolve([]);
+                }
+                return lib.massRequest({
+                    action: 'query',
+                    list: 'blocks',
+                    bkip: ipsArr,
+                    bklimit: 1,
+                    formatversion: '2'
+                }, 'bkip', 1)
+                    .then(function (response) {
+                    return response.reduce(function (acc, res, i) {
+                        var resBk = res && res.query && res.query.blocks;
+                        if (resBk && resBk[0]) {
+                            acc.push(ipsArr[i]);
+                        }
+                        return acc;
+                    }, []);
+                });
+            };
+            return $.when(processUsers(users), processIps(ips)).then(function (blockedUsers, blockedIps) {
+                return blockedUsers.concat(blockedIps);
+            });
         };
-        /** Storage of the return value of {@link getBlockStatus}. */
+        /**
+         * Check for duplicate reports.
+         * @param data The return value of {@link collectData}.
+         * @param info The partial return value of {@link processIds}.
+         * @returns `string` if duplicate reports are found, a `Wikitext` instance if no duplicate reports are found,
+         * `false` if the page isn't found, and `null` if there's an issue with the connection.
+         */
+        Reporter.prototype.checkDuplicateReports = function (data, info) {
+            return lib.Wikitext.newFromTitle(data.page).then(function (Wkt) {
+                var _a;
+                // Wikitext instance failed to be initialized
+                if (!Wkt)
+                    return Wkt; // false or null
+                // Find UserANs that contain duplicate reports
+                var UserANs = Wkt.parseTemplates({
+                    namePredicate: function (name) { return name === 'UserAN'; },
+                    recursivePredicate: function (Temp) { return !Temp || Temp.getName('clean') !== 'UserAN'; },
+                    hierarchy: [
+                        ['1', 'user', 'User'],
+                        ['t', 'type', 'Type'],
+                        ['状態', 's', 'status', 'Status']
+                    ],
+                    templatePredicate: function (Temp) {
+                        // Get 1= and t= parameter values of this UserAN
+                        var param1 = '';
+                        var paramT = 'User2';
+                        var converted = null;
+                        for (var _i = 0, _a = Temp.args; _i < _a.length; _i++) {
+                            var _b = _a[_i], name_1 = _b.name, value = _b.value;
+                            if (value) {
+                                if (name_1 === '2') {
+                                    return false; // Ignore closed ones
+                                }
+                                else if (/^(1|[uU]ser)$/.test(name_1)) {
+                                    param1 = value;
+                                }
+                                else if (/^(t|[tT]ype)$/.test(name_1)) {
+                                    if (/^unl|usernolink$/i.test(value)) {
+                                        paramT = 'UNL';
+                                    }
+                                    else if (/^ip(user)2$/i.test(value)) {
+                                        paramT = 'IP2';
+                                    }
+                                    else if (/^log(id)?$/i.test(value)) {
+                                        if (!/^\d+$/.test(value))
+                                            return false;
+                                        paramT = 'logid';
+                                        converted = idList.getRegisteredUsername(parseInt(value), 'logid');
+                                    }
+                                    else if (/^diff?$/i.test(value)) {
+                                        if (!/^\d+$/.test(value))
+                                            return false;
+                                        paramT = 'diff';
+                                        converted = idList.getRegisteredUsername(parseInt(value), 'diffid');
+                                    }
+                                    else if (/^none$/i.test(value)) {
+                                        paramT = 'none';
+                                    }
+                                }
+                            }
+                        }
+                        if (!param1) {
+                            return false;
+                        }
+                        else if (mw.util.isIPv6Address(param1, true)) {
+                            param1 = param1.toUpperCase();
+                        }
+                        param1 = User.formatName(param1);
+                        // Evaluation
+                        var isDuplicate = data.users.some(function (_a) {
+                            var user = _a.user, type = _a.type;
+                            switch (paramT) {
+                                case 'UNL':
+                                case 'User2':
+                                case 'IP2':
+                                case 'none':
+                                    return user === param1 && /^(UNL|User2|IP2|none)$/.test(type) || info.includes(param1);
+                                case 'logid':
+                                case 'diff':
+                                    return user === param1 && type === paramT || converted && info.includes(converted);
+                            }
+                        });
+                        return isDuplicate;
+                    }
+                });
+                if (!UserANs.length)
+                    return Wkt;
+                // Highlight the duplicate UserANs
+                var wikitext = Wkt.wikitext;
+                var spanStart = '<span class="anr-preview-duplicate">';
+                UserANs.reverse().forEach(function (Temp) {
+                    wikitext = Temp.replaceIn(wikitext, { with: "".concat(spanStart).concat(Temp.renderOriginal(), "</span>") });
+                });
+                if (wikitext === Wkt.wikitext)
+                    return Wkt;
+                // The sections in which to search for duplicate reports
+                var tarSectionsAll = (_a = {},
+                    _a[ANI] = [
+                        Reporter.getCurrentAniSection(true),
+                        Reporter.getCurrentAniSection(false),
+                        '不適切な利用者名',
+                        '公開アカウント',
+                        '公開プロキシ・ゾンビマシン・ボット・不特定多数',
+                        '犯罪行為またはその疑いのある投稿'
+                    ],
+                    _a[ANS] = [
+                        '著作権侵害・犯罪予告',
+                        '名誉毀損・なりすまし・個人情報',
+                        '妨害編集・いたずら',
+                        'その他'
+                    ],
+                    _a[AN3RR] = ['3RR'],
+                    _a);
+                var testKey = formatANTEST(true);
+                var tarSections = tarSectionsAll[(testKey || data.page)];
+                if (!tarSections) {
+                    console.error("\"tarSectionsAll['".concat(data.page, "']\" is undefined."));
+                }
+                else if ((data.page === ANS || testKey === ANS) && !tarSections.includes(data.section)) {
+                    tarSections.push(data.section);
+                }
+                // Filter out the content of the relevant sections
+                var ret = new lib.Wikitext(wikitext).parseSections().reduce(function (acc, _a) {
+                    var title = _a.title, content = _a.content;
+                    if (tarSections.includes(title) && content.includes(spanStart)) {
+                        acc.push(content.trim());
+                    }
+                    return acc;
+                }, []);
+                if (!ret.length) {
+                    return Wkt;
+                }
+                else {
+                    return ret.join('\n\n');
+                }
+            });
+        };
+        /**
+         * Preview duplicate reports.
+         * @param data The return value of {@link collectData}.
+         * @param wikitext The wikitext to parse as HTML.
+         */
+        Reporter.prototype.previewDuplicateReports = function (data, wikitext) {
+            // Create preview dialog
+            var $preview = $('<div>')
+                .css({
+                maxHeight: '70vh',
+                maxWidth: '80vw'
+            })
+                .dialog({
+                dialogClass: 'anr-dialog anr-dialog-drpreview',
+                title: ANR + ' - Duplicate report preview',
+                height: 'auto',
+                width: 'auto',
+                modal: true,
+                close: function () {
+                    // Destory the dialog and its contents when closed by any means
+                    $(this).empty().dialog('destroy');
+                }
+            });
+            var $previewContent = $('<div>')
+                .prop('id', 'anr-dialog-drpreview-content')
+                .text('読み込み中')
+                .append($(lib.getIcon('load')).css('margin-left', '0.5em'));
+            $preview.append($previewContent);
+            // Parse wikitext to HTML
+            new mw.Api().post({
+                action: 'parse',
+                title: data.page,
+                text: wikitext,
+                prop: 'text',
+                disablelimitreport: true,
+                disableeditsection: true,
+                disabletoc: true,
+                formatversion: '2'
+            }).then(function (res) {
+                var content = res && res.parse && res.parse.text;
+                if (content) {
+                    var $body = $('<div>').prop('id', 'anr-dialog-drpreview-body');
+                    $body.append(content);
+                    $previewContent
+                        .empty()
+                        .append($body)
+                        .find('a').prop('target', '_blank'); // Open all links on a new tab
+                    $preview.dialog({
+                        buttons: [
+                            {
+                                text: '閉じる',
+                                click: function () {
+                                    $preview.dialog('close');
+                                }
+                            }
+                        ]
+                    });
+                    Reporter.centerDialog($preview, true);
+                    Reporter.centerDialog($preview, true); // Necessary to call this twice for some reason
+                    // requestAnimationFrame(() => {
+                    // 	const dup = document.querySelector('.anr-preview-duplicate');
+                    // 	if (dup) dup.scrollIntoView({block: 'center'});
+                    // });
+                }
+                else {
+                    throw new Error('action=parseのエラー');
+                }
+            }).catch(function (_, err) {
+                console.log(err);
+                $previewContent
+                    .empty()
+                    .text('プレビューの読み込みに失敗しました。')
+                    .append($(lib.getIcon('cross')).css('margin-left', '0.5em'));
+                $preview.dialog({
+                    buttons: [
+                        {
+                            text: '閉じる',
+                            click: function () {
+                                $preview.dialog('close');
+                            }
+                        }
+                    ]
+                });
+            });
+        };
+        /**
+         * Watch user pages on report.
+         * @param data The return value of {@link collectData}.
+         * @param info The partial return value of {@link processIds}.
+         * @returns
+         */
+        Reporter.prototype.watchUsers = function (data, info) {
+            if (!data.watch) {
+                return;
+            }
+            var users = info.reduce(function (acc, val) {
+                if (val) {
+                    var username = '利用者:' + val;
+                    if (!acc.includes(username)) {
+                        acc.push(username);
+                    }
+                }
+                return acc;
+            }, []);
+            if (!users.length) {
+                return;
+            }
+            new mw.Api().watch(users, data.watch);
+        };
+        /**
+         * Storage of the return value of {@link getBlockStatus}. This property is static, meaning that it is initialized
+         * only once on DOM ready.
+         */
         Reporter.blockStatus = {};
         return Reporter;
     }());
@@ -2189,11 +2752,16 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         }
         /**
          * Format a username by calling `lib.clean`, replacing underscores with spaces, and capitalizing the first letter.
+         * If the username is an IPv6 address, all letters will be captalized.
          * @param username
          * @returns The formatted username.
          */
         User.formatName = function (username) {
-            return mwString.ucFirst(lib.clean(username.replace(/_/g, ' ')));
+            var user = mwString.ucFirst(lib.clean(username.replace(/_/g, ' ')));
+            if (mw.util.isIPv6Address(user, true)) {
+                user = user.toUpperCase();
+            }
+            return user;
         };
         /**
          * Get the username in the textbox (underscores are replaced by spaces).
@@ -2563,6 +3131,28 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             return null;
         }
     }
+    /**
+     * Format the `ANTEST` variable to a processable page name.
+     * @param toWikipedia Whether to format to a page name in the Wikipedia namespace, defaulted to `false`.
+     * @returns Always `false` if `ANTEST` is set to `false`, otherwise a formatted page name.
+     */
+    function formatANTEST(toWikipedia) {
+        if (toWikipedia === void 0) { toWikipedia = false; }
+        var prefix = '利用者:DragoTest/test/WP';
+        switch (ANTEST) {
+            case 'ANI':
+            case 'ANS':
+            case 'AN3RR':
+                return toWikipedia ? eval(ANTEST) : prefix + ANTEST;
+            default:
+                return false;
+        }
+    }
+    /**
+     * Get an \<img> tag.
+     * @param iconType
+     * @returns
+     */
     function getImage(iconType) {
         var img = document.createElement('img');
         switch (iconType) {

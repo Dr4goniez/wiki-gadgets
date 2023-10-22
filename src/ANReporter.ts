@@ -13,7 +13,9 @@ const AN3RR = 'Wikipedia:管理者伝言板/3RR';
 /**
  * This variable being a string means that we're in a debugging mode. (cf. {@link Reporter.collectData})
  */
-const ANTEST: string|false = false;//'利用者:DragoTest/test/WPANI';
+const ANTEST: 'ANI'|'ANS'|'AN3RR'|false = 'ANS';
+
+const ad = ' ([[利用者:Dragoniez/scripts/AN_Reporter|AN Reporter]])';
 
 let lib: WpLibExtra;
 let mwString: MwString;
@@ -641,8 +643,8 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'.anr-hidden {' + // Used to show/hide elements on the dialog (by Reporter.toggle)
 			'display: none;' +
 		'}' +
-		'#anr-dialog-progress,' + // One of the main dialog field
-		'#anr-dialog-preview-content {' +
+		'#anr-dialog-preview-content,' +
+		'#anr-dialog-drpreview-content {' +
 			'padding: 1em;' +
 		'}' +
 		'#anr-dialog-optionfield,' + // The immediate child of #anr-dialog-content
@@ -751,13 +753,17 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'#anr-dialog-progress-field ul {' +
 			'margin-top: 0;' +
 		'}' +
-		'#anr-dialog-preview-body > div {' +
+		'#anr-dialog-preview-body > div,' +
+		'#anr-dialog-drpreview-body > div {' +
 			'border: 1px solid silver;' +
 			'padding: 0.2em 0.5em;' +
 			'background: white;' +
 		'}' +
 		'#anr-dialog-preview-body .autocomment a {' +  // Change the color of the section link in summary
 			'color: gray;' +
+		'}' +
+		'#anr-dialog-progress-error-message {' +
+			'color: mediumvioletred;' +
 		'}' +
 		// Dialog colors
 		'.anr-dialog.ui-dialog-content,' +
@@ -1070,23 +1076,26 @@ class Reporter {
 
 		// Create dialog contour
 		this.$dialog = $('<div>');
-		this.$dialog.prop('title', ANR).css('max-height', '70vh');
-		this.$dialog.dialog({
-			dialogClass: 'anr-dialog',
-			resizable: false,
-			height: 'auto',
-			width: 'auto',
-			modal: true,
-			close: function() {
-				// Destory the dialog and its contents when closed by any means
-				$(this).empty().dialog('destroy');
-			}
-		});
+		this.$dialog
+			.css('max-height', '70vh')
+			.dialog({
+				dialogClass: 'anr-dialog',
+				title: ANR,
+				resizable: false,
+				height: 'auto',
+				width: 'auto',
+				modal: true,
+				close: function() {
+					// Destory the dialog and its contents when closed by any means
+					$(this).empty().dialog('destroy');
+				}
+			});
 
 		// Create progress container
 		this.$progress = $('<div>');
 		this.$progress
 			.prop('id', 'anr-dialog-progress')
+			.css('padding', '1em')
 			.append(
 				document.createTextNode('読み込み中'),
 				$(lib.getIcon('load')).css('margin-left', '0.5em')
@@ -1350,8 +1359,9 @@ class Reporter {
 	/**
 	 * Taken several HTML elements, set the width that is widest among the elements to all of them.
 	 * @param $elements
+	 * @returns The width.
 	 */
-	static setWidestWidth($elements: JQuery<HTMLElement>): void {
+	static setWidestWidth($elements: JQuery<HTMLElement>): number {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const optionsWidths = Array.prototype.map.call<JQuery<HTMLElement>, any[], number[]>(
 			$elements,
@@ -1359,6 +1369,7 @@ class Reporter {
 		);
 		const optionWidth = Math.max(...optionsWidths); // Get the max value
 		$elements.css('min-width', optionWidth); // Set the value to all
+		return optionWidth;
 	}
 
 	/**
@@ -1461,12 +1472,14 @@ class Reporter {
 
 	/**
 	 * Bring a jQuery UI dialog to the center of the viewport.
+	 * @param $dialog
+	 * @param absoluteCenter Whether to apply `center` instead of `top+5%`, defaulted to `false`.
 	 */
-	static centerDialog($dialog: JQuery<HTMLDivElement>): void {
+	static centerDialog($dialog: JQuery<HTMLElement>, absoluteCenter = false): void {
 		$dialog.dialog({
 			position: {
-				my: 'top',
-				at: 'top+5%',
+				my: absoluteCenter ? 'center' : 'top',
+				at: absoluteCenter ? 'center' : 'top+5%',
 				of: window
 			}
 		});
@@ -1578,6 +1591,7 @@ class Reporter {
 
 			def.then(() => { // Ensure that processInputChange has been resolved as well
 				Reporter.toggle(R.$progress, false);
+				R.$progress.css('padding', '');
 				Reporter.toggle(R.$content, true);
 				R.setMainButtons();
 			});
@@ -1670,7 +1684,7 @@ class Reporter {
 	 * Set an href to {@link $pageLink}. If {@link $page} is not selected, disable the anchor.
 	 * @returns
 	 */
-	setPageLink(): Reporter {
+	private setPageLink(): Reporter {
 		const page = this.getPage();
 		if (page) {
 			this.$pageLink
@@ -1711,7 +1725,7 @@ class Reporter {
 	 * This method calls {@link setPageLink} when done.
 	 * @returns
 	 */
-	switchSectionDropdown(): Reporter {
+	private switchSectionDropdown(): Reporter {
 		const page = this.getPage();
 		if (page) {
 			switch (page) {
@@ -1755,7 +1769,10 @@ class Reporter {
 		return this;
 	}
 
-	/** Storage of the return value of {@link getBlockStatus}. */
+	/**
+	 * Storage of the return value of {@link getBlockStatus}. This property is static, meaning that it is initialized
+	 * only once on DOM ready.
+	 */
 	static blockStatus: {[username: string]: BlockStatus;} = {};
 
 	/**
@@ -1819,7 +1836,7 @@ class Reporter {
 	 * Collect option values.
 	 * @returns `null` if there's some error.
 	 */
-	collectData(): ReportData|null {
+	private collectData(): ReportData|null {
 
 		//  -- Check first for required fields --
 
@@ -1886,7 +1903,7 @@ class Reporter {
 
 		// Return
 		return {
-			page: ANTEST || page!,
+			page: formatANTEST() || page!,
 			section: section!,
 			users,
 			reason,
@@ -1903,7 +1920,7 @@ class Reporter {
 	 * @param data
 	 * @returns
 	 */
-	processIds(data: ReportData): JQueryPromise<ProcessedIds> {
+	private processIds(data: ReportData): JQueryPromise<ProcessedIds> {
 		const deferreds: JQueryPromise<string|null>[] = data.users.map((obj) => { // Create an array of $.Deferred out of input values
 			if (obj.type === 'logid' || obj.type === 'diff') {
 				return idList.getUsername(parseInt(obj.user), obj.type === 'diff' ? 'diffid' : 'logid'); // Convert ID
@@ -1986,7 +2003,7 @@ class Reporter {
 	 * @param info The partial return value of {@link processIds}.
 	 * @returns The report text and summary.
 	 */
-	createReport(data: ReportData, info: ProcessedIds['info']): {text: string; summary: string;} {
+	private createReport(data: ReportData, info: ProcessedIds['info']): {text: string; summary: string;} {
 
 		// Create UserANs and summary links
 		const templates: Template[] = [];
@@ -2047,7 +2064,7 @@ class Reporter {
 		let summary = '';
 		const fixed = [ // The fixed, always existing parts of the summary
 			`/*${data.section}*/+`,
-			' ([[利用者:Dragoniez/scripts/AN_Reporter|AN Reporter]])'
+			ad
 		];
 		const fixedLen = fixed.join('').length; // The length of the fixed summary
 		const summaryComment = data.summary ? ' - ' + data.summary : '';
@@ -2090,13 +2107,13 @@ class Reporter {
 		if (!data) return;
 
 		const $preview = $('<div>')
-			.prop('title', ANR + ' - Preview')
 			.css({
-				'max-height': '80vh',
-				'max-width': '80vw'
+				maxHeight: '70vh',
+				maxWidth: '80vw'
 			})
 			.dialog({
 				dialogClass: 'anr-dialog anr-dialog-preview',
+				title: ANR + ' - Preview',
 				height: 'auto',
 				width: 'auto',
 				modal: true,
@@ -2113,7 +2130,7 @@ class Reporter {
 
 		this.processIds(data).then(({info}) => {
 			const {text, summary} = this.createReport(data, info);
-			new mw.Api().get({
+			new mw.Api().post({
 				action: 'parse',
 				title: data.page,
 				text,
@@ -2158,13 +2175,9 @@ class Reporter {
 									$preview.dialog('close');
 								}
 							}
-						],
-						position: {
-							at: 'center',
-							my: 'center',
-							of: window
-						}
+						]
 					});
+					Reporter.centerDialog($preview, true);
 
 				} else {
 					throw new Error('action=parseのエラー');
@@ -2261,13 +2274,11 @@ class Reporter {
 		const $dupReportsText = $('<td>').text('重複報告');
 		$dupReportsRow.append($dupReportsLabel, $dupReportsText);
 
-		const $dupReportsListRow = $('<tr>');
-		$progressTable.append($dupReportsListRow);
-		const $dupReportsListText = $('<td>');
-		$dupReportsListRow.append($('<td>'), $dupReportsListText);
-		const $dupReportsList = $('<ul>');
-		$dupReportsListText.append($dupReportsList);
-		Reporter.toggle($dupReportsListRow , false);
+		const $dupReportsButtonRow = $('<tr>');
+		$progressTable.append($dupReportsButtonRow);
+		const $dupReportsButtonCell = $('<td>');
+		$dupReportsButtonRow.append($('<td>'), $dupReportsButtonCell);
+		Reporter.toggle($dupReportsButtonRow , false);
 
 		const $reportRow = $('<tr>');
 		$progressTable.append($reportRow);
@@ -2275,13 +2286,29 @@ class Reporter {
 		const $reportText = $('<td>').text('報告');
 		$reportRow.append($reportLabel, $reportText);
 
-		const $reportListRow = $('<tr>');
-		$progressTable.append($reportListRow);
-		const $reportListText = $('<td>');
-		$reportListRow.append($('<td>'), $reportListText);
-		const $reportList = $('<ul>');
-		$reportListText.append($reportList);
-		Reporter.toggle($reportListRow , false);
+		const $errorWrapper = $('<div>').prop('id', 'anr-dialog-progress-error');
+		$progressField.append($errorWrapper);
+		const $errorMessage = $('<p>').prop('id', 'anr-dialog-progress-error-message');
+		const $errorReportText = $('<textarea>');
+		$errorReportText.prop({
+			id: 'anr-dialog-progress-error-text',
+			rows: 5,
+			disabled: true
+		});
+		const $errorReportSummary = $('<textarea>');
+		$errorReportSummary.prop({
+			id: 'anr-dialog-progress-error-summary',
+			rows: 3,
+			disabled: true
+		});
+		$errorWrapper.append(
+			$('<hr>'),
+			$errorMessage,
+			$('<label>').text('手動編集用'),
+			$errorReportText,
+			$errorReportSummary
+		);
+		Reporter.toggle($errorWrapper, false);
 
 		// Process IDs that need to be converted to usernames
 		this.processIds(data).then(({users, info}) => {
@@ -2305,7 +2332,6 @@ class Reporter {
 							{
 								text: '続行',
 								click: () => {
-									$dupUsersList.empty();
 									Reporter.toggle($dupUsersListRow, false);
 									this.$dialog.dialog({buttons: []});
 									def.resolve(true);
@@ -2314,8 +2340,6 @@ class Reporter {
 							{
 								text: '戻る',
 								click: () => {
-									$dupUsersList.empty();
-									Reporter.toggle($dupUsersListRow, false);
 									Reporter.toggle(this.$progress, false);
 									Reporter.toggle(this.$content, true);
 									this.setMainButtons();
@@ -2339,11 +2363,264 @@ class Reporter {
 			.then((duplicateUsernamesResolved) => {
 
 				if (!duplicateUsernamesResolved) return;
-				console.log(this.createReport(data, info));
 
-				(() => {
+				const deferreds = [];
+				if (data.blockCheck && data.duplicateCheck) {
+					$blockedUsersLabel.empty().append(lib.getIcon('load'));
+					$dupReportsLabel.empty().append(lib.getIcon('load'));
+					deferreds.push(this.checkBlocks(info), this.checkDuplicateReports(data, info));
+				} else if (data.blockCheck) {
+					$blockedUsersLabel.empty().append(lib.getIcon('load'));
+					deferreds.push(this.checkBlocks(info), $.Deferred().resolve(void 0));
+				} else if (data.duplicateCheck) {
+					$dupReportsLabel.empty().append(lib.getIcon('load'));
+					deferreds.push($.Deferred().resolve(void 0), this.checkDuplicateReports(data, info));
+				} else {
+					deferreds.push($.Deferred().resolve(void 0), $.Deferred().resolve(void 0));
+				}
 
-				})();
+				$.when(...deferreds).then((blocked?: string[], dup?: string|Wikitext|false|null) => {
+
+					((): JQueryPromise<Wikitext|void> => {
+
+						const def = $.Deferred();
+						let stop = false;
+
+						// Process the result of block check
+						if (blocked) {
+							if (!blocked.length) {
+								$blockedUsersLabel.empty().append(lib.getIcon('check'));
+							} else {
+								$blockedUsersLabel.empty().append(getImage('exclamation'));
+								blocked.forEach((user) => {
+									$blockedUsersList.append(
+										$('<li>').append(
+											$('<a>')
+												.prop({
+													href: mw.util.getUrl('特別:投稿記録/' + user),
+													target: '_blank'
+												})
+												.text(user)
+										)
+									);
+								});
+								Reporter.toggle($blockedUsersListRow, true);
+								mw.notify('ブロック済みの利用者を検出しました。', {type: 'warn'});
+								stop = true;
+							}
+						}
+
+						// Process the result of duplicate report check
+						if (dup instanceof lib.Wikitext) {
+							$dupReportsLabel.empty().append(lib.getIcon('check'));
+						} else if (typeof dup === 'string') {
+							$dupReportsLabel.empty().append(getImage('exclamation'));
+							$dupReportsButtonCell.append(
+								$('<input>')
+									.prop('type', 'button')
+									.val('確認')
+									.off('click').on('click', () => {
+										this.previewDuplicateReports(data, dup);
+									})
+							);
+							Reporter.toggle($dupReportsButtonRow, true);
+							mw.notify('重複報告を検出しました。', {type: 'warn'});
+							stop = true;
+						} else if (dup === false || dup === null) {
+							$dupReportsLabel.empty().append(lib.getIcon('cross'));
+							mw.notify(`重複報告チェックに失敗しました。(${dup === null ? '通信エラー' : 'ページ非存在'})`, {type: 'error'});
+							stop = true;
+						}
+
+						if (!stop && dup instanceof lib.Wikitext) {
+							def.resolve(dup);
+						} else if (!stop) {
+							def.resolve(void 0);
+						} else {
+							this.$dialog.dialog({
+								buttons: [
+									{
+										text: '続行',
+										click: () => {
+											Reporter.toggle($blockedUsersListRow, false);
+											Reporter.toggle($dupReportsButtonRow, false);
+											this.$dialog.dialog({buttons: []});
+											def.resolve(void 0);
+										}
+									},
+									{
+										text: '戻る',
+										click: () => {
+											Reporter.toggle(this.$progress, false);
+											Reporter.toggle(this.$content, true);
+											this.setMainButtons();
+											def.reject(); // Reject
+										}
+									},
+									{
+										text: '閉じる',
+										click: () => {
+											this.close();
+											def.reject(); // Reject
+										}
+									}
+								]
+							});
+						}
+
+						return def.promise();
+
+					})()
+					.done((inheritedWkt) => { // Called only when resolved
+
+						$reportLabel.empty().append(lib.getIcon('load'));
+						const report = this.createReport(data, info);
+						let reportText = report.text;
+						const summary = report.summary;
+
+						const errorHandler = (err: Error) => { // Picks up an Error in the then block
+
+							console.error(err);
+
+							$reportLabel.empty().append(lib.getIcon('cross'));
+							$errorMessage.text(err.message);
+							$errorReportText.val(reportText);
+							$errorReportSummary.val(summary.replace(new RegExp(mw.util.escapeRegExp(ad) + '$'), ''));
+							Reporter.toggle($errorWrapper, true);
+							mw.notify('報告に失敗しました。', {type: 'error'});
+
+							this.$dialog.dialog({
+								buttons: [
+									{
+										text: '再試行',
+										click: () => this.report()
+									},
+									{
+										text: '報告先',
+										click: () => {
+											window.open(this.$pageLink.prop('href'), '_blank');
+										}
+									},
+									{
+										text: '戻る',
+										click: () => {
+											Reporter.toggle(this.$progress, false);
+											Reporter.toggle(this.$content, true);
+											this.setMainButtons();
+										}
+									},
+									{
+										text: '閉じる',
+										click: () => {
+											this.close();
+										}
+									}
+								]
+							});
+
+						};
+
+						const $when: JQueryPromise<Wikitext|false|null> =
+							inheritedWkt ?
+							$.when($.Deferred().resolve(inheritedWkt)) :
+							$.when(lib.Wikitext.newFromTitle(data.page));
+						$when.then((Wkt) => {
+
+							// Validate the Wikitext instance
+							if (Wkt === false) {
+								throw new Error(`ページ「${data.page}」が見つかりませんでした。`);
+							} else if (Wkt === null) {
+								throw new Error('通信エラーが発生しました。');
+							}
+
+							// Get the number of the section to edit
+							let sectionNum = -1;
+							let sectionContent = '';
+							for (const {title, index, content} of Wkt.parseSections()) {
+								if (title === data.section) {
+									sectionNum = index;
+									sectionContent = content;
+									break;
+								}
+							}
+							if (sectionNum === -1) {
+								throw new Error(`節「${data.section}」が見つかりませんでした。`);
+							}
+
+							// Create the new content of the section to edit
+							if (data.page === ANS || formatANTEST(true) === ANS) {
+
+								// Add div if the target section is 'その他' but lacks div for the current date
+								const d = new Date();
+								const today = (d.getMonth() + 1) + '月' + d.getDate() + '日';
+								const miscHeader = '{{bgcolor|#eee|{{Visible anchor|他' + today + '}}|div}}';
+								if (data.section === 'その他' && !sectionContent.includes(miscHeader)) {
+									reportText = '; ' + miscHeader + '\n\n' + reportText;
+								}
+
+								// Get the report text to submit
+								const sockInfoArr = new lib.Wikitext(sectionContent).parseTemplates({
+									namePredicate: (name) => name === 'SockInfo/M',
+									recursivePredicate: (Temp) => !Temp || Temp.getName('clean') !== 'SockInfo/M'
+								});
+								if (!sockInfoArr.length) {
+									throw new Error(`節「${data.section}」内にテンプレート「SockInfo/M」が存在しないため報告場所を特定できませんでした。`);
+								} else if (sockInfoArr.length > 1) {
+									throw new Error(`節「${data.section}」内にテンプレート「SockInfo/M」が複数個あるため報告場所を特定できませんでした。`);
+								}
+								const sockInfo = sockInfoArr[0];
+								sectionContent = sockInfo.replaceIn(sectionContent, {
+									with: sockInfo.renderOriginal().replace(/\s*?\}{2}$/, '') + '\n\n' + reportText + '\n\n}}'
+								});
+
+							} else {
+								sectionContent = lib.clean(sectionContent) + '\n\n' + reportText;
+							}
+
+							this.watchUsers(data, info);
+							const {basetimestamp, curtimestamp} = Wkt.getRevision()!;
+							new mw.Api().postWithEditToken({
+								action: 'edit',
+								title: data.page,
+								section: sectionNum,
+								text: sectionContent,
+								summary,
+								basetimestamp,
+								curtimestamp,
+								formatversion: '2'
+							}).then((res) => {
+								if (res && res.edit && res.edit.result === 'Success') {
+									$reportLabel.empty().append(lib.getIcon('check'));
+									mw.notify('報告が完了しました。', {type: 'success'});
+									this.$dialog.dialog({
+										buttons: [
+											{
+												text: '報告先',
+												click: () => {
+													window.open(this.$pageLink.prop('href'), '_blank');
+												}
+											},
+											{
+												text: '閉じる',
+												click: () => {
+													this.close();
+												}
+											}
+										]
+									});
+								} else {
+									errorHandler(new Error(`報告に失敗しました。(不明なエラー)`));
+								}
+							}).catch((code, err) => {
+								console.warn(err);
+								errorHandler(new Error(`報告に失敗しました。(${code})`));
+							});
+
+						}).catch(errorHandler);
+
+					});
+
+				});
 
 			});
 
@@ -2352,10 +2629,11 @@ class Reporter {
 	}
 
 	/**
-	 *
+	 * Check the block statuses of the reportees.
 	 * @param userInfoArray The `info` property array of the return value of {@link processIds}.
+	 * @returns An array of blocked users and IPs.
 	 */
-	checkBlocks(userInfoArray: ProcessedIds['info']): JQueryPromise<string[]> {
+	private checkBlocks(userInfoArray: ProcessedIds['info']): JQueryPromise<string[]> {
 
 		const users: string[] = [];
 		const ips: string[] = [];
@@ -2430,8 +2708,8 @@ class Reporter {
 	 * @returns `string` if duplicate reports are found, a `Wikitext` instance if no duplicate reports are found,
 	 * `false` if the page isn't found, and `null` if there's an issue with the connection.
 	 */
-	checkDuplicateReports(data: ReportData, info: ProcessedIds['info']): JQueryPromise<string|Wikitext|false|null> {
-		return lib.Wikitext.newFromTitle('').then((Wkt) => {
+	private checkDuplicateReports(data: ReportData, info: ProcessedIds['info']): JQueryPromise<string|Wikitext|false|null> {
+		return lib.Wikitext.newFromTitle(data.page).then((Wkt) => {
 
 			// Wikitext instance failed to be initialized
 			if (!Wkt) return Wkt; // false or null
@@ -2446,7 +2724,7 @@ class Reporter {
 					['状態', 's', 'status', 'Status']
 				],
 				templatePredicate: (Temp) => {
-	
+
 					// Get 1= and t= parameter values of this UserAN
 					let param1 = '';
 					let paramT: antype = 'User2';
@@ -2484,20 +2762,20 @@ class Reporter {
 					param1 = User.formatName(param1);
 
 					// Evaluation
-					const isDuplicate = data.users.some(({user, type}) => {
+					const isDuplicate = data.users.some(({user, type}) => { // Loop through values in user panes on the dialog
 						switch (paramT) {
 							case 'UNL':
 							case 'User2':
 							case 'IP2':
 							case 'none':
-								return user === param1 && /^(UNL|User2|IP2|none)$/.test(type);
+								return user === param1 && /^(UNL|User2|IP2|none)$/.test(type) || info.includes(param1);
 							case 'logid':
 							case 'diff':
 								return user === param1 && type === paramT || converted && info.includes(converted);
 						}
 					});
 					return isDuplicate;
-	
+
 				}
 			});
 			if (!UserANs.length) return Wkt;
@@ -2528,7 +2806,7 @@ class Reporter {
 				],
 				[AN3RR]: ['3RR']
 			};
-			const testKey: string = ANTEST ? eval(ANTEST.slice(ANTEST.lastIndexOf('/') + 1)) : '';
+			const testKey = formatANTEST(true);
 			const tarSections = tarSectionsAll[(testKey || data.page) as keyof typeof tarSectionsAll];
 			if (!tarSections) {
 				console.error(`"tarSectionsAll['${data.page}']" is undefined.`);
@@ -2550,6 +2828,123 @@ class Reporter {
 			}
 
 		});
+	}
+
+	/**
+	 * Preview duplicate reports.
+	 * @param data The return value of {@link collectData}.
+	 * @param wikitext The wikitext to parse as HTML.
+	 */
+	private previewDuplicateReports(data: ReportData, wikitext: string): void {
+
+		// Create preview dialog
+		const $preview = $('<div>')
+			.css({
+				maxHeight: '70vh',
+				maxWidth: '80vw'
+			})
+			.dialog({
+				dialogClass: 'anr-dialog anr-dialog-drpreview',
+				title: ANR + ' - Duplicate report preview',
+				height: 'auto',
+				width: 'auto',
+				modal: true,
+				close: function() {
+					// Destory the dialog and its contents when closed by any means
+					$(this).empty().dialog('destroy');
+				}
+			});
+		const $previewContent = $('<div>')
+			.prop('id', 'anr-dialog-drpreview-content')
+			.text('読み込み中')
+			.append($(lib.getIcon('load')).css('margin-left', '0.5em'));
+		$preview.append($previewContent);
+
+		// Parse wikitext to HTML
+		new mw.Api().post({
+			action: 'parse',
+			title: data.page,
+			text: wikitext,
+			prop: 'text',
+			disablelimitreport: true,
+			disableeditsection: true,
+			disabletoc: true,
+			formatversion: '2'
+		}).then((res) => {
+			const content = res && res.parse && res.parse.text;
+			if (content) {
+
+				const $body = $('<div>').prop('id', 'anr-dialog-drpreview-body');
+				$body.append(content);
+				$previewContent
+					.empty()
+					.append($body)
+					.find('a').prop('target', '_blank'); // Open all links on a new tab
+
+				$preview.dialog({
+					buttons: [
+						{
+							text: '閉じる',
+							click: () => {
+								$preview.dialog('close');
+							}
+						}
+					]
+				});
+
+				Reporter.centerDialog($preview, true);
+				Reporter.centerDialog($preview, true); // Necessary to call this twice for some reason
+				// requestAnimationFrame(() => {
+				// 	const dup = document.querySelector('.anr-preview-duplicate');
+				// 	if (dup) dup.scrollIntoView({block: 'center'});
+				// });
+
+			} else {
+				throw new Error('action=parseのエラー');
+			}
+		}).catch((_, err) => {
+			console.log(err);
+			$previewContent
+				.empty()
+				.text('プレビューの読み込みに失敗しました。')
+				.append($(lib.getIcon('cross')).css('margin-left', '0.5em'));
+			$preview.dialog({
+				buttons: [
+					{
+						text: '閉じる',
+						click: () => {
+							$preview.dialog('close');
+						}
+					}
+				]
+			});
+		});
+
+	}
+
+	/**
+	 * Watch user pages on report.
+	 * @param data The return value of {@link collectData}.
+	 * @param info The partial return value of {@link processIds}.
+	 * @returns
+	 */
+	private watchUsers(data: ReportData, info: ProcessedIds['info']) {
+		if (!data.watch) {
+			return;
+		}
+		const users = info.reduce((acc: string[], val) => {
+			if (val) {
+				const username = '利用者:' + val;
+				if (!acc.includes(username)) {
+					acc.push(username);
+				}
+			}
+			return acc;
+		}, []);
+		if (!users.length) {
+			return;
+		}
+		new mw.Api().watch(users, data.watch);
 	}
 
 }
@@ -3184,6 +3579,28 @@ function extractCidr(text: string): string|null {
 
 }
 
+/**
+ * Format the `ANTEST` variable to a processable page name.
+ * @param toWikipedia Whether to format to a page name in the Wikipedia namespace, defaulted to `false`.
+ * @returns Always `false` if `ANTEST` is set to `false`, otherwise a formatted page name.
+ */
+function formatANTEST(toWikipedia = false): string|false {
+	const prefix = '利用者:DragoTest/test/WP';
+	switch (ANTEST) {
+		case 'ANI':
+		case 'ANS':
+		case 'AN3RR':
+			return toWikipedia ? eval(ANTEST) : prefix + ANTEST;
+		default:
+			return false;
+	}
+}
+
+/**
+ * Get an \<img> tag.
+ * @param iconType
+ * @returns
+ */
 function getImage(iconType: 'exclamation'|'bar'|'clock') {
 	const img = document.createElement('img');
 	switch (iconType) {
