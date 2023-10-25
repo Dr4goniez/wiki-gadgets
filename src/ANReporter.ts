@@ -359,54 +359,42 @@ class Config {
 		this.watchExpiry.getMenu().selectItemByData(cfg.watchExpiry);
 		this.headerColor = new OO.ui.TextInputWidget({
 			id: 'anrc-headercolor',
-			value: cfg.headerColor
+			value: cfg.headerColor,
+			placeholder: 'カラー名またはHEXコードを入力'
 		});
 		this.backgroundColor = new OO.ui.TextInputWidget({
 			id: 'anrc-backgroundcolor',
-			value: cfg.backgroundColor
+			value: cfg.backgroundColor,
+			placeholder: 'カラー名またはHEXコードを入力'
 		});
 		this.portletlinkPosition = new OO.ui.TextInputWidget({
 			id: 'anrc-portletlinkposition',
-			value: cfg.portletlinkPosition
+			value: cfg.portletlinkPosition,
+			placeholder: '「報告」リンクの生成位置を随意入力'
 		});
 
 		// Add the config options to the fieldset
 		this.fieldset.addItems([
 			new OO.ui.FieldLayout(this.reasons, {
 				label: '定形理由',
-				align: 'top'
+				align: 'top',
+				help: '登録した定形理由はドロップダウンからコピーできます。'
 			}),
 			new OO.ui.FieldLayout(this.blockCheck, {
-				label: 'ブロックチェック',
-				align: 'inline',
-				help: new OO.ui.HtmlSnippet(
-					'報告対象者の既存ブロック設定を、報告時に事前チェックするかを指定します。' +
-					'<i>この設定はダイアログ上で変更可能です。</i>'
-				)
+				label: '報告前にブロック状態をチェック',
+				align: 'inline'
 			}),
 			new OO.ui.FieldLayout(this.duplicateCheck, {
-				label: '重複報告チェック',
-				align: 'inline',
-				help: new OO.ui.HtmlSnippet(
-					'重複報告の有無を、報告時に事前チェックするかを指定します。' +
-					'<i>この設定はダイアログ上で変更可能です。</i>'
-				)
+				label: '報告前に重複報告をチェック',
+				align: 'inline'
 			}),
 			new OO.ui.FieldLayout(this.watchUser, {
 				label: '報告対象者をウォッチ',
-				align: 'inline',
-				help: new OO.ui.HtmlSnippet(
-					'報告対象者をウォッチするか否かを指定します。' +
-					'<i>この設定はダイアログ上で変更可能です。</i>'
-				)
+				align: 'inline'
 			}),
 			new OO.ui.FieldLayout(this.watchExpiry, {
 				label: 'ウォッチ期間',
-				align: 'top',
-				help: new OO.ui.HtmlSnippet(
-					'報告対象者をウォッチする際の期間を設定します。' +
-					'<i>この設定はダイアログ上で変更可能です。</i>'
-				)
+				align: 'top'
 			}),
 			new OO.ui.FieldLayout(this.headerColor, {
 				label: 'ヘッダー色',
