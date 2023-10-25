@@ -1,4 +1,11 @@
 "use strict";
+/*********************************************************************************\
+    AN Reporter
+    @author [[User:Dragoniez]]
+    @version 8.0.0
+    @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
+\*********************************************************************************/
+//<nowiki>
 var __assign = (this && this.__assign) || function () {
     __assign = Object.assign || function(t) {
         for (var s, i = 1, n = arguments.length; i < n; i++) {
@@ -19,7 +26,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     }
     return to.concat(ar || Array.prototype.slice.call(from));
 };
-//<nowiki>
 (function () {
     // ******************************************************************************************
     // Across-the-board variables
@@ -31,7 +37,25 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     /**
      * This variable being a string means that we're in a debugging mode. (cf. {@link Reporter.collectData})
      */
-    var ANTEST = 'ANS';
+    var ANTEST = false;
+    /**
+     * Format the `ANTEST` variable to a processable page name.
+     * @param toWikipedia Whether to format to a page name in the Wikipedia namespace, defaulted to `false`.
+     * @returns Always `false` if `ANTEST` is set to `false`, otherwise a formatted page name.
+     */
+    var formatANTEST = function (toWikipedia) {
+        if (toWikipedia === void 0) { toWikipedia = false; }
+        if (typeof ANTEST === 'string') {
+            return toWikipedia ? eval(ANTEST) : '利用者:DragoTest/test/WP' + ANTEST;
+        }
+        else {
+            return false;
+        }
+    };
+    /**
+     * Whether to use the library on testwiki.
+     */
+    var useDevLibrary = false;
     var ad = ' ([[利用者:Dragoniez/scripts/AN_Reporter|AN Reporter]])';
     var lib;
     var mwString;
@@ -52,7 +76,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         /** Whether the user is on the config page. */
         var onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(ANReporterConfig|ANRC)$/i.test(mw.config.get('wgTitle'));
         // Load the library and dependent modules, then go on to the main procedure
-        loadLibrary(false).then(function (libReady) {
+        loadLibrary(useDevLibrary).then(function (libReady) {
             if (!libReady)
                 return;
             // Main procedure
@@ -162,8 +186,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         }
         // Set up the elements
         heading.textContent = ANR + 'の設定';
-        content.innerHTML = 'インターフェースを読み込み中 ';
-        content.appendChild(lib.getIcon('load'));
+        content.innerHTML = 'インターフェースを読み込み中';
+        content.appendChild(getImage('load', 'margin-left: 0.5em;'));
         return { heading: heading, content: content };
     }
     /**
@@ -194,7 +218,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * @requires mediawiki.api - Used to save the config
          */
         function Config($container) {
-            var _this = this;
+            var _this_1 = this;
             // Transparent overlay of the container used to make elements in it unclickable
             this.$overlay = $('<div>').prop('id', 'anrc-container-overlay').hide();
             $container.after(this.$overlay);
@@ -332,20 +356,20 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             // Event listeners
             var headerColorTimeout;
             this.headerColor.$input.off('input').on('input', function () {
-                var _this = this;
+                var _this_1 = this;
                 // Change the background color of span that demonstrates the color of the dialog header
                 clearTimeout(headerColorTimeout);
                 headerColorTimeout = setTimeout(function () {
-                    $headerColorDemo.css('background-color', _this.value);
+                    $headerColorDemo.css('background-color', _this_1.value);
                 }, 500);
             });
             var backgroundColorTimeout;
             this.backgroundColor.$input.off('input').on('input', function () {
-                var _this = this;
+                var _this_1 = this;
                 // Change the background color of span that demonstrates the color of the dialog body
                 clearTimeout(backgroundColorTimeout);
                 backgroundColorTimeout = setTimeout(function () {
-                    $backgroundColorDemo.css('background-color', _this.value);
+                    $backgroundColorDemo.css('background-color', _this_1.value);
                 }, 500);
             });
             // Buttons
@@ -357,7 +381,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 flags: 'destructive'
             });
             resetButton.$element.off('click').on('click', function () {
-                _this.reset();
+                _this_1.reset();
             });
             $buttonGroup1.append(resetButton.$element);
             var $buttonGroup2 = $('<div>').addClass('anrc-buttonwrapper');
@@ -368,7 +392,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 flags: ['primary', 'progressive']
             });
             this.saveButton.$element.off('click').on('click', function () {
-                _this.save();
+                _this_1.save();
             });
             $buttonGroup2.append(this.saveButton.$element);
             // Append the buttons to the container
@@ -413,21 +437,21 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * Reset the options to their default values.
          */
         Config.prototype.reset = function () {
-            var _this = this;
+            var _this_1 = this;
             OO.ui.confirm('設定をリセットしますか？').then(function (confirmed) {
                 if (!confirmed) {
                     mw.notify('キャンセルしました。');
                     return;
                 }
                 var defaultCfg = Config.merge(true);
-                _this.reasons.setValue('');
-                _this.blockCheck.setSelected(defaultCfg.blockCheck);
-                _this.duplicateCheck.setSelected(defaultCfg.duplicateCheck);
-                _this.watchUser.setSelected(defaultCfg.watchUser);
-                _this.watchExpiry.getMenu().selectItemByData(defaultCfg.watchExpiry);
-                _this.headerColor.setValue(defaultCfg.headerColor).$input.trigger('input');
-                _this.backgroundColor.setValue(defaultCfg.backgroundColor).$input.trigger('input');
-                _this.portletlinkPosition.setValue('');
+                _this_1.reasons.setValue('');
+                _this_1.blockCheck.setSelected(defaultCfg.blockCheck);
+                _this_1.duplicateCheck.setSelected(defaultCfg.duplicateCheck);
+                _this_1.watchUser.setSelected(defaultCfg.watchUser);
+                _this_1.watchExpiry.getMenu().selectItemByData(defaultCfg.watchExpiry);
+                _this_1.headerColor.setValue(defaultCfg.headerColor).$input.trigger('input');
+                _this_1.backgroundColor.setValue(defaultCfg.backgroundColor).$input.trigger('input');
+                _this_1.portletlinkPosition.setValue('');
                 mw.notify('設定をリセットしました。', { type: 'success' });
             });
         };
@@ -443,13 +467,11 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * @requires mediawiki.api
          */
         Config.prototype.save = function () {
-            var _this = this;
+            var _this_1 = this;
             this.setOverlay(true);
             // Change the save button's label
             var $label = $('<span>');
-            var spinner = lib.getIcon('load');
-            spinner.style.marginRight = '1em';
-            $label.append(spinner);
+            $label.append(getImage('load', 'margin-right: 1em;'));
             var textNode = document.createTextNode('設定を保存しています...');
             $label.append(textNode);
             this.saveButton.setIcon(null).setLabel($label);
@@ -467,7 +489,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 blockCheck: this.blockCheck.isSelected(),
                 duplicateCheck: this.duplicateCheck.isSelected(),
                 watchUser: this.watchUser.isSelected(),
-                // @ts-ignore
                 watchExpiry: this.watchExpiry.getMenu().findSelectedItem().getData(),
                 headerColor: this.headerColor.getValue(),
                 backgroundColor: this.backgroundColor.getValue(),
@@ -491,8 +512,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 else {
                     mw.notify('保存しました。', { type: 'success' });
                 }
-                _this.saveButton.setIcon('bookmarkOutline').setLabel('設定を保存');
-                _this.setOverlay(false);
+                _this_1.saveButton.setIcon('bookmarkOutline').setLabel('設定を保存');
+                _this_1.setOverlay(false);
             });
         };
         /**
@@ -501,7 +522,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         Config.key = 'userjs-anreporter';
         return Config;
     }());
-    /** Create a '報告' portlet link. */
+    /**
+     * Create a Reporter portlet link.
+     * @returns The Reporter portlet link.
+     */
     function createPortletLink() {
         var cfg = Config.merge();
         var portletlinkPosition = '';
@@ -526,7 +550,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     portletlinkPosition = 'p-cactions';
             }
         }
-        var portlet = mw.util.addPortletLink(portletlinkPosition, '#', '報告β', 'ca-anr2', '管理者伝言板に利用者を報告', undefined, '#ca-move');
+        var portlet = mw.util.addPortletLink(portletlinkPosition, '#', '報告', 'ca-anr', '管理者伝言板に利用者を報告');
         return portlet || null;
     }
     /**
@@ -563,6 +587,30 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 // Dialog
                 '.anr-hidden {' + // Used to show/hide elements on the dialog (by Reporter.toggle)
                 'display: none;' +
+                '}' +
+                '#anr-dialog-configlink-wrapper {' +
+                'text-align: right;' +
+                '}' +
+                '#anr-dialog-configlink,' +
+                '.anr-dialog input[type="button"] {' +
+                'display: inline-block;' +
+                'margin-left: auto;' +
+                'margin-right: 0;' +
+                'cursor: pointer;' +
+                'padding: 1px 6px;' +
+                'border: 1px solid #777777;' +
+                'border-radius: 3px;' +
+                'background-color: #f8f9fa;' +
+                'box-shadow: 1px 1px #cccccc;' +
+                'box-sizing: border-box;' +
+                '}' +
+                '#anr-dialog-configlink:hover,' +
+                '.anr-dialog input[type="button"]:hover {' +
+                'background-color: white;' +
+                '}' +
+                '#anr-dialog-configlink > span {' +
+                'vertical-align: middle;' +
+                'line-height: initial;' +
                 '}' +
                 '#anr-dialog-preview-content,' +
                 '#anr-dialog-drpreview-content {' +
@@ -665,7 +713,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '.anr-option-hideuser > label {' +
                 'margin-left: 0.2em;' +
                 '}' +
-                '.anr-option-blockstatus > a {' +
+                '.anr-option-blockstatus > a,' +
+                '#anr-dialog-progress-error-message {' +
                 'color: mediumvioletred;' +
                 '}' +
                 '#anr-dialog-progress-field img {' +
@@ -682,9 +731,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '}' +
                 '#anr-dialog-preview-body .autocomment a {' + // Change the color of the section link in summary
                 'color: gray;' +
-                '}' +
-                '#anr-dialog-progress-error-message {' +
-                'color: mediumvioletred;' +
                 '}' +
                 // Dialog colors
                 '.anr-dialog.ui-dialog-content,' +
@@ -734,7 +780,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * @returns
          */
         IdList.prototype.fetchIds = function (username) {
-            var _this = this;
+            var _this_1 = this;
             var ret = {};
             return new mw.Api().get({
                 action: 'query',
@@ -758,7 +804,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     ret.diffid = resCont[0].revid;
                 }
                 if (Object.keys(ret).length) {
-                    _this.list[username] = __assign({}, ret);
+                    _this_1.list[username] = __assign({}, ret);
                 }
                 return ret;
             }).catch(function (_, err) {
@@ -773,7 +819,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * @returns
          */
         IdList.prototype.getUsername = function (id, type) {
-            var _this = this;
+            var _this_1 = this;
             // Attempt to convert the ID without making an HTTP request
             var registeredUsername = this.getRegisteredUsername(id, type);
             if (registeredUsername) {
@@ -784,10 +830,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             return fetcher(id).then(function (username) {
                 if (username) {
                     username = User.formatName(username);
-                    if (!_this.list[username]) {
-                        _this.list[username] = {};
+                    if (!_this_1.list[username]) {
+                        _this_1.list[username] = {};
                     }
-                    _this.list[username][type] = id;
+                    _this_1.list[username][type] = id;
                 }
                 return username;
             });
@@ -874,7 +920,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * asynchronous procedures are externally handled by {@link new}.
          */
         function Reporter() {
-            var _this = this;
+            var _this_1 = this;
             this.cfg = Config.merge();
             Reporter.blockStatus = {}; // Reset
             // Create dialog contour
@@ -893,12 +939,23 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     $(this).empty().dialog('destroy');
                 }
             });
+            // Create button that redirects the user to the config page
+            var $config = $('<div>');
+            $config.prop('id', 'anr-dialog-configlink-wrapper');
+            var $configLink = $('<label>')
+                .prop('id', 'anr-dialog-configlink')
+                .append(getImage('gear', 'margin-right: 0.5em;'), $('<span>').text('設定'))
+                .off('click').on('click', function () {
+                window.open(mw.util.getUrl('特別:ANReporterConfig'), '_blank');
+            });
+            $config.append($configLink);
+            this.$dialog.append($config);
             // Create progress container
             this.$progress = $('<div>');
             this.$progress
                 .prop('id', 'anr-dialog-progress')
-                .css('padding', '1em')
-                .append(document.createTextNode('読み込み中'), $(lib.getIcon('load')).css('margin-left', '0.5em'));
+                .css('padding', '1em') // Will be removed in Reporter.new
+                .append(document.createTextNode('読み込み中'), getImage('load', 'margin-left: 0.5em;'));
             this.$dialog.append(this.$progress);
             // Create option container
             this.$content = $('<div>');
@@ -922,7 +979,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '<option>' + ANS + '</option>' +
                 '<option>' + AN3RR + '</option>')
                 .off('change').on('change', function () {
-                _this.switchSectionDropdown();
+                _this_1.switchSectionDropdown();
             });
             var $pageDropdownWrapper = Reporter.wrapElement($pageWrapper, this.$page); // As important as above
             this.$fieldset.append($pageWrapper);
@@ -947,7 +1004,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 disabled: true
             })
                 .off('change').on('change', function () {
-                _this.setPageLink();
+                _this_1.setPageLink();
             });
             var $sectionDropdownWrapper = Reporter.wrapElement(this.$sectionWrapper, this.$section);
             this.$fieldset.append(this.$sectionWrapper);
@@ -965,7 +1022,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '<option>その他</option>' +
                 '</optgroup>')
                 .off('change').on('change', function () {
-                _this.setPageLink();
+                _this_1.setPageLink();
             });
             var $sectionAnsDropdownWrapper = Reporter.wrapElement(this.$sectionAnsWrapper, this.$sectionAns);
             this.$fieldset.append(this.$sectionAnsWrapper);
@@ -983,23 +1040,23 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.Users = [
                 new User($addButtonWrapper, { removable: false })
             ];
-            // eslint-disable-next-line @typescript-eslint/no-this-alias
-            var self = this;
             this.$addButton.off('click').on('click', function () {
+                // eslint-disable-next-line @typescript-eslint/no-this-alias
+                var _this = _this_1;
                 new User($addButtonWrapper, {
                     addCallback: function (User) {
                         var minWidth = User.$label.outerWidth() + 'px';
                         $.each([User.$wrapper, User.$hideUserWrapper, User.$idLinkWrapper, User.$blockStatusWrapper], function (_, $wrapper) {
                             $wrapper.children('.anr-option-label').css('min-width', minWidth);
                         });
-                        self.Users.push(User);
+                        _this.Users.push(User);
                     },
                     removeCallback: function (User) {
-                        var idx = self.Users.findIndex(function (U) { return U.id === User.id; });
+                        var idx = _this.Users.findIndex(function (U) { return U.id === User.id; });
                         if (idx !== -1) { // Should never be -1
-                            var U = self.Users[idx];
+                            var U = _this.Users[idx];
                             U.$wrapper.remove();
-                            self.Users.splice(idx, 1);
+                            _this.Users.splice(idx, 1);
                         }
                     }
                 });
@@ -1012,7 +1069,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
              * (Bound to the change event of a \<select> element.)
              *
              * Copy the selected value to the clipboard and reset the selection.
-             * @param this
              */
             var copyThenResetSelection = function () {
                 lib.copyToClipboard(this.value, 'ja');
@@ -1073,7 +1129,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             });
             addCommentElements.$wrapper.append(this.$comment);
             this.$addComment.off('change').on('change', function () {
-                Reporter.toggle(_this.$comment, _this.$addComment.prop('checked'));
+                Reporter.toggle(_this_1.$comment, _this_1.$addComment.prop('checked'));
             }).trigger('change');
             // Create "block check" option
             var checkBlockElements = createLabelledCheckbox('報告前にブロック状態をチェック', { checkboxId: 'anr-option-checkblock' });
@@ -1113,7 +1169,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 .append(document.createTextNode('期間: '), this.$watchExpiry);
             watchUserElements.$wrapper.append($watchExpiryWrapper);
             this.$watchUser.off('change').on('change', function () {
-                Reporter.toggle($watchExpiryWrapper, _this.$watchUser.prop('checked'));
+                Reporter.toggle($watchExpiryWrapper, _this_1.$watchUser.prop('checked'));
             }).trigger('change');
             // Set all the row labels to the same width
             Reporter.setWidestWidth($('.anr-option-label'));
@@ -1353,20 +1409,20 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * Set the main dialog buttons.
          */
         Reporter.prototype.setMainButtons = function () {
-            var _this = this;
+            var _this_1 = this;
             this.$dialog.dialog({
                 buttons: [
                     {
                         text: '報告',
-                        click: function () { return _this.report(); }
+                        click: function () { return _this_1.report(); }
                     },
                     {
                         text: 'プレビュー',
-                        click: function () { return _this.preview(); }
+                        click: function () { return _this_1.preview(); }
                     },
                     {
                         text: '閉じる',
-                        click: function () { return _this.close(); }
+                        click: function () { return _this_1.close(); }
                     }
                 ]
             });
@@ -1570,7 +1626,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 };
             });
         };
-        // -- Methods related to the dialog buttons of "report" and "preview"
+        // -- Methods related to the dialog buttons of "report" and "preview" --
         /**
          * Collect option values.
          * @returns `null` if there's some error.
@@ -1605,19 +1661,19 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             // Look for errors
             var $errList = $('<ul>');
             if (!page) {
-                $errList.append($('<li>報告先のページ名が未指定</li>'));
+                $errList.append($('<li>').text('報告先のページ名が未指定'));
             }
             if (!section) {
-                $errList.append($('<li>報告先のセクション名が未指定</li>'));
+                $errList.append($('<li>').text('報告先のセクション名が未指定'));
             }
             if (!users.length) {
-                $errList.append($('<li>報告対象者が未指定</li>'));
+                $errList.append($('<li>').text('報告対象者が未指定'));
             }
             if (hasInvalidId) {
-                $errList.append($('<li>数字ではないID</li>'));
+                $errList.append($('<li>').text('数字ではないID'));
             }
             if (!reason) {
-                $errList.append($('<li>報告理由が未指定</li>'));
+                $errList.append($('<li>').text('報告理由が未指定'));
             }
             var errLen = $errList.children('li').length;
             if (errLen) {
@@ -1827,7 +1883,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * @returns
          */
         Reporter.prototype.preview = function () {
-            var _this = this;
+            var _this_1 = this;
             var data = this.collectData();
             if (!data)
                 return;
@@ -1850,11 +1906,11 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             var $previewContent = $('<div>')
                 .prop('id', 'anr-dialog-preview-content')
                 .text('読み込み中')
-                .append($(lib.getIcon('load')).css('margin-left', '0.5em'));
+                .append(getImage('load', 'margin-left: 0.5em;'));
             $preview.append($previewContent);
             this.processIds(data).then(function (_a) {
                 var info = _a.info;
-                var _b = _this.createReport(data, info), text = _b.text, summary = _b.summary;
+                var _b = _this_1.createReport(data, info), text = _b.text, summary = _b.summary;
                 new mw.Api().post({
                     action: 'parse',
                     title: data.page,
@@ -1904,7 +1960,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     $previewContent
                         .empty()
                         .text('プレビューの読み込みに失敗しました。')
-                        .append($(lib.getIcon('cross')).css('margin-left', '0.5em'));
+                        .append(getImage('cross', 'margin-left: 0.5em;'));
                     $preview.dialog({
                         buttons: [
                             {
@@ -1923,7 +1979,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * @returns
          */
         Reporter.prototype.report = function () {
-            var _this = this;
+            var _this_1 = this;
             // Collect dialog data and check for errors
             var data = this.collectData();
             if (!data)
@@ -1935,12 +1991,12 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$dialog.dialog({ buttons: [] });
             var $progressField = $('<fieldset>').prop('id', 'anr-dialog-progress-field');
             this.$progress.append($progressField);
-            $progressField.append($('<legend>').text('報告の進捗'), $('<div>').prop('id', 'anr-dialog-progress-icons').append(lib.getIcon('check'), document.createTextNode('処理通過'), getImage('exclamation'), document.createTextNode('要確認'), getImage('bar'), document.createTextNode('スキップ'), getImage('clock'), document.createTextNode('待機中'), lib.getIcon('cross'), document.createTextNode('処理失敗')), $('<hr>'));
+            $progressField.append($('<legend>').text('報告の進捗'), $('<div>').prop('id', 'anr-dialog-progress-icons').append(getImage('check'), document.createTextNode('処理通過'), getImage('exclamation'), document.createTextNode('要確認'), getImage('bar'), document.createTextNode('スキップ'), getImage('clock'), document.createTextNode('待機中'), getImage('cross'), document.createTextNode('処理失敗')), $('<hr>'));
             var $progressTable = $('<table>');
             $progressField.append($progressTable);
             var $dupUsersRow = $('<tr>');
             $progressTable.append($dupUsersRow);
-            var $dupUsersLabel = $('<td>').append(lib.getIcon('load'));
+            var $dupUsersLabel = $('<td>').append(getImage('load'));
             var $dupUsersText = $('<td>').text('利用者名重複');
             $dupUsersRow.append($dupUsersLabel, $dupUsersText);
             var $dupUsersListRow = $('<tr>');
@@ -1952,7 +2008,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.toggle($dupUsersListRow, false);
             var $blockedUsersRow = $('<tr>');
             $progressTable.append($blockedUsersRow);
-            var $blockedUsersLabel = $('<td>').append(data.blockCheck ? getImage('clock') : getImage('bar'));
+            var $blockedUsersLabel = $('<td>').append(getImage(data.blockCheck ? 'clock' : 'bar'));
             var $blockedUsersText = $('<td>').text('既存ブロック');
             $blockedUsersRow.append($blockedUsersLabel, $blockedUsersText);
             var $blockedUsersListRow = $('<tr>');
@@ -1964,7 +2020,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.toggle($blockedUsersListRow, false);
             var $dupReportsRow = $('<tr>');
             $progressTable.append($dupReportsRow);
-            var $dupReportsLabel = $('<td>').append(data.duplicateCheck ? getImage('clock') : getImage('bar'));
+            var $dupReportsLabel = $('<td>').append(getImage(data.duplicateCheck ? 'clock' : 'bar'));
             var $dupReportsText = $('<td>').text('重複報告');
             $dupReportsRow.append($dupReportsLabel, $dupReportsText);
             var $dupReportsButtonRow = $('<tr>');
@@ -2001,7 +2057,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 (function () {
                     var def = $.Deferred();
                     if (!users.length) {
-                        $dupUsersLabel.empty().append(lib.getIcon('check'));
+                        $dupUsersLabel.empty().append(getImage('check'));
                         def.resolve(true);
                     }
                     else {
@@ -2011,29 +2067,29 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                             $dupUsersList.append($li);
                         });
                         Reporter.toggle($dupUsersListRow, true);
-                        _this.$dialog.dialog({
+                        _this_1.$dialog.dialog({
                             buttons: [
                                 {
                                     text: '続行',
                                     click: function () {
                                         Reporter.toggle($dupUsersListRow, false);
-                                        _this.$dialog.dialog({ buttons: [] });
+                                        _this_1.$dialog.dialog({ buttons: [] });
                                         def.resolve(true);
                                     }
                                 },
                                 {
                                     text: '戻る',
                                     click: function () {
-                                        Reporter.toggle(_this.$progress, false);
-                                        Reporter.toggle(_this.$content, true);
-                                        _this.setMainButtons();
+                                        Reporter.toggle(_this_1.$progress, false);
+                                        Reporter.toggle(_this_1.$content, true);
+                                        _this_1.setMainButtons();
                                         def.resolve(false);
                                     }
                                 },
                                 {
                                     text: '閉じる',
                                     click: function () {
-                                        _this.close();
+                                        _this_1.close();
                                         def.resolve(false);
                                     }
                                 }
@@ -2048,17 +2104,17 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                         return;
                     var deferreds = [];
                     if (data.blockCheck && data.duplicateCheck) {
-                        $blockedUsersLabel.empty().append(lib.getIcon('load'));
-                        $dupReportsLabel.empty().append(lib.getIcon('load'));
-                        deferreds.push(_this.checkBlocks(info), _this.checkDuplicateReports(data, info));
+                        $blockedUsersLabel.empty().append(getImage('load'));
+                        $dupReportsLabel.empty().append(getImage('load'));
+                        deferreds.push(_this_1.checkBlocks(info), _this_1.checkDuplicateReports(data, info));
                     }
                     else if (data.blockCheck) {
-                        $blockedUsersLabel.empty().append(lib.getIcon('load'));
-                        deferreds.push(_this.checkBlocks(info), $.Deferred().resolve(void 0));
+                        $blockedUsersLabel.empty().append(getImage('load'));
+                        deferreds.push(_this_1.checkBlocks(info), $.Deferred().resolve(void 0));
                     }
                     else if (data.duplicateCheck) {
-                        $dupReportsLabel.empty().append(lib.getIcon('load'));
-                        deferreds.push($.Deferred().resolve(void 0), _this.checkDuplicateReports(data, info));
+                        $dupReportsLabel.empty().append(getImage('load'));
+                        deferreds.push($.Deferred().resolve(void 0), _this_1.checkDuplicateReports(data, info));
                     }
                     else {
                         deferreds.push($.Deferred().resolve(void 0), $.Deferred().resolve(void 0));
@@ -2070,7 +2126,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                             // Process the result of block check
                             if (blocked) {
                                 if (!blocked.length) {
-                                    $blockedUsersLabel.empty().append(lib.getIcon('check'));
+                                    $blockedUsersLabel.empty().append(getImage('check'));
                                 }
                                 else {
                                     $blockedUsersLabel.empty().append(getImage('exclamation'));
@@ -2089,7 +2145,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                             }
                             // Process the result of duplicate report check
                             if (dup instanceof lib.Wikitext) {
-                                $dupReportsLabel.empty().append(lib.getIcon('check'));
+                                $dupReportsLabel.empty().append(getImage('check'));
                             }
                             else if (typeof dup === 'string') {
                                 $dupReportsLabel.empty().append(getImage('exclamation'));
@@ -2097,14 +2153,14 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                                     .prop('type', 'button')
                                     .val('確認')
                                     .off('click').on('click', function () {
-                                    _this.previewDuplicateReports(data, dup);
+                                    _this_1.previewDuplicateReports(data, dup);
                                 }));
                                 Reporter.toggle($dupReportsButtonRow, true);
                                 mw.notify('重複報告を検出しました。', { type: 'warn' });
                                 stop = true;
                             }
                             else if (dup === false || dup === null) {
-                                $dupReportsLabel.empty().append(lib.getIcon('cross'));
+                                $dupReportsLabel.empty().append(getImage('cross'));
                                 mw.notify("\u91CD\u8907\u5831\u544A\u30C1\u30A7\u30C3\u30AF\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002(".concat(dup === null ? '通信エラー' : 'ページ非存在', ")"), { type: 'error' });
                                 stop = true;
                             }
@@ -2115,30 +2171,30 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                                 def.resolve(void 0);
                             }
                             else {
-                                _this.$dialog.dialog({
+                                _this_1.$dialog.dialog({
                                     buttons: [
                                         {
                                             text: '続行',
                                             click: function () {
                                                 Reporter.toggle($blockedUsersListRow, false);
                                                 Reporter.toggle($dupReportsButtonRow, false);
-                                                _this.$dialog.dialog({ buttons: [] });
+                                                _this_1.$dialog.dialog({ buttons: [] });
                                                 def.resolve(void 0);
                                             }
                                         },
                                         {
                                             text: '戻る',
                                             click: function () {
-                                                Reporter.toggle(_this.$progress, false);
-                                                Reporter.toggle(_this.$content, true);
-                                                _this.setMainButtons();
+                                                Reporter.toggle(_this_1.$progress, false);
+                                                Reporter.toggle(_this_1.$content, true);
+                                                _this_1.setMainButtons();
                                                 def.reject(); // Reject
                                             }
                                         },
                                         {
                                             text: '閉じる',
                                             click: function () {
-                                                _this.close();
+                                                _this_1.close();
                                                 def.reject(); // Reject
                                             }
                                         }
@@ -2148,42 +2204,42 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                             return def.promise();
                         })()
                             .done(function (inheritedWkt) {
-                            $reportLabel.empty().append(lib.getIcon('load'));
-                            var report = _this.createReport(data, info);
+                            $reportLabel.empty().append(getImage('load'));
+                            var report = _this_1.createReport(data, info);
                             var reportText = report.text;
                             var summary = report.summary;
                             var errorHandler = function (err) {
                                 console.error(err);
-                                $reportLabel.empty().append(lib.getIcon('cross'));
+                                $reportLabel.empty().append(getImage('cross'));
                                 $errorMessage.text(err.message);
                                 $errorReportText.val(reportText);
                                 $errorReportSummary.val(summary.replace(new RegExp(mw.util.escapeRegExp(ad) + '$'), ''));
                                 Reporter.toggle($errorWrapper, true);
                                 mw.notify('報告に失敗しました。', { type: 'error' });
-                                _this.$dialog.dialog({
+                                _this_1.$dialog.dialog({
                                     buttons: [
                                         {
                                             text: '再試行',
-                                            click: function () { return _this.report(); }
+                                            click: function () { return _this_1.report(); }
                                         },
                                         {
                                             text: '報告先',
                                             click: function () {
-                                                window.open(_this.$pageLink.prop('href'), '_blank');
+                                                window.open(_this_1.$pageLink.prop('href'), '_blank');
                                             }
                                         },
                                         {
                                             text: '戻る',
                                             click: function () {
-                                                Reporter.toggle(_this.$progress, false);
-                                                Reporter.toggle(_this.$content, true);
-                                                _this.setMainButtons();
+                                                Reporter.toggle(_this_1.$progress, false);
+                                                Reporter.toggle(_this_1.$content, true);
+                                                _this_1.setMainButtons();
                                             }
                                         },
                                         {
                                             text: '閉じる',
                                             click: function () {
-                                                _this.close();
+                                                _this_1.close();
                                             }
                                         }
                                     ]
@@ -2242,7 +2298,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                                 else {
                                     sectionContent = lib.clean(sectionContent) + '\n\n' + reportText;
                                 }
-                                _this.watchUsers(data, info);
+                                _this_1.watchUsers(data, info);
                                 var _c = Wkt.getRevision(), basetimestamp = _c.basetimestamp, curtimestamp = _c.curtimestamp;
                                 new mw.Api().postWithEditToken({
                                     action: 'edit',
@@ -2255,27 +2311,27 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                                     formatversion: '2'
                                 }).then(function (res) {
                                     if (res && res.edit && res.edit.result === 'Success') {
-                                        $reportLabel.empty().append(lib.getIcon('check'));
+                                        $reportLabel.empty().append(getImage('check'));
                                         mw.notify('報告が完了しました。', { type: 'success' });
-                                        _this.$dialog.dialog({
+                                        _this_1.$dialog.dialog({
                                             buttons: [
                                                 {
                                                     text: '報告先',
                                                     click: function () {
-                                                        window.open(_this.$pageLink.prop('href'), '_blank');
+                                                        window.open(_this_1.$pageLink.prop('href'), '_blank');
                                                     }
                                                 },
                                                 {
                                                     text: '閉じる',
                                                     click: function () {
-                                                        _this.close();
+                                                        _this_1.close();
                                                     }
                                                 }
                                             ]
                                         });
                                     }
                                     else {
-                                        errorHandler(new Error("\u5831\u544A\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002(\u4E0D\u660E\u306A\u30A8\u30E9\u30FC)"));
+                                        errorHandler(new Error('報告に失敗しました。(不明なエラー)'));
                                     }
                                 }).catch(function (code, err) {
                                     console.warn(err);
@@ -2293,6 +2349,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * @returns An array of blocked users and IPs.
          */
         Reporter.prototype.checkBlocks = function (userInfoArray) {
+            var _this_1 = this;
             var users = [];
             var ips = [];
             for (var _i = 0, userInfoArray_1 = userInfoArray; _i < userInfoArray_1.length; _i++) {
@@ -2358,7 +2415,17 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 });
             };
             return $.when(processUsers(users), processIps(ips)).then(function (blockedUsers, blockedIps) {
-                return blockedUsers.concat(blockedIps);
+                var blocked = blockedUsers.concat(blockedIps);
+                // Update block status info
+                users.concat(ips).forEach(function (user) {
+                    if (Reporter.blockStatus[user]) {
+                        Reporter.blockStatus[user].blocked = blocked.includes(user);
+                    }
+                });
+                _this_1.Users.forEach(function (U) {
+                    U.processTypeChange(); // Toggle the visibility of block status links
+                });
+                return blocked;
             });
         };
         /**
@@ -2452,7 +2519,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 var wikitext = Wkt.wikitext;
                 var spanStart = '<span class="anr-preview-duplicate">';
                 UserANs.reverse().forEach(function (Temp) {
-                    wikitext = Temp.replaceIn(wikitext, { with: "".concat(spanStart).concat(Temp.renderOriginal(), "</span>") });
+                    wikitext = Temp.replaceIn(wikitext, { with: spanStart + Temp.renderOriginal() + '</span>' });
                 });
                 if (wikitext === Wkt.wikitext)
                     return Wkt;
@@ -2524,7 +2591,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             var $previewContent = $('<div>')
                 .prop('id', 'anr-dialog-drpreview-content')
                 .text('読み込み中')
-                .append($(lib.getIcon('load')).css('margin-left', '0.5em'));
+                .append(getImage('load', 'margin-left: 0.5em;'));
             $preview.append($previewContent);
             // Parse wikitext to HTML
             new mw.Api().post({
@@ -2539,6 +2606,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             }).then(function (res) {
                 var content = res && res.parse && res.parse.text;
                 if (content) {
+                    // Append the parsed HTML to the preview dialog
                     var $body = $('<div>').prop('id', 'anr-dialog-drpreview-body');
                     $body.append(content);
                     $previewContent
@@ -2555,12 +2623,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                             }
                         ]
                     });
+                    // Center the preview dialog and scroll to the first duplicate report
                     Reporter.centerDialog($preview, true);
                     Reporter.centerDialog($preview, true); // Necessary to call this twice for some reason
-                    // requestAnimationFrame(() => {
-                    // 	const dup = document.querySelector('.anr-preview-duplicate');
-                    // 	if (dup) dup.scrollIntoView({block: 'center'});
-                    // });
+                    $('.anr-dialog-drpreview').children('.ui-dialog-content').eq(0).scrollTop($('.anr-preview-duplicate').position().top);
                 }
                 else {
                     throw new Error('action=parseのエラー');
@@ -2570,7 +2636,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 $previewContent
                     .empty()
                     .text('プレビューの読み込みに失敗しました。')
-                    .append($(lib.getIcon('cross')).css('margin-left', '0.5em'));
+                    .append(getImage('cross', 'margin-left: 0.5em;'));
                 $preview.dialog({
                     buttons: [
                         {
@@ -2608,8 +2674,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             new mw.Api().watch(users, data.watch);
         };
         /**
-         * Storage of the return value of {@link getBlockStatus}. This property is static, meaning that it is initialized
-         * only once on DOM ready.
+         * Storage of the return value of {@link getBlockStatus}.
+         *
+         * This property is initialized every time when the constructor is called. This per se would tempt one to make the method non-static,
+         * but this isn't an option because the property is accessed by {@link getBlockStatus}, which is a static method.
          */
         Reporter.blockStatus = {};
         return Reporter;
@@ -2659,7 +2727,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
          * @param options
          */
         function User($next, options) {
-            var _this = this;
+            var _this_1 = this;
             options = Object.assign({ removable: true }, options || {});
             // Create user pane row
             this.$wrapper = Reporter.createRow();
@@ -2677,9 +2745,9 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     .prop('title', 'SHIFTクリックで除去')
                     .off('click').on('click', function (e) {
                     if (e.shiftKey) { // Remove the user pane when the label is shift-clicked
-                        _this.$wrapper.remove();
+                        _this_1.$wrapper.remove();
                         if (options && options.removeCallback) {
-                            options.removeCallback(_this);
+                            options.removeCallback(_this_1);
                         }
                     }
                 });
@@ -2690,7 +2758,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             this.$type // Initialize
                 .prop('disabled', true) // Disable
                 .off('change').on('change', function () {
-                _this.processTypeChange();
+                _this_1.processTypeChange();
             })
                 .children('option').eq(5).prop('selected', true); // Select 'none'
             $typeWrapper.append(this.$type);
@@ -2707,7 +2775,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 .off('input').on('input', function () {
                 clearTimeout(inputTimeout);
                 inputTimeout = setTimeout(function () {
-                    _this.processInputChange();
+                    _this_1.processInputChange();
                 }, 350);
             });
             var $userWrapper = Reporter.wrapElement(this.$wrapper, this.$input);
@@ -2720,7 +2788,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             var hideUserElements = createLabelledCheckbox('利用者名を隠す', { alterClasses: ['anr-option-hideuser'] });
             this.$hideUser = hideUserElements.$checkbox;
             this.$hideUser.off('change').on('change', function () {
-                _this.processHideUserChange();
+                _this_1.processHideUserChange();
             });
             this.$hideUserLabel = hideUserElements.$label;
             this.$hideUserWrapper.append(hideUserElements.$wrapper);
@@ -2732,8 +2800,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.createRowLabel(this.$idLinkWrapper, '');
             this.$idLink = $('<a>');
             this.$idLink.prop('target', '_blank');
-            this.$idLinkWrapper
-                .append($('<div>').addClass('anr-option-idlink').append(this.$idLink));
+            this.$idLinkWrapper.append($('<div>').addClass('anr-option-idlink').append(this.$idLink));
             this.$wrapper.append(this.$idLinkWrapper);
             Reporter.toggle(this.$idLinkWrapper, false);
             // Append a block status link
@@ -2742,8 +2809,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             Reporter.createRowLabel(this.$blockStatusWrapper, '');
             this.$blockStatus = $('<a>');
             this.$blockStatus.prop('target', '_blank').text('ブロックあり');
-            this.$blockStatusWrapper
-                .append($('<div>').addClass('anr-option-blockstatus').append(this.$blockStatus));
+            this.$blockStatusWrapper.append($('<div>').addClass('anr-option-blockstatus').append(this.$blockStatus));
             this.$wrapper.append(this.$blockStatusWrapper);
             Reporter.toggle(this.$blockStatusWrapper, false);
             if (options.addCallback) {
@@ -2798,6 +2864,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         /**
          * Change the hidden state of the options in the type dropdown.
          * @param types An array of type options to make visible. The element at index 0 will be selected.
+         * @returns
          */
         User.prototype.setTypeOptions = function (types) {
             this.$type.children('option').each(function (_, opt) {
@@ -2812,6 +2879,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         };
         /**
          * Update the visibility of auxiliary wrappers when the selection is changed in the type dropdown.
+         * @returns
          */
         User.prototype.processTypeChange = function () {
             var selectedType = this.processAuxiliaryElements().getType();
@@ -2893,6 +2961,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         /**
          * Set up the display text and the href of the block status link
          * @param username
+         * @returns
          */
         User.prototype.processBlockStatus = function (username) {
             username = User.formatName(username);
@@ -2923,9 +2992,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         /**
          * Evaluate the input value, figure out its user type (and block status if relevant), and change selection
          * in the type dropdown (which proceeds to {@link processTypeChange}).
+         * @returns
          */
         User.prototype.processInputChange = function () {
-            var _this = this;
+            var _this_1 = this;
             var def = $.Deferred();
             var typeMap = {
                 ip: ['IP2', 'none'],
@@ -2943,23 +3013,24 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                     if (/^\d+$/.test(username) && obj.usertype === 'user') {
                         typeMap.user.push('logid', 'diff');
                     }
-                    _this.setTypeOptions(typeMap[obj.usertype]).$type.prop('disabled', false);
-                    _this.processTypeChange();
-                    def.resolve(_this);
+                    _this_1.setTypeOptions(typeMap[obj.usertype]).$type.prop('disabled', false);
+                    _this_1.processTypeChange();
+                    def.resolve(_this_1);
                 });
             }
             return def.promise();
         };
         /**
          * Process the change event of the hideuser checkbox and do a username-ID conversion.
+         * @returns
          */
         User.prototype.processHideUserChange = function () {
-            var _this = this;
+            var _this_1 = this;
             // Show a spinner aside the hideuser checkbox label
-            var $processing = $(lib.getIcon('load')).css('margin-left', '0.5em');
+            var $processing = $(getImage('load', 'margin-left: 0.5em;'));
             this.$hideUserLabel.append($processing);
             this.setOverlay(true);
-            /*!*
+            /*!
              * Error handlers. If the catch block is ever reached, there should be some problem with either processInputChange
              * or processTypeChange because the hideuser checkbox should be unclickable when the variables would be substituted
              * by an unexpected value.
@@ -2993,19 +3064,19 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 return idList.getIds(inputVal).then(function (_a) {
                     var logid = _a.logid, diffid = _a.diffid;
                     if (typeof logid === 'number') {
-                        _this.setName(logid.toString()).setTypeOptions(['logid', 'diff', 'none']).processTypeChange();
+                        _this_1.setName(logid.toString()).setTypeOptions(['logid', 'diff', 'none']).processTypeChange();
                         mw.notify("\u5229\u7528\u8005\u540D\u300C".concat(inputVal, "\u300D\u3092\u30ED\u30B0ID\u306B\u5909\u63DB\u3057\u307E\u3057\u305F\u3002"), { type: 'success' });
                     }
                     else if (typeof diffid === 'number') {
-                        _this.setName(diffid.toString()).setTypeOptions(['diff', 'logid', 'none']).processTypeChange();
+                        _this_1.setName(diffid.toString()).setTypeOptions(['diff', 'logid', 'none']).processTypeChange();
                         mw.notify("\u5229\u7528\u8005\u540D\u300C".concat(inputVal, "\u300D\u3092\u5DEE\u5206ID\u306B\u5909\u63DB\u3057\u307E\u3057\u305F\u3002"), { type: 'success' });
                     }
                     else {
-                        _this.$hideUser.prop('checked', !checked);
+                        _this_1.$hideUser.prop('checked', !checked);
                         mw.notify("\u5229\u7528\u8005\u540D\u300C".concat(inputVal, "\u300D\u3092ID\u306B\u5909\u63DB\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"), { type: 'warn' });
                     }
                     $processing.remove();
-                    return _this.setOverlay(false);
+                    return _this_1.setOverlay(false);
                 });
             }
             else { // ID to username
@@ -3013,17 +3084,17 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 var idTypeJa_1 = selectedType === 'logid' ? 'ログ' : '差分';
                 return idList.getUsername(parseInt(inputVal), idType).then(function (username) {
                     if (username) {
-                        return _this.setName(username).processInputChange().then(function () {
+                        return _this_1.setName(username).processInputChange().then(function () {
                             mw.notify("".concat(idTypeJa_1, "ID\u300C").concat(inputVal, "\u300D\u3092\u5229\u7528\u8005\u540D\u306B\u5909\u63DB\u3057\u307E\u3057\u305F\u3002"), { type: 'success' });
                             $processing.remove();
-                            return _this.setOverlay(false);
+                            return _this_1.setOverlay(false);
                         });
                     }
                     else {
-                        _this.$hideUser.prop('checked', !checked);
+                        _this_1.$hideUser.prop('checked', !checked);
                         mw.notify("".concat(idTypeJa_1, "ID\u300C").concat(inputVal, "\u300D\u3092\u5229\u7528\u8005\u540D\u306B\u5909\u63DB\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"), { type: 'warn' });
                         $processing.remove();
-                        return _this.setOverlay(false);
+                        return _this_1.setOverlay(false);
                     }
                 });
             }
@@ -3049,6 +3120,40 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         };
         return User;
     }());
+    /**
+     * Get an \<img> tag.
+     * @param iconType
+     * @param cssText Additional styles to apply (Default styles: `vertical-align: middle; height: 1em; border: 0;`)
+     * @returns
+     */
+    function getImage(iconType, cssText) {
+        if (cssText === void 0) { cssText = ''; }
+        var img = (function () {
+            if (iconType === 'load' || iconType === 'check' || iconType === 'cross' || iconType === 'cancel') {
+                return lib.getIcon(iconType);
+            }
+            else {
+                var tag = document.createElement('img');
+                switch (iconType) {
+                    case 'gear':
+                        tag.src = 'https://upload.wikimedia.org/wikipedia/commons/0/05/OOjs_UI_icon_advanced.svg';
+                        break;
+                    case 'exclamation':
+                        tag.src = 'https://upload.wikimedia.org/wikipedia/commons/c/c6/OOjs_UI_icon_alert-warning-black.svg';
+                        break;
+                    case 'bar':
+                        tag.src = 'https://upload.wikimedia.org/wikipedia/commons/e/e5/OOjs_UI_icon_subtract.svg';
+                        break;
+                    case 'clock':
+                        tag.src = 'https://upload.wikimedia.org/wikipedia/commons/8/85/OOjs_UI_icon_clock-progressive.svg';
+                }
+                tag.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
+                return tag;
+            }
+        })();
+        img.style.cssText += cssText;
+        return img;
+    }
     /**
      * Add \<option>s to a dropdown by referring to object data.
      * @param $dropdown
@@ -3130,43 +3235,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
         else {
             return null;
         }
-    }
-    /**
-     * Format the `ANTEST` variable to a processable page name.
-     * @param toWikipedia Whether to format to a page name in the Wikipedia namespace, defaulted to `false`.
-     * @returns Always `false` if `ANTEST` is set to `false`, otherwise a formatted page name.
-     */
-    function formatANTEST(toWikipedia) {
-        if (toWikipedia === void 0) { toWikipedia = false; }
-        var prefix = '利用者:DragoTest/test/WP';
-        switch (ANTEST) {
-            case 'ANI':
-            case 'ANS':
-            case 'AN3RR':
-                return toWikipedia ? eval(ANTEST) : prefix + ANTEST;
-            default:
-                return false;
-        }
-    }
-    /**
-     * Get an \<img> tag.
-     * @param iconType
-     * @returns
-     */
-    function getImage(iconType) {
-        var img = document.createElement('img');
-        switch (iconType) {
-            case 'exclamation':
-                img.src = 'https://upload.wikimedia.org/wikipedia/commons/c/c6/OOjs_UI_icon_alert-warning-black.svg';
-                break;
-            case 'bar':
-                img.src = 'https://upload.wikimedia.org/wikipedia/commons/e/e5/OOjs_UI_icon_subtract.svg';
-                break;
-            case 'clock':
-                img.src = 'https://upload.wikimedia.org/wikipedia/commons/8/85/OOjs_UI_icon_clock-progressive.svg';
-        }
-        img.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
-        return img;
     }
     // ******************************************************************************************
     // Entry point

@@ -1,4 +1,11 @@
+/*********************************************************************************\
+	AN Reporter
+	@author [[User:Dragoniez]]
+	@version 8.0.0
+	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
+\*********************************************************************************/
 //<nowiki>
+
 (() => {
 // ******************************************************************************************
 
@@ -10,10 +17,27 @@ const ANR = 'AN Reporter';
 const ANI = 'Wikipedia:管理者伝言板/投稿ブロック';
 const ANS = 'Wikipedia:管理者伝言板/投稿ブロック/ソックパペット';
 const AN3RR = 'Wikipedia:管理者伝言板/3RR';
+
 /**
  * This variable being a string means that we're in a debugging mode. (cf. {@link Reporter.collectData})
  */
-const ANTEST: 'ANI'|'ANS'|'AN3RR'|false = 'ANS';
+const ANTEST: 'ANI'|'ANS'|'AN3RR'|false = false;
+/**
+ * Format the `ANTEST` variable to a processable page name.
+ * @param toWikipedia Whether to format to a page name in the Wikipedia namespace, defaulted to `false`.
+ * @returns Always `false` if `ANTEST` is set to `false`, otherwise a formatted page name.
+ */
+const formatANTEST = (toWikipedia = false): string|false => {
+	if (typeof ANTEST === 'string') {
+		return toWikipedia ? eval(ANTEST) : '利用者:DragoTest/test/WP' + ANTEST;
+	} else {
+		return false;
+	}
+};
+/**
+ * Whether to use the library on testwiki.
+ */
+const useDevLibrary = false;
 
 const ad = ' ([[利用者:Dragoniez/scripts/AN_Reporter|AN Reporter]])';
 
@@ -43,7 +67,7 @@ function init() {
 	const onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(ANReporterConfig|ANRC)$/i.test(mw.config.get('wgTitle'));
 
 	// Load the library and dependent modules, then go on to the main procedure
-	loadLibrary(false).then((libReady) => {
+	loadLibrary(useDevLibrary).then((libReady) => {
 
 		if (!libReady) return;
 
@@ -155,8 +179,8 @@ function loadConfigInterface(): {
 
 	// Set up the elements
 	heading.textContent = ANR + 'の設定';
-	content.innerHTML = 'インターフェースを読み込み中 ';
-	content.appendChild(lib.getIcon('load'));
+	content.innerHTML = 'インターフェースを読み込み中';
+	content.appendChild(getImage('load', 'margin-left: 0.5em;'));
 
 	return {heading, content};
 
@@ -240,7 +264,7 @@ class Config {
 		}
 
 		// Objectify the user config
-		const strCfg: string = mw.user.options.get(this.key) || '{}';
+		const strCfg = <string|null>mw.user.options.get(this.key) || '{}';
 		let userCfg: ANReporterConfig;
 		try {
 			userCfg = JSON.parse(strCfg);
@@ -515,9 +539,7 @@ class Config {
 
 		// Change the save button's label
 		const $label = $('<span>');
-		const spinner = lib.getIcon('load');
-		spinner.style.marginRight = '1em';
-		$label.append(spinner);
+		$label.append(getImage('load', 'margin-right: 1em;'));
 		const textNode = document.createTextNode('設定を保存しています...');
 		$label.append(textNode);
 		this.saveButton.setIcon(null).setLabel($label);
@@ -536,8 +558,7 @@ class Config {
 			blockCheck: this.blockCheck.isSelected(),
 			duplicateCheck: this.duplicateCheck.isSelected(),
 			watchUser: this.watchUser.isSelected(),
-			// @ts-ignore
-			watchExpiry: this.watchExpiry.getMenu().findSelectedItem().getData(), // Always a string
+			watchExpiry: (this.watchExpiry.getMenu().findSelectedItem() as OO.ui.OptionWidget).getData() as string,
 			headerColor: this.headerColor.getValue(),
 			backgroundColor: this.backgroundColor.getValue(),
 			portletlinkPosition: this.portletlinkPosition.getValue()
@@ -568,7 +589,10 @@ class Config {
 
 }
 
-/** Create a '報告' portlet link. */
+/**
+ * Create a Reporter portlet link.
+ * @returns The Reporter portlet link.
+ */
 function createPortletLink(): HTMLLIElement|null {
 
 	const cfg = Config.merge();
@@ -598,11 +622,9 @@ function createPortletLink(): HTMLLIElement|null {
 	const portlet = mw.util.addPortletLink(
 		portletlinkPosition,
 		'#',
-		'報告β',
-		'ca-anr2',
-		'管理者伝言板に利用者を報告',
-		undefined,
-		'#ca-move'
+		'報告',
+		'ca-anr',
+		'管理者伝言板に利用者を報告'
 	);
 	return portlet || null;
 
@@ -642,6 +664,30 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		// Dialog
 		'.anr-hidden {' + // Used to show/hide elements on the dialog (by Reporter.toggle)
 			'display: none;' +
+		'}' +
+		'#anr-dialog-configlink-wrapper {' +
+			'text-align: right;' +
+		'}' +
+		'#anr-dialog-configlink,' +
+		'.anr-dialog input[type="button"] {' +
+			'display: inline-block;' +
+			'margin-left: auto;' +
+			'margin-right: 0;' +
+			'cursor: pointer;' +
+			'padding: 1px 6px;' +
+			'border: 1px solid #777777;' +
+			'border-radius: 3px;' +
+			'background-color: #f8f9fa;' +
+			'box-shadow: 1px 1px #cccccc;' +
+			'box-sizing: border-box;' +
+		'}' +
+		'#anr-dialog-configlink:hover,' +
+		'.anr-dialog input[type="button"]:hover {' +
+			'background-color: white;' +
+		'}' +
+		'#anr-dialog-configlink > span {' +
+			'vertical-align: middle;' +
+			'line-height: initial;' +
 		'}' +
 		'#anr-dialog-preview-content,' +
 		'#anr-dialog-drpreview-content {' +
@@ -744,7 +790,8 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'.anr-option-hideuser > label {' +
 			'margin-left: 0.2em;' +
 		'}' +
-		'.anr-option-blockstatus > a {' +
+		'.anr-option-blockstatus > a,' +
+		'#anr-dialog-progress-error-message {' +
 			'color: mediumvioletred;' +
 		'}' +
 		'#anr-dialog-progress-field img {' +
@@ -761,9 +808,6 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'}' +
 		'#anr-dialog-preview-body .autocomment a {' +  // Change the color of the section link in summary
 			'color: gray;' +
-		'}' +
-		'#anr-dialog-progress-error-message {' +
-			'color: mediumvioletred;' +
 		'}' +
 		// Dialog colors
 		'.anr-dialog.ui-dialog-content,' +
@@ -797,7 +841,7 @@ class IdList {
 	/**
 	 * The list object of objects, keyed by usernames.
 	 *
-	 * The usernames are formatted by `lib.clean` and spaces in it are represented by underscores.
+	 * The usernames are formatted by `lib.clean` and underscores in it are represented by spaces.
 	 */
 	list: {
 		[username: string]: EventIds;
@@ -1091,14 +1135,29 @@ class Reporter {
 				}
 			});
 
+		// Create button that redirects the user to the config page
+		const $config = $('<div>');
+		$config.prop('id', 'anr-dialog-configlink-wrapper');
+		const $configLink = $('<label>')
+			.prop('id', 'anr-dialog-configlink')
+			.append(
+				getImage('gear', 'margin-right: 0.5em;'),
+				$('<span>').text('設定')
+			)
+			.off('click').on('click', () => {
+				window.open(mw.util.getUrl('特別:ANReporterConfig'), '_blank');
+			});
+		$config.append($configLink);
+		this.$dialog.append($config);
+
 		// Create progress container
 		this.$progress = $('<div>');
 		this.$progress
 			.prop('id', 'anr-dialog-progress')
-			.css('padding', '1em')
+			.css('padding', '1em') // Will be removed in Reporter.new
 			.append(
 				document.createTextNode('読み込み中'),
-				$(lib.getIcon('load')).css('margin-left', '0.5em')
+				getImage('load', 'margin-left: 0.5em;')
 			);
 		this.$dialog.append(this.$progress);
 
@@ -1196,23 +1255,23 @@ class Reporter {
 		this.Users = [
 			new User($addButtonWrapper, {removable: false})
 		];
-		// eslint-disable-next-line @typescript-eslint/no-this-alias
-		const self = this;
 		this.$addButton.off('click').on('click', () => {
+			// eslint-disable-next-line @typescript-eslint/no-this-alias
+			const _this = this;
 			new User($addButtonWrapper, {
 				addCallback(User) {
 					const minWidth = User.$label.outerWidth()! + 'px';
 					$.each([User.$wrapper, User.$hideUserWrapper, User.$idLinkWrapper, User.$blockStatusWrapper], (_, $wrapper) => {
 						$wrapper.children('.anr-option-label').css('min-width', minWidth);
 					});
-					self.Users.push(User);
+					_this.Users.push(User);
 				},
 				removeCallback(User) {
-					const idx = self.Users.findIndex((U) => U.id === User.id);
+					const idx = _this.Users.findIndex((U) => U.id === User.id);
 					if (idx !== -1) { // Should never be -1
-						const U = self.Users[idx];
+						const U = _this.Users[idx];
 						U.$wrapper.remove();
-						self.Users.splice(idx, 1);
+						_this.Users.splice(idx, 1);
 					}
 				}
 			});
@@ -1226,7 +1285,6 @@ class Reporter {
 		 * (Bound to the change event of a \<select> element.)
 		 *
 		 * Copy the selected value to the clipboard and reset the selection.
-		 * @param this
 		 */
 		const copyThenResetSelection = function(this: HTMLSelectElement) {
 			lib.copyToClipboard(this.value, 'ja');
@@ -1770,8 +1828,10 @@ class Reporter {
 	}
 
 	/**
-	 * Storage of the return value of {@link getBlockStatus}. This property is static, meaning that it is initialized
-	 * only once on DOM ready.
+	 * Storage of the return value of {@link getBlockStatus}.
+	 *
+	 * This property is initialized every time when the constructor is called. This per se would tempt one to make the method non-static,
+	 * but this isn't an option because the property is accessed by {@link getBlockStatus}, which is a static method.
 	 */
 	static blockStatus: {[username: string]: BlockStatus;} = {};
 
@@ -1830,7 +1890,7 @@ class Reporter {
 
 	}
 
-	// -- Methods related to the dialog buttons of "report" and "preview"
+	// -- Methods related to the dialog buttons of "report" and "preview" --
 
 	/**
 	 * Collect option values.
@@ -1869,19 +1929,19 @@ class Reporter {
 		// Look for errors
 		const $errList = $('<ul>');
 		if (!page) {
-			$errList.append($('<li>報告先のページ名が未指定</li>'));
+			$errList.append($('<li>').text('報告先のページ名が未指定'));
 		}
 		if (!section) {
-			$errList.append($('<li>報告先のセクション名が未指定</li>'));
+			$errList.append($('<li>').text('報告先のセクション名が未指定'));
 		}
 		if (!users.length) {
-			$errList.append($('<li>報告対象者が未指定</li>'));
+			$errList.append($('<li>').text('報告対象者が未指定'));
 		}
 		if (hasInvalidId) {
-			$errList.append($('<li>数字ではないID</li>'));
+			$errList.append($('<li>').text('数字ではないID'));
 		}
 		if (!reason) {
-			$errList.append($('<li>報告理由が未指定</li>'));
+			$errList.append($('<li>').text('報告理由が未指定'));
 		}
 		const errLen = $errList.children('li').length;
 		if (errLen) {
@@ -2125,7 +2185,7 @@ class Reporter {
 		const $previewContent = $('<div>')
 			.prop('id', 'anr-dialog-preview-content')
 			.text('読み込み中')
-			.append($(lib.getIcon('load')).css('margin-left', '0.5em'));
+			.append(getImage('load', 'margin-left: 0.5em;'));
 		$preview.append($previewContent);
 
 		this.processIds(data).then(({info}) => {
@@ -2187,7 +2247,7 @@ class Reporter {
 				$previewContent
 					.empty()
 					.text('プレビューの読み込みに失敗しました。')
-					.append($(lib.getIcon('cross')).css('margin-left', '0.5em'));
+					.append(getImage('cross', 'margin-left: 0.5em;'));
 				$preview.dialog({
 					buttons: [
 						{
@@ -2224,7 +2284,7 @@ class Reporter {
 		$progressField.append(
 			$('<legend>').text('報告の進捗'),
 			$('<div>').prop('id', 'anr-dialog-progress-icons').append(
-				lib.getIcon('check'),
+				getImage('check'),
 				document.createTextNode('処理通過'),
 				getImage('exclamation'),
 				document.createTextNode('要確認'),
@@ -2232,7 +2292,7 @@ class Reporter {
 				document.createTextNode('スキップ'),
 				getImage('clock'),
 				document.createTextNode('待機中'),
-				lib.getIcon('cross'),
+				getImage('cross'),
 				document.createTextNode('処理失敗')
 			),
 			$('<hr>')
@@ -2242,7 +2302,7 @@ class Reporter {
 
 		const $dupUsersRow = $('<tr>');
 		$progressTable.append($dupUsersRow);
-		const $dupUsersLabel = $('<td>').append(lib.getIcon('load'));
+		const $dupUsersLabel = $('<td>').append(getImage('load'));
 		const $dupUsersText = $('<td>').text('利用者名重複');
 		$dupUsersRow.append($dupUsersLabel, $dupUsersText);
 
@@ -2256,7 +2316,7 @@ class Reporter {
 
 		const $blockedUsersRow = $('<tr>');
 		$progressTable.append($blockedUsersRow);
-		const $blockedUsersLabel = $('<td>').append(data.blockCheck ? getImage('clock') : getImage('bar'));
+		const $blockedUsersLabel = $('<td>').append(getImage(data.blockCheck ? 'clock': 'bar'));
 		const $blockedUsersText = $('<td>').text('既存ブロック');
 		$blockedUsersRow.append($blockedUsersLabel, $blockedUsersText);
 
@@ -2270,7 +2330,7 @@ class Reporter {
 
 		const $dupReportsRow = $('<tr>');
 		$progressTable.append($dupReportsRow);
-		const $dupReportsLabel = $('<td>').append(data.duplicateCheck ? getImage('clock') : getImage('bar'));
+		const $dupReportsLabel = $('<td>').append(getImage(data.duplicateCheck ? 'clock': 'bar'));
 		const $dupReportsText = $('<td>').text('重複報告');
 		$dupReportsRow.append($dupReportsLabel, $dupReportsText);
 
@@ -2318,7 +2378,7 @@ class Reporter {
 
 				const def = $.Deferred();
 				if (!users.length) {
-					$dupUsersLabel.empty().append(lib.getIcon('check'));
+					$dupUsersLabel.empty().append(getImage('check'));
 					def.resolve(true);
 				} else {
 					$dupUsersLabel.empty().append(getImage('exclamation'));
@@ -2366,14 +2426,14 @@ class Reporter {
 
 				const deferreds = [];
 				if (data.blockCheck && data.duplicateCheck) {
-					$blockedUsersLabel.empty().append(lib.getIcon('load'));
-					$dupReportsLabel.empty().append(lib.getIcon('load'));
+					$blockedUsersLabel.empty().append(getImage('load'));
+					$dupReportsLabel.empty().append(getImage('load'));
 					deferreds.push(this.checkBlocks(info), this.checkDuplicateReports(data, info));
 				} else if (data.blockCheck) {
-					$blockedUsersLabel.empty().append(lib.getIcon('load'));
+					$blockedUsersLabel.empty().append(getImage('load'));
 					deferreds.push(this.checkBlocks(info), $.Deferred().resolve(void 0));
 				} else if (data.duplicateCheck) {
-					$dupReportsLabel.empty().append(lib.getIcon('load'));
+					$dupReportsLabel.empty().append(getImage('load'));
 					deferreds.push($.Deferred().resolve(void 0), this.checkDuplicateReports(data, info));
 				} else {
 					deferreds.push($.Deferred().resolve(void 0), $.Deferred().resolve(void 0));
@@ -2389,7 +2449,7 @@ class Reporter {
 						// Process the result of block check
 						if (blocked) {
 							if (!blocked.length) {
-								$blockedUsersLabel.empty().append(lib.getIcon('check'));
+								$blockedUsersLabel.empty().append(getImage('check'));
 							} else {
 								$blockedUsersLabel.empty().append(getImage('exclamation'));
 								blocked.forEach((user) => {
@@ -2412,7 +2472,7 @@ class Reporter {
 
 						// Process the result of duplicate report check
 						if (dup instanceof lib.Wikitext) {
-							$dupReportsLabel.empty().append(lib.getIcon('check'));
+							$dupReportsLabel.empty().append(getImage('check'));
 						} else if (typeof dup === 'string') {
 							$dupReportsLabel.empty().append(getImage('exclamation'));
 							$dupReportsButtonCell.append(
@@ -2427,7 +2487,7 @@ class Reporter {
 							mw.notify('重複報告を検出しました。', {type: 'warn'});
 							stop = true;
 						} else if (dup === false || dup === null) {
-							$dupReportsLabel.empty().append(lib.getIcon('cross'));
+							$dupReportsLabel.empty().append(getImage('cross'));
 							mw.notify(`重複報告チェックに失敗しました。(${dup === null ? '通信エラー' : 'ページ非存在'})`, {type: 'error'});
 							stop = true;
 						}
@@ -2473,7 +2533,7 @@ class Reporter {
 					})()
 					.done((inheritedWkt) => { // Called only when resolved
 
-						$reportLabel.empty().append(lib.getIcon('load'));
+						$reportLabel.empty().append(getImage('load'));
 						const report = this.createReport(data, info);
 						let reportText = report.text;
 						const summary = report.summary;
@@ -2482,7 +2542,7 @@ class Reporter {
 
 							console.error(err);
 
-							$reportLabel.empty().append(lib.getIcon('cross'));
+							$reportLabel.empty().append(getImage('cross'));
 							$errorMessage.text(err.message);
 							$errorReportText.val(reportText);
 							$errorReportSummary.val(summary.replace(new RegExp(mw.util.escapeRegExp(ad) + '$'), ''));
@@ -2590,7 +2650,7 @@ class Reporter {
 								formatversion: '2'
 							}).then((res) => {
 								if (res && res.edit && res.edit.result === 'Success') {
-									$reportLabel.empty().append(lib.getIcon('check'));
+									$reportLabel.empty().append(getImage('check'));
 									mw.notify('報告が完了しました。', {type: 'success'});
 									this.$dialog.dialog({
 										buttons: [
@@ -2609,7 +2669,7 @@ class Reporter {
 										]
 									});
 								} else {
-									errorHandler(new Error(`報告に失敗しました。(不明なエラー)`));
+									errorHandler(new Error('報告に失敗しました。(不明なエラー)'));
 								}
 							}).catch((code, err) => {
 								console.warn(err);
@@ -2696,7 +2756,21 @@ class Reporter {
 		};
 
 		return $.when(processUsers(users), processIps(ips)).then((blockedUsers, blockedIps) => {
-			return blockedUsers.concat(blockedIps);
+
+			const blocked = blockedUsers.concat(blockedIps);
+
+			// Update block status info
+			users.concat(ips).forEach((user) => {
+				if (Reporter.blockStatus[user]) {
+					Reporter.blockStatus[user].blocked = blocked.includes(user);
+				}
+			});
+			this.Users.forEach((U) => {
+				U.processTypeChange(); // Toggle the visibility of block status links
+			});
+
+			return blocked;
+
 		});
 
 	}
@@ -2784,7 +2858,7 @@ class Reporter {
 			let wikitext = Wkt.wikitext;
 			const spanStart = '<span class="anr-preview-duplicate">';
 			UserANs.reverse().forEach((Temp) => {
-				wikitext = Temp.replaceIn(wikitext, {with: `${spanStart}${Temp.renderOriginal()}</span>`});
+				wikitext = Temp.replaceIn(wikitext, {with: spanStart + Temp.renderOriginal() + '</span>'});
 			});
 			if (wikitext === Wkt.wikitext) return Wkt;
 
@@ -2857,7 +2931,7 @@ class Reporter {
 		const $previewContent = $('<div>')
 			.prop('id', 'anr-dialog-drpreview-content')
 			.text('読み込み中')
-			.append($(lib.getIcon('load')).css('margin-left', '0.5em'));
+			.append(getImage('load', 'margin-left: 0.5em;'));
 		$preview.append($previewContent);
 
 		// Parse wikitext to HTML
@@ -2874,13 +2948,13 @@ class Reporter {
 			const content = res && res.parse && res.parse.text;
 			if (content) {
 
+				// Append the parsed HTML to the preview dialog
 				const $body = $('<div>').prop('id', 'anr-dialog-drpreview-body');
 				$body.append(content);
 				$previewContent
 					.empty()
 					.append($body)
 					.find('a').prop('target', '_blank'); // Open all links on a new tab
-
 				$preview.dialog({
 					buttons: [
 						{
@@ -2892,12 +2966,10 @@ class Reporter {
 					]
 				});
 
+				// Center the preview dialog and scroll to the first duplicate report
 				Reporter.centerDialog($preview, true);
 				Reporter.centerDialog($preview, true); // Necessary to call this twice for some reason
-				// requestAnimationFrame(() => {
-				// 	const dup = document.querySelector('.anr-preview-duplicate');
-				// 	if (dup) dup.scrollIntoView({block: 'center'});
-				// });
+				$('.anr-dialog-drpreview').children('.ui-dialog-content').eq(0).scrollTop($('.anr-preview-duplicate').position().top);
 
 			} else {
 				throw new Error('action=parseのエラー');
@@ -2907,7 +2979,7 @@ class Reporter {
 			$previewContent
 				.empty()
 				.text('プレビューの読み込みに失敗しました。')
-				.append($(lib.getIcon('cross')).css('margin-left', '0.5em'));
+				.append(getImage('cross', 'margin-left: 0.5em;'));
 			$preview.dialog({
 				buttons: [
 					{
@@ -3131,10 +3203,9 @@ class User {
 		Reporter.createRowLabel(this.$idLinkWrapper, '');
 		this.$idLink = $('<a>');
 		this.$idLink.prop('target', '_blank');
-		this.$idLinkWrapper
-			.append(
-				$('<div>').addClass('anr-option-idlink').append(this.$idLink)
-			);
+		this.$idLinkWrapper.append(
+			$('<div>').addClass('anr-option-idlink').append(this.$idLink)
+		);
 		this.$wrapper.append(this.$idLinkWrapper);
 		Reporter.toggle(this.$idLinkWrapper, false);
 
@@ -3144,10 +3215,9 @@ class User {
 		Reporter.createRowLabel(this.$blockStatusWrapper, '');
 		this.$blockStatus = $('<a>');
 		this.$blockStatus.prop('target', '_blank').text('ブロックあり');
-		this.$blockStatusWrapper
-			.append(
-				$('<div>').addClass('anr-option-blockstatus').append(this.$blockStatus)
-			);
+		this.$blockStatusWrapper.append(
+			$('<div>').addClass('anr-option-blockstatus').append(this.$blockStatus)
+		);
 		this.$wrapper.append(this.$blockStatusWrapper);
 		Reporter.toggle(this.$blockStatusWrapper, false);
 
@@ -3210,6 +3280,7 @@ class User {
 	/**
 	 * Change the hidden state of the options in the type dropdown.
 	 * @param types An array of type options to make visible. The element at index 0 will be selected.
+	 * @returns
 	 */
 	setTypeOptions(types: antype[]): User {
 		this.$type.children('option').each((_, opt) => { // Loop all the options
@@ -3225,6 +3296,7 @@ class User {
 
 	/**
 	 * Update the visibility of auxiliary wrappers when the selection is changed in the type dropdown.
+	 * @returns
 	 */
 	processTypeChange(): User {
 		const selectedType = this.processAuxiliaryElements().getType();
@@ -3264,7 +3336,7 @@ class User {
 	 * - Set up the display text and the href of the block status link (by {@link processBlockStatus}).
 	 * @returns
 	 */
-	processAuxiliaryElements(): User {
+	private processAuxiliaryElements(): User {
 
 		const selectedType = this.getType();
 		const inputVal = this.getName() || '';
@@ -3313,8 +3385,9 @@ class User {
 	/**
 	 * Set up the display text and the href of the block status link
 	 * @param username
+	 * @returns
 	 */
-	processBlockStatus(username: string): User {
+	private processBlockStatus(username: string): User {
 		username = User.formatName(username);
 		const status = Reporter.blockStatus[username];
 		if (status) {
@@ -3342,6 +3415,7 @@ class User {
 	/**
 	 * Evaluate the input value, figure out its user type (and block status if relevant), and change selection
 	 * in the type dropdown (which proceeds to {@link processTypeChange}).
+	 * @returns
 	 */
 	processInputChange(): JQueryPromise<User> {
 
@@ -3378,15 +3452,16 @@ class User {
 
 	/**
 	 * Process the change event of the hideuser checkbox and do a username-ID conversion.
+	 * @returns
 	 */
 	processHideUserChange(): JQueryPromise<User> {
 
 		// Show a spinner aside the hideuser checkbox label
-		const $processing = $(lib.getIcon('load')).css('margin-left', '0.5em');
+		const $processing = $(getImage('load', 'margin-left: 0.5em;'));
 		this.$hideUserLabel.append($processing);
 		this.setOverlay(true);
 
-		/*!*
+		/*!
 		 * Error handlers. If the catch block is ever reached, there should be some problem with either processInputChange
 		 * or processTypeChange because the hideuser checkbox should be unclickable when the variables would be substituted
 		 * by an unexpected value.
@@ -3472,6 +3547,39 @@ class User {
 		return /[@/#<>[\]|{}:]/.test(username);
 	}
 
+}
+
+/**
+ * Get an \<img> tag.
+ * @param iconType
+ * @param cssText Additional styles to apply (Default styles: `vertical-align: middle; height: 1em; border: 0;`)
+ * @returns
+ */
+function getImage(iconType: 'load'|'check'|'cross'|'cancel'|'gear'|'exclamation'|'bar'|'clock', cssText = '') {
+	const img = (() => {
+		if (iconType === 'load' || iconType === 'check' || iconType ===  'cross' || iconType === 'cancel') {
+			return lib.getIcon(iconType);
+		} else {
+			const tag = document.createElement('img');
+			switch (iconType) {
+				case 'gear':
+					tag.src = 'https://upload.wikimedia.org/wikipedia/commons/0/05/OOjs_UI_icon_advanced.svg';
+					break;
+				case 'exclamation':
+					tag.src = 'https://upload.wikimedia.org/wikipedia/commons/c/c6/OOjs_UI_icon_alert-warning-black.svg';
+					break;
+				case 'bar':
+					tag.src = 'https://upload.wikimedia.org/wikipedia/commons/e/e5/OOjs_UI_icon_subtract.svg';
+					break;
+				case 'clock':
+					tag.src = 'https://upload.wikimedia.org/wikipedia/commons/8/85/OOjs_UI_icon_clock-progressive.svg';
+			}
+			tag.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
+			return tag;
+		}
+	})();
+	img.style.cssText += cssText;
+	return img;
 }
 
 interface OptionElementData {
@@ -3577,44 +3685,6 @@ function extractCidr(text: string): string|null {
 		return null;
 	}
 
-}
-
-/**
- * Format the `ANTEST` variable to a processable page name.
- * @param toWikipedia Whether to format to a page name in the Wikipedia namespace, defaulted to `false`.
- * @returns Always `false` if `ANTEST` is set to `false`, otherwise a formatted page name.
- */
-function formatANTEST(toWikipedia = false): string|false {
-	const prefix = '利用者:DragoTest/test/WP';
-	switch (ANTEST) {
-		case 'ANI':
-		case 'ANS':
-		case 'AN3RR':
-			return toWikipedia ? eval(ANTEST) : prefix + ANTEST;
-		default:
-			return false;
-	}
-}
-
-/**
- * Get an \<img> tag.
- * @param iconType
- * @returns
- */
-function getImage(iconType: 'exclamation'|'bar'|'clock') {
-	const img = document.createElement('img');
-	switch (iconType) {
-		case 'exclamation':
-			img.src = 'https://upload.wikimedia.org/wikipedia/commons/c/c6/OOjs_UI_icon_alert-warning-black.svg';
-			break;
-		case 'bar':
-			img.src = 'https://upload.wikimedia.org/wikipedia/commons/e/e5/OOjs_UI_icon_subtract.svg';
-			break;
-		case 'clock':
-			img.src = 'https://upload.wikimedia.org/wikipedia/commons/8/85/OOjs_UI_icon_clock-progressive.svg';
-	}
-	img.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
-	return img;
 }
 
 // ******************************************************************************************
