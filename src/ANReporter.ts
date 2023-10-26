@@ -376,9 +376,9 @@ class Config {
 		// Add the config options to the fieldset
 		this.fieldset.addItems([
 			new OO.ui.FieldLayout(this.reasons, {
-				label: '定形理由',
+				label: '定型理由',
 				align: 'top',
-				help: '登録した定形理由はドロップダウンからコピーできます。'
+				help: '登録した定型理由はドロップダウンからコピーできます。'
 			}),
 			new OO.ui.FieldLayout(this.blockCheck, {
 				label: '報告前にブロック状態をチェック',
