@@ -1943,7 +1943,7 @@ class Reporter {
 		//  -- Collect secondary data --
 
 		reason += '--~~~~'; // Add signature to reason
-		const summary = lib.clean(<string>this.$comment.val()); // This is incomplete
+		const summary = this.$addComment.prop('checked') ? lib.clean(<string>this.$comment.val()) : '';
 		const blockCheck = this.$checkBlock.prop('checked');
 		const duplicateCheck = this.$checkDuplicates.prop('checked');
 		const watchUser = this.$watchUser.prop('checked');
@@ -2116,7 +2116,7 @@ class Reporter {
 		];
 		const fixedLen = fixed.join('').length; // The length of the fixed summary
 		const summaryComment = data.summary ? ' - ' + data.summary : '';
-		for (let i = 0; i < links.length; i++) { // Loop the reportee links
+		for (let i = 0; i < Math.min(5, links.length); i++) { // Loop the reportee links
 			const userLinks =
 				links.slice(0, i + 1).join(', ') + // The first "i + 1" links
 				(links.slice(i + 1).length ? `, ほか${links.slice(i + 1).length}アカウント` : ''); // and the number of the remaining links if any
@@ -2521,11 +2521,22 @@ class Reporter {
 					})()
 					.done((inheritedWkt) => { // Called only when resolved
 
+						// Recheck the target section for ANI
+						if (data.page === ANI && data.section === Reporter.getCurrentAniSection(true)) { // If the date range has changed since it was selected in the dropdown
+							this.switchSectionDropdown().$section.prop('selectedIndex', 1); // Update selection
+							data.section = this.getSection()!;
+						}
+
+						// Create report text and summary
 						$reportLabel.empty().append(getImage('load'));
 						const report = this.createReport(data, info);
 						let reportText = report.text;
 						const summary = report.summary;
 
+						/**
+						 * Handle an error thrown on an edit attempt.
+						 * @param err
+						 */
 						const errorHandler = (err: Error) => { // Picks up an Error in the then block
 
 							console.error(err);
@@ -2568,11 +2579,12 @@ class Reporter {
 
 						};
 
+						// Create a Wikitext instance for the report
 						const $when: JQueryPromise<Wikitext|false|null> =
 							inheritedWkt ?
 							$.when($.Deferred().resolve(inheritedWkt)) :
 							$.when(lib.Wikitext.newFromTitle(data.page));
-						$when.then((Wkt) => {
+						$when.then((Wkt) => { // Note: errors thrown in this block will be redirected to the catch block below
 
 							// Validate the Wikitext instance
 							if (Wkt === false) {
@@ -2581,22 +2593,22 @@ class Reporter {
 								throw new Error('通信エラーが発生しました。');
 							}
 
-							// Get the number of the section to edit
-							let sectionNum = -1;
+							// Get the index of the section to edit
+							let sectionIdx = -1;
 							let sectionContent = '';
 							for (const {title, index, content} of Wkt.parseSections()) {
 								if (title === data.section) {
-									sectionNum = index;
+									sectionIdx = index;
 									sectionContent = content;
 									break;
 								}
 							}
-							if (sectionNum === -1) {
+							if (sectionIdx === -1) {
 								throw new Error(`節「${data.section}」が見つかりませんでした。`);
 							}
 
-							// Create the new content of the section to edit
-							if (data.page === ANS || formatANTEST(true) === ANS) {
+							// Create a new content for the section to edit
+							if (data.page === ANS || formatANTEST(true) === ANS) { // ANS
 
 								// Add div if the target section is 'その他' but lacks div for the current date
 								const d = new Date();
@@ -2621,16 +2633,19 @@ class Reporter {
 									with: sockInfo.renderOriginal().replace(/\s*?\}{2}$/, '') + '\n\n' + reportText + '\n\n}}'
 								});
 
-							} else {
+							} else { // ANI or AN3RR
 								sectionContent = lib.clean(sectionContent) + '\n\n' + reportText;
 							}
 
+							// Send action=watch requests in the background (if relevant)
 							this.watchUsers(data, info);
+
+							// Edit page
 							const {basetimestamp, curtimestamp} = Wkt.getRevision()!;
 							new mw.Api().postWithEditToken({
 								action: 'edit',
 								title: data.page,
-								section: sectionNum,
+								section: sectionIdx,
 								text: sectionContent,
 								summary,
 								basetimestamp,
@@ -2983,7 +2998,8 @@ class Reporter {
 	}
 
 	/**
-	 * Watch user pages on report.
+	 * Watch user pages on report. If `data.watch` isn't a string (i.e. not a watch expiry), the method
+	 * will not send any API request of `action=watch`.
 	 * @param data The return value of {@link collectData}.
 	 * @param info The partial return value of {@link processIds}.
 	 * @returns

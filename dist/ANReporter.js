@@ -1681,7 +1681,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             }
             //  -- Collect secondary data --
             reason += '--~~~~'; // Add signature to reason
-            var summary = lib.clean(this.$comment.val()); // This is incomplete
+            var summary = this.$addComment.prop('checked') ? lib.clean(this.$comment.val()) : '';
             var blockCheck = this.$checkBlock.prop('checked');
             var duplicateCheck = this.$checkDuplicates.prop('checked');
             var watchUser = this.$watchUser.prop('checked');
@@ -1848,7 +1848,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             ];
             var fixedLen = fixed.join('').length; // The length of the fixed summary
             var summaryComment = data.summary ? ' - ' + data.summary : '';
-            for (var i = 0; i < links.length; i++) { // Loop the reportee links
+            for (var i = 0; i < Math.min(5, links.length); i++) { // Loop the reportee links
                 var userLinks = links.slice(0, i + 1).join(', ') + // The first "i + 1" links
                     (links.slice(i + 1).length ? ", \u307B\u304B".concat(links.slice(i + 1).length, "\u30A2\u30AB\u30A6\u30F3\u30C8") : ''); // and the number of the remaining links if any
                 var totalLen = fixedLen + userLinks.length + summaryComment.length; // The total length of the summary
@@ -2200,10 +2200,20 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                             return def.promise();
                         })()
                             .done(function (inheritedWkt) {
+                            // Recheck the target section for ANI
+                            if (data.page === ANI && data.section === Reporter.getCurrentAniSection(true)) { // If the date range has changed since it was selected in the dropdown
+                                _this_1.switchSectionDropdown().$section.prop('selectedIndex', 1); // Update selection
+                                data.section = _this_1.getSection();
+                            }
+                            // Create report text and summary
                             $reportLabel.empty().append(getImage('load'));
                             var report = _this_1.createReport(data, info);
                             var reportText = report.text;
                             var summary = report.summary;
+                            /**
+                             * Handle an error thrown on an edit attempt.
+                             * @param err
+                             */
                             var errorHandler = function (err) {
                                 console.error(err);
                                 $reportLabel.empty().append(getImage('cross'));
@@ -2241,6 +2251,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                                     ]
                                 });
                             };
+                            // Create a Wikitext instance for the report
                             var $when = inheritedWkt ?
                                 $.when($.Deferred().resolve(inheritedWkt)) :
                                 $.when(lib.Wikitext.newFromTitle(data.page));
@@ -2252,22 +2263,22 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                                 else if (Wkt === null) {
                                     throw new Error('通信エラーが発生しました。');
                                 }
-                                // Get the number of the section to edit
-                                var sectionNum = -1;
+                                // Get the index of the section to edit
+                                var sectionIdx = -1;
                                 var sectionContent = '';
                                 for (var _i = 0, _a = Wkt.parseSections(); _i < _a.length; _i++) {
                                     var _b = _a[_i], title = _b.title, index = _b.index, content = _b.content;
                                     if (title === data.section) {
-                                        sectionNum = index;
+                                        sectionIdx = index;
                                         sectionContent = content;
                                         break;
                                     }
                                 }
-                                if (sectionNum === -1) {
+                                if (sectionIdx === -1) {
                                     throw new Error("\u7BC0\u300C".concat(data.section, "\u300D\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F\u3002"));
                                 }
-                                // Create the new content of the section to edit
-                                if (data.page === ANS || formatANTEST(true) === ANS) {
+                                // Create a new content for the section to edit
+                                if (data.page === ANS || formatANTEST(true) === ANS) { // ANS
                                     // Add div if the target section is 'その他' but lacks div for the current date
                                     var d = new Date();
                                     var today = (d.getMonth() + 1) + '月' + d.getDate() + '日';
@@ -2291,15 +2302,17 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                                         with: sockInfo.renderOriginal().replace(/\s*?\}{2}$/, '') + '\n\n' + reportText + '\n\n}}'
                                     });
                                 }
-                                else {
+                                else { // ANI or AN3RR
                                     sectionContent = lib.clean(sectionContent) + '\n\n' + reportText;
                                 }
+                                // Send action=watch requests in the background (if relevant)
                                 _this_1.watchUsers(data, info);
+                                // Edit page
                                 var _c = Wkt.getRevision(), basetimestamp = _c.basetimestamp, curtimestamp = _c.curtimestamp;
                                 new mw.Api().postWithEditToken({
                                     action: 'edit',
                                     title: data.page,
-                                    section: sectionNum,
+                                    section: sectionIdx,
                                     text: sectionContent,
                                     summary: summary,
                                     basetimestamp: basetimestamp,
@@ -2646,7 +2659,8 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             });
         };
         /**
-         * Watch user pages on report.
+         * Watch user pages on report. If `data.watch` isn't a string (i.e. not a watch expiry), the method
+         * will not send any API request of `action=watch`.
          * @param data The return value of {@link collectData}.
          * @param info The partial return value of {@link processIds}.
          * @returns
