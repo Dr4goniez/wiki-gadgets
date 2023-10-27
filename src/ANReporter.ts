@@ -622,6 +622,27 @@ function createPortletLink(): HTMLLIElement|null {
  * Create a /<style> tag for the script.
  */
 function createStyleTag(cfg: ANReporterConfig): void {
+	let fontSize: string;
+	let select2FontSize: string;
+	switch (mw.config.get('skin')) {
+		case 'vector':
+		case 'vector-2022':
+		case 'minerva':
+			fontSize = '80%';
+			select2FontSize = '0.9em';
+			break;
+		case 'monobook':
+			fontSize = '110%';
+			select2FontSize = '1.03em';
+			break;
+		case 'timeless':
+			fontSize = '90%';
+			select2FontSize = '0.94em';
+			break;
+		default:
+			fontSize = '80%';
+			select2FontSize = '0.9em';
+	}
 	const style = document.createElement('style');
 	style.textContent =
 		// Config
@@ -650,32 +671,48 @@ function createStyleTag(cfg: ANReporterConfig): void {
 			'margin-bottom: 0.5em;' +
 		'}' +
 		// Dialog
-		'.anr-hidden {' + // Used to show/hide elements on the dialog (by Reporter.toggle)
-			'display: none;' +
+		'.anr-dialog {' +
+			'font-size: ' + fontSize + ';' +
 		'}' +
-		'#anr-dialog-configlink-wrapper {' +
-			'text-align: right;' +
+		'.anr-dialog hr {' +
+			'margin: 0.8em 0;' +
+			'background-color: #ccc;' +
 		'}' +
-		'#anr-dialog-configlink,' +
-		'.anr-dialog input[type="button"] {' +
+		'.anr-dialog input[type="text"],' +
+		'.anr-dialog textarea,' +
+		'.anr-dialog select {' +
+			'border: 1px solid #777;' +
+			'border-radius: 1%;' +
+			'background-color: white;' +
+			'padding: 2px 4px;' +
+			'box-sizing: border-box;' +
+		'}' +
+		'.anr-dialog input[type="button"],' +
+		'#anr-dialog-configlink {' +
 			'display: inline-block;' +
 			'margin-left: auto;' +
 			'margin-right: 0;' +
 			'cursor: pointer;' +
 			'padding: 1px 6px;' +
-			'border: 1px solid #777777;' +
+			'border: 1px solid #777;' +
 			'border-radius: 3px;' +
 			'background-color: #f8f9fa;' +
 			'box-shadow: 1px 1px #cccccc;' +
 			'box-sizing: border-box;' +
 		'}' +
-		'#anr-dialog-configlink:hover,' +
-		'.anr-dialog input[type="button"]:hover {' +
+		'.anr-dialog input[type="button"]:hover,' +
+		'#anr-dialog-configlink:hover {' +
 			'background-color: white;' +
+		'}' +
+		'#anr-dialog-configlink-wrapper {' +
+			'text-align: right;' +
 		'}' +
 		'#anr-dialog-configlink > span {' +
 			'vertical-align: middle;' +
 			'line-height: initial;' +
+		'}' +
+		'.anr-hidden {' + // Used to show/hide elements on the dialog (by Reporter.toggle)
+			'display: none;' +
 		'}' +
 		'#anr-dialog-preview-content,' +
 		'#anr-dialog-drpreview-content {' +
@@ -685,16 +722,12 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'#anr-dialog-progress-field {' +
 			'padding: 1em;' +
 			'margin: 0;' +
-			'border: 1px solid #cccccc;' +
+			'border: 1px solid #ccc;' +
 		'}' +
 		'#anr-dialog-optionfield > legend,' +
 		'#anr-dialog-progress-field > legend {' +
 			'font-weight: bold;' +
 			'padding-bottom: 0;' +
-		'}' +
-		'.anr-dialog hr {' +
-			'margin: 0.8em 0;' +
-			'background-color: #cccccc;' +
 		'}' +
 		'.anr-option-row:not(:last-child) {' + // Margin below every option row
 			'margin-bottom: 0.15em;' +
@@ -726,7 +759,6 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'#anr-option-reason, ' +
 		'#anr-option-comment,' +
 		'.anr-juxtaposed {' + // Assigned by Reporter.wrapElement.
-			'box-sizing: border-box;' +
 			'width: 100%;' + // Fill the remaining space ("float" and "overflow" are essential for this to work)
 		'}' +
 		'.select2-container,' + // Set up the font size of select2 options
@@ -741,7 +773,7 @@ function createStyleTag(cfg: ANReporterConfig): void {
 		'.anr-select2 .select2-results__option,' +
 		'.anr-select2 .select2-results__group {' +
 			'padding: 1px 8px;' +
-			'font-size: 0.9em;' +
+			'font-size: ' + select2FontSize + ';' +
 			'margin: 0;' +
 		'}' +
 		'.anr-disabledanchor {' + // Disabled anchor
@@ -1306,11 +1338,14 @@ class Reporter {
 		// Create predefined reason selector
 		const $predefinedWrapper = Reporter.createRow(true);
 		const $predefinedLabel = Reporter.createRowLabel($predefinedWrapper, '定型文');
-		this.$predefined = addOptions($('<select>'), [
-			{text: '選択してコピー', value: '', disabled: true, selected: true, hidden: true},
-			...this.cfg.reasons.map((el) => ({text: el}))
-		]);
-		this.$predefined.off('change').on('change', copyThenResetSelection);
+		this.$predefined = $('<select>');
+		this.$predefined
+			.prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
+			.append($('<optgroup>')
+				.css('display', 'none')
+				.prop('innerHTML', this.cfg.reasons.map((el) => '<option>' + el + '</option>').join(''))
+			)
+			.off('change').on('change', copyThenResetSelection);
 		const $predefinedDropdownWrapper = Reporter.wrapElement($predefinedWrapper, this.$predefined);
 		this.$fieldset.append($predefinedWrapper);
 		Reporter.select2(this.$predefined);
@@ -3185,6 +3220,10 @@ class User {
 			});
 		const $userWrapper = Reporter.wrapElement(this.$wrapper, this.$input);
 		$next.before(this.$wrapper);
+		let selectHeight: number;
+		if ((selectHeight = this.$type.height()!) > this.$input.height()!) {
+			this.$input.height(selectHeight);
+		}
 		Reporter.verticalAlign(this.$label, $userWrapper);
 
 		// Append a hide-user checkbox

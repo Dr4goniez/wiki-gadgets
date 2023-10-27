@@ -17,15 +17,6 @@ var __assign = (this && this.__assign) || function () {
     };
     return __assign.apply(this, arguments);
 };
-var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
-    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
-        if (ar || !(i in from)) {
-            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
-            ar[i] = from[i];
-        }
-    }
-    return to.concat(ar || Array.prototype.slice.call(from));
-};
 (function () {
     // ******************************************************************************************
     // Across-the-board variables
@@ -553,6 +544,34 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
      * Create a /<style> tag for the script.
      */
     function createStyleTag(cfg) {
+        var fontSize = (function () {
+            switch (mw.config.get('skin')) {
+                case 'vector':
+                case 'vector-2022':
+                case 'minerva':
+                    return '80%';
+                case 'monobook':
+                    return '110%';
+                case 'timeless':
+                    return '90%';
+                default:
+                    return '80%';
+            }
+        })();
+        var select2FontSize = (function () {
+            switch (mw.config.get('skin')) {
+                case 'vector':
+                case 'vector-2022':
+                case 'minerva':
+                    return '0.9em';
+                case 'monobook':
+                    return '1.03em';
+                case 'timeless':
+                    return '0.94em';
+                default:
+                    return '0.9em';
+            }
+        })();
         var style = document.createElement('style');
         style.textContent =
             // Config
@@ -581,32 +600,51 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 'margin-bottom: 0.5em;' +
                 '}' +
                 // Dialog
-                '.anr-hidden {' + // Used to show/hide elements on the dialog (by Reporter.toggle)
-                'display: none;' +
+                '.anr-dialog {' +
+                'font-size: ' + fontSize + ';' +
                 '}' +
-                '#anr-dialog-configlink-wrapper {' +
-                'text-align: right;' +
+                '.anr-dialog hr {' +
+                'margin: 0.8em 0;' +
+                'background-color: #ccc;' +
                 '}' +
-                '#anr-dialog-configlink,' +
-                '.anr-dialog input[type="button"] {' +
+                '.anr-dialog input[type="text"],' +
+                '.anr-dialog textarea,' +
+                '.anr-dialog select {' +
+                'border: 1px solid #777;' +
+                'border-radius: 1%;' +
+                'background-color: white;' +
+                'padding: 2px 4px;' +
+                'box-sizing: border-box;' +
+                '}' +
+                '.anr-dialog input[type="text"] {' +
+                'height: $select-height;' +
+                '}' +
+                '.anr-dialog input[type="button"],' +
+                '#anr-dialog-configlink {' +
                 'display: inline-block;' +
                 'margin-left: auto;' +
                 'margin-right: 0;' +
                 'cursor: pointer;' +
                 'padding: 1px 6px;' +
-                'border: 1px solid #777777;' +
+                'border: 1px solid #777;' +
                 'border-radius: 3px;' +
                 'background-color: #f8f9fa;' +
                 'box-shadow: 1px 1px #cccccc;' +
                 'box-sizing: border-box;' +
                 '}' +
-                '#anr-dialog-configlink:hover,' +
-                '.anr-dialog input[type="button"]:hover {' +
+                '.anr-dialog input[type="button"]:hover,' +
+                '#anr-dialog-configlink:hover {' +
                 'background-color: white;' +
+                '}' +
+                '#anr-dialog-configlink-wrapper {' +
+                'text-align: right;' +
                 '}' +
                 '#anr-dialog-configlink > span {' +
                 'vertical-align: middle;' +
                 'line-height: initial;' +
+                '}' +
+                '.anr-hidden {' + // Used to show/hide elements on the dialog (by Reporter.toggle)
+                'display: none;' +
                 '}' +
                 '#anr-dialog-preview-content,' +
                 '#anr-dialog-drpreview-content {' +
@@ -616,16 +654,12 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '#anr-dialog-progress-field {' +
                 'padding: 1em;' +
                 'margin: 0;' +
-                'border: 1px solid #cccccc;' +
+                'border: 1px solid #ccc;' +
                 '}' +
                 '#anr-dialog-optionfield > legend,' +
                 '#anr-dialog-progress-field > legend {' +
                 'font-weight: bold;' +
                 'padding-bottom: 0;' +
-                '}' +
-                '.anr-dialog hr {' +
-                'margin: 0.8em 0;' +
-                'background-color: #cccccc;' +
                 '}' +
                 '.anr-option-row:not(:last-child) {' + // Margin below every option row
                 'margin-bottom: 0.15em;' +
@@ -657,7 +691,6 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '#anr-option-reason, ' +
                 '#anr-option-comment,' +
                 '.anr-juxtaposed {' + // Assigned by Reporter.wrapElement.
-                'box-sizing: border-box;' +
                 'width: 100%;' + // Fill the remaining space ("float" and "overflow" are essential for this to work)
                 '}' +
                 '.select2-container,' + // Set up the font size of select2 options
@@ -672,7 +705,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
                 '.anr-select2 .select2-results__option,' +
                 '.anr-select2 .select2-results__group {' +
                 'padding: 1px 8px;' +
-                'font-size: 0.9em;' +
+                'font-size: ' + select2FontSize + ';' +
                 'margin: 0;' +
                 '}' +
                 '.anr-disabledanchor {' + // Disabled anchor
@@ -1095,10 +1128,13 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             // Create predefined reason selector
             var $predefinedWrapper = Reporter.createRow(true);
             var $predefinedLabel = Reporter.createRowLabel($predefinedWrapper, '定型文');
-            this.$predefined = addOptions($('<select>'), __spreadArray([
-                { text: '選択してコピー', value: '', disabled: true, selected: true, hidden: true }
-            ], this.cfg.reasons.map(function (el) { return ({ text: el }); }), true));
-            this.$predefined.off('change').on('change', copyThenResetSelection);
+            this.$predefined = $('<select>');
+            this.$predefined
+                .prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
+                .append($('<optgroup>')
+                .css('display', 'none')
+                .prop('innerHTML', this.cfg.reasons.map(function (el) { return '<option>' + el + '</option>'; })))
+                .off('change').on('change', copyThenResetSelection);
             var $predefinedDropdownWrapper = Reporter.wrapElement($predefinedWrapper, this.$predefined);
             this.$fieldset.append($predefinedWrapper);
             Reporter.select2(this.$predefined);
@@ -2790,6 +2826,10 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
             });
             var $userWrapper = Reporter.wrapElement(this.$wrapper, this.$input);
             $next.before(this.$wrapper);
+            var selectHeight;
+            if ((selectHeight = this.$type.height()) > this.$input.height()) {
+                this.$input.height(selectHeight);
+            }
             Reporter.verticalAlign(this.$label, $userWrapper);
             // Append a hide-user checkbox
             this.$hideUserWrapper = Reporter.createRow();
