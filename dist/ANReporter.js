@@ -2,7 +2,7 @@
 /*********************************************************************************\
     AN Reporter
     @author [[User:Dragoniez]]
-    @version 8.0.0
+    @version 8.0.1
     @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -544,34 +544,27 @@ var __assign = (this && this.__assign) || function () {
      * Create a /<style> tag for the script.
      */
     function createStyleTag(cfg) {
-        var fontSize = (function () {
-            switch (mw.config.get('skin')) {
-                case 'vector':
-                case 'vector-2022':
-                case 'minerva':
-                    return '80%';
-                case 'monobook':
-                    return '110%';
-                case 'timeless':
-                    return '90%';
-                default:
-                    return '80%';
-            }
-        })();
-        var select2FontSize = (function () {
-            switch (mw.config.get('skin')) {
-                case 'vector':
-                case 'vector-2022':
-                case 'minerva':
-                    return '0.9em';
-                case 'monobook':
-                    return '1.03em';
-                case 'timeless':
-                    return '0.94em';
-                default:
-                    return '0.9em';
-            }
-        })();
+        var fontSize;
+        var select2FontSize;
+        switch (mw.config.get('skin')) {
+            case 'vector':
+            case 'vector-2022':
+            case 'minerva':
+                fontSize = '80%';
+                select2FontSize = '0.9em';
+                break;
+            case 'monobook':
+                fontSize = '110%';
+                select2FontSize = '1.03em';
+                break;
+            case 'timeless':
+                fontSize = '90%';
+                select2FontSize = '0.94em';
+                break;
+            default:
+                fontSize = '80%';
+                select2FontSize = '0.9em';
+        }
         var style = document.createElement('style');
         style.textContent =
             // Config
@@ -615,9 +608,6 @@ var __assign = (this && this.__assign) || function () {
                 'background-color: white;' +
                 'padding: 2px 4px;' +
                 'box-sizing: border-box;' +
-                '}' +
-                '.anr-dialog input[type="text"] {' +
-                'height: $select-height;' +
                 '}' +
                 '.anr-dialog input[type="button"],' +
                 '#anr-dialog-configlink {' +
@@ -1133,7 +1123,7 @@ var __assign = (this && this.__assign) || function () {
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
                 .append($('<optgroup>')
                 .css('display', 'none')
-                .prop('innerHTML', this.cfg.reasons.map(function (el) { return '<option>' + el + '</option>'; })))
+                .prop('innerHTML', this.cfg.reasons.map(function (el) { return '<option>' + el + '</option>'; }).join('')))
                 .off('change').on('change', copyThenResetSelection);
             var $predefinedDropdownWrapper = Reporter.wrapElement($predefinedWrapper, this.$predefined);
             this.$fieldset.append($predefinedWrapper);
