@@ -3,6 +3,7 @@
 /* global mw, OO */
 //<nowiki>
 module.exports = /** @class */ (function() {
+// var MarkBLocked = /** @class */ (function() {
 
 	/** @readonly */
 	var defaultOptionKey = 'userjs-markblocked-config';
@@ -105,8 +106,8 @@ module.exports = /** @class */ (function() {
 		 */
 		/** @type {LinkRegex} */
 		this.regex = {
-			article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')), // '/wiki/PAGENAME'
-			script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)'), // '/w/index.php?title=PAGENAME'
+			article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
+			script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)'),
 			user: new RegExp('^(?:' + rContribsCA + '|' + rUser + ')([^/#]+|[a-f\\d:\\.]+/\\d\\d)$', 'i')
 		};
 
@@ -201,20 +202,26 @@ module.exports = /** @class */ (function() {
 	 * Initialize `MarkBLocked`.
 	 * @param {ConstructorConfig} [config]
 	 * @returns {JQueryPromise<MarkBLocked>}
+	 * @static
 	 */
 	MarkBLocked.init = function(config) {
 
 		var cfg = config || {};
 
 		// Wait for dependent modules and the DOM to get ready
+		var modules = [
+			'mediawiki.user',
+			'mediawiki.api',
+			'mediawiki.util',
+			'oojs-ui',
+			'oojs-ui.styles.icons-moderation',
+		];
+		var onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(markblockedconfig|mblc)$/i.test(mw.config.get('wgTitle'));
+		if (!onConfig) {
+			modules.splice(3);
+		}
 		return $.when(
-			mw.loader.using([
-				'mediawiki.user',
-				'mediawiki.api',
-				'mediawiki.util',
-				'oojs-ui',
-				'oojs-ui.styles.icons-moderation',
-			]),
+			mw.loader.using(modules),
 			$.ready
 		).then(function() { // When ready
 
@@ -223,24 +230,27 @@ module.exports = /** @class */ (function() {
 			// For backwards compatibility, clear old config if any
 			var oldOptionKey = 'userjs-gmbl-preferences';
 			var /** @type {string?} */ oldCfgStr = mw.user.options.get(oldOptionKey);
-			if (oldCfgStr) {
-				if (!mw.user.options.get(defaultOptionKey)) {
-					mw.user.options.set(defaultOptionKey, oldCfgStr);
-				}
-				api.saveOption(oldOptionKey, null).then(function() {
+			var /** @type {JQueryPromise<void>} */ backwards;
+			if (oldCfgStr && (cfg.optionKey === void 0 || cfg.optionKey === defaultOptionKey) && !mw.user.options.get(defaultOptionKey)) {
+				var /** @type {Record<string, string?>} */ params = {};
+				params[oldOptionKey] = null;
+				params[defaultOptionKey] = oldCfgStr;
+				backwards = api.saveOptions(params).then(function() {
 					mw.user.options.set(oldOptionKey, null);
+					mw.user.options.set(defaultOptionKey, oldCfgStr);
 				});
+			} else {
+				backwards = $.Deferred().resolve();
 			}
 
 			// Entry point
-			var onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(markblockedconfig|mblc)$/i.test(mw.config.get('wgTitle'));
 			var /** @type {JQueryPromise<string[]?>} */ ccaDeferred =
 				onConfig ?
 				$.Deferred().resolve([]) :
 				cfg.contribs_CA ?
 				$.Deferred().resolve(cfg.contribs_CA) :
 				MarkBLocked.getContribsCA();
-			return ccaDeferred.then(function(contribs_CA) {
+			return $.when(ccaDeferred, backwards).then(function(contribs_CA) {
 
 				if (contribs_CA) {
 					cfg.contribs_CA = contribs_CA;
@@ -255,11 +265,11 @@ module.exports = /** @class */ (function() {
 				} else {
 					MBL.createPortletLink();
 					var /** @type {NodeJS.Timeout} */ hookTimeout;
-					mw.hook('wikipage.content').add(function() {
+					mw.hook('wikipage.content').add(/** @param {JQuery<HTMLElement>} $content */ function($content) {
 						clearTimeout(hookTimeout); // Prevent hook from being triggered multiple times
 						hookTimeout = setTimeout(function() {
 							api.abort(); // Prevent the old HTTP requests from being taken over to the new markup procedure
-							MBL.markup();
+							MBL.markup($content);
 						}, 100);
 					});
 				}
@@ -275,6 +285,7 @@ module.exports = /** @class */ (function() {
 	 * Get special page aliases for `Contributions` and `CentralAuth`.
 	 * @returns {JQueryPromise<string[]?>}
 	 * @requires mediawiki.api
+	 * @static
 	 */
 	MarkBLocked.getContribsCA = function() {
 		return api.get({
@@ -425,7 +436,6 @@ module.exports = /** @class */ (function() {
 					console.warn(err);
 					return code;
 				})
-				// @ts-ignore
 				.then(/** @param {string?} err */ function(err) {
 					if (err) {
 						mw.notify(_this.getMessage('config-label-savefailed') + '(' + err + ')', {type: 'error'});
@@ -459,14 +469,14 @@ module.exports = /** @class */ (function() {
 
 	/**
 	 * Mark up user links.
+	 * @param {JQuery<HTMLElement>} $content
 	 * @returns {void}
+	 * @requires mediawiki.util
+	 * @requires mediawiki.api
 	 */
-	MarkBLocked.prototype.markup = function() {
+	MarkBLocked.prototype.markup = function($content) {
 
-		var collected = this.collectLinks();
-		if (!collected) {
-			return;
-		}
+		var collected = this.collectLinks($content);
 		var userLinks = collected.userLinks;
 		if ($.isEmptyObject(userLinks)) {
 			console.log('MarkBLocked', {
@@ -585,22 +595,17 @@ module.exports = /** @class */ (function() {
 	 */
 	/**
 	 * Collect user links to mark up.
-	 * @returns {{userLinks: UserLinks; users: string[]; ips: string[];}|void}
+	 * @param {JQuery<HTMLElement>} $content
+	 * @returns {{userLinks: UserLinks; users: string[]; ips: string[];}}
 	 * @requires mediawiki.util
 	 */
-	MarkBLocked.prototype.collectLinks = function() {
+	MarkBLocked.prototype.collectLinks = function($content) {
 
 		// Get all anchors in the page content
-		var body = document.querySelector('.mw-body-content');
-		if (!body) {
-			console.error('MarkBLocked: ".mw-body-content" does not exist in the DOM.');
-			return;
-		}
-		var /** @type {HTMLAnchorElement[]} */ anchors = Array.prototype.slice.call(body.getElementsByTagName('a'));
-		var pNamespacesId = '#p-associated-pages';
-		var pNamespaces = document.querySelector(pNamespacesId);
-		if (pNamespaces && !body.querySelector(pNamespacesId)) { // Add links in left navigation
-			anchors = Array.prototype.slice.call(pNamespaces.getElementsByTagName('a')).concat(anchors);
+		var $anchors = $content.find('a');
+		var $pNamespaces = $('#p-associated-pages');
+		if ($pNamespaces.length && !$content.find($pNamespaces).length) { // Add links in left navigation
+			$anchors.extend($pNamespaces.find('a'));
 		}
 
 		// Set up variables
@@ -611,7 +616,7 @@ module.exports = /** @class */ (function() {
 		var /** @type {UserLinks} */ userLinks = {};
 
 		// Filter out user links
-		anchors.forEach(function(a) {
+		$anchors.each(function(_, a) {
 
 			// Ignore some anchors
 			var href = a.href;
@@ -695,6 +700,7 @@ module.exports = /** @class */ (function() {
 	 * @param {UserLinks} userLinks
 	 * @param {string[]} usersArr
 	 * @returns {JQueryPromise<string[]?>} Usernames whose links are marked up (`null` if aborted).
+	 * @requires mediawiki.api
 	 */
 	MarkBLocked.prototype.markBlockedUsers = function(userLinks, usersArr) {
 
@@ -796,6 +802,7 @@ module.exports = /** @class */ (function() {
 	 * processed sequentially after the older batch is resolved.
 	 * @param {BatchObject[]} batchArray
 	 * @returns {JQueryPromise<void>}
+	 * @requires mediawiki.api
 	 */
 	function batchRequest(batchArray) {
 
