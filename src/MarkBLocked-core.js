@@ -192,7 +192,7 @@ module.exports = /** @class */ (function() {
 		return this.msg[key];
 	};
 
-	/** 
+	/**
 	 * @type {mw.Api}
 	 * @readonly
 	 */
@@ -234,7 +234,7 @@ module.exports = /** @class */ (function() {
 
 			// Entry point
 			var onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(markblockedconfig|mblc)$/i.test(mw.config.get('wgTitle'));
-			var /** @type {JQueryPromise<string[]?>} */ ccaDeferred = 
+			var /** @type {JQueryPromise<string[]?>} */ ccaDeferred =
 				onConfig ?
 				$.Deferred().resolve([]) :
 				cfg.contribs_CA ?
@@ -289,7 +289,7 @@ module.exports = /** @class */ (function() {
 					/**
 					 * @param {string[]} acc
 					 * @param {{realname: string; aliases: string[];}} obj
-					 * @returns 
+					 * @returns
 					 */
 					function(acc, obj) {
 						var /** @type {string[]} */ exclude = [];
@@ -464,8 +464,14 @@ module.exports = /** @class */ (function() {
 	MarkBLocked.prototype.markup = function() {
 
 		var collected = this.collectLinks();
+		if (!collected) {
+			return;
+		}
 		var userLinks = collected.userLinks;
 		if ($.isEmptyObject(userLinks)) {
+			console.log('MarkBLocked', {
+				links: 0
+			});
 			return;
 		}
 		var users = collected.users;
@@ -477,6 +483,12 @@ module.exports = /** @class */ (function() {
 
 			if (markedUsers === null) { // Aborted
 				return;
+			} else {
+				console.log('MarkBLocked', {
+					links: $('.mbl-userlink').length,
+					user_registered: users.length,
+					user_anonymous: ips.length
+				});
 			}
 
 			// Create a batch array for additional markups
@@ -573,38 +585,47 @@ module.exports = /** @class */ (function() {
 	 */
 	/**
 	 * Collect user links to mark up.
-	 * @returns {{userLinks: UserLinks; users: string[]; ips: string[];}}
+	 * @returns {{userLinks: UserLinks; users: string[]; ips: string[];}|void}
 	 * @requires mediawiki.util
 	 */
 	MarkBLocked.prototype.collectLinks = function() {
 
+		// Get all anchors in the page content
+		var body = document.querySelector('.mw-body-content');
+		if (!body) {
+			console.error('MarkBLocked: ".mw-body-content" does not exist in the DOM.');
+			return;
+		}
+		var /** @type {HTMLAnchorElement[]} */ anchors = Array.prototype.slice.call(body.getElementsByTagName('a'));
+		var pNamespacesId = '#p-associated-pages';
+		var pNamespaces = document.querySelector(pNamespacesId);
+		if (pNamespaces && !body.querySelector(pNamespacesId)) { // Add links in left navigation
+			anchors = Array.prototype.slice.call(pNamespaces.getElementsByTagName('a')).concat(anchors);
+		}
+
+		// Set up variables
 		var _this = this;
-		var /** @type {HTMLAnchorElement[]} */ anchors = Array.prototype.slice.call(document.querySelectorAll('.mw-body-content a'));
 		var /** @type {string[]} */ users = [];
 		var /** @type {string[]} */ ips = [];
-		var ignoredClasses = /\bmw-changeslist-/;
-		var ignoredClassesPr = /\bmw-(history|rollback)-|\bautocomment/;
+		var ignoredClassesPr = /\b(mw-rollback-|autocomment)/;
 		var /** @type {UserLinks} */ userLinks = {};
 
+		// Filter out user links
 		anchors.forEach(function(a) {
 
 			// Ignore some anchors
+			var href = a.href;
 			var pr = a.parentElement;
-			var pr2 = pr && pr.parentElement;
 			if (
+				!href ||
+				href[0] === '#' ||
+				mw.util.getParamValue('action', href) && !mw.util.getParamValue('redlink', href) ||
+				mw.util.getParamValue('diff', href) ||
+				mw.util.getParamValue('oldid', href) ||
 				a.type === 'button' ||
 				a.role === 'button' ||
-				ignoredClasses.test(a.className) ||
-				pr && ignoredClassesPr.test(pr.className) ||
-				// cur/prev revision links
-				pr2 && pr2.classList.contains('mw-history-histlinks') && pr2.classList.contains('mw-changeslist-links')
+				pr && ignoredClassesPr.test(pr.className)
 			) {
-				return;
-			}
-
-			// Get the href of the anchor
-			var href = a.href;
-			if (!href || href[0] === '#') {
 				return;
 			}
 
@@ -653,7 +674,7 @@ module.exports = /** @class */ (function() {
 			}
 
 		});
-		
+
 		return {
 			userLinks: userLinks,
 			users: users,
@@ -768,7 +789,7 @@ module.exports = /** @class */ (function() {
 	 */
 	/**
 	 * Send batched API requests.
-	 * 
+	 *
 	 * MarkBLocked has to send quite a few API requests when additional markup functionalities are enabled,
 	 * and this can lead to an `net::ERR_INSUFFICIENT_RESOURCES` error if too many requests are sent all
 	 * at once. This (private) function sends API requests by creating batches of 1000, where each batch is
