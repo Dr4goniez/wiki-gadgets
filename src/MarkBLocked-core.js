@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-this-alias */
 /* global mw, OO */
 //<nowiki>
-var MarkBLocked = /** @class */ (function() {
+module.exports = /** @class */ (function() {
 
 	/** @readonly */
 	var defaultOptionKey = 'userjs-markblocked-config';
@@ -432,7 +432,7 @@ var MarkBLocked = /** @class */ (function() {
 					} else {
 						mw.notify(_this.getMessage('config-label-savedone'), {type: 'success'});
 					}
-					saveButton.setIcon('bookmarkOutline').setLabel('設定を保存');
+					saveButton.setIcon('bookmarkOutline').setLabel(_this.getMessage('config-label-save'));
 					$overlay.hide();
 				});
 
@@ -769,7 +769,7 @@ var MarkBLocked = /** @class */ (function() {
 	/**
 	 * Send batched API requests.
 	 * 
-	 * MarkBLocked has to send quite a few API requests when additional markup functionaities are enabled,
+	 * MarkBLocked has to send quite a few API requests when additional markup functionalities are enabled,
 	 * and this can lead to an `net::ERR_INSUFFICIENT_RESOURCES` error if too many requests are sent all
 	 * at once. This (private) function sends API requests by creating batches of 1000, where each batch is
 	 * processed sequentially after the older batch is resolved.
@@ -803,7 +803,7 @@ var MarkBLocked = /** @class */ (function() {
 					if (err.exception === 'abort') {
 						aborted = true;
 					} else {
-						// console.error(err);
+						console.error(err);
 					}
 					return void 0;
 				});
