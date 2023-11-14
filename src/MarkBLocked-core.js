@@ -20,11 +20,11 @@ var MarkBLocked = /** @class */ (function() {
 	 * @property {string} [optionKey]  The key of `mw.user.options`, defaulted to `userjs-markblocked-config`.
 	 * @property {Object.<string, Lang>} [i18n] A language object to merge to {@link MarkBLocked.i18n}. Using this config makes
 	 * it possible to configure the default interface messages and add a new interface language (for the latter, a value needs
-	 * to be passed to the {@link lang} paramter.)
+	 * to be passed to the {@link lang} parameter.)
 	 * @property {string} [lang] The code of the language to use in the interface messages, defaulted to `en`.
-	 * @property {string[]} [contribs_CA] Special page alises for Contributions and CentralAuth in the local language (no need
-	 * to pass `Contributions`, `Contribs`, `CentralAuth`, `CA`, and  `GlobalAccount`).
-	 * If not provided, these are fetched from the API.
+	 * @property {string[]} [contribs_CA] Special page aliases for Contributions and CentralAuth in the local language (no need
+	 * to pass `Contributions`, `Contribs`, `CentralAuth`, `CA`, and  `GlobalAccount`). If not provided, aliases are fetched from
+	 * the API.
 	 * @property {string[]} [groupsAHL] Local user groups with the `apihighlimits` user right, defaulted to `['sysop', 'bot']`;
 	 */
 	/**
@@ -54,7 +54,7 @@ var MarkBLocked = /** @class */ (function() {
 			options = JSON.parse(optionsStr);
 		}
 		catch(err) {
-			console.log(err);
+			console.error(err);
 			options = defaultOptions;
 		}
 		/** @type {UserOptions} */
@@ -97,7 +97,7 @@ var MarkBLocked = /** @class */ (function() {
 		var rUser = '(?:' + userAliases.join('|') + '):';
 		/**
 		 * Regular expressions to collect user links.
-		 * @typedef LinkRegex {{article: RegExp; script: RegExp; user: RegExp;}}
+		 * @typedef LinkRegex
 		 * @type {object}
 		 * @property {RegExp} article `/wiki/PAGENAME`: $1: PAGENAME
 		 * @property {RegExp} script `/w/index.php?title=PAGENAME`: $1: PAGENAME
@@ -148,7 +148,7 @@ var MarkBLocked = /** @class */ (function() {
 	 * @property {string} config-label-saving
 	 * @property {string} config-label-savedone
 	 * @property {string} config-label-savefailed
-	 * @property {string} portlet-tooltip
+	 * @property {string} portlet-text
 	 */
 	/**
 	 * @type {Object.<string, Lang>}
@@ -166,7 +166,7 @@ var MarkBLocked = /** @class */ (function() {
 			'config-label-saving': 'Saving settings...',
 			'config-label-savedone': 'Sucessfully saved the settings.',
 			'config-label-savefailed': 'Failed to save the settings. ',
-			'portlet-tooltip': 'Configure MarkBLocked'
+			'portlet-text': 'Configure MarkBLocked'
 		},
 		ja: {
 			'config-notloaded': 'インターフェースの読み込みに失敗しました。',
@@ -179,7 +179,7 @@ var MarkBLocked = /** @class */ (function() {
 			'config-label-saving': '設定を保存中...',
 			'config-label-savedone': '設定の保存に成功しました。',
 			'config-label-savefailed': '設定の保存に失敗しました。',
-			'portlet-tooltip': 'MarkBLockedの設定'
+			'portlet-text': 'MarkBLockedの設定'
 		}
 	};
 
@@ -192,6 +192,11 @@ var MarkBLocked = /** @class */ (function() {
 		return this.msg[key];
 	};
 
+	/** 
+	 * @type {mw.Api}
+	 * @readonly
+	 */
+	var api;
 	/**
 	 * Initialize `MarkBLocked`.
 	 * @param {ConstructorConfig} [config]
@@ -213,6 +218,8 @@ var MarkBLocked = /** @class */ (function() {
 			$.ready
 		).then(function() { // When ready
 
+			api = new mw.Api();
+
 			// For backwards compatibility, clear old config if any
 			var oldOptionKey = 'userjs-gmbl-preferences';
 			var /** @type {string?} */ oldCfgStr = mw.user.options.get(oldOptionKey);
@@ -220,7 +227,7 @@ var MarkBLocked = /** @class */ (function() {
 				if (!mw.user.options.get(defaultOptionKey)) {
 					mw.user.options.set(defaultOptionKey, oldCfgStr);
 				}
-				new mw.Api().saveOption(oldOptionKey, null).then(function() {
+				api.saveOption(oldOptionKey, null).then(function() {
 					mw.user.options.set(oldOptionKey, null);
 				});
 			}
@@ -250,35 +257,27 @@ var MarkBLocked = /** @class */ (function() {
 					var /** @type {NodeJS.Timeout} */ hookTimeout;
 					mw.hook('wikipage.content').add(function() {
 						clearTimeout(hookTimeout); // Prevent hook from being triggered multiple times
-						hookTimeout = setTimeout(MBL.markup, 100);
+						hookTimeout = setTimeout(function() {
+							api.abort(); // Prevent the old HTTP requests from being taken over to the new markup procedure
+							MBL.markup();
+						}, 100);
 					});
 				}
 				return MBL;
 
 			});
-			
 
 		});
 
 	};
 
-	// var api = new mw.Api();
-	// api.get({
-	// 	action: 'query',
-	// 	meta: 'siteinfo',
-	// 	siprop: 'specialpagealiases',
-	// 	formatversion: '2'
-	// }).catch(function(_, err) {
-	// 	console.log(err); // err.exception === 'abort'
-	// });
-	// api.abort();
 	/**
 	 * Get special page aliases for `Contributions` and `CentralAuth`.
 	 * @returns {JQueryPromise<string[]?>}
 	 * @requires mediawiki.api
 	 */
 	MarkBLocked.getContribsCA = function() {
-		return new mw.Api().get({
+		return api.get({
 			action: 'query',
 			meta: 'siteinfo',
 			siprop: 'specialpagealiases',
@@ -293,24 +292,24 @@ var MarkBLocked = /** @class */ (function() {
 					 * @returns 
 					 */
 					function(acc, obj) {
-						var /** @type {string[]} */ aliases = [];
+						var /** @type {string[]} */ exclude = [];
 						switch(obj.realname) {
 							case 'Contributions':
-								aliases = obj.aliases.filter(function(alias) {
-									return ['Contributions', 'Contribs'].indexOf(alias) === -1;
-								});
+								exclude = ['Contributions', 'Contribs'];
 								break;
 							case 'CentralAuth':
-								aliases = obj.aliases.filter(function(alias) {
-									return ['CentralAuth', 'CA', 'GlobalAccount'].indexOf(alias) === -1;
-								});
-								break;
-							default:
+								exclude = ['CentralAuth', 'CA', 'GlobalAccount'];
 						}
-						acc.concat(aliases);
+						if (exclude.length) {
+							var aliases = obj.aliases.filter(function(alias) {
+								return exclude.indexOf(alias) === -1;
+							});
+							acc.concat(aliases);
+						}
 						return acc;
 					},
-				[]);
+					[]
+				);
 			} else {
 				return null;
 			}
@@ -323,10 +322,16 @@ var MarkBLocked = /** @class */ (function() {
 	/**
 	 * Replace the page content with the MarkBLocked config interface.
 	 * @returns {void}
+	 * @requires oojs-ui
+	 * @requires oojs-ui.styles.icons-moderation
+	 * @requires mediawiki.api
+	 * @requires mediawiki.user
 	 */
 	MarkBLocked.prototype.createConfigInterface = function() {
 
 		document.title = 'MarkBLockedConfig - ' + mw.config.get('wgSiteName');
+
+		// Collect DOM elements
 		var $heading = $('.mw-first-heading');
 		var $body = $('.mw-body-content');
 		if (!$heading.length || !$body.length) {
@@ -335,6 +340,7 @@ var MarkBLocked = /** @class */ (function() {
 		}
 		$heading.text(this.getMessage('config-heading'));
 
+		// Config container
 		var $container = $('<div>').prop('id', 'mblc-container');
 		$body.empty().append($container);
 
@@ -342,12 +348,14 @@ var MarkBLocked = /** @class */ (function() {
 		var $overlay = $('<div>').prop('id', 'mblc-container-overlay').hide();
 		$container.after($overlay);
 
+		// Option container fieldset
 		var fieldset = new OO.ui.FieldsetLayout({
 			id: 'mblc-optionfield',
 			label: this.getMessage('config-label-fieldset')
 		});
 		$container.append(fieldset.$element);
 
+		// Options
 		var localIps = new OO.ui.CheckboxInputWidget({
 			selected: this.options.localips
 		});
@@ -372,6 +380,7 @@ var MarkBLocked = /** @class */ (function() {
 			})
 		]);
 
+		// Save button
 		var saveButton = new OO.ui.ButtonWidget({
 			id: 'mblc-save',
 			label: this.getMessage('config-label-save'),
@@ -407,12 +416,12 @@ var MarkBLocked = /** @class */ (function() {
 			var strCfg = JSON.stringify(cfg);
 
 			// Save config
-			new mw.Api().saveOption(_this.optionKey, strCfg)
-				.done(function() {
+			api.saveOption(_this.optionKey, strCfg)
+				.then(function() {
 					mw.user.options.set(_this.optionKey, strCfg);
 					return null;
 				})
-				.fail(/** @param {string} code */ function(code, err) {
+				.catch(/** @param {string} code */ function(code, err) {
 					console.warn(err);
 					return code;
 				})
@@ -440,15 +449,18 @@ var MarkBLocked = /** @class */ (function() {
 		var portlet = mw.util.addPortletLink(
 			'p-tb',
 			mw.util.getUrl('Special:MarkBLockedConfig'),
-			'MarkBLockedConfig',
-			'ca-mblc',
-			this.getMessage('portlet-tooltip')
+			this.getMessage('portlet-text'),
+			'ca-mblc'
 		);
 		if (!portlet) {
 			console.error('Failed to create a portlet link for MarkBLocked.');
 		}
 	};
 
+	/**
+	 * Mark up user links.
+	 * @returns {void}
+	 */
 	MarkBLocked.prototype.markup = function() {
 
 		var collected = this.collectLinks();
@@ -459,121 +471,106 @@ var MarkBLocked = /** @class */ (function() {
 		var users = collected.users;
 		var ips = collected.ips;
 		var allUsers = users.concat(ips);
+		var options = this.options;
 
 		this.markBlockedUsers(userLinks, allUsers).then(function(markedUsers) {
 
+			if (markedUsers === null) { // Aborted
+				return;
+			}
+
+			// Create a batch array for additional markups
 			var ipsThatMightBeBlocked = ips.filter(function(ip) {
 				return markedUsers.indexOf(ip) === -1;
 			});
-
-		});
-
-		api.get({
-			action: 'query',
-			list: 'blocks',
-			bklimit: '1', // Only one IP can be checked in one API call, which means it's neccesary to send as many API requests as the
-			bkip: ip,     // length of the array. You can see why we need the personal preferences: This can lead to performance issues.
-			bkprop: 'user|expiry|restrictions',
-			formatversion: '2'
-		}).then(function(res){
-
-			var resBlk;
-			if (!res || !res.query || !(resBlk = res.query.blocks) || !resBlk.length) return;
-
-			resBlk = resBlk[0];
-			var partialBlk = resBlk.restrictions && !Array.isArray(resBlk.restrictions);
-			var clss;
-			if (/^in/.test(resBlk.expiry)) {
-				clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
-			} else {
-				clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
+			var /** @type {BatchObject[]} */ batchArray = [];
+			if (options.localips && ipsThatMightBeBlocked.length) {
+				ipsThatMightBeBlocked.forEach(function(ip) {
+					batchArray.push({
+						params: {
+							action: 'query',
+							list: 'blocks',
+							bklimit: 1,
+							bkip: ip,
+							bkprop: 'user|expiry|restrictions',
+							formatversion: '2'
+						},
+						callback: function(res) {
+							var /** @type {ApiResponseQueryListBlocks[]=} */ resBlk = res && res.query && res.query.blocks;
+							var /** @type {ApiResponseQueryListBlocks=} */ resObj;
+							if (resBlk && (resObj = resBlk[0])) {
+								var partialBlk = resObj.restrictions && !Array.isArray(resObj.restrictions);
+								var clss;
+								if (/^in/.test(resObj.expiry)) {
+									clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
+								} else {
+									clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
+								}
+								addClass(userLinks, ip, clss);
+							}
+						}
+					});
+				});
 			}
-			MarkBLocked.addClass(ip, clss);
+			if (options.globalusers && users.length) {
+				users.forEach(function(user) {
+					batchArray.push({
+						params: {
+							action: 'query',
+							list: 'globalallusers',
+							agulimit: 1,
+							agufrom: user,
+							aguto: user,
+							aguprop: 'lockinfo',
+							formatversion: '2'
+						},
+						callback: function(res) {
+							/** @typedef {{locked?: string;}} ApiResponseQueryListGlobalallusers */
+							var /** @type {ApiResponseQueryListGlobalallusers[]=} */ resLck = res && res.query && res.query.globalallusers;
+							var /** @type {ApiResponseQueryListGlobalallusers=} */ resObj;
+							if (resLck && (resObj = resLck[0]) && resObj.locked === '') {
+								addClass(userLinks, user, 'mbl-globally-locked');
+							}
+						}
+					});
+				});
+			}
+			if (options.globalips && ips.length) {
+				ips.forEach(function(ip) {
+					batchArray.push({
+						params: {
+							action: 'query',
+							list: 'globalblocks',
+							bgip: ip,
+							bglimit: 1,
+							bgprop: 'address|expiry',
+							formatversion: '2'
+						},
+						callback: function(res) {
+							/** @typedef {{expiry: string;}} ApiResponseQueryListGlobalblocks */
+							var /** @type {ApiResponseQueryListGlobalblocks[]=} */ resGblk = res && res.query && res.query.globalblocks;
+							var /** @type {ApiResponseQueryListGlobalblocks=} */ resObj;
+							if (resGblk && (resObj = resGblk[0])) {
+								var clss = /^in/.test(resObj.expiry) ? 'mbl-globally-blocked-indef' : 'mbl-globally-blocked-temp';
+								addClass(userLinks, ip, clss);
+							}
+						}
+					});
+				});
+			}
 
-		}).catch(function(code, err) {
-			mw.log.error(err);
+			if (batchArray.length) {
+				batchRequest(batchArray);
+			}
+
 		});
 
 	};
 
 	/**
-	 * @typedef BatchObject
-	 * @type {object}
-	 * @property {DynamicObject} params
-	 * @property {(res?: DynamicObject) => void} callback
-	 */
-	/**
-	 * 
-	 * @param {BatchObject[]} batchArray 
-	 */
-	function batchRequest(batchArray) {
-
-		var unflattened = batchArray.reduce(/** @param {BatchObject[][]} acc */ function(acc, obj) {
-			var len = acc.length - 1;
-			if (Array.isArray(acc[len]) && acc[len].length < 2000) {
-				acc[len].push(obj);
-			} else {
-				acc[len + 1] = [obj];
-			}
-			return acc;
-		}, [[]]);
-
-		var api = new mw.Api();
-		/**
-		 * @param {BatchObject} batchObj
-		 * @returns {JQueryPromise<void>}
-		 */
-		var req = function(batchObj) {
-			return api.get(batchObj.params).then(batchObj.callback);
-		};
-		/**
-		 * @param {BatchObject[]} unflattenedBatchArrayElement
-		 * @returns {JQueryPromise<void>}
-		 */
-		var batch = function(unflattenedBatchArrayElement) {
-			var /** @type {JQueryPromise<void>[]} */ deferreds = [];
-			unflattenedBatchArrayElement.forEach(function(batchObj) {
-				deferreds.push(req(batchObj));
-			});
-			return $.when(deferreds).then(function() {
-				return void 0;
-			});
-		};
-
-		var index = 0;
-		batch(unflattened[index]).then(function() {
-			index++;
-			if (unflattened[index]) {
-				batch(unflattened[index]);
-			}
-		});
-
-	}
-
-	/**
 	 * Object that stores collected user links, keyed by usernames and valued by an array of anchors.
 	 * @typedef {Object.<string, HTMLAnchorElement[]>} UserLinks
 	 */
-	/**
-	 * Add a class to all anchors associated with a certain username.
-	 * @param {UserLinks} userLinks
-	 * @param {string} userName
-	 * @param {string} className
-	 * @returns {string?} The username if any link is marked up, or else `null`.
-	 */
-	function addClass(userLinks, userName, className) {
-		var links = userLinks[userName]; // Get all links related to the user
-		if (links) {
-			for (var i = 0; links && i < links.length; i++) {
-				links[i].classList.add(className);
-			}
-			return userName;
-		} else {
-			console.error('MarkBLocked: There\'s no link for User:' + userName);
-			return null;
-		}
-	}
-	
 	/**
 	 * Collect user links to mark up.
 	 * @returns {{userLinks: UserLinks; users: string[]; ips: string[];}}
@@ -636,6 +633,7 @@ var MarkBLocked = /** @class */ (function() {
 				arr = ips;
 			} else if (/[/@#<>[\]|{}:]|^(\d{1,3}\.){3}\d{1,3}$/.test(username)) {
 				// Ensure the username doesn't contain characters that can't be used for usernames (do this here or block status query might fail)
+				console.log('MarkBLocked: Unprocessable username: ' + username);
 				return;
 			} else {
 				arr = users;
@@ -665,9 +663,6 @@ var MarkBLocked = /** @class */ (function() {
 	};
 
 	/**
-	 * @typedef {Object.<string, any>} DynamicObject
-	 */
-	/**
 	 * @typedef ApiResponseQueryListBlocks
 	 * @type {object}
 	 * @property {[]|{}} [restrictions]
@@ -678,7 +673,7 @@ var MarkBLocked = /** @class */ (function() {
 	 * Mark up locally blocked registered users and single IPs (this can't detect single IPs included in blocked IP ranges)
 	 * @param {UserLinks} userLinks
 	 * @param {string[]} usersArr
-	 * @returns {JQueryPromise<string[]>} Usernames whose links are marked up.
+	 * @returns {JQueryPromise<string[]?>} Usernames whose links are marked up (`null` if aborted).
 	 */
 	MarkBLocked.prototype.markBlockedUsers = function(userLinks, usersArr) {
 
@@ -688,8 +683,8 @@ var MarkBLocked = /** @class */ (function() {
 			usersArr = usersArr.slice(); // Deep copy
 		}
 
-		var api = new mw.Api();
 		var /** @type {string[]} */ marked = [];
+		var aborted = false;
 		/**
 		 * @param {string[]} users
 		 * @returns {JQueryPromise<void>}
@@ -721,7 +716,12 @@ var MarkBLocked = /** @class */ (function() {
 				}
 				return void 0;
 			}).catch(function(_, err) {
-				console.error(err);
+				// @ts-ignore
+				if (err.exception === 'abort') {
+					aborted = true;
+				} else {
+					console.error(err);
+				}
 				return void 0;
 			});
 		};
@@ -731,125 +731,108 @@ var MarkBLocked = /** @class */ (function() {
 		while (usersArr.length) {
 			deferreds.push(req(usersArr.splice(0, this.apilimit)));
 		}
-		return $.when(deferreds).then(function() {
-			return marked;
+		return $.when.apply($, deferreds).then(function() {
+			return aborted ? null : marked;
 		});
 
 	};
 
 	/**
-	 * Mark up all locally blocked IPs including single IPs in blocked IP ranges
-	 * @param {Array<string>} ipsArr
+	 * Add a class to all anchors associated with a certain username.
+	 * @param {UserLinks} userLinks
+	 * @param {string} userName
+	 * @param {string} className
+	 * @returns {string?} The username if any link is marked up, or else `null`.
 	 */
-	MarkBLocked.prototype.markIpsInBlockedRanges = function(ipsArr) {
+	function addClass(userLinks, userName, className) {
+		var links = userLinks[userName]; // Get all links related to the user
+		if (links) {
+			for (var i = 0; links && i < links.length; i++) {
+				links[i].classList.add(className);
+			}
+			return userName;
+		} else {
+			console.error('MarkBLocked: There\'s no link for User:' + userName);
+			return null;
+		}
+	}
 
+	/**
+	 * @typedef {Object.<string, any>} DynamicObject
+	 */
+	/**
+	 * @typedef BatchObject
+	 * @type {object}
+	 * @property {DynamicObject} params
+	 * @property {(res?: DynamicObject) => void} callback
+	 */
+	/**
+	 * Send batched API requests.
+	 * 
+	 * MarkBLocked has to send quite a few API requests when additional markup functionaities are enabled,
+	 * and this can lead to an `net::ERR_INSUFFICIENT_RESOURCES` error if too many requests are sent all
+	 * at once. This (private) function sends API requests by creating batches of 1000, where each batch is
+	 * processed sequentially after the older batch is resolved.
+	 * @param {BatchObject[]} batchArray
+	 * @returns {JQueryPromise<void>}
+	 */
+	function batchRequest(batchArray) {
+
+		// Unflatten the array of objects to an array of arrays of objects
+		var unflattened = batchArray.reduce(/** @param {BatchObject[][]} acc */ function(acc, obj) {
+			var len = acc.length - 1;
+			if (Array.isArray(acc[len]) && acc[len].length < 1000) {
+				acc[len].push(obj);
+			} else {
+				acc[len + 1] = [obj];
+			}
+			return acc;
+		}, [[]]);
+
+		var aborted = false;
 		/**
-		 * @param {string} ip
+		 * Send an API request.
+		 * @param {BatchObject} batchObj
+		 * @returns {JQueryPromise<void>}
 		 */
-		var query = function(ip) {
-			api.get({
-				action: 'query',
-				list: 'blocks',
-				bklimit: '1', // Only one IP can be checked in one API call, which means it's neccesary to send as many API requests as the
-				bkip: ip,     // length of the array. You can see why we need the personal preferences: This can lead to performance issues.
-				bkprop: 'user|expiry|restrictions',
-				formatversion: '2'
-			}).then(function(res){
-
-				var resBlk;
-				if (!res || !res.query || !(resBlk = res.query.blocks) || !resBlk.length) return;
-
-				resBlk = resBlk[0];
-				var partialBlk = resBlk.restrictions && !Array.isArray(resBlk.restrictions);
-				var clss;
-				if (/^in/.test(resBlk.expiry)) {
-					clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
+		var req = function(batchObj) {
+			return api.get(batchObj.params)
+				.then(batchObj.callback)
+				.catch(function(_, err) {
+					// @ts-ignore
+					if (err.exception === 'abort') {
+						aborted = true;
+					} else {
+						// console.error(err);
+					}
+					return void 0;
+				});
+		};
+		/**
+		 * Send batched API requests.
+		 * @param {number} index
+		 * @returns {JQueryPromise<void>}
+		 */
+		var batch = function(index) {
+			var batchElementArray = unflattened[index];
+			var /** @type {JQueryPromise<void>[]} */ deferreds = [];
+			batchElementArray.forEach(function(batchObj) {
+				deferreds.push(req(batchObj));
+			});
+			return $.when.apply($, deferreds).then(function() {
+				console.log('MarkBLocked batch count: ' + deferreds.length);
+				index++;
+				if (!aborted && unflattened[index]) {
+					return batch(index);
 				} else {
-					clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
+					return void 0;
 				}
-				MarkBLocked.addClass(ip, clss);
-
-			}).catch(function(code, err) {
-				mw.log.error(err);
 			});
 		};
 
-		// API calls
-		ipsArr.forEach(query);
+		return batch(0);
 
-	};
-
-	/**
-	 * Mark up globally locked users
-	 * @param {Array<string>} regUsersArr
-	 */
-	MarkBLocked.prototype.markLockedUsers = function(regUsersArr) {
-
-		/**
-		 * @param {string} regUser
-		 */
-		var query = function(regUser) {
-			api.get({
-				action: 'query',
-				list: 'globalallusers',
-				agulimit: '1',
-				agufrom: regUser,
-				aguto: regUser,
-				aguprop: 'lockinfo',
-				formatversion: '2'
-			}).then(function(res) {
-
-				var resLck;
-				if (!res || !res.query || !(resLck = res.query.globalallusers) || !resLck.length) return;
-
-				var locked = resLck[0].locked === '';
-				if (locked) MarkBLocked.addClass(regUser, 'mbl-globally-locked');
-
-			}).catch(function(code, err) {
-				mw.log.error(err);
-			});
-		};
-
-		// API calls
-		regUsersArr.forEach(query);
-
-	};
-
-	/**
-	 * Mark up (all) globally blocked IPs
-	 * @param {Array} ipsArr
-	 */
-	MarkBLocked.prototype.markGloballyBlockedIps = function(ipsArr) {
-
-		/**
-		 * @param {string} ip
-		 */
-		var query = function(ip) {
-			api.get({
-				action: 'query',
-				list: 'globalblocks',
-				bgip: ip,
-				bglimit: '1',
-				bgprop: 'address|expiry',
-				formatversion: '2'
-			}).then(function(res){
-
-				var resBlk;
-				if (!res || !res.query || !(resBlk = res.query.globalblocks) || !resBlk.length) return;
-
-				resBlk = resBlk[0];
-				var clss = /^in/.test(resBlk.expiry) ? 'mbl-globally-blocked-indef' : 'mbl-globally-blocked-temp';
-				MarkBLocked.addClass(ip, clss);
-
-			}).catch(function(code, err) {
-				mw.log.error(err);
-			});
-		};
-
-		// API calls
-		ipsArr.forEach(query);
-
-	};
+	}
 
 	return MarkBLocked;
 
