@@ -25,7 +25,7 @@ module.exports = /** @class */ (function() {
 	 * it possible to configure the default interface messages and add a new interface language (for the latter, a value needs
 	 * to be passed to the {@link lang} parameter.)
 	 * @property {string} [lang] The code of the language to use in the interface messages, defaulted to `en`.
-	 * @property {string[]} [contribs_CA] Special page aliases for Contributions and CentralAuth in the local language (no need
+	 * @property {string[]} [contribsCA] Special page aliases for Contributions and CentralAuth in the local language (no need
 	 * to pass `Contributions`, `Contribs`, `CentralAuth`, `CA`, and  `GlobalAccount`). If not provided, aliases are fetched from
 	 * the API.
 	 * @property {string[]} [groupsAHL] Local user groups with the `apihighlimits` user right, defaulted to `['sysop', 'bot']`;
@@ -98,7 +98,7 @@ module.exports = /** @class */ (function() {
 				default:
 			}
 		}
-		var rContribsCA = cfg.contribs_CA && cfg.contribs_CA.length ? '|' + cfg.contribs_CA.join('|') : '';
+		var rContribsCA = cfg.contribsCA && cfg.contribsCA.length ? '|' + cfg.contribsCA.join('|') : '';
 		rContribsCA = '(?:' + specialAliases.join('|') + '):(?:contrib(?:ution)?s|ca|centralauth|globalaccount' + rContribsCA + ')/';
 		var rUser = '(?:' + userAliases.join('|') + '):';
 		/**
@@ -252,16 +252,16 @@ module.exports = /** @class */ (function() {
 			var /** @type {JQueryPromise<string[]?>} */ ccaDeferred =
 				onConfig ?
 				$.Deferred().resolve([]) :
-				cfg.contribs_CA ?
-				$.Deferred().resolve(cfg.contribs_CA) :
+				cfg.contribsCA ?
+				$.Deferred().resolve(cfg.contribsCA) :
 				MarkBLocked.getContribsCA();
-			return $.when(ccaDeferred, backwards).then(function(contribs_CA) {
+			return $.when(ccaDeferred, backwards).then(function(contribsCA) {
 
-				if (contribs_CA) {
-					cfg.contribs_CA = contribs_CA;
+				if (contribsCA) {
+					cfg.contribsCA = contribsCA;
 				} else {
 					console.warn('MarkBLocked: Failed to get special page aliases.');
-					cfg.contribs_CA = [];
+					cfg.contribsCA = [];
 				}
 
 				var MBL = new MarkBLocked(cfg);
@@ -305,22 +305,23 @@ module.exports = /** @class */ (function() {
 					/**
 					 * @param {string[]} acc
 					 * @param {{realname: string; aliases: string[];}} obj
-					 * @returns
+					 * @returns {string[]}
 					 */
 					function(acc, obj) {
 						var /** @type {string[]} */ exclude = [];
 						switch(obj.realname) {
 							case 'Contributions':
-								exclude = ['Contributions', 'Contribs'];
+								exclude.push('Contributions', 'Contribs');
 								break;
 							case 'CentralAuth':
-								exclude = ['CentralAuth', 'CA', 'GlobalAccount'];
+								exclude.push('CentralAuth', 'CA', 'GlobalAccount');
 						}
 						if (exclude.length) {
-							var aliases = obj.aliases.filter(function(alias) {
-								return exclude.indexOf(alias) === -1;
+							obj.aliases.forEach(function(alias) {
+								if (exclude.indexOf(alias) === -1) {
+									acc.push(alias);
+								}
 							});
-							acc.concat(aliases);
 						}
 						return acc;
 					},
