@@ -605,7 +605,7 @@ module.exports = /** @class */ (function() {
 		var $anchors = $content.find('a');
 		var $pNamespaces = $('#p-associated-pages');
 		if ($pNamespaces.length && !$content.find($pNamespaces).length) { // Add links in left navigation
-			$anchors.extend($pNamespaces.find('a'));
+			$anchors = $anchors.add($pNamespaces.find('a'));
 		}
 
 		// Set up variables
