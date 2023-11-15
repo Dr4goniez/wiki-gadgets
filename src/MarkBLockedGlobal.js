@@ -7,7 +7,13 @@
 			.then(function(require) {
 				var MarkBLocked = require(moduleName);
 				MarkBLocked.init({
-					optionKey: 'userjs-markblockedglobal-config'
+					defaultOptions: {
+						localips: false,
+						globalusers: true,
+						globalips: false
+					},
+					optionKey: 'userjs-markblockedglobal-config',
+					globalize: true
 				});
 			})
 			.catch(console.error);

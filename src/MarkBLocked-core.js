@@ -20,6 +20,7 @@ module.exports = /** @class */ (function() {
 	 * @type {object}
 	 * @property {UserOptions} [defaultOptions] Configured default option values. (Default: all `false`).
 	 * @property {string} [optionKey] The key of `mw.user.options`, defaulted to `userjs-markblocked-config`.
+	 * @property {boolean} [globalize] If `true`, save the options as global preferences.
 	 * @property {Object.<string, Lang>} [i18n] A language object to merge to {@link MarkBLocked.i18n}. Using this config makes
 	 * it possible to configure the default interface messages and add a new interface language (for the latter, a value needs
 	 * to be passed to the {@link lang} parameter.)
@@ -61,6 +62,9 @@ module.exports = /** @class */ (function() {
 		}
 		/** @type {UserOptions} */
 		this.options = $.extend(defaultOptions, options);
+		/** @type {boolean} */
+		this.globalize = !!cfg.globalize;
+		console.log('MarkBLocked globalization: ' + this.globalize);
 
 		// Language options
 		if (cfg.i18n) {
@@ -266,11 +270,11 @@ module.exports = /** @class */ (function() {
 				} else {
 					MBL.createPortletLink();
 					var /** @type {NodeJS.Timeout} */ hookTimeout;
-					mw.hook('wikipage.content').add(/** @param {JQuery<HTMLElement>} $content */ function($content) {
+					mw.hook('wikipage.content').add(function() {
 						clearTimeout(hookTimeout); // Prevent hook from being triggered multiple times
 						hookTimeout = setTimeout(function() {
 							api.abort(); // Prevent the old HTTP requests from being taken over to the new markup procedure
-							MBL.markup($content);
+							MBL.markup();
 						}, 100);
 					});
 				}
@@ -425,27 +429,30 @@ module.exports = /** @class */ (function() {
 				globalusers: globalUsers.isSelected(),
 				globalips: globalIps.isSelected()
 			};
-			var strCfg = JSON.stringify(cfg);
+			var cfgStr = JSON.stringify(cfg);
 
 			// Save config
-			api.saveOption(_this.optionKey, strCfg)
-				.then(function() {
-					mw.user.options.set(_this.optionKey, strCfg);
-					return null;
-				})
-				.catch(/** @param {string} code */ function(code, err) {
-					console.warn(err);
-					return code;
-				})
-				.then(/** @param {string?} err */ function(err) {
-					if (err) {
-						mw.notify(_this.getMessage('config-label-savefailed') + '(' + err + ')', {type: 'error'});
-					} else {
-						mw.notify(_this.getMessage('config-label-savedone'), {type: 'success'});
-					}
-					saveButton.setIcon('bookmarkOutline').setLabel(_this.getMessage('config-label-save'));
-					$overlay.hide();
-				});
+			api.postWithToken('csrf', {
+				action: _this.globalize ? 'globalpreferences' : 'options',
+				optionname: _this.optionKey,
+				optionvalue: cfgStr,
+				formatversion:'2'
+			}).then(function() {
+				mw.user.options.set(_this.optionKey, cfgStr);
+				return null;
+			}).catch(/** @param {string} code */ function(code, err) {
+				console.warn(err);
+				return code;
+			})
+			.then(/** @param {string?} err */ function(err) {
+				if (err) {
+					mw.notify(_this.getMessage('config-label-savefailed') + '(' + err + ')', {type: 'error'});
+				} else {
+					mw.notify(_this.getMessage('config-label-savedone'), {type: 'success'});
+				}
+				saveButton.setIcon('bookmarkOutline').setLabel(_this.getMessage('config-label-save'));
+				$overlay.hide();
+			});
 
 		});
 
@@ -470,14 +477,13 @@ module.exports = /** @class */ (function() {
 
 	/**
 	 * Mark up user links.
-	 * @param {JQuery<HTMLElement>} $content
 	 * @returns {void}
 	 * @requires mediawiki.util
 	 * @requires mediawiki.api
 	 */
-	MarkBLocked.prototype.markup = function($content) {
+	MarkBLocked.prototype.markup = function() {
 
-		var collected = this.collectLinks($content);
+		var collected = this.collectLinks();
 		var userLinks = collected.userLinks;
 		if ($.isEmptyObject(userLinks)) {
 			console.log('MarkBLocked', {
@@ -596,13 +602,13 @@ module.exports = /** @class */ (function() {
 	 */
 	/**
 	 * Collect user links to mark up.
-	 * @param {JQuery<HTMLElement>} $content
 	 * @returns {{userLinks: UserLinks; users: string[]; ips: string[];}}
 	 * @requires mediawiki.util
 	 */
-	MarkBLocked.prototype.collectLinks = function($content) {
+	MarkBLocked.prototype.collectLinks = function() {
 
 		// Get all anchors in the page content
+		var $content = $('.mw-body-content');
 		var $anchors = $content.find('a');
 		var $pNamespaces = $('#p-associated-pages');
 		if ($pNamespaces.length && !$content.find($pNamespaces).length) { // Add links in left navigation
