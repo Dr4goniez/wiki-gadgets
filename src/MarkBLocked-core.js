@@ -18,7 +18,8 @@ module.exports = /** @class */ (function() {
 	/**
 	 * @typedef ConstructorConfig
 	 * @type {object}
-	 * @property {string} [optionKey]  The key of `mw.user.options`, defaulted to `userjs-markblocked-config`.
+	 * @property {UserOptions} [defaultOptions] Configured default option values. (Default: all `false`).
+	 * @property {string} [optionKey] The key of `mw.user.options`, defaulted to `userjs-markblocked-config`.
 	 * @property {Object.<string, Lang>} [i18n] A language object to merge to {@link MarkBLocked.i18n}. Using this config makes
 	 * it possible to configure the default interface messages and add a new interface language (for the latter, a value needs
 	 * to be passed to the {@link lang} parameter.)
@@ -39,9 +40,9 @@ module.exports = /** @class */ (function() {
 		var cfg = config || {};
 
 		// User options
-		var defaultOptions = {
+		var defaultOptions = cfg.defaultOptions || {
 			localips: false,
-			globalusers: true,
+			globalusers: false,
 			globalips: false
 		};
 		/**
