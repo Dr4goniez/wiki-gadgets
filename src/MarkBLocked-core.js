@@ -28,7 +28,7 @@ module.exports = /** @class */ (function() {
 	 * @property {string[]} [contribsCA] Special page aliases for Contributions and CentralAuth in the local language (no need
 	 * to pass `Contributions`, `Contribs`, `CentralAuth`, `CA`, and  `GlobalAccount`). If not provided, aliases are fetched from
 	 * the API.
-	 * @property {string[]} [groupsAHL] Local user groups with the `apihighlimits` user right, defaulted to `['sysop', 'bot']`;
+	 * @property {string[]} [groupsAHL] Local user groups with the `apihighlimits` user right, defaulted to `['sysop', 'bot']`.
 	 */
 	/**
 	 * Initialize the properties of the `MarkBLocked` class. This is only to be called by `MarkBLocked.init`.
@@ -213,7 +213,7 @@ module.exports = /** @class */ (function() {
 
 		var cfg = config || {};
 
-		// Wait for dependent modules and the DOM to get ready
+		// Wait for dependent modules to get ready
 		var modules = [
 			'mediawiki.user',
 			'mediawiki.api',
@@ -225,10 +225,7 @@ module.exports = /** @class */ (function() {
 		if (!onConfig) {
 			modules.splice(3);
 		}
-		return $.when(
-			mw.loader.using(modules),
-			$.ready
-		).then(function() { // When ready
+		return mw.loader.using(modules).then(function() { // When ready
 
 			api = new mw.Api();
 
@@ -255,7 +252,7 @@ module.exports = /** @class */ (function() {
 				cfg.contribsCA ?
 				$.Deferred().resolve(cfg.contribsCA) :
 				MarkBLocked.getContribsCA();
-			return $.when(ccaDeferred, backwards).then(function(contribsCA) {
+			return $.when(ccaDeferred, backwards, $.ready).then(function(contribsCA) { // contribsCA and backwards are resolved, and the DOM is ready
 
 				if (contribsCA) {
 					cfg.contribsCA = contribsCA;
@@ -271,7 +268,7 @@ module.exports = /** @class */ (function() {
 					MBL.createPortletLink();
 					var /** @type {NodeJS.Timeout} */ hookTimeout;
 					mw.hook('wikipage.content').add(function() {
-						clearTimeout(hookTimeout); // Prevent hook from being triggered multiple times
+						clearTimeout(hookTimeout); // Prevent hook from being fired multiple times
 						hookTimeout = setTimeout(function() {
 							api.abort(); // Prevent the old HTTP requests from being taken over to the new markup procedure
 							MBL.markup();
@@ -466,7 +463,7 @@ module.exports = /** @class */ (function() {
 	 */
 	MarkBLocked.prototype.createPortletLink = function() {
 		var portlet = mw.util.addPortletLink(
-			'p-tb',
+			document.getElementById('p-tb') ? 'p-tb' : 'p-personal', // p-tb doesn't exist on minerva
 			mw.util.getUrl('Special:MarkBLockedConfig'),
 			this.getMessage('portlet-text'),
 			'ca-mblc'
@@ -611,9 +608,13 @@ module.exports = /** @class */ (function() {
 		// Get all anchors in the page content
 		var $content = $('.mw-body-content');
 		var $anchors = $content.find('a');
-		var $pNamespaces = $('#p-associated-pages');
-		if ($pNamespaces.length && !$content.find($pNamespaces).length) { // Add links in left navigation
+		var $pNamespaces = $('#p-associated-pages, #p-namespaces, .skin-monobook #ca-nstab-user, .skin-monobook #ca-talk');
+		if ($pNamespaces.length && !$content.find($pNamespaces).length && [2, 3].indexOf(mw.config.get('wgNamespaceNumber')) !== -1) { // Add links in left navigation
 			$anchors = $anchors.add($pNamespaces.find('a'));
+		}
+		var $userTools = $('.mw-contributions-user-tools');
+		if ($userTools.length && !$content.find($userTools).length) { // Add toollinks on Special:Contributions
+			$anchors = $anchors.add($userTools.find('a'));
 		}
 
 		// Set up variables
