@@ -686,15 +686,15 @@ module.exports = /** @class */ (function() {
 	 */
 	MarkBLocked.prototype.collectLinks = function($content) {
 
-		// Get all anchors in the page content
+		// Get all anchors in the content
 		var $anchors = $content.find('a');
 		var $pNamespaces = $('#p-associated-pages, #p-namespaces, .skin-monobook #ca-nstab-user, .skin-monobook #ca-talk');
-		if ($pNamespaces.length && !$content.find($pNamespaces).length && [2, 3].indexOf(mw.config.get('wgNamespaceNumber')) !== -1) { // Add links in left navigation
+		if ($pNamespaces.length && !$content.find($pNamespaces).length && [2, 3].indexOf(mw.config.get('wgNamespaceNumber')) !== -1) {
 			$anchors = $anchors.add($pNamespaces.find('a'));
 		}
-		var $userTools = $('.mw-contributions-user-tools');
-		if ($userTools.length && !$content.find($userTools).length) { // Add toollinks on Special:Contributions
-			$anchors = $anchors.add($userTools.find('a'));
+		var $contribsTools = $('.mw-special-Contributions #mw-content-subtitle, .mw-special-DeletedContributions #mw-content-subtitle');
+		if ($contribsTools.length && !$content.find($contribsTools).length) {
+			$anchors = $anchors.add($contribsTools.find('a'));
 		}
 
 		// Set up variables
