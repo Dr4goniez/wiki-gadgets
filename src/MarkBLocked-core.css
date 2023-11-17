@@ -34,87 +34,91 @@
 #mblc-save {
 	margin-top: 0.5em;
 }
+
 /* General */
+#mbl-toggle-wrapper {
+	float: right;
+}
 .mbl-userlink {
 	opacity: 0.85;
 }
 /* DU */
-a:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp) {
+.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp) {
 	text-decoration: underline dotted;
 }
 /* 04ST */
-a.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-a.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-a:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-a:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp)
+.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
+.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
+.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
+.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp)
 {
 	opacity: 0.4;
 	text-decoration: line-through;
 }
 /* 07ST */
-a.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-a.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp)
+.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
+.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp)
 {
 	opacity: 0.7;
 	text-decoration: line-through;
 }
 /* 04RU */
-a:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial).mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-a:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-a:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp)
+.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial).mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
+.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
+.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp)
 {
 	opacity: 0.4;
 	border-bottom: dashed medium red;
 }
 /* 07RU */
-a:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
+.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
 {
 	opacity: 0.7;
 	border-bottom: dashed medium red;
 }
 /* 04STRU */
-a.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-a.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-a.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
-a.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-a.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-a.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
-a.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-a.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-a.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial).mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-a.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-a.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-a:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-a:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-a:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
-a:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial).mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-a:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-a:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-a:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
+.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
+.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
+.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
+.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
+.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
+.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
+.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
+.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
+.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial).mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
+.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
+.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
+.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
+.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
+.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
+.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial).mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
+.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
+.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
+.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
 {
 	opacity: 0.4;
 	text-decoration: line-through;
 	border-bottom: dashed medium red;
 }
 /* 07STRU */
-a.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
-a.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
+.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
+.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
 {
 	opacity: 0.7;
 	text-decoration: line-through;
 	border-bottom: dashed medium red;
 }
 /* 04DURU */
-a:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial.mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-a:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-a:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp
+.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial.mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
+.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
+.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp
 {
 	opacity: 0.4;
 	text-decoration: underline dotted;
 	border-bottom: dashed medium red;
 }
 /* 07DURU */
-a:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
+.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
 {
 	opacity: 0.7;
 	text-decoration: underline dotted;

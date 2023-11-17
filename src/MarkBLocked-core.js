@@ -144,17 +144,21 @@ module.exports = /** @class */ (function() {
 	/**
 	 * @typedef Lang
 	 * @type {object}
-	 * @property {string} config-notloaded
-	 * @property {string} config-heading
-	 * @property {string} config-label-fieldset
-	 * @property {string} config-label-localips
-	 * @property {string} config-label-globalusers
-	 * @property {string} config-label-globalips
-	 * @property {string} config-label-save
-	 * @property {string} config-label-saving
-	 * @property {string} config-label-savedone
-	 * @property {string} config-label-savefailed
-	 * @property {string} portlet-text
+	 * @property {string} config-notify-notloaded A `mw.notify` message to show when failed to load the config interface.
+	 * @property {string} config-label-heading The heading text of the config interface.
+	 * @property {string} config-label-fieldset The fieldset legend's text of the config interface.
+	 * @property {string} config-label-localips Option label to mark up IPs in locally blocked IP ranges.
+	 * @property {string} config-label-globalusers Option label to mark up globally locked users.
+	 * @property {string} config-label-globalips Option label to mark up globally blocked IPs.
+	 * @property {string} config-label-save The text of the save button.
+	 * @property {string} config-label-saving The text of the save button when saving options.
+	 * @property {string} config-notify-savedone A `mw.notify` message to show when done with saving options.
+	 * @property {string} config-notify-savefailed A `mw.notify` message to show when failed to save options.
+	 * @property {string} portlet-text The text of the portlet link to the config page.
+	 * @property {string} toggle-title-enabled The title attribute of the RCW toggle button when MBL is enabled.
+	 * @property {string} toggle-title-disabled The title attribute of the RCW toggle button when MBL is temporarily disabled.
+	 * @property {string} toggle-notify-enabled A `mw.notify` message to show when MBL gets enabled on RCW.
+	 * @property {string} toggle-notify-disabled A `mw.notify` message to show when MBL gets disabled on RCW.
 	 */
 	/**
 	 * @type {Object.<string, Lang>}
@@ -162,30 +166,38 @@ module.exports = /** @class */ (function() {
 	 */
 	MarkBLocked.i18n = {
 		en: {
-			'config-notloaded': 'Failed to load the interface.',
-			'config-heading': 'Configure MarkBLocked',
+			'config-label-heading': 'Configure MarkBLocked',
 			'config-label-fieldset': 'Markup settings',
 			'config-label-localips': 'Mark up IPs in locally blocked IP ranges',
 			'config-label-globalusers': 'Mark up globally locked users',
 			'config-label-globalips': 'Mark up globally blocked IPs',
 			'config-label-save': 'Save settings',
 			'config-label-saving': 'Saving settings...',
-			'config-label-savedone': 'Sucessfully saved the settings.',
-			'config-label-savefailed': 'Failed to save the settings. ',
-			'portlet-text': 'Configure MarkBLocked'
+			'config-notify-notloaded': 'Failed to load the interface.',
+			'config-notify-savedone': 'Sucessfully saved the settings.',
+			'config-notify-savefailed': 'Failed to save the settings. ',
+			'portlet-text': 'Configure MarkBLocked',
+			'toggle-title-enabled': 'MarkBLocked is enabled. Click to disable it temporarily.',
+			'toggle-title-disabled': 'MarkBLocked is temporarily disabled. Click to enable it again.',
+			'toggle-notify-enabled': 'Enabled MarkBLocked.',
+			'toggle-notify-disabled': 'Temporarily disabled MarkBLocked.'
 		},
 		ja: {
-			'config-notloaded': 'インターフェースの読み込みに失敗しました。',
-			'config-heading': 'MarkBLockedの設定',
+			'config-label-heading': 'MarkBLockedの設定',
 			'config-label-fieldset': 'マークアップ設定',
 			'config-label-localips': 'ブロックされたIPレンジに含まれるIPをマークアップ',
 			'config-label-globalusers': 'グローバルロックされた利用者をマークアップ',
 			'config-label-globalips': 'グローバルブロックされたIPをマークアップ',
 			'config-label-save': '設定を保存',
 			'config-label-saving': '設定を保存中...',
-			'config-label-savedone': '設定の保存に成功しました。',
-			'config-label-savefailed': '設定の保存に失敗しました。',
-			'portlet-text': 'MarkBLockedの設定'
+			'config-notify-notloaded': 'インターフェースの読み込みに失敗しました。',
+			'config-notify-savedone': '設定の保存に成功しました。',
+			'config-notify-savefailed': '設定の保存に失敗しました。',
+			'portlet-text': 'MarkBLockedの設定',
+			'toggle-title-enabled': 'MarkBLockedが有効化されています。クリックすると一時的に無効化します。',
+			'toggle-title-disabled': 'MarkBLockedが一時的に無効化されています。クリックすると再有効化します。',
+			'toggle-notify-enabled': 'MarkBLockedを有効化しました。',
+			'toggle-notify-disabled': 'MarkBLockedを一時的に無効化しました。'
 		}
 	};
 
@@ -222,7 +234,8 @@ module.exports = /** @class */ (function() {
 			'oojs-ui.styles.icons-moderation',
 		];
 		var onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(markblockedconfig|mblc)$/i.test(mw.config.get('wgTitle'));
-		if (!onConfig) {
+		var isRCW = ['Recentchanges', 'Watchlist'].indexOf(mw.config.get('wgCanonicalSpecialPageName') || '') !== -1;
+		if (!onConfig && !isRCW) {
 			modules.splice(3);
 		}
 		return mw.loader.using(modules).then(function() { // When ready
@@ -267,19 +280,83 @@ module.exports = /** @class */ (function() {
 				} else {
 					MBL.createPortletLink();
 					var /** @type {NodeJS.Timeout} */ hookTimeout;
-					mw.hook('wikipage.content').add(function() {
+					var hookHandler = function() {
 						clearTimeout(hookTimeout); // Prevent hook from being fired multiple times
 						hookTimeout = setTimeout(function() {
 							api.abort(); // Prevent the old HTTP requests from being taken over to the new markup procedure
 							MBL.markup();
 						}, 100);
-					});
+					};
+					mw.hook('wikipage.content').add(hookHandler);
+					if (isRCW) {
+						createToggleButton(MBL, hookHandler);
+					}
 				}
 				return MBL;
 
 			});
 
 		});
+
+		/**
+		 * Create a button to enable/disable MarkBLocked (for Special:Recentchanges and Special:Watchlist, on which `markup`
+		 * is recursively called when the page content is updated.)
+		 * @param {MarkBLocked} MBL An instance of MarkBLocked.
+		 * @param {() => void} hookHandler A function to (un)bind to the `wikipage.content` hook.
+		 */
+		function createToggleButton(MBL, hookHandler) {
+
+			// Create toggle button
+			var toggle = new OO.ui.ButtonWidget({
+				id: 'mbl-toggle',
+				label: 'MBL',
+				icon: 'unLock',
+				flags: 'progressive',
+				title: MBL.getMessage('toggle-title-enabled')
+			});
+			toggle.$element.off('click').on('click', function() {
+				var disable = toggle.getFlags().indexOf('progressive') !== -1;
+				var icon, title, hookToggle, msg;
+				if (disable) {
+					icon = 'lock';
+					title = MBL.getMessage('toggle-title-disabled');
+					hookToggle = mw.hook('wikipage.content').remove;
+					msg = MBL.getMessage('toggle-notify-disabled');
+					$('.mbl-userlink').removeClass(function(_, className) { // Remove all mbl- classes from user links
+						return (className.match(/(^|\s)mbl-\S+/) || []).join(' ');
+					});
+				} else {
+					icon = 'unLock';
+					title = MBL.getMessage('toggle-title-enabled');
+					hookToggle = mw.hook('wikipage.content').add;
+					msg = MBL.getMessage('toggle-notify-enabled');
+					// Hook.add fires the `wikipage.content` hook, meaning that `markup` is automatically called and classes are reassigned
+				}
+				toggle
+					.setFlags({progressive: !disable, destructive: disable})
+					.setIcon(icon)
+					.setTitle(title);
+				hookToggle(hookHandler);
+				mw.notify(msg);
+			});
+			var $wrapper = $('<div>')
+				.addClass('mw-rcfilters-ui-cell')
+				.prop('id', 'mbl-toggle-wrapper')
+				.append(toggle.$element);
+
+			// Append the toggle button
+			var spName = mw.config.get('wgCanonicalSpecialPageName');
+			var selector = '';
+			if (spName === 'Recentchanges') {
+				selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-rcTopSectionWidget-savedLinks';
+				$(selector).eq(0).before($wrapper);
+			} else if (spName === 'Watchlist') {
+				selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-watchlistTopSectionWidget-savedLinks';
+				$(selector).eq(0).after($wrapper);
+				$wrapper.css('margin-right', '1em');
+			}
+
+		}
 
 	};
 
@@ -349,10 +426,10 @@ module.exports = /** @class */ (function() {
 		var $heading = $('.mw-first-heading');
 		var $body = $('.mw-body-content');
 		if (!$heading.length || !$body.length) {
-			mw.notify(this.getMessage('config-notloaded'));
+			mw.notify(this.getMessage('config-notify-notloaded'));
 			return;
 		}
-		$heading.text(this.getMessage('config-heading'));
+		$heading.text(this.getMessage('config-label-heading'));
 
 		// Config container
 		var $container = $('<div>').prop('id', 'mblc-container');
@@ -444,9 +521,9 @@ module.exports = /** @class */ (function() {
 			})
 			.then(/** @param {string?} err */ function(err) {
 				if (err) {
-					mw.notify(_this.getMessage('config-label-savefailed') + '(' + err + ')', {type: 'error'});
+					mw.notify(_this.getMessage('config-notify-savefailed') + '(' + err + ')', {type: 'error'});
 				} else {
-					mw.notify(_this.getMessage('config-label-savedone'), {type: 'success'});
+					mw.notify(_this.getMessage('config-notify-savedone'), {type: 'success'});
 				}
 				saveButton.setIcon('bookmarkOutline').setLabel(_this.getMessage('config-label-save'));
 				$overlay.hide();
