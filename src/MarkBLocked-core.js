@@ -279,13 +279,13 @@ module.exports = /** @class */ (function() {
 					MBL.createConfigInterface();
 				} else {
 					MBL.createPortletLink();
-					var /** @type {NodeJS.Timeout} */ hookTimeout;
-					var hookHandler = function() {
-						clearTimeout(hookTimeout); // Prevent hook from being fired multiple times
-						hookTimeout = setTimeout(function() {
+					/** @param {JQuery<HTMLElement>} $content */
+					var hookHandler = function($content) {
+						var isConnected = !!$(document).find($content).length;
+						if (isConnected && $content.find('a').length) {
 							api.abort(); // Prevent the old HTTP requests from being taken over to the new markup procedure
-							MBL.markup();
-						}, 100);
+							MBL.markup($content);
+						}
 					};
 					mw.hook('wikipage.content').add(hookHandler);
 					if (isRCW) {
@@ -302,7 +302,7 @@ module.exports = /** @class */ (function() {
 		 * Create a button to enable/disable MarkBLocked (for Special:Recentchanges and Special:Watchlist, on which `markup`
 		 * is recursively called when the page content is updated.)
 		 * @param {MarkBLocked} MBL An instance of MarkBLocked.
-		 * @param {() => void} hookHandler A function to (un)bind to the `wikipage.content` hook.
+		 * @param {($content: JQuery<HTMLElement>) => void} hookHandler A function to (un)bind to the `wikipage.content` hook.
 		 */
 		function createToggleButton(MBL, hookHandler) {
 
@@ -552,16 +552,18 @@ module.exports = /** @class */ (function() {
 
 	/**
 	 * Mark up user links.
+	 * @param {JQuery<HTMLElement>} $content
 	 * @returns {void}
 	 * @requires mediawiki.util
 	 * @requires mediawiki.api
 	 */
-	MarkBLocked.prototype.markup = function() {
+	MarkBLocked.prototype.markup = function($content) {
 
-		var collected = this.collectLinks();
+		var collected = this.collectLinks($content);
 		var userLinks = collected.userLinks;
 		if ($.isEmptyObject(userLinks)) {
 			console.log('MarkBLocked', {
+				$content: $content,
 				links: 0
 			});
 			return;
@@ -577,6 +579,7 @@ module.exports = /** @class */ (function() {
 				return;
 			} else {
 				console.log('MarkBLocked', {
+					$content: $content,
 					links: $('.mbl-userlink').length,
 					user_registered: users.length,
 					user_anonymous: ips.length
@@ -677,13 +680,13 @@ module.exports = /** @class */ (function() {
 	 */
 	/**
 	 * Collect user links to mark up.
+	 * @param {JQuery<HTMLElement>} $content
 	 * @returns {{userLinks: UserLinks; users: string[]; ips: string[];}}
 	 * @requires mediawiki.util
 	 */
-	MarkBLocked.prototype.collectLinks = function() {
+	MarkBLocked.prototype.collectLinks = function($content) {
 
 		// Get all anchors in the page content
-		var $content = $('.mw-body-content');
 		var $anchors = $content.find('a');
 		var $pNamespaces = $('#p-associated-pages, #p-namespaces, .skin-monobook #ca-nstab-user, .skin-monobook #ca-talk');
 		if ($pNamespaces.length && !$content.find($pNamespaces).length && [2, 3].indexOf(mw.config.get('wgNamespaceNumber')) !== -1) { // Add links in left navigation
