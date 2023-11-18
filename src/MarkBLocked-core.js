@@ -278,19 +278,51 @@ module.exports = /** @class */ (function() {
 				if (onConfig) {
 					MBL.createConfigInterface();
 				} else {
+
 					MBL.createPortletLink();
-					/** @param {JQuery<HTMLElement>} $content */
+
+					// wikipage.content hook handler
+					/**
+					 * @type {NodeJS.Timeout=}
+					 */
+					var hookTimeout;
+					/**
+					 * @param {JQuery<HTMLElement>} [$content] Fall back to `.mw-body-content`
+					 */
+					var markup = function($content) {
+						hookTimeout = void 0; // Reset the value of `hookTimeout`
+						api.abort(); // Prevent the old HTTP requests from being taken over to the new markup procedure
+						MBL.markup($content || $('.mw-body-content'));
+					};
+					/**
+					 * A callback to `mw.hook('wikipage.content').add`.
+					 * @param {JQuery<HTMLElement>} $content
+					 * @see https://doc.wikimedia.org/mediawiki-core/master/js/#!/api/mw.hook-event-wikipage_content
+					 */
 					var hookHandler = function($content) {
 						var isConnected = !!$(document).find($content).length;
-						if (isConnected && $content.find('a').length) {
-							api.abort(); // Prevent the old HTTP requests from being taken over to the new markup procedure
-							MBL.markup($content);
+						if (isConnected) {
+							// Ensure that $content is attached to the DOM. The same hook can be fired multiple times,
+							// but in some of them the hook is fired on an element detached (and removed) from the DOM.
+							// It's useless to parse links in the element in such cases because the links are inaccessible.
+							clearTimeout(hookTimeout); // Clear the reserved `markup` call, if any
+							if ($content.find('a').length) {
+								markup($content);
+							}
+						} else if (typeof hookTimeout !== 'number') {
+							// When the hook is fired (any number of times), we want to ensure that `markup` is called
+							// at least once. Reserve a `markup` call for when the `isConnected` block is never reached
+							// in the set of `wikipage.content` events.
+							hookTimeout = setTimeout(markup, 100);
 						}
 					};
 					mw.hook('wikipage.content').add(hookHandler);
+
+					// Add a toggle button on RCW
 					if (isRCW) {
 						createToggleButton(MBL, hookHandler);
 					}
+
 				}
 				return MBL;
 
@@ -692,7 +724,7 @@ module.exports = /** @class */ (function() {
 		if ($pNamespaces.length && !$content.find($pNamespaces).length && [2, 3].indexOf(mw.config.get('wgNamespaceNumber')) !== -1) {
 			$anchors = $anchors.add($pNamespaces.find('a'));
 		}
-		var $contribsTools = $('.mw-special-Contributions #mw-content-subtitle, .mw-special-DeletedContributions #mw-content-subtitle');
+		var $contribsTools = $('.mw-special-Contributions, .mw-special-DeletedContributions').find('#mw-content-subtitle');
 		if ($contribsTools.length && !$content.find($contribsTools).length) {
 			$anchors = $anchors.add($contribsTools.find('a'));
 		}
