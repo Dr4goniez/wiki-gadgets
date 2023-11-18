@@ -223,6 +223,13 @@ module.exports = /** @class */ (function() {
 	 */
 	MarkBLocked.init = function(config) {
 
+		// @ts-ignore
+		if (window.MarkBLockedLoaded) {
+			mw.notify('Looks like MarkBLocked is loaded from multiple sources.', {type: 'error', autoHideSeconds: 'long'});
+		} else {
+			$.extend(window, {MarkBLockedLoaded: true});
+		}
+
 		var cfg = config || {};
 
 		// Wait for dependent modules to get ready
