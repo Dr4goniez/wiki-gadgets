@@ -9,7 +9,7 @@
 
 	This script:
 	@author [[User:Dragoniez]]
-	@version 2.0.0
+	@version 2.0.1
 
 	This script differs from the original in the following respects:
 	* Has a dynamic preview feature.
@@ -114,8 +114,8 @@ var PrivateSandbox = /** @class */ (function() {
 
 	}
 
-	/** @type {MwString} */
-	var mwString;
+	var /** @type {MwString} */ mwString;
+	var /** @type {mw.Api} */ api;
 	/**
 	 * Load modules and create the PrivateSandbox interface.
 	 * @returns {JQueryPromise<PrivateSandbox>}
@@ -128,6 +128,7 @@ var PrivateSandbox = /** @class */ (function() {
 		];
 		return mw.loader.using(modules).then(function(require) {
 			mwString = require(modules[0]);
+			api = new mw.Api();
 			/** @type {string} */
 			var userLang = mw.user.options.get('language') || 'en';
 			// @ts-ignore
@@ -184,7 +185,7 @@ var PrivateSandbox = /** @class */ (function() {
 		var /** @type {JQuery<HTMLDivElement>} */ $psLoading;
 		var /** @type {JQuery<HTMLDivElement>} */ $psTextareaWrapper;
 		var /** @type {JQuery<HTMLTextAreaElement>} */ $psTextarea;
-		var /** @type {JQuery<HTMLTextAreaElement>} */ $psSaveWrapper;
+		var /** @type {JQuery<HTMLDivElement>} */ $psSaveWrapper;
 		var /** @type {JQuery<HTMLInputElement>} */ $psSave;
 		var /** @type {JQuery<HTMLSpanElement>} */ $psSaving;
 		var /** @type {JQuery<HTMLSpanElement>} */ $psSavedOn;
@@ -284,7 +285,7 @@ var PrivateSandbox = /** @class */ (function() {
 				.text('')
 				.removeClass('ps-shown');
 
-			new mw.Api().saveOption(_this.optionName, content)
+			api.saveOption(_this.optionName, content)
 				.then(function() {
 					$psSaving
 						.empty()
@@ -399,7 +400,7 @@ var PrivateSandbox = /** @class */ (function() {
 	 * @returns {JQueryPromise<string?>} Parsed wikitext. Null on error.
 	 */
 	function getPreviewHTML(wikitext) {
-		return new mw.Api().post({
+		return api.post({
 			action: 'parse',
 			text: wikitext,
 			title: 'Special:PrivateSandbox',
@@ -413,12 +414,12 @@ var PrivateSandbox = /** @class */ (function() {
 			var resParse, rawHtml;
 			if (res && (resParse = res.parse) && (rawHtml = resParse.text)) {
 				if (resParse.modules.length) {
-					mw.loader.load(res.parse.modules);
+					mw.loader.load(resParse.modules);
 				}
 				if (resParse.modulestyles.length) {
-					mw.loader.load(res.parse.modulestyles);
+					mw.loader.load(resParse.modulestyles);
 				}
-				return rawHtml + (res.parse.categorieshtml || '');
+				return rawHtml + (resParse.categorieshtml || '');
 			} else {
 				return null;
 			}
