@@ -1,7 +1,7 @@
 /*********************************************************************************\
 	AN Reporter
 	@author [[User:Dragoniez]]
-	@version 8.0.1
+	@version 8.0.2
 	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -158,31 +158,28 @@ function loadLibrary(dev = false): JQueryPromise<boolean> {
  * @returns
  */
 function loadConfigInterface(): {
-	heading: HTMLHeadingElement|null;
-	content: HTMLDivElement|null;
+	$heading: JQuery<HTMLHeadingElement>|null;
+	$content: JQuery<HTMLDivElement>|null;
 } {
 
 	// Change the document's title
 	document.title = 'ANReporterConfig' + ' - ' + mw.config.get('wgSiteName');
 
 	// Get the first heading and content body
-	const heading: HTMLHeadingElement|null =
-		document.querySelector('.mw-first-heading') ||
-		document.querySelector('.firstHeading') ||
-		document.querySelector('#firstHeading');
-	const content: HTMLDivElement|null =
-		document.querySelector('.mw-body-content') ||
-		document.querySelector('#mw-content-text');
-	if (!heading || !content) {
-		return {heading: null, content: null};
+	const $heading: JQuery<HTMLHeadingElement>= $('.mw-first-heading');
+	const $content: JQuery<HTMLDivElement> = $('.mw-body-content');
+	if (!$heading.length || !$content.length) {
+		return {$heading: null, $content: null};
 	}
 
 	// Set up the elements
-	heading.textContent = ANR + 'の設定';
-	content.innerHTML = 'インターフェースを読み込み中';
-	content.appendChild(getImage('load', 'margin-left: 0.5em;'));
+	$heading.text(ANR + 'の設定');
+	$content.empty().append(
+		document.createTextNode('インターフェースを読み込み中'),
+		getImage('load', 'margin-left: 0.5em;')
+	);
 
-	return {heading, content};
+	return {$heading, $content};
 
 }
 
@@ -192,16 +189,15 @@ function loadConfigInterface(): {
  */
 function createConfigInterface(): void {
 
-	const {heading, content} = loadConfigInterface();
-	if (!heading || !content) {
+	const {$heading, $content} = loadConfigInterface();
+	if (!$heading || !$content) {
 		mw.notify('インターフェースの読み込みに失敗しました。', {type: 'error', autoHide: false});
 		return;
 	}
 
 	// Create a config container
 	const $container = $('<div>').prop('id', 'anrc-container');
-	content.innerHTML = '';
-	content.appendChild($container[0]);
+	$content.empty().append($container);
 
 	// Create the config body
 	new Config($container);
@@ -420,7 +416,7 @@ class Config {
 				label: 'ポートレットID (上級)',
 				align: 'top',
 				help: new OO.ui.HtmlSnippet(
-					'<a href="https://doc.wikimedia.org/mediawiki-core/master/js/#!/api/mw.util" target="_blank">mw.util.addPortletLink</a>の' +
+					'<a href="https://doc.wikimedia.org/mediawiki-core/master/js/#!/api/mw.util-method-addPortletLink" target="_blank">mw.util.addPortletLink</a>の' +
 					'<code style="font-family: inherit;">portletId</code>を指定します。未指定または値が無効の場合、使用中のスキンに応じて自動的にリンクの生成位置が決定されます。'
 				)
 			}),
@@ -2868,10 +2864,9 @@ class Reporter {
 					}
 					if (!param1) {
 						return false;
-					} else if (mw.util.isIPv6Address(param1, true)) {
-						param1 = param1.toUpperCase();
+					} else {
+						param1 = User.formatName(param1);
 					}
-					param1 = User.formatName(param1);
 
 					// Evaluation
 					const isDuplicate = data.users.some(({user, type}) => { // Loop through values in user panes on the dialog
@@ -3277,9 +3272,11 @@ class User {
 	 * @returns The formatted username.
 	 */
 	static formatName(username: string): string {
-		let user = mwString.ucFirst(lib.clean(username.replace(/_/g, ' ')));
+		let user = lib.clean(username.replace(/_/g, ' '));
 		if (mw.util.isIPv6Address(user, true)) {
 			user = user.toUpperCase();
+		} else if (!/^[\u10A0-\u10FF]/.test(user)) { // ucFirst, except for Georgean letters
+			user = mwString.ucFirst(user);
 		}
 		return user;
 	}

@@ -2,7 +2,7 @@
 /*********************************************************************************\
     AN Reporter
     @author [[User:Dragoniez]]
-    @version 8.0.1
+    @version 8.0.2
     @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -167,34 +167,29 @@ var __assign = (this && this.__assign) || function () {
         // Change the document's title
         document.title = 'ANReporterConfig' + ' - ' + mw.config.get('wgSiteName');
         // Get the first heading and content body
-        var heading = document.querySelector('.mw-first-heading') ||
-            document.querySelector('.firstHeading') ||
-            document.querySelector('#firstHeading');
-        var content = document.querySelector('.mw-body-content') ||
-            document.querySelector('#mw-content-text');
-        if (!heading || !content) {
-            return { heading: null, content: null };
+        var $heading = $('.mw-first-heading');
+        var $content = $('.mw-body-content');
+        if (!$heading.length || !$content.length) {
+            return { $heading: null, $content: null };
         }
         // Set up the elements
-        heading.textContent = ANR + 'の設定';
-        content.innerHTML = 'インターフェースを読み込み中';
-        content.appendChild(getImage('load', 'margin-left: 0.5em;'));
-        return { heading: heading, content: content };
+        $heading.text(ANR + 'の設定');
+        $content.empty().append(document.createTextNode('インターフェースを読み込み中'), getImage('load', 'margin-left: 0.5em;'));
+        return { $heading: $heading, $content: $content };
     }
     /**
      * Create the config interface.
      * @returns
      */
     function createConfigInterface() {
-        var _a = loadConfigInterface(), heading = _a.heading, content = _a.content;
-        if (!heading || !content) {
+        var _a = loadConfigInterface(), $heading = _a.$heading, $content = _a.$content;
+        if (!$heading || !$content) {
             mw.notify('インターフェースの読み込みに失敗しました。', { type: 'error', autoHide: false });
             return;
         }
         // Create a config container
         var $container = $('<div>').prop('id', 'anrc-container');
-        content.innerHTML = '';
-        content.appendChild($container[0]);
+        $content.empty().append($container);
         // Create the config body
         new Config($container);
     }
@@ -332,7 +327,7 @@ var __assign = (this && this.__assign) || function () {
                 new OO.ui.FieldLayout(this.portletlinkPosition, {
                     label: 'ポートレットID (上級)',
                     align: 'top',
-                    help: new OO.ui.HtmlSnippet('<a href="https://doc.wikimedia.org/mediawiki-core/master/js/#!/api/mw.util" target="_blank">mw.util.addPortletLink</a>の' +
+                    help: new OO.ui.HtmlSnippet('<a href="https://doc.wikimedia.org/mediawiki-core/master/js/#!/api/mw.util-method-addPortletLink" target="_blank">mw.util.addPortletLink</a>の' +
                         '<code style="font-family: inherit;">portletId</code>を指定します。未指定または値が無効の場合、使用中のスキンに応じて自動的にリンクの生成位置が決定されます。')
                 }),
             ]);
@@ -2527,10 +2522,9 @@ var __assign = (this && this.__assign) || function () {
                         if (!param1) {
                             return false;
                         }
-                        else if (mw.util.isIPv6Address(param1, true)) {
-                            param1 = param1.toUpperCase();
+                        else {
+                            param1 = User.formatName(param1);
                         }
-                        param1 = User.formatName(param1);
                         // Evaluation
                         var isDuplicate = data.users.some(function (_a) {
                             var user = _a.user, type = _a.type;
@@ -2863,9 +2857,12 @@ var __assign = (this && this.__assign) || function () {
          * @returns The formatted username.
          */
         User.formatName = function (username) {
-            var user = mwString.ucFirst(lib.clean(username.replace(/_/g, ' ')));
+            var user = lib.clean(username.replace(/_/g, ' '));
             if (mw.util.isIPv6Address(user, true)) {
                 user = user.toUpperCase();
+            }
+            else if (!/^[\u10A0-\u10FF]/.test(user)) { // ucFirst, except for Georgean letters
+                user = mwString.ucFirst(user);
             }
             return user;
         };
