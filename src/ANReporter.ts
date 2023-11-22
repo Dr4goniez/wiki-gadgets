@@ -1,7 +1,7 @@
 /*********************************************************************************\
 	AN Reporter
 	@author [[User:Dragoniez]]
-	@version 8.0.2
+	@version 8.0.3
 	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -2214,15 +2214,25 @@ class Reporter {
 				title: data.page,
 				text,
 				summary,
-				prop: 'text',
+				prop: 'text|modules|jsconfigvars',
+				pst: true,
 				disablelimitreport: true,
 				disableeditsection: true,
 				disabletoc: true,
+				contentmodel: 'wikitext',
 				formatversion: '2'
 			}).then((res) => {
-				const content = res && res.parse && res.parse.text;
-				const comment = res && res.parse && res.parse.parsedsummary;
+				const resParse = res && res.parse;
+				const content = resParse.text;
+				const comment = resParse.parsedsummary;
 				if (content && comment) {
+
+					if (resParse.modules.length) {
+						mw.loader.load(resParse.modules);
+					}
+					if (resParse.modulestyles.length) {
+						mw.loader.load(resParse.modulestyles);
+					}
 
 					const $header = $('<div>')
 						.prop('id', 'anr-dialog-preview-header')

@@ -2,7 +2,7 @@
 /*********************************************************************************\
     AN Reporter
     @author [[User:Dragoniez]]
-    @version 8.0.2
+    @version 8.0.3
     @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -1933,15 +1933,24 @@ var __assign = (this && this.__assign) || function () {
                     title: data.page,
                     text: text,
                     summary: summary,
-                    prop: 'text',
+                    prop: 'text|modules|jsconfigvars',
+                    pst: true,
                     disablelimitreport: true,
                     disableeditsection: true,
                     disabletoc: true,
+                    contentmodel: 'wikitext',
                     formatversion: '2'
                 }).then(function (res) {
-                    var content = res && res.parse && res.parse.text;
-                    var comment = res && res.parse && res.parse.parsedsummary;
+                    var resParse = res && res.parse;
+                    var content = resParse.text;
+                    var comment = resParse.parsedsummary;
                     if (content && comment) {
+                        if (resParse.modules.length) {
+                            mw.loader.load(resParse.modules);
+                        }
+                        if (resParse.modulestyles.length) {
+                            mw.loader.load(resParse.modulestyles);
+                        }
                         var $header = $('<div>')
                             .prop('id', 'anr-dialog-preview-header')
                             .append($('<p>' +
