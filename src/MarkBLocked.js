@@ -11,7 +11,7 @@
 					MarkBLocked.init({
 						// The options below are specific to Japanese projects
 						lang: 'ja',
-						contribs_CA: [
+						contribsCA: [
 							'投稿記録',
 							'アカウント統一管理',
 							'統一ログインの管理'
