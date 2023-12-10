@@ -40,6 +40,18 @@ module.exports = /** @class */ (function() {
 
 		var cfg = config || {};
 
+		// Warn if the config has any invalid property
+		var validKeys = ['defaultOptions', 'optionKey', 'globalize', 'i18n', 'lang', 'contribsCA', 'groupsAHL'];
+		var invalidKeys = Object.keys(cfg).reduce(/** @param {string[]} acc */ function(acc, key) {
+			if (validKeys.indexOf(key) === -1 && acc.indexOf(key) === -1) {
+				acc.push(key);
+			}
+			return acc;
+		}, []);
+		if (invalidKeys.length) {
+			console.error('MarkBLocked: Detected invalid constructor options: ' + invalidKeys.join(', '));
+		}
+
 		// User options
 		var defaultOptions = cfg.defaultOptions || {
 			localips: false,
