@@ -1,12 +1,12 @@
-/*!*
- * 署名忘れ防止スクリプト [[利用者:Cpro|cpro]] 2012年12月6日 (木) 07:39 (UTC)
- *
- * 以下のスクリプトはパブリックドメインとします。
- * 改変・再配布を含め自由にお使いいただけますが、自己責任でお願いします。
- * This script is under the public domain.
- * You can freely use, modify, or redistribute it at your own risk.
- *
- * Modified in December 2023 by [[User:Dragoniez]]
+/*
+	署名忘れ防止スクリプト [[利用者:Cpro|cpro]] 2012年12月6日 (木) 07:39 (UTC)
+
+	以下のスクリプトはパブリックドメインとします。
+	改変・再配布を含め自由にお使いいただけますが、自己責任でお願いします。
+	This script is under the public domain.
+	You can freely use, modify, or redistribute it at your own risk.
+
+	Modified in December 2023 by [[User:Dragoniez]]
  */
 /* global mw, OO */
 //<nowiki>
@@ -109,11 +109,13 @@ $.when(mw.loader.using(['oojs-ui-core', 'oojs-ui-windows']), $.ready).then(funct
 
 		}
 
-		// コードがここまでたどり着いた場合署名がないため警告し、OKが押されなかったら保存処理をキャンセル
-		// (OO.ui.confirmが非同期処理のため先に保存処理をキャンセルし、OKが押されたらフォームをsubmit)
-		e.preventDefault();
+		// コードがここまでたどり着いた場合署名がない
+		e.preventDefault(); // OO.ui.confirmが非同期処理のため先に保存処理をキャンセル
 		OO.ui.confirm('署名が入力されていません。このまま投稿しますか？').then(function(confirmed) {
+
+			// OKが押されたらフォームをsubmit
 			if (confirmed) $('#editform').trigger('submit');
+
 		});
 
 	});
