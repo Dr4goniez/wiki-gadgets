@@ -13,15 +13,16 @@
 (function() {
 
 	// 編集またはプレビュー時にスクリプトを実行
-	if (['edit', 'submit'].indexOf(mw.config.get('wgAction')) === -1) return;
+	var wgAction = mw.config.get('wgAction');
+	if (['edit', 'submit'].indexOf(wgAction) === -1) return;
 
 	// すべてのノート名前空間と、Wikipedia名前空間、プロジェクト名前空間の一部を対象とする
 	/**
 	 * 条件付き名前空間でスクリプトを走らせるページ名の文字列型正規表現
-	 * @type {Record<string, string[]>}
+	 * @type {Record<number, string[]>}
 	 */
 	var rTitles = {
-		'4': [
+		4: [
 			'^井戸端($|/subj/)',
 			'^削除依頼/(?!ログ/)',
 			'^リダイレクトの削除依頼/受付$',
@@ -31,14 +32,14 @@
 			'^(ガジェット|編集フィルター)/提案$',
 			'^管理者伝言板/(投稿ブロック|保護ページ編集|その他の伝言)($|/)'
 		],
-		'102': [
+		102: [
 			'^カテゴリ関連/議論/'
 		]
 	};
 	var ns = mw.config.get('wgNamespaceNumber');
 	if (
 		ns < 0 ||
-		ns % 2 === 0 && Object.keys(rTitles).indexOf(ns.toString()) === -1 || // 2で割り切れる、かつrTitlesのキーのどれとも合致しない
+		ns % 2 === 0 && !rTitles[ns] || // 2で割り切れる、かつrTitlesのキーのどれとも合致しない
 		rTitles[ns] && !new RegExp(rTitles[ns].join('|')).test(mw.config.get('wgTitle')) // rTitlesのキーと合致するがページ名が合致しない
 	) {
 		return;
@@ -69,9 +70,9 @@
 			// 細部の編集がチェックされ、かつ確認抑制ガジェットが有効であれば終了
 			if (isMinorEdit && suppressWhenMinor) return;
 
-			// テキストを取得（変更がない場合は終了）
+			// テキストを取得（action=editで変更がない場合は終了）
 			var text = $textbox.val();
-			if (typeof text !== 'string' || text === originalText) return;
+			if (typeof text !== 'string' || wgAction === 'edit' && text === originalText) return;
 
 			// 署名がある場合
 			var rSig = /[^~]~~~~(?!~)/; // チルダ4つ（それ以外の個数はNG）
