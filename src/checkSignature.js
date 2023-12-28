@@ -16,34 +16,33 @@
 	if (['edit', 'submit'].indexOf(mw.config.get('wgAction')) === -1) return;
 
 	// すべてのノート名前空間と、Wikipedia名前空間、プロジェクト名前空間の一部を対象とする
+	/**
+	 * 条件付き名前空間でスクリプトを走らせるページ名の文字列型正規表現
+	 * @type {Record<string, string[]>}
+	 */
+	var rTitles = {
+		'4': [
+			'^井戸端($|/subj/)',
+			'^削除依頼/(?!ログ/)',
+			'^リダイレクトの削除依頼/受付$',
+			'^(削除の復帰|投稿ブロック|チェックユーザー)依頼/',
+			'^(保護(解除)?|移動|利用者ページの削除|著作権問題調査)依頼$',
+			'^(改名|統合|分割)提案$',
+			'^(ガジェット|編集フィルター)/提案$',
+			'^管理者伝言板/(投稿ブロック|保護ページ編集|その他の伝言)($|/)'
+		],
+		'102': [
+			'^カテゴリ関連/議論/'
+		]
+	};
 	var ns = mw.config.get('wgNamespaceNumber');
-	if (ns < 0 || ns % 2 === 0 && [4, 102].indexOf(ns) === -1) return;
-
-	// 条件付き名前空間の場合スクリプトを走らせるページ名を取得
-	var rTitles;
-	switch (ns) {
-		case 4:
-			rTitles = [
-				'^井戸端($|/subj/)',
-				'^削除依頼/(?!ログ/)',
-				'^リダイレクトの削除依頼/受付$',
-				'^(削除の復帰|投稿ブロック|チェックユーザー)依頼/',
-				'^(保護(解除)?|移動|利用者ページの削除|著作権問題調査)依頼$',
-				'^(改名|統合|分割)提案$',
-				'^(ガジェット|編集フィルター)/提案$',
-				'^管理者伝言板/(投稿ブロック|保護ページ編集|その他の伝言)($|/)'
-			];
-			break;
-		case 102:
-			rTitles = [
-				'^カテゴリ関連/議論/'
-			];
-			break;
-		default:
+	if (
+		ns < 0 ||
+		ns % 2 === 0 && Object.keys(rTitles).indexOf(ns.toString()) === -1 || // 2で割り切れる、かつrTitlesのキーのどれとも合致しない
+		rTitles[ns] && !new RegExp(rTitles[ns].join('|')).test(mw.config.get('wgTitle')) // rTitlesのキーと合致するがページ名が合致しない
+	) {
+		return;
 	}
-
-	// 取得したページ名があり、そのどれにもマッチしない場合終了
-	if (rTitles && !new RegExp(rTitles.join('|')).test(mw.config.get('wgTitle'))) return;
 
 	// 依存モジュールとDOMをロード
 	$.when(mw.loader.using(['oojs-ui-core', 'oojs-ui-windows']), $.ready).then(function() {
