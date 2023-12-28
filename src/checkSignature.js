@@ -10,8 +10,7 @@
  */
 /* global mw, OO */
 //<nowiki>
-
-$.when(mw.loader.using(['oojs-ui-core', 'oojs-ui-windows']), $.ready).then(function() {
+(function() {
 
 	// 編集またはプレビュー時にスクリプトを実行
 	if (['edit', 'submit'].indexOf(mw.config.get('wgAction')) === -1) return;
@@ -46,79 +45,94 @@ $.when(mw.loader.using(['oojs-ui-core', 'oojs-ui-windows']), $.ready).then(funct
 	// 取得したページ名があり、そのどれにもマッチしない場合終了
 	if (rTitles && !new RegExp(rTitles.join('|')).test(mw.config.get('wgTitle'))) return;
 
-	// 「変更を公開」が押された時
-	$('#wpSave').off('click').on('click', function(e) {
+	// 依存モジュールとDOMをロード
+	$.when(mw.loader.using(['oojs-ui-core', 'oojs-ui-windows']), $.ready).then(function() {
 
-		// 細部の編集のチェック状態を取得
-		var isMinorEdit = $('#wpMinoredit').prop('checked');
+		// DOM要素を取得
+		var $textbox = $('#wpTextbox1');
+		var $saveButton = $('#wpSave');
+		var $form = $('#editform');
+		if (!$textbox.length || !$saveButton.length || !$form.length) return;
 
-		// 「細部の編集にチェックを入れたときは署名がなくてもポップアップを表示しない」ガジェットが有効か
-		var suppressWhenMinor = mw.loader.getState('ext.gadget.checkSignature-suppressWhenMinor') === 'ready';
+		// 初期テキストを保存
+		var originalText = $textbox.val();
+		if (typeof originalText !== 'string') return;
 
-		// 細部の編集がチェックされ、かつ確認抑制ガジェットが有効であれば終了
-		if (isMinorEdit && suppressWhenMinor) return;
+		// 「変更を公開」が押された時
+		$saveButton.off('click').on('click', function(e) {
 
-		// 署名の有無をチェック
-		var text = $('#wpTextbox1').val();
-		if (typeof text !== 'string') return;
+			// 細部の編集のチェック状態を取得
+			var isMinorEdit = $('#wpMinoredit').prop('checked');
 
-		// 署名がある場合
-		var rSig = /[^~]~~~~(?!~)/; // チルダ4つ（それ以外の個数はNG）
-		if (/^\s*~~~~(?!~)/.test(text)) { // 本文先頭に署名がある場合は上の正規表現がカバーできないので念のため
-			return;
-		} else if (rSig.test(text)) {
+			// 「細部の編集にチェックを入れたときは署名がなくてもポップアップを表示しない」ガジェットが有効か
+			var suppressWhenMinor = mw.loader.getState('ext.gadget.checkSignature-suppressWhenMinor') === 'ready';
 
-			// 署名がコメントまたはnowiki内にないことを保障
-			var rTag = {
-				comment: { // 以下、C
-					start: /^<!--/,
-					end: /^-->/
-				},
-				nowiki: { // 以下、N
-					start: /^<nowiki[^>\n]*>/,
-					end: /^<\/nowiki[^>\n]*>/
-				}
-			};
-			var rClose, m;
-			for (var i = 0; i < text.length; i++) { // 本文の1文字目から順番にチェック
+			// 細部の編集がチェックされ、かつ確認抑制ガジェットが有効であれば終了
+			if (isMinorEdit && suppressWhenMinor) return;
 
-				// i文字目から最後までのウィキテキスト
-				var substr = text.slice(i);
+			// テキストを取得（変更がない場合は終了）
+			var text = $textbox.val();
+			if (typeof text !== 'string' || text === originalText) return;
 
-				// C内でもN内でもない時に署名を見つけたら終了
-				if (!rClose && substr.search(rSig) === 0) {
-					return;
+			// 署名がある場合
+			var rSig = /[^~]~~~~(?!~)/; // チルダ4つ（それ以外の個数はNG）
+			if (/^\s*~~~~(?!~)/.test(text)) { // 本文先頭に署名がある場合は上の正規表現がカバーできないので念のため
+				return;
+			} else if (rSig.test(text)) {
 
-				// C内でもN内でもない時にCかNの開始タグを見つけたら、探す終了タグの正規表現を登録
-				} else if (!rClose) {
-					if ((m = rTag.comment.start.exec(substr))) {
-						rClose = rTag.comment.end;
-						i += m[0].length - 1;
-					} else if ((m = rTag.nowiki.start.exec(substr))) {
-						rClose = rTag.nowiki.end;
+				// 署名がコメントまたはnowiki内にないことを保障
+				var rTag = {
+					comment: { // 以下、C
+						start: /^<!--/,
+						end: /^-->/
+					},
+					nowiki: { // 以下、N
+						start: /^<nowiki[^>\n]*>/,
+						end: /^<\/nowiki[^>\n]*>/
+					}
+				};
+				var rClose, m;
+				for (var i = 0; i < text.length; i++) { // 本文の1文字目から順番にチェック
+
+					// i文字目から最後までのウィキテキスト
+					var substr = text.slice(i);
+
+					// C内でもN内でもない時に署名を見つけたら終了
+					if (!rClose && substr.search(rSig) === 0) {
+						return;
+
+					// C内でもN内でもない時にCかNの開始タグを見つけたら、探す終了タグの正規表現を登録
+					} else if (!rClose) {
+						if ((m = rTag.comment.start.exec(substr))) {
+							rClose = rTag.comment.end;
+							i += m[0].length - 1;
+						} else if ((m = rTag.nowiki.start.exec(substr))) {
+							rClose = rTag.nowiki.end;
+							i += m[0].length - 1;
+						}
+
+					// C内かN内で対応する閉じタグをを見つけたら、探す終了タグの正規表現をリセット
+					} else if (rClose && (m = rClose.exec(substr))) {
+						rClose = void 0;
 						i += m[0].length - 1;
 					}
 
-				// C内かN内で対応する閉じタグをを見つけたら、探す終了タグの正規表現をリセット
-				} else if (rClose && (m = rClose.exec(substr))) {
-					rClose = void 0;
-					i += m[0].length - 1;
 				}
 
 			}
 
-		}
+			// コードがここまでたどり着いた場合署名がない
+			e.preventDefault(); // OO.ui.confirmが非同期処理のため先に保存処理をキャンセル
+			OO.ui.confirm('署名が入力されていません。このまま投稿しますか？').then(function(confirmed) {
 
-		// コードがここまでたどり着いた場合署名がない
-		e.preventDefault(); // OO.ui.confirmが非同期処理のため先に保存処理をキャンセル
-		OO.ui.confirm('署名が入力されていません。このまま投稿しますか？').then(function(confirmed) {
+				// OKが押されたらフォームをsubmit
+				if (confirmed) $form.trigger('submit');
 
-			// OKが押されたらフォームをsubmit
-			if (confirmed) $('#editform').trigger('submit');
+			});
 
 		});
 
 	});
 
-});
+})();
 //</nowiki>
