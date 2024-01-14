@@ -3,7 +3,7 @@
  *	 Generate warnings on Special:Movepage, per the states of the move destination.
  *
  * @author [[User:Dragoniez]]
- * @version 1.0.2
+ * @version 1.0.3
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -121,10 +121,14 @@
 			var inputTimeout;
 			/**
 			 * The input event handler.
+			 * @param {boolean} [moveTalkChanged]
 			 */
-			var initWarnings = function() {
+			var initWarnings = function(moveTalkChanged) {
+				var mtc = !!moveTalkChanged;
 				clearTimeout(inputTimeout);
-				inputTimeout = setTimeout(function() { _this.updateWarnings(); }, 1000);
+				inputTimeout = setTimeout(function() {
+					_this.updateWarnings(mtc);
+				}, 1000);
 			};
 
 			// Event listener for changes in the namespace prefix
@@ -141,7 +145,16 @@
 			});
 
 			// Event listener for changes in the title
-			this.titleInput.addEventListener('input', initWarnings);
+			this.titleInput.addEventListener('input', function() {
+				initWarnings();
+			});
+
+			// Event listener for changes in "move associated talk page"
+			if (this.moveTalkBox) {
+				this.moveTalkBox.addEventListener('change', function() {
+					initWarnings(true);
+				});
+			}
 
 			initWarnings();
 
@@ -222,9 +235,10 @@
 
 		/**
 		 * Update warnings. This is to be called when either the prefix or the title has been changed.
+		 * @param {boolean} moveTalkChanged
 		 * @returns {JQueryPromise<void>}
 		 */
-		MoveWarnings.prototype.updateWarnings = function() {
+		MoveWarnings.prototype.updateWarnings = function(moveTalkChanged) {
 
 			// Pick up the prefixed title to which to move the current page
 			var title = (this.prefix && this.prefix + ':') + this.titleInput.value;
@@ -237,7 +251,7 @@
 			this.lastTitle = title;
 
 			// Synchronous checks for possible warnings
-			if (isSameTitle) {
+			if (isSameTitle && !moveTalkChanged) {
 				console.log('[mvw]', 'Exited for the reason of "same title".');
 				return $.Deferred().resolve(void 0);
 			} else if (!title || title === this.target) {
@@ -256,7 +270,7 @@
 
 			// Asynchronous checks for possible warnings
 			this.api.abort();
-			this.clearWarnings();
+			if (!moveTalkChanged) this.clearWarnings();
 			var _this = this;
 			var associatedTitle = this.moveTalk && Title && !Title.isTalkPage() && Title.getTalkPage() || void 0;
 			var talkTitle = associatedTitle && associatedTitle.getPrefixedText();
