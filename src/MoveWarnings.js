@@ -3,7 +3,7 @@
  *	 Generate warnings on Special:Movepage, per the states of the move destination.
  *
  * @author [[User:Dragoniez]]
- * @version 1.0.3
+ * @version 1.0.4
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -165,10 +165,9 @@
 		 * @static
 		 */
 		MoveWarnings.init = function() {
-
 			$.when(
 				mw.loader.using(['mediawiki.api', 'mediawiki.Title', 'mediawiki.util']),
-				$.ready
+				formReady()
 			).then(function() { // Load modules and the DOM, then
 
 				var title = mw.util.getParamValue('target') || mw.config.get('wgTitle').replace(/^移動\/?/, '');
@@ -189,9 +188,54 @@
 					new MoveWarnings(Title.getPrefixedText(), prefixLabel, titleInput, $submitButton);
 				}
 
+			}).catch(console.error);
+		};
+
+		/**
+		 * The movepage form is created by OOUI dynamically, so it's not enough to just wait for document ready.
+		 * This function ensures that the form in the document is ready.
+		 */
+		function formReady() {
+			var def = $.Deferred();
+
+			/**
+			 * @param {Element} content
+			 * @returns {boolean}
+			 */
+			var elementsReady = function(content) {
+				return !!(
+					content.querySelector('#wpNewTitleNs') &&
+					content.querySelector('#wpNewTitleMain') &&
+					content.querySelector('button[name="wpMove"]')
+				);
+			};
+
+			$(function() {
+				var content = document.querySelector('.mw-body-content');
+				if (content) {
+					if (elementsReady(content)) {
+						// Just resolve if the elements are already there
+						def.resolve();
+					} else {
+						// Watch DOM updates if the elements aren't ready
+						new MutationObserver(function(_, obs) {
+							if (content && elementsReady(content)) {
+								// Resolve when the elements get ready
+								obs.disconnect();
+								def.resolve();
+							}
+						}).observe(content, {
+							childList: true,
+							subtree: true
+						});
+					}
+				} else {
+					def.reject(new Error('[mvw] ".mw-body-content" not found'));
+				}
 			});
 
-		};
+			return def.promise();
+		}
 
 		// Define getters
 		Object.defineProperty(MoveWarnings.prototype, 'moveTalk', {
