@@ -3,7 +3,7 @@
  *	 Generate warnings on Special:Movepage, per the states of the move destination.
  *
  * @author [[User:Dragoniez]]
- * @version 1.0.1
+ * @version 1.0.2
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -124,7 +124,7 @@
 			 */
 			var initWarnings = function() {
 				clearTimeout(inputTimeout);
-				inputTimeout = setTimeout(function() { _this.updateWarnings(); }, 500);
+				inputTimeout = setTimeout(function() { _this.updateWarnings(); }, 1000);
 			};
 
 			// Event listener for changes in the namespace prefix
@@ -230,6 +230,7 @@
 			var title = (this.prefix && this.prefix + ':') + this.titleInput.value;
 			var Title = mw.Title.newFromText(title);
 			title = Title ? Title.getPrefixedText() : title.replace(/_/g, ' ');
+			console.log('[mvw]', title);
 
 			// Compare with the last-checked title
 			var isSameTitle = title === this.lastTitle;
@@ -237,12 +238,15 @@
 
 			// Synchronous checks for possible warnings
 			if (isSameTitle) {
+				console.log('[mvw]', 'Exited for the reason of "same title".');
 				return $.Deferred().resolve(void 0);
 			} else if (!title || title === this.target) {
+				console.log('[mvw]', 'Exited for the reason of "no title" or "same as target title".');
 				this.api.abort();
 				this.clearWarnings();
 				return $.Deferred().resolve(void 0);
 			} else if (!Title) {
+				console.log('[mvw]', 'Exited for the reason of "invalid title 1".');
 				this.api.abort();
 				this.setWarnings({
 					invalidtitle: [title]
@@ -263,14 +267,17 @@
 
 				var cnt = 0;
 				if (info === null) {
+					console.log('[mvw]', 'Exited for the reason of "info is null".');
 					cnt += _this.clearWarnings();
 				} else if (info.invalid) {
+					console.log('[mvw]', 'Exited for the reason of "invalid title 2".');
 					cnt += _this.setWarnings({
 						invalidtitle: [title]
 					});
 				} else {
+					console.log('[mvw]', 'Generated warnings.');
 					cnt += _this.setWarnings({
-						overwrite: info.single && info.redirect && plusInfo.redirectTo === title ? [title] : null,
+						overwrite: info.single && info.redirect && plusInfo.redirectTo === _this.target ? [title] : null,
 						talkexists: plusInfo.talkExists && associatedTitle ? [associatedTitle.getPrefixedText()] : null,
 						needdelete: info.missing === false && info.single === false && _this.candelete ? [title] : null,
 						cantmove: info.missing === false && info.single === false && !_this.candelete ? [title] : null
