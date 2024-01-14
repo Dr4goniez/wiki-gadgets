@@ -676,7 +676,6 @@
 				if (resLgev && ret.protected) {
 					for (var i = 0; i < resLgev.length; i++) {
 						var obj = resLgev[i];
-						console.log(obj);
 						if (
 							['protect', 'modify', 'move_prot'].indexOf(obj.action || '') !== -1 &&
 							// The first log entry might not be the one assocaited with the current protection settings,
@@ -752,7 +751,6 @@
 				redirects: true,
 				formatversion: '2'
 			}).then(/** @param {ApiResponse} res */ function(res) {
-				console.log(res);
 				/** @type {AdditionalTitleInfo} */
 				var ret = {
 					redirectTo: null,
