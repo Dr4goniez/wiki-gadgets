@@ -3,7 +3,7 @@
  *	 Generate warnings on Special:Movepage, per the states of the move destination.
  *
  * @author [[User:Dragoniez]]
- * @version 1.0.5
+ * @version 1.0.6
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -340,11 +340,12 @@
 					});
 				} else {
 					console.log('[mvw]', 'Generated warnings.');
+					var isSingleRevisionRedirectToTarget = !!(info.single && info.redirect && plusInfo.redirectTo === _this.target);
 					_this.setWarnings({
-						overwrite: info.single && info.redirect && plusInfo.redirectTo === _this.target ? [title] : null,
+						overwrite: isSingleRevisionRedirectToTarget ? [title] : null,
 						talkexists: plusInfo.talkExists && associatedTitle ? [associatedTitle.getPrefixedText()] : null,
-						needdelete: info.missing === false && info.single === false && _this.candelete ? [title] : null,
-						cantmove: info.missing === false && info.single === false && !_this.candelete ? [title] : null
+						needdelete: !(info.missing || isSingleRevisionRedirectToTarget) && _this.candelete ? [title] : null,
+						cantmove: !(info.missing || isSingleRevisionRedirectToTarget) && !_this.candelete ? [title] : null
 					});
 					if (info.protected) {
 						var pwCnt = _this.setProtectionWarning(info.protection);
