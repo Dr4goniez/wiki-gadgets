@@ -3,7 +3,7 @@
  *	 Generate warnings on Special:Movepage, per the states of the move destination.
  *
  * @author [[User:Dragoniez]]
- * @version 1.0.0
+ * @version 1.0.1
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -633,8 +633,8 @@
 		 * The object returned by `MoveWarnings.queryAdditionalTitleInfo`.
 		 * @typedef AdditionalTitleInfo
 		 * @type {object}
-		 * @property {string} [redirectTo] If the page is a redirect, the title to which it is redirected to
-		 * @property {boolean} [talkExists] `true` if the tale page exists
+		 * @property {string?} redirectTo If the page is a redirect, the title to which it is redirected to
+		 * @property {boolean} talkExists `true` if the talk page exists
 		 */
 
 		/**
@@ -744,21 +744,36 @@
 		 * @returns {JQueryPromise<AdditionalTitleInfo>}
 		 */
 		MoveWarnings.prototype.queryAdditionalTitleInfo = function(page, talkpage) {
-			var titles = talkpage ? page + '|' + talkpage : page;
+			var titles = [page];
+			if (talkpage) titles.push(talkpage);
 			return this.api.get({
 				action: 'query',
 				titles: titles,
 				redirects: true,
 				formatversion: '2'
 			}).then(/** @param {ApiResponse} res */ function(res) {
+				console.log(res);
 				/** @type {AdditionalTitleInfo} */
-				var ret = {};
+				var ret = {
+					redirectTo: null,
+					talkExists: false
+				};
 				if (res && res.query) {
-					if (res.query.redirects && res.query.redirects[0] && res.query.redirects[0].to) {
-						ret.redirectTo = res.query.redirects[0].to;
-					}
-					if (res.query.pages && res.query.pages[1] && !res.query.pages[1].missing) {
-						ret.talkExists = true;
+					(res.query.redirects || []).some(function(obj) {
+						if (obj.from === titles[0]) {
+							ret.redirectTo = obj.to;
+							return true;
+						}
+						return false;
+					});
+					if (titles[1] && res.query.pages) {
+						res.query.pages.some(function(obj) {
+							if (obj.title === titles[1]) {
+								ret.talkExists = !obj.missing;
+								return true;
+							}
+							return false;
+						});
 					}
 				}
 				return ret;
@@ -766,7 +781,10 @@
 				if (err && err['exception'] !== 'abort') {
 					console.log(err);
 				}
-				return {};
+				return {
+					redirectTo: null,
+					talkExists: false
+				};
 			});
 		};
 
