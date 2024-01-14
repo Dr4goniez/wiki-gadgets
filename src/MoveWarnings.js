@@ -3,7 +3,7 @@
  *	 Generate warnings on Special:Movepage, per the states of the move destination.
  *
  * @author [[User:Dragoniez]]
- * @version 1.0.4
+ * @version 1.0.5
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -240,12 +240,20 @@
 		// Define getters
 		Object.defineProperty(MoveWarnings.prototype, 'moveTalk', {
 			/**
-			 * Check whether the `Move associated talk page` box is checked.
-			 *
+			 * Return the check state of the `Move associated talk page` box.
 			 * @returns {boolean}
 			 */
-			get: function moveTalk() {
+			get: function() {
 				return this.moveTalkBox && this.moveTalkBox.checked || false;
+			}
+		});
+		Object.defineProperty(MoveWarnings.prototype, 'length', {
+			/**
+			 * Return the number of warnings.
+			 * @returns {number}
+			 */
+			get: function() {
+				return this.$warningList.children('li').length;
 			}
 		});
 
@@ -314,7 +322,6 @@
 
 			// Asynchronous checks for possible warnings
 			this.api.abort();
-			if (!moveTalkChanged) this.clearWarnings();
 			var _this = this;
 			var associatedTitle = this.moveTalk && Title && !Title.isTalkPage() && Title.getTalkPage() || void 0;
 			var talkTitle = associatedTitle && associatedTitle.getPrefixedText();
@@ -323,18 +330,17 @@
 				this.queryAdditionalTitleInfo(title, talkTitle)
 			).then(function(info, plusInfo) {
 
-				var cnt = 0;
 				if (info === null) {
 					console.log('[mvw]', 'Exited for the reason of "info is null".');
-					cnt += _this.clearWarnings();
+					_this.clearWarnings();
 				} else if (info.invalid) {
 					console.log('[mvw]', 'Exited for the reason of "invalid title 2".');
-					cnt += _this.setWarnings({
+					_this.setWarnings({
 						invalidtitle: [title]
 					});
 				} else {
 					console.log('[mvw]', 'Generated warnings.');
-					cnt += _this.setWarnings({
+					_this.setWarnings({
 						overwrite: info.single && info.redirect && plusInfo.redirectTo === _this.target ? [title] : null,
 						talkexists: plusInfo.talkExists && associatedTitle ? [associatedTitle.getPrefixedText()] : null,
 						needdelete: info.missing === false && info.single === false && _this.candelete ? [title] : null,
@@ -343,11 +349,10 @@
 					if (info.protected) {
 						var pwCnt = _this.setProtectionWarning(info.protection);
 						if (pwCnt) _this.searchRedlinks();
-						cnt += pwCnt;
 					}
 				}
 
-				if (cnt) {
+				if (_this.length) {
 					// If new warnings have been generated, trigger the wikipage.content hook to run any script
 					// that watches the hook for updates in the page content (this will activate e.g. nav_popups
 					// on links in the warnings)
@@ -423,7 +428,7 @@
 			}
 
 			// Show/hide the warning wrapper depending on whether there's at least one warning
-			var cnt = this.$warningList.children('li').length;
+			var cnt = this.length;
 			this.toggle(!!cnt);
 			return cnt;
 
