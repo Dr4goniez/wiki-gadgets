@@ -1,9 +1,8 @@
 /*****************************************************************************************\
- * MoveWarnings
- *	 Generate warnings on Special:Movepage, per the states of the move destination.
- *
- * @author [[User:Dragoniez]]
- * @version 1.0.6
+	MoveWarnings
+	Generate warnings on Special:Movepage, per the states of the move destination.
+	@author [[User:Dragoniez]]
+	@version 1.0.7
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -29,6 +28,23 @@
 	// Define main functions, using a class
 	var MoveWarnings = /** @class */ (function() {
 
+		// Collect all localized, canonical namespace prefixes
+		var wgFormattedNamespaces = mw.config.get('wgFormattedNamespaces');
+		var prefixes = Object.keys(wgFormattedNamespaces).reduce(/** @param {string[]} acc */ function(acc, key) {
+			var val = wgFormattedNamespaces[key];
+			if (val) acc.push(val);
+			return acc;
+		}, []);
+
+		/**
+		 * Sanitize a localized namespace prefix.
+		 * @param {string} prefix
+		 * @returns {string} An empty string if there's no match with any of the localized namespace prefixes. ("(Main)" -> "")
+		 */
+		var sanitizePrefix = function(prefix) {
+			return prefixes.some(function(pfx) { return pfx === prefix; }) ? prefix : '';
+		};
+
 		/**
 		 * Initialize a MoveWarnings instance.
 		 *
@@ -50,13 +66,11 @@
 			 */
 			this.target = target;
 
-			var prefix = prefixLabel.innerHTML;
-			if (prefix.indexOf('標準') !== -1) prefix = '';
 			/**
 			 * The value selected in the namespace selector dropdown (updated in the callback of MutationObserver).
 			 * @type {string}
 			 */
-			this.prefix = prefix;
+			this.prefix = sanitizePrefix(prefixLabel.innerHTML);
 
 			/**
 			 * The input tag in the OOUI InputWidget used as a wgTitle specifier.
@@ -135,8 +149,7 @@
 			new MutationObserver(function(mutations) {
 				var val = mutations[1] && mutations[1].addedNodes[0] && mutations[1].addedNodes[0].nodeValue;
 				if (val) {
-					if (val.indexOf('標準') !== -1) val = '';
-					_this.prefix = val; // Update prefix
+					_this.prefix = sanitizePrefix(val); // Update prefix
 					initWarnings();
 				}
 			}).observe(prefixLabel, {
@@ -170,7 +183,7 @@
 				formReady()
 			).then(function() { // Load modules and the DOM, then
 
-				var title = mw.util.getParamValue('target') || mw.config.get('wgTitle').replace(/^移動\/?/, '');
+				var title = mw.util.getParamValue('target') || mw.config.get('wgTitle').replace(/^[^/]+\/?/, '');
 				var Title = mw.Title.newFromText(title);
 
 				var prefixDropdown = document.getElementById('wpNewTitleNs');
@@ -272,6 +285,11 @@
 					'font-weight: bold;' +
 					'margin-left: 1em;' +
 					'padding-top: 5px;' +
+				'}' +
+				'.mvw-logline-hidden {' +
+					'text-decoration: line-through;' +
+					'color: #72777d;' +
+					'font-style: italic;' +
 				'}';
 			document.head.appendChild(style);
 		};
@@ -378,30 +396,35 @@
 		 * @static
 		 */
 		MoveWarnings.template = {
+			/** `$1`: prefixed title */
 			invalidtitle: '「$1」は[[Help:ページ名#特殊文字|不正なページ名]]です。',
+			/** `$1`: prefixed title */
 			overwrite: 'リダイレクトの「[[$1]]」を上書きして移動します。',
+			/** `$1`: prefixed title */
 			talkexists: '「[[$1]]」が存在するため、<b>ノートページは付随移動されません</b>。',
+			/** `$1`: prefixed title */
 			needdelete: '「[[$1]]」への移動を行うためにはページの削除が必要です。',
+			/** `$1`: prefixed title */
 			cantmove: '「[[$1]]」への移動は削除権限を要するため、<b>あなたは移動できません</b>。記事としての履歴がない (またはあっても' +
 				'即時削除対象となる) 場合は[[Wikipedia:移動依頼|移動依頼]]を、そうでない場合は[[Wikipedia:削除の方針#C|ケースC]]の' +
 				'[[Wikipedia:削除依頼|削除依頼]]を利用してください。',
 			/** `$1`: logid, `$2`: timestamp, `$3`: user, `$4`: target, `$5`: levels, `$6`: parsedcomment */
 			'protect/protect': protectionWarningWrapper(
-				'[[Special:Redirect/logid/$1|$2]] <span class="mvw-logline-userhidden">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
-				'[[Special:Contribs/$3|投稿記録]]) が</span> <span class="mvw-logline-actionhidden">[[$4]] を保護しました $5</span> ' +
-				'<span class="mvw-logline-commenthidden">($6)</span>'
+				'[[Special:Redirect/logid/$1|$2]] <span class="mvw-logline-user">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
+				'[[Special:Contribs/$3|投稿記録]])</span><span class="mvw-logline-connective"></span><span class="mvw-logline-action">' +
+				'[[$4]] を保護しました $5</span> <span class="mvw-logline-comment">$6</span>'
 			),
 			/** `$1`: logid, `$2`: timestamp, `$3`: user, `$4`: target, `$5`: levels, `$6`: parsedcomment */
 			'protect/modify': protectionWarningWrapper(
-				'[[Special:Redirect/logid/$1|$2]] <span class="mvw-logline-userhidden">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
-				'[[Special:Contribs/$3|投稿記録]]) が</span> <span class="mvw-logline-actionhidden">[[$4]] の保護設定を変更しました ' +
-				'$5</span> <span class="mvw-logline-commenthidden">($6)</span>'
+				'[[Special:Redirect/logid/$1|$2]] <span class="mvw-logline-user">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
+				'[[Special:Contribs/$3|投稿記録]])</span><span class="mvw-logline-connective"></span><span class="mvw-logline-action">' +
+				'[[$4]] の保護設定を変更しました $5</span> <span class="mvw-logline-comment">$6</span>'
 			),
 			/** `$1`: logid, `$2`: timestamp, `$3`: user, `$4`: target, `$5`: moved_from, `$6`: parsedcomment */
 			'protect/move_prot': protectionWarningWrapper(
-				'[[Special:Redirect/logid/$1|$2]] <span class="mvw-logline-userhidden">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
-				'[[Special:Contribs/$3|投稿記録]]) が</span> <span class="mvw-logline-actionhidden">保護設定を [[$5]] から [[$4]] に' +
-				'移動しました</span> <span class="mvw-logline-commenthidden">($6)</span>'
+				'[[Special:Redirect/logid/$1|$2]] <span class="mvw-logline-user">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
+				'[[Special:Contribs/$3|投稿記録]])</span><span class="mvw-logline-connective-move"></span><span class="mvw-logline-action">' +
+				'保護設定を [[$5]] から [[$4]] に移動しました</span> <span class="mvw-logline-comment">$6</span>'
 			)
 		};
 
@@ -501,20 +524,23 @@
 
 			// Handle hidden parts in the logline, if any
 			var $logline = $('<div>').prop('innerHTML', template); // Temporarily convert the string to a JQuery element
-			if (info.user === null) {
-				$logline.children('.mvw-logline-userhidden').addClass('history-hidden').prop('innerHTML',
-					'(利用者名は除去されています)'
-				);
+			var userHidden = info.user === null;
+			var actionHidden = info.actionhidden;
+			var commentHidden = info.parsedcomment === null;
+			if (!userHidden && !actionHidden) {
+				$logline.find('.mvw-logline-connective').text(' が ');
+				$logline.find('.mvw-logline-connective-move').text(' が');
+			} else {
+				$logline.find('.mvw-logline-connective, .mvw-logline-connective-move').text(' ');
 			}
-			if (info.actionhidden) {
-				$logline.children('.mvw-logline-actionhidden').addClass('history-hidden').prop('innerHTML',
-					'(ログの詳細は除去されています)'
-				);
+			if (userHidden) {
+				$logline.find('.mvw-logline-user').addClass('mvw-logline-hidden').prop('innerHTML', '(利用者名は除去されています)');
 			}
-			if (info.parsedcomment === null) {
-				$logline.children('.mvw-logline-commenthidden').addClass('history-hidden').prop('innerHTML',
-					'(要約は除去されています)'
-				);
+			if (actionHidden) {
+				$logline.find('.mvw-logline-action').addClass('mvw-logline-hidden').prop('innerHTML', '(ログの詳細は除去されています)');
+			}
+			if (commentHidden) {
+				$logline.find('.mvw-logline-comment').addClass('mvw-logline-hidden').prop('innerHTML', '(要約は除去されています)');
 			}
 			template = $logline.prop('innerHTML'); // Convert back to a string
 
@@ -525,7 +551,7 @@
 				info.user || void 0,
 				info.target,
 				info.action === 'move_prot' ? info.moved_from : translateLevels(info.levels),
-				info.parsedcomment || void 0
+				info.parsedcomment && ('(' + info.parsedcomment + ')') || ''
 			];
 
 			// Create warning
@@ -579,7 +605,7 @@
 				var resPages = res && res.query && res.query.pages;
 				if (!resPages) return;
 				resPages.forEach(function(obj) {
-					if (obj.missing && anchors[obj.title]) {
+					if (obj.missing && !obj.known && anchors[obj.title]) {
 						anchors[obj.title].forEach(function(a) {
 							a.classList.add('new');
 						});
@@ -636,6 +662,7 @@
 		 * 			ns: number;
 		 * 			title: string;
 		 * 			missing?: boolean;
+		 * 			known?: boolean;
 		 * 			redirect?: boolean;
 		 * 			invalid?: boolean;
 		 * 			invalidreason?: string;
@@ -736,7 +763,7 @@
 				var resPg = res && res.query && res.query.pages && res.query.pages[0];
 				if (resPg) {
 					$.extend(ret, {
-						missing: !!resPg.missing,
+						missing: !!(resPg.missing && !resPg.known),
 						redirect: !!resPg.redirect,
 						invalid: !!resPg.invalid,
 						protected: Array.isArray(resPg.protection) && !!resPg.protection.length,
