@@ -1,8 +1,8 @@
 /*****************************************************************************************\
-	MoveWarnings
+	MovePageWarnings
 	Generate warnings on Special:Movepage, per the states of the move destination.
 	@author [[User:Dragoniez]]
-	@version 1.0.7
+	@version 1.0.8
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -26,7 +26,7 @@
 	}
 
 	// Define main functions, using a class
-	var MoveWarnings = /** @class */ (function() {
+	var MovePageWarnings = /** @class */ (function() {
 
 		// Collect all localized, canonical namespace prefixes
 		var wgFormattedNamespaces = mw.config.get('wgFormattedNamespaces');
@@ -46,7 +46,7 @@
 		};
 
 		/**
-		 * Initialize a MoveWarnings instance.
+		 * Initialize a MovePageWarnings instance.
 		 *
 		 * @constructor
 		 * @param {string} target
@@ -54,9 +54,9 @@
 		 * @param {HTMLInputElement} titleInput
 		 * @param {JQuery<HTMLElement>} $submitButton
 		 */
-		function MoveWarnings(target, prefixLabel, titleInput, $submitButton) {
+		function MovePageWarnings(target, prefixLabel, titleInput, $submitButton) {
 
-			MoveWarnings.addStyleTag();
+			MovePageWarnings.addStyleTag();
 
 			// Define class properties
 
@@ -97,14 +97,14 @@
 			this.$warning = $('<div>');
 			this.$warning
 				.addClass('mw-message-box mw-message-box-warning')
-				.prop('id', 'mvw-warnings')
+				.prop('id', 'mpw-warnings')
 				.hide();
 			/**
 			 * The warning message list.
 			 * @type {JQuery<HTMLOListElement>}
 			 */
 			this.$warningList = $('<ol>');
-			this.$warningList.prop('id', 'mvw-warnings-list');
+			this.$warningList.prop('id', 'mpw-warnings-list');
 			this.$warning.append(
 				$('<span>').prop('innerHTML', '<b>警告:</b> 移動先ページについて、以下の点を確認してください。'),
 				this.$warningList
@@ -177,7 +177,7 @@
 		 * Load dependent modules and call the constructor.
 		 * @static
 		 */
-		MoveWarnings.init = function() {
+		MovePageWarnings.init = function() {
 			$.when(
 				mw.loader.using(['mediawiki.api', 'mediawiki.Title', 'mediawiki.util']),
 				formReady()
@@ -198,7 +198,7 @@
 
 				// Run the script if all the above are defined
 				if (Title && prefixLabel && titleInput && $submitButton.length) {
-					new MoveWarnings(Title.getPrefixedText(), prefixLabel, titleInput, $submitButton);
+					new MovePageWarnings(Title.getPrefixedText(), prefixLabel, titleInput, $submitButton);
 				}
 
 			}).catch(console.error);
@@ -243,7 +243,7 @@
 						});
 					}
 				} else {
-					def.reject(new Error('[mvw] ".mw-body-content" not found'));
+					def.reject(new Error('[mpw] ".mw-body-content" not found'));
 				}
 			});
 
@@ -251,7 +251,7 @@
 		}
 
 		// Define getters
-		Object.defineProperty(MoveWarnings.prototype, 'moveTalk', {
+		Object.defineProperty(MovePageWarnings.prototype, 'moveTalk', {
 			/**
 			 * Return the check state of the `Move associated talk page` box.
 			 * @returns {boolean}
@@ -260,7 +260,7 @@
 				return this.moveTalkBox && this.moveTalkBox.checked || false;
 			}
 		});
-		Object.defineProperty(MoveWarnings.prototype, 'length', {
+		Object.defineProperty(MovePageWarnings.prototype, 'length', {
 			/**
 			 * Return the number of warnings.
 			 * @returns {number}
@@ -271,13 +271,13 @@
 		});
 
 		/**
-		 * Add a \<style> for MoveWarnings.
+		 * Add a \<style> for MovePageWarnings.
 		 * @static
 		 */
-		MoveWarnings.addStyleTag = function() {
+		MovePageWarnings.addStyleTag = function() {
 			var style = document.createElement('style');
 			style.textContent =
-				'.mvw-seewarning::after {' +
+				'.mpw-seewarning::after {' +
 					'display: inline-block;' +
 					'content: "※ 下記の警告も確認してください";' +
 					'color: red;' +
@@ -286,7 +286,7 @@
 					'margin-left: 1em;' +
 					'padding-top: 5px;' +
 				'}' +
-				'.mvw-logline-hidden {' +
+				'.mpw-logline-hidden {' +
 					'text-decoration: line-through;' +
 					'color: #72777d;' +
 					'font-style: italic;' +
@@ -298,8 +298,8 @@
 		 * Toggle the visibility of warnings.
 		 * @param {boolean} show
 		 */
-		MoveWarnings.prototype.toggle = function(show) {
-			this.$submitButton.toggleClass('mvw-seewarning', show);
+		MovePageWarnings.prototype.toggle = function(show) {
+			this.$submitButton.toggleClass('mpw-seewarning', show);
 			this.$warning.toggle(show);
 		};
 
@@ -308,13 +308,13 @@
 		 * @param {boolean} moveTalkChanged
 		 * @returns {JQueryPromise<void>}
 		 */
-		MoveWarnings.prototype.updateWarnings = function(moveTalkChanged) {
+		MovePageWarnings.prototype.updateWarnings = function(moveTalkChanged) {
 
 			// Pick up the prefixed title to which to move the current page
 			var title = (this.prefix && this.prefix + ':') + this.titleInput.value;
 			var Title = mw.Title.newFromText(title);
 			title = Title ? Title.getPrefixedText() : title.replace(/_/g, ' ');
-			console.log('[mvw]', title);
+			console.log('[mpw]', title);
 
 			// Compare with the last-checked title
 			var isSameTitle = title === this.lastTitle;
@@ -322,15 +322,15 @@
 
 			// Synchronous checks for possible warnings
 			if (isSameTitle && !moveTalkChanged) {
-				console.log('[mvw]', 'Exited for the reason of "same title".');
+				console.log('[mpw]', 'Exited for the reason of "same title".');
 				return $.Deferred().resolve(void 0);
 			} else if (!title || title === this.target) {
-				console.log('[mvw]', 'Exited for the reason of "no title" or "same as target title".');
+				console.log('[mpw]', 'Exited for the reason of "no title" or "same as target title".');
 				this.api.abort();
 				this.clearWarnings();
 				return $.Deferred().resolve(void 0);
 			} else if (!Title) {
-				console.log('[mvw]', 'Exited for the reason of "invalid title 1".');
+				console.log('[mpw]', 'Exited for the reason of "invalid title 1".');
 				this.api.abort();
 				this.setWarnings({
 					invalidtitle: [title]
@@ -349,15 +349,15 @@
 			).then(function(info, plusInfo) {
 
 				if (info === null) {
-					console.log('[mvw]', 'Exited for the reason of "info is null".');
+					console.log('[mpw]', 'Exited for the reason of "info is null".');
 					_this.clearWarnings();
 				} else if (info.invalid) {
-					console.log('[mvw]', 'Exited for the reason of "invalid title 2".');
+					console.log('[mpw]', 'Exited for the reason of "invalid title 2".');
 					_this.setWarnings({
 						invalidtitle: [title]
 					});
 				} else {
-					console.log('[mvw]', 'Generated warnings.');
+					console.log('[mpw]', 'Generated warnings.');
 					var isSingleRevisionRedirectToTarget = !!(info.single && info.redirect && plusInfo.redirectTo === _this.target);
 					_this.setWarnings({
 						overwrite: isSingleRevisionRedirectToTarget ? [title] : null,
@@ -395,7 +395,7 @@
 		 * Warning templates.
 		 * @static
 		 */
-		MoveWarnings.template = {
+		MovePageWarnings.template = {
 			/** `$1`: prefixed title */
 			invalidtitle: '「$1」は[[Help:ページ名#特殊文字|不正なページ名]]です。',
 			/** `$1`: prefixed title */
@@ -410,32 +410,32 @@
 				'[[Wikipedia:削除依頼|削除依頼]]を利用してください。',
 			/** `$1`: logid, `$2`: timestamp, `$3`: user, `$4`: target, `$5`: levels, `$6`: parsedcomment */
 			'protect/protect': protectionWarningWrapper(
-				'[[Special:Redirect/logid/$1|$2]] <span class="mvw-logline-user">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
-				'[[Special:Contribs/$3|投稿記録]])</span><span class="mvw-logline-connective"></span><span class="mvw-logline-action">' +
-				'[[$4]] を保護しました $5</span> <span class="mvw-logline-comment">$6</span>'
+				'[[Special:Redirect/logid/$1|$2]] <span class="mpw-logline-user">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
+				'[[Special:Contribs/$3|投稿記録]])</span><span class="mpw-logline-connective"></span><span class="mpw-logline-action">' +
+				'[[$4]] を保護しました $5</span> <span class="mpw-logline-comment">$6</span>'
 			),
 			/** `$1`: logid, `$2`: timestamp, `$3`: user, `$4`: target, `$5`: levels, `$6`: parsedcomment */
 			'protect/modify': protectionWarningWrapper(
-				'[[Special:Redirect/logid/$1|$2]] <span class="mvw-logline-user">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
-				'[[Special:Contribs/$3|投稿記録]])</span><span class="mvw-logline-connective"></span><span class="mvw-logline-action">' +
-				'[[$4]] の保護設定を変更しました $5</span> <span class="mvw-logline-comment">$6</span>'
+				'[[Special:Redirect/logid/$1|$2]] <span class="mpw-logline-user">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
+				'[[Special:Contribs/$3|投稿記録]])</span><span class="mpw-logline-connective"></span><span class="mpw-logline-action">' +
+				'[[$4]] の保護設定を変更しました $5</span> <span class="mpw-logline-comment">$6</span>'
 			),
 			/** `$1`: logid, `$2`: timestamp, `$3`: user, `$4`: target, `$5`: moved_from, `$6`: parsedcomment */
 			'protect/move_prot': protectionWarningWrapper(
-				'[[Special:Redirect/logid/$1|$2]] <span class="mvw-logline-user">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
-				'[[Special:Contribs/$3|投稿記録]])</span><span class="mvw-logline-connective-move"></span><span class="mvw-logline-action">' +
-				'保護設定を [[$5]] から [[$4]] に移動しました</span> <span class="mvw-logline-comment">$6</span>'
+				'[[Special:Redirect/logid/$1|$2]] <span class="mpw-logline-user">[[User:$3|$3]] ([[User_talk:$3|会話]] | ' +
+				'[[Special:Contribs/$3|投稿記録]])</span><span class="mpw-logline-connective-move"></span><span class="mpw-logline-action">' +
+				'保護設定を [[$5]] から [[$4]] に移動しました</span> <span class="mpw-logline-comment">$6</span>'
 			)
 		};
 
 		/**
 		 * Set warnings.
 		 *
-		 * @param {Partial<Record<keyof MoveWarnings.template, string[]?>>} warningMap
+		 * @param {Partial<Record<keyof MovePageWarnings.template, string[]?>>} warningMap
 		 * The values should be an array of variables for `mw.format`, or `null` if they shouldn't be converted to warnings.
 		 * @returns {number} The number of warnings generated.
 		 */
-		MoveWarnings.prototype.setWarnings = function(warningMap) {
+		MovePageWarnings.prototype.setWarnings = function(warningMap) {
 
 			// Erase old warnings
 			this.$warningList.empty();
@@ -462,7 +462,7 @@
 		 * Clear all warnings.
 		 * @returns {number} The number of warnings generated (always 0).
 		 */
-		MoveWarnings.prototype.clearWarnings = function() {
+		MovePageWarnings.prototype.clearWarnings = function() {
 			this.$warningList.empty();
 			this.toggle(false);
 			return 0;
@@ -471,7 +471,7 @@
 		/**
 		 * Create a warning message as a raw HTML by parsing [[links]] and $-variables.
 		 *
-		 * @param {keyof MoveWarnings.template} key
+		 * @param {keyof MovePageWarnings.template} key
 		 * @param {string[]} variables
 		 * @param {string} [template] Use this template instead of what can be obtained by the key
 		 * @returns {string}
@@ -479,7 +479,7 @@
 		function createWarning(key, variables, template) {
 
 			// Get template and replace variables
-			var def = template || MoveWarnings.template[key];
+			var def = template || MovePageWarnings.template[key];
 			def = mw.format.apply(mw, [def].concat(variables)); // Same as "mw.format(def, $1, $2, ...)"
 			var transformed = def;
 
@@ -512,14 +512,14 @@
 		 * @param {TitleInfo["protection"]} info
 		 * @returns {number} The number of warnings generated.
 		 */
-		MoveWarnings.prototype.setProtectionWarning = function(info) {
+		MovePageWarnings.prototype.setProtectionWarning = function(info) {
 
 			if (!info || !info.action) return 0;
 
 			// Get template
 			var key = 'protect/' + info.action;
 			/** @type {string} */
-			var template = MoveWarnings.template[key];
+			var template = MovePageWarnings.template[key];
 			if (!template) return 0;
 
 			// Handle hidden parts in the logline, if any
@@ -528,19 +528,19 @@
 			var actionHidden = info.actionhidden;
 			var commentHidden = info.parsedcomment === null;
 			if (!userHidden && !actionHidden) {
-				$logline.find('.mvw-logline-connective').text(' が ');
-				$logline.find('.mvw-logline-connective-move').text(' が');
+				$logline.find('.mpw-logline-connective').text(' が ');
+				$logline.find('.mpw-logline-connective-move').text(' が');
 			} else {
-				$logline.find('.mvw-logline-connective, .mvw-logline-connective-move').text(' ');
+				$logline.find('.mpw-logline-connective, .mpw-logline-connective-move').text(' ');
 			}
 			if (userHidden) {
-				$logline.find('.mvw-logline-user').addClass('mvw-logline-hidden').prop('innerHTML', '(利用者名は除去されています)');
+				$logline.find('.mpw-logline-user').addClass('mpw-logline-hidden').prop('innerHTML', '(利用者名は除去されています)');
 			}
 			if (actionHidden) {
-				$logline.find('.mvw-logline-action').addClass('mvw-logline-hidden').prop('innerHTML', '(ログの詳細は除去されています)');
+				$logline.find('.mpw-logline-action').addClass('mpw-logline-hidden').prop('innerHTML', '(ログの詳細は除去されています)');
 			}
 			if (commentHidden) {
-				$logline.find('.mvw-logline-comment').addClass('mvw-logline-hidden').prop('innerHTML', '(要約は除去されています)');
+				$logline.find('.mpw-logline-comment').addClass('mpw-logline-hidden').prop('innerHTML', '(要約は除去されています)');
 			}
 			template = $logline.prop('innerHTML'); // Convert back to a string
 
@@ -571,7 +571,7 @@
 		 *
 		 * @returns {JQueryPromise<void>}
 		 */
-		MoveWarnings.prototype.searchRedlinks = function() {
+		MovePageWarnings.prototype.searchRedlinks = function() {
 
 			/**
 			 * @typedef {Record<string, HTMLAnchorElement[]>} AnchorMap
@@ -708,7 +708,7 @@
 		 * }}
 		 */
 		/**
-		 * The object returned by `MoveWarnings.queryTitleInfo`.
+		 * The object returned by `MovePageWarnings.queryTitleInfo`.
 		 * @typedef TitleInfo
 		 * @type {object}
 		 * @property {boolean} [missing]
@@ -728,7 +728,7 @@
 		 * @property {string?} protection.parsedcomment `null` if hidden
 		 */
 		/**
-		 * The object returned by `MoveWarnings.queryAdditionalTitleInfo`.
+		 * The object returned by `MovePageWarnings.queryAdditionalTitleInfo`.
 		 * @typedef AdditionalTitleInfo
 		 * @type {object}
 		 * @property {string?} redirectTo If the page is a redirect, the title to which it is redirected to
@@ -741,7 +741,7 @@
 		 * @param {string} title
 		 * @returns {JQueryPromise<TitleInfo?>}
 		 */
-		MoveWarnings.prototype.queryTitleInfo = function(title) {
+		MovePageWarnings.prototype.queryTitleInfo = function(title) {
 			return this.api.get({
 				action: 'query',
 				titles: title,
@@ -840,7 +840,7 @@
 		 * @param {string} [talkpage]
 		 * @returns {JQueryPromise<AdditionalTitleInfo>}
 		 */
-		MoveWarnings.prototype.queryAdditionalTitleInfo = function(page, talkpage) {
+		MovePageWarnings.prototype.queryAdditionalTitleInfo = function(page, talkpage) {
 			var titles = [page];
 			if (talkpage) titles.push(talkpage);
 			return this.api.get({
@@ -884,12 +884,12 @@
 			});
 		};
 
-		return MoveWarnings;
+		return MovePageWarnings;
 
 	})();
 
 	// Entry point
-	MoveWarnings.init();
+	MovePageWarnings.init();
 
 })();
 //</nowiki>
