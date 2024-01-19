@@ -2,7 +2,7 @@
 	MovePageWarnings
 	Generate warnings on Special:Movepage, per the states of the move destination.
 	@author [[User:Dragoniez]]
-	@version 1.0.8
+	@version 1.0.9
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -44,6 +44,20 @@
 		var sanitizePrefix = function(prefix) {
 			return prefixes.some(function(pfx) { return pfx === prefix; }) ? prefix : '';
 		};
+
+		// Create namespace alias regex
+		var wgNamespaceIds = mw.config.get('wgNamespaceIds');
+		var aliases = Object.keys(wgNamespaceIds).reduce(/** @param {string[]} acc */ function(acc, alias) {
+			if (alias) acc.push(alias.replace(/_/g, '[_ ]'));
+			return acc;
+		}, []);
+		var rWhitespaceStr = '[ _\u00A0\u1680\u180E\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]*'; // Stringified `\s`, including underscore and excluding tab
+		var rAliases = new RegExp('^' + rWhitespaceStr + '(' + aliases.join('|') + ')' + rWhitespaceStr + ':', 'i');
+
+		/**
+		 * Regex for unicode bidirectional characters (from `MediaWikiTitleCodec::splitTitleString()` in PHP).
+		 */
+		var rUnicodeBidi = /[\u200E\u200F\u202A-\u202E]+/g;
 
 		/**
 		 * Initialize a MovePageWarnings instance.
@@ -112,10 +126,10 @@
 			$('.mw-body-content').children('h2').eq(0).before(this.$warning);
 
 			/**
-			 * Stores the title of the move destination last inputted.
+			 * Stores the page name of the move destination last inputted.
 			 * @type {string}
 			 */
-			this.lastTitle = target;
+			this.lastPagename = target;
 
 			/**
 			 * Whether the current user can delete pages.
@@ -310,30 +324,37 @@
 		 */
 		MovePageWarnings.prototype.updateWarnings = function(moveTalkChanged) {
 
-			// Pick up the prefixed title to which to move the current page
-			var title = (this.prefix && this.prefix + ':') + this.titleInput.value;
-			var Title = mw.Title.newFromText(title);
-			title = Title ? Title.getPrefixedText() : title.replace(/_/g, ' ');
-			console.log('[mpw]', title);
+			// Pick up the page name to which to move the current page
+			var prefix = this.prefix && this.prefix + ':';
+			var title = this.titleInput.value.replace(rUnicodeBidi, '');
+			var pagename = prefix + title;
+			var hasPrefixInTitle = rAliases.test(title);
+			var hasDuplicatePrefixes = !!prefix && hasPrefixInTitle;
+			var Title = mw.Title.newFromText(pagename);
+			pagename = Title ? Title.getPrefixedText() : pagename.replace(/_/g, ' ');
+			console.log('[mpw]', pagename);
 
-			// Compare with the last-checked title
-			var isSameTitle = title === this.lastTitle;
-			this.lastTitle = title;
+			// Compare with the last-checked pagename
+			var isSamePagename = pagename === this.lastPagename;
+			this.lastPagename = pagename;
+			var isSameAsTarget = pagename === this.target;
 
 			// Synchronous checks for possible warnings
-			if (isSameTitle && !moveTalkChanged) {
-				console.log('[mpw]', 'Exited for the reason of "same title".');
+			if (isSamePagename && !moveTalkChanged) {
+				console.log('[mpw]', 'Exited for the reason of "same pagename".');
 				return $.Deferred().resolve(void 0);
-			} else if (!title || title === this.target) {
-				console.log('[mpw]', 'Exited for the reason of "no title" or "same as target title".');
+			} else if (!pagename || isSameAsTarget && !hasPrefixInTitle && !hasDuplicatePrefixes) {
+				console.log('[mpw]', 'Exited for the reason of "no pagename" or "same as target pagename".');
 				this.api.abort();
 				this.clearWarnings();
 				return $.Deferred().resolve(void 0);
-			} else if (!Title) {
-				console.log('[mpw]', 'Exited for the reason of "invalid title 1".');
+			} else if (isSameAsTarget || !Title) {
+				console.log('[mpw]', 'Exited for the reason of "invalid pagename".');
 				this.api.abort();
 				this.setWarnings({
-					invalidtitle: [title]
+					invalidPagename: !Title ? [pagename] : null,
+					misplacedPrefix: hasPrefixInTitle ? [] : null,
+					duplicatePrefixes: hasDuplicatePrefixes ? [pagename] : null
 				});
 				return $.Deferred().resolve(void 0);
 			}
@@ -341,29 +362,27 @@
 			// Asynchronous checks for possible warnings
 			this.api.abort();
 			var _this = this;
-			var associatedTitle = this.moveTalk && Title && !Title.isTalkPage() && Title.getTalkPage() || void 0;
-			var talkTitle = associatedTitle && associatedTitle.getPrefixedText();
+			var talkTitle = this.moveTalk && Title && !Title.isTalkPage() && Title.getTalkPage() || void 0;
+			var talkPagename = talkTitle && talkTitle.getPrefixedText();
 			return $.when(
-				this.queryTitleInfo(title),
-				this.queryAdditionalTitleInfo(title, talkTitle)
+				this.queryTitleInfo(pagename),
+				this.queryAdditionalTitleInfo(pagename, talkPagename)
 			).then(function(info, plusInfo) {
 
 				if (info === null) {
 					console.log('[mpw]', 'Exited for the reason of "info is null".');
 					_this.clearWarnings();
-				} else if (info.invalid) {
-					console.log('[mpw]', 'Exited for the reason of "invalid title 2".');
-					_this.setWarnings({
-						invalidtitle: [title]
-					});
 				} else {
 					console.log('[mpw]', 'Generated warnings.');
 					var isSingleRevisionRedirectToTarget = !!(info.single && info.redirect && plusInfo.redirectTo === _this.target);
 					_this.setWarnings({
-						overwrite: isSingleRevisionRedirectToTarget ? [title] : null,
-						talkexists: plusInfo.talkExists && associatedTitle ? [associatedTitle.getPrefixedText()] : null,
-						needdelete: !(info.missing || isSingleRevisionRedirectToTarget) && _this.candelete ? [title] : null,
-						cantmove: !(info.missing || isSingleRevisionRedirectToTarget) && !_this.candelete ? [title] : null
+						invalidPagename: info.invalid ? [pagename] : null,
+						misplacedPrefix: hasPrefixInTitle ? [] : null,
+						duplicatePrefixes: hasDuplicatePrefixes ? [pagename] : null,
+						overwriteRedirect: isSingleRevisionRedirectToTarget ? [pagename] : null,
+						talkPageExists: plusInfo.talkExists && talkTitle ? [talkTitle.getPrefixedText()] : null,
+						deleteToMove: !(info.missing || isSingleRevisionRedirectToTarget) && _this.candelete ? [pagename] : null,
+						cantDelete: !(info.missing || isSingleRevisionRedirectToTarget) && !_this.candelete ? [pagename] : null
 					});
 					if (info.protected) {
 						var pwCnt = _this.setProtectionWarning(info.protection);
@@ -396,16 +415,20 @@
 		 * @static
 		 */
 		MovePageWarnings.template = {
-			/** `$1`: prefixed title */
-			invalidtitle: '「$1」は[[Help:ページ名#特殊文字|不正なページ名]]です。',
-			/** `$1`: prefixed title */
-			overwrite: 'リダイレクトの「[[$1]]」を上書きして移動します。',
-			/** `$1`: prefixed title */
-			talkexists: '「[[$1]]」が存在するため、<b>ノートページは付随移動されません</b>。',
-			/** `$1`: prefixed title */
-			needdelete: '「[[$1]]」への移動を行うためにはページの削除が必要です。',
-			/** `$1`: prefixed title */
-			cantmove: '「[[$1]]」への移動は削除権限を要するため、<b>あなたは移動できません</b>。記事としての履歴がない (またはあっても' +
+			/** `$1`: page name */
+			invalidPagename: '「$1」は[[Help:ページ名#特殊文字|不正なページ名]]です。',
+			misplacedPrefix: 'ページ名指定用テキストボックスの値に[[H:NS#詳細|名前空間]]接頭辞が含まれています。(名前空間の指定にはドロップダウンを' +
+				'使用してください。)',
+			/** `$1`: page name */
+			duplicatePrefixes: '「[[$1]]」には重複した[[H:NS#詳細|名前空間]]接頭辞が含まれています。',
+			/** `$1`: page name */
+			overwriteRedirect: 'リダイレクトの「[[$1]]」を上書きして移動します。',
+			/** `$1`: page name */
+			talkPageExists: '「[[$1]]」が存在するため、<b>ノートページは付随移動されません</b>。',
+			/** `$1`: page name */
+			deleteToMove: '「[[$1]]」への移動を行うためにはページの削除が必要です。',
+			/** `$1`: page name */
+			cantDelete: '「[[$1]]」への移動は削除権限を要するため、<b>あなたは移動できません</b>。記事としての履歴がない (またはあっても' +
 				'即時削除対象となる) 場合は[[Wikipedia:移動依頼|移動依頼]]を、そうでない場合は[[Wikipedia:削除の方針#C|ケースC]]の' +
 				'[[Wikipedia:削除依頼|削除依頼]]を利用してください。',
 			/** `$1`: logid, `$2`: timestamp, `$3`: user, `$4`: target, `$5`: levels, `$6`: parsedcomment */
@@ -788,7 +811,7 @@
 								user: !obj.userhidden && obj.user || null,
 								target: obj.title,
 								levels: obj.params.description && obj.params.description
-									.replace(/[\u200E\u200F\u202A-\u202E]/g, '') // Remove unicode bidirectional markers
+									.replace(rUnicodeBidi, '') // Remove unicode bidirectional markers
 									.replace(/([^ ])\[/g, '$1 ['), // Ensure that there's a space before every "["
 								moved_from: obj.params.oldtitle_title,
 								parsedcomment: !obj.commenthidden && obj.parsedcomment || null
