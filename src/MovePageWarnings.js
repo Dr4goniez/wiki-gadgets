@@ -2,7 +2,7 @@
 	MovePageWarnings
 	Generate warnings on Special:Movepage, per the states of the move destination.
 	@author [[User:Dragoniez]]
-	@version 1.0.9
+	@version 1.0.10
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -13,15 +13,18 @@
 (function() {
 
 	// Check whether we should run the script
-	if (
-		// User isn't going to move the page, or
-		mw.config.get('wgCanonicalSpecialPageName') !== 'Movepage' ||
-		// User doesn't have the right to move pages, or
-		mw.config.get('wgUserGroups').indexOf('autoconfirmed') === -1 ||
-		// Browser isn't compatible with MutationObserver (we have to be able to detect changes in software-defined OOUI elements)
-		!MutationObserver
-	) {
-		// Stop running the script
+	var moveFrom = mw.config.get('wgRelevantPageName');
+	if (!(
+		// User is on Special:Movepage, and
+		mw.config.get('wgCanonicalSpecialPageName') === 'Movepage' &&
+		// User isn't on the root of Special:Movepage, and
+		moveFrom && moveFrom !== mw.config.get('wgPageName') &&
+		// User has the right to move pages, and
+		mw.config.get('wgUserGroups').indexOf('autoconfirmed') !== -1 &&
+		// Browser is compatible with MutationObserver (we have to be able to detect changes in software-defined OOUI elements)
+		MutationObserver
+	)) {
+		// If any of the above lacks, stop running the script
 		return;
 	}
 
@@ -63,12 +66,11 @@
 		 * Initialize a MovePageWarnings instance.
 		 *
 		 * @constructor
-		 * @param {string} target
 		 * @param {Element} prefixLabel
 		 * @param {HTMLInputElement} titleInput
 		 * @param {JQuery<HTMLElement>} $submitButton
 		 */
-		function MovePageWarnings(target, prefixLabel, titleInput, $submitButton) {
+		function MovePageWarnings(prefixLabel, titleInput, $submitButton) {
 
 			MovePageWarnings.addStyleTag();
 
@@ -78,7 +80,7 @@
 			 * The page name of the moving target (the "from" page name).
 			 * @type {string}
 			 */
-			this.target = target;
+			this.target = moveFrom;
 
 			/**
 			 * The value selected in the namespace selector dropdown (updated in the callback of MutationObserver).
@@ -97,12 +99,6 @@
 			 * @type {JQuery<HTMLSpanElement>}
 			 */
 			this.$submitButton = $submitButton;
-
-			/**
-			 * The "move associated talk page" button.
-			 * @type {HTMLInputElement?}
-			 */
-			this.moveTalkBox = document.querySelector('#wpMovetalk > input');
 
 			/**
 			 * The wrapper div for warning messages.
@@ -129,7 +125,7 @@
 			 * Stores the page name of the move destination last inputted.
 			 * @type {string}
 			 */
-			this.lastPagename = target;
+			this.lastPagename = moveFrom;
 
 			/**
 			 * Whether the current user can delete pages.
@@ -150,13 +146,14 @@
 			/**
 			 * The input event handler.
 			 * @param {boolean} [moveTalkChanged]
+			 * @param {boolean} [noTimeout]
 			 */
-			var initWarnings = function(moveTalkChanged) {
+			var initWarnings = function(moveTalkChanged, noTimeout) {
 				var mtc = !!moveTalkChanged;
 				clearTimeout(inputTimeout);
 				inputTimeout = setTimeout(function() {
 					_this.updateWarnings(mtc);
-				}, 1000);
+				}, noTimeout ? 0 : 1000);
 			};
 
 			// Event listener for changes in the namespace prefix
@@ -177,14 +174,23 @@
 			});
 
 			// Event listener for changes in "move associated talk page"
-			if (this.moveTalkBox) {
-				this.moveTalkBox.addEventListener('change', function() {
+			var moveTalkBox = getMoveTalkBox();
+			if (moveTalkBox) {
+				moveTalkBox.addEventListener('change', function() {
 					initWarnings(true);
 				});
 			}
 
-			initWarnings();
+			initWarnings(false, true);
 
+		}
+
+		/**
+		 * Get the "move associated talk page" checkbox, if any.
+		 * @returns {HTMLInputElement?}
+		 */
+		function getMoveTalkBox() {
+			return document.querySelector('#wpMovetalk > input');
 		}
 
 		/**
@@ -197,9 +203,6 @@
 				formReady()
 			).then(function() { // Load modules and the DOM, then
 
-				var title = mw.util.getParamValue('target') || mw.config.get('wgTitle').replace(/^[^/]+\/?/, '');
-				var Title = mw.Title.newFromText(title);
-
 				var prefixDropdown = document.getElementById('wpNewTitleNs');
 				var prefixLabel = prefixDropdown && prefixDropdown.querySelector('span.oo-ui-labelElement-label');
 
@@ -211,8 +214,8 @@
 				}).eq(0);
 
 				// Run the script if all the above are defined
-				if (Title && prefixLabel && titleInput && $submitButton.length) {
-					new MovePageWarnings(Title.getPrefixedText(), prefixLabel, titleInput, $submitButton);
+				if (prefixLabel && titleInput && $submitButton.length) {
+					new MovePageWarnings(prefixLabel, titleInput, $submitButton);
 				}
 
 			}).catch(console.error);
@@ -264,16 +267,17 @@
 			return def.promise();
 		}
 
-		// Define getters
 		Object.defineProperty(MovePageWarnings.prototype, 'moveTalk', {
 			/**
 			 * Return the check state of the `Move associated talk page` box.
 			 * @returns {boolean}
 			 */
 			get: function() {
-				return this.moveTalkBox && this.moveTalkBox.checked || false;
+				var moveTalkBox = getMoveTalkBox();
+				return moveTalkBox && moveTalkBox.checked || false;
 			}
 		});
+
 		Object.defineProperty(MovePageWarnings.prototype, 'length', {
 			/**
 			 * Return the number of warnings.
