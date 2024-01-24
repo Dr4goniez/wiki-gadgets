@@ -2,7 +2,7 @@
 	MovePageWarnings
 	Generate warnings on Special:Movepage, per the states of the move destination.
 	@author [[User:Dragoniez]]
-	@version 1.0.11
+	@version 1.1.0
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -220,42 +220,47 @@
 
 		/**
 		 * The movepage form is created by OOUI dynamically, so it's not enough to just wait for document ready.
-		 * This function ensures that the form in the document is ready.
+		 * This function ensures that the form is ready in the document.
+		 *
+		 * See `[[Special:Permalink/98980431]]` for the older 1.0.X version of this function written with MutationObserver,
+		 * which turned out to not work well if the page has been opened on a different tab (see also the bottom of this
+		 * script for a handler of this situation).
 		 */
 		function formReady() {
 			var def = $.Deferred();
 
 			/**
-			 * @param {Element} content
+			 * @param {Element?} content
 			 * @returns {boolean}
 			 */
 			var elementsReady = function(content) {
 				return !!(
+					content &&
 					content.querySelector('#wpNewTitleNs') &&
 					content.querySelector('#wpNewTitleMain') &&
 					content.querySelector('button[name="wpMove"]')
 				);
 			};
 
-			$(function() {
+			$(function() { // When the document is ready
 				var content = document.querySelector('.mw-body-content');
 				if (content) {
-					if (elementsReady(content)) {
-						// Just resolve if the elements are already there
-						def.resolve();
-					} else {
-						// Watch DOM updates if the elements aren't ready
-						new MutationObserver(function(_, obs) {
-							if (content && elementsReady(content)) {
-								// Resolve when the elements get ready
-								obs.disconnect();
-								def.resolve();
-							}
-						}).observe(content, {
-							childList: true,
-							subtree: true
-						});
-					}
+
+					// Check the ready state of form elements every 0.5 seconds (up to 10 times)
+					var iterations = 0;
+					var interval = setInterval(function() {
+						if ((++iterations) > 10) {
+							// If we have already done 10 iterations, reject the procedure
+							clearInterval(interval);
+							def.reject(new Error('[mpw] The form never got ready'));
+						} else if (elementsReady(content)) {
+							// If the form elements are ready, resolve the procedure
+							clearInterval(interval);
+							def.resolve();
+						}
+						// <= Proceed to the next interval
+					}, 500);
+
 				} else {
 					def.reject(new Error('[mpw] ".mw-body-content" not found'));
 				}
@@ -318,6 +323,13 @@
 		};
 
 		/**
+		 * @param {string} logline
+		 */
+		function log(logline) {
+			console.log('[mpw]', logline);
+		}
+
+		/**
 		 * Update warnings. This is to be called when either the prefix or the title has been changed.
 		 * @param {boolean} moveTalkChanged
 		 * @returns {JQueryPromise<void>}
@@ -332,7 +344,7 @@
 			var hasDuplicatePrefixes = !!prefix && hasPrefixInTitle;
 			var Title = mw.Title.newFromText(pagename);
 			pagename = Title ? Title.getPrefixedText() : pagename.replace(/_/g, ' ');
-			console.log('[mpw]', pagename);
+			log('Move destination: ' + pagename);
 
 			// Compare with the last-checked pagename
 			var isSamePagename = pagename === this.lastPagename;
@@ -341,15 +353,15 @@
 
 			// Synchronous checks for possible warnings
 			if (isSamePagename && !moveTalkChanged) {
-				console.log('[mpw]', 'Exited for the reason of "same pagename".');
+				log('Exited for the reason of "same pagename".');
 				return $.Deferred().resolve(void 0);
 			} else if (!pagename || isSameAsTarget && !hasPrefixInTitle && !hasDuplicatePrefixes) {
-				console.log('[mpw]', 'Exited for the reason of "no pagename" or "same as target pagename".');
+				log('Exited for the reason of "no pagename" or "same as target pagename".');
 				this.api.abort();
 				this.clearWarnings();
 				return $.Deferred().resolve(void 0);
 			} else if (isSameAsTarget || !Title) {
-				console.log('[mpw]', 'Exited for the reason of "invalid pagename".');
+				log('Exited for the reason of "invalid pagename".');
 				this.api.abort();
 				this.setWarnings({
 					invalidPagename: !Title ? [pagename] : null,
@@ -366,21 +378,22 @@
 			var talkPagename = talkTitle && talkTitle.getPrefixedText();
 			return $.when(
 				this.queryTitleInfo(pagename),
-				this.queryAdditionalTitleInfo(pagename, talkPagename)
-			).then(function(info, plusInfo) {
+				this.getRedirectTarget(pagename),
+				this.getExistenceFunc(typeof talkPagename === 'string' ? [talkPagename] : void 0)
+			).then(function(info, redirectTo, exists) {
 
 				if (info === null) {
-					console.log('[mpw]', 'Exited for the reason of "info is null".');
+					log('Exited for the reason of "info is null".');
 					_this.clearWarnings();
 				} else {
-					console.log('[mpw]', 'Generated warnings.');
-					var isSingleRevisionRedirectToTarget = !!(info.single && info.redirect && plusInfo.redirectTo === _this.target);
+					log('Generated warnings.');
+					var isSingleRevisionRedirectToTarget = !!(info.single && info.redirect && redirectTo === _this.target);
 					_this.setWarnings({
 						invalidPagename: info.invalid ? [pagename] : null,
 						misplacedPrefix: hasPrefixInTitle ? [] : null,
 						duplicatePrefixes: hasDuplicatePrefixes ? [pagename] : null,
 						overwriteRedirect: isSingleRevisionRedirectToTarget ? [pagename] : null,
-						talkPageExists: plusInfo.talkExists && talkTitle ? [talkTitle.getPrefixedText()] : null,
+						talkPageExists: talkTitle && exists(talkPagename) ? [talkTitle.getPrefixedText()] : null,
 						deleteToMove: !(info.missing || isSingleRevisionRedirectToTarget) && _this.candelete ? [pagename] : null,
 						cantDelete: !(info.missing || isSingleRevisionRedirectToTarget) && !_this.candelete ? [pagename] : null
 					});
@@ -620,24 +633,15 @@
 			);
 			if ($.isEmptyObject(anchors)) return $.Deferred().resolve(void 0);
 
-			return this.api.get({
-				action: 'query',
-				titles: Object.keys(anchors),
-				formatversion: '2'
-			}).then(/** @param {ApiResponse} res */ function(res) {
-				var resPages = res && res.query && res.query.pages;
-				if (!resPages) return;
-				resPages.forEach(function(obj) {
-					if (obj.missing && !obj.known && anchors[obj.title]) {
-						anchors[obj.title].forEach(function(a) {
+			var pagenames = Object.keys(anchors);
+			return this.getExistenceFunc(pagenames).then(function(exists) {
+				pagenames.forEach(function(p) {
+					if (anchors[p] && !exists(p)) {
+						anchors[p].forEach(function(a) {
 							a.classList.add('new');
 						});
 					}
 				});
-			}).catch(function(_, err) {
-				if (err && err['exception'] !== 'abort') {
-					console.log(err);
-				}
 			});
 
 		};
@@ -677,6 +681,7 @@
 		 * @typedef ApiResponse
 		 * @type {{
 		 * 	query?: {
+		 * 		normalized?: ApiResponseNormalized[];
 		 * 		redirects?: {
 		 * 			from: string;
 		 * 			to: string;
@@ -722,6 +727,14 @@
 		 * }}
 		 */
 		/**
+		 * @typedef ApiResponseNormalized
+		 * @type {{
+		 *	fromencoded: boolean;
+		 *	from: string;
+		 *	to: string;
+		 * }}
+		 */
+		/**
 		 * @typedef ApiResponseLogeventsParamsDetails
 		 * @type {{
 		 *	type: string;
@@ -749,13 +762,6 @@
 		 * @property {string} [protection.levels]
 		 * @property {string} [protection.moved_from]
 		 * @property {string?} protection.parsedcomment `null` if hidden
-		 */
-		/**
-		 * The object returned by `MovePageWarnings.queryAdditionalTitleInfo`.
-		 * @typedef AdditionalTitleInfo
-		 * @type {object}
-		 * @property {string?} redirectTo If the page is a redirect, the title to which it is redirected to
-		 * @property {boolean} talkExists `true` if the talk page exists
 		 */
 
 		/**
@@ -855,54 +861,87 @@
 		}
 
 		/**
-		 * Get additional information about a move destination (and its associated talk page).
-		 * - Is the destination page a redirect to somewhere?
-		 * - Does the destination page have an associated talk page?
-		 *
-		 * @param {string} page
-		 * @param {string} [talkpage]
-		 * @returns {JQueryPromise<AdditionalTitleInfo>}
+		 * Get a function to sanitize a given pagename in API-response format.
+		 * @param {ApiResponseNormalized[]} [normalized]
+		 * @returns {(page: string) => string}
 		 */
-		MovePageWarnings.prototype.queryAdditionalTitleInfo = function(page, talkpage) {
-			var titles = [page];
-			if (talkpage) titles.push(talkpage);
+		function formatterFactory(normalized) {
+			var formatterMap = (normalized || []).reduce(/** @param {Record<String, string>} acc */ function(acc, obj) {
+				acc[obj.from] = obj.to;
+				return acc;
+			}, Object.create(null));
+			return /** @param {string} page */ function(page) {
+				return formatterMap[page] || page;
+			};
+		}
+
+		/**
+		 * Get the name of the page to which a given page is redirected.
+		 * @param {string} pagename
+		 * @returns {JQueryPromise<string?>} The redirected pagename if the queried page is a redirect, or else `null`.
+		 */
+		MovePageWarnings.prototype.getRedirectTarget = function(pagename) {
 			return this.api.get({
 				action: 'query',
-				titles: titles,
+				titles: pagename,
 				redirects: true,
 				formatversion: '2'
 			}).then(/** @param {ApiResponse} res */ function(res) {
-				/** @type {AdditionalTitleInfo} */
-				var ret = {
-					redirectTo: null,
-					talkExists: false
-				};
 				if (res && res.query) {
-					(res.query.redirects || []).some(function(obj) {
-						if (obj.from === titles[0]) {
-							ret.redirectTo = obj.to;
-							return true;
+					var resRedir = res.query.redirects || [];
+					var formatter = formatterFactory(res.query.normalized);
+					for (var i = 0; i < resRedir.length; i++) {
+						var obj = resRedir[i];
+						if (obj.from === formatter(pagename)) {
+							return obj.to;
 						}
-						return false;
-					});
-					if (titles[1] && res.query.pages) {
-						res.query.pages.some(function(obj) {
-							if (obj.title === titles[1]) {
-								ret.talkExists = !obj.missing;
-								return true;
-							}
-							return false;
-						});
 					}
 				}
-				return ret;
+				return null;
 			}).catch(function(_, err) {
 				if (err && err['exception'] !== 'abort') {
 					console.log(err);
 				}
-				return {
-					redirectTo: null,
-					talkExists: false
+				return null;
+			});
+		};
+
+		/**
+		 * Get a function from a pagename to its existence boolean.
+		 * @param {string[]} [pagenames]
+		 * @returns {JQueryPromise<(page: string|undefined) => boolean>}
+		 */
+		MovePageWarnings.prototype.getExistenceFunc = function(pagenames) {
+			if (pagenames === void 0 || !pagenames.length) {
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars
+				return $.Deferred().resolve(/** @param {string} [page] */ function(page) { return false; });
+			}
+			/** @typedef {Record<String, boolean>} ExistenceMap */
+			return this.api.get({
+				action: 'query',
+				titles: pagenames,
+				formatversion: '2'
+			}).then(/** @param {ApiResponse} res */ function(res) {
+				var formatter = formatterFactory(res && res.query && res.query.normalized);
+				var fPagenames = pagenames.map(function(p) {
+					return formatter(p);
+				});
+				return (res && res.query && res.query.pages || []).reduce(/** @param {ExistenceMap} acc */ function(acc, obj) {
+					var index = fPagenames.indexOf(obj.title);
+					if (index !== -1) {
+						acc[pagenames[index]] = !obj.missing;
+					}
+					return acc;
+				}, Object.create(null));
+			}).catch(function(_, err) {
+				if (err && err['exception'] !== 'abort') {
+					console.log(err);
+				}
+				return Object.create(null);
+			}).then(/** @param {ExistenceMap} existenceMap */ function(existenceMap) {
+				/** @param {string} [page] */
+				return function(page) {
+					return !!existenceMap[page || ''];
 				};
 			});
 		};
@@ -912,7 +951,24 @@
 	})();
 
 	// Entry point
-	MovePageWarnings.init();
+	if (document.hidden) {
+		// If Special:Movepage is opened on an inactive tab, wait until the tab gets active
+		var vc = 'visibilitychange';
+		var init = function() {
+			if (!document.hidden) {
+				document.removeEventListener(vc, init);
+				MovePageWarnings.init();
+			}
+		};
+		try { // Make sure that the browser supports Document API: visibilitychange event
+			document.addEventListener(vc, init);
+		}
+		catch (err) {
+			console.log(err);
+		}
+	} else {
+		MovePageWarnings.init();
+	}
 
 })();
 //</nowiki>
