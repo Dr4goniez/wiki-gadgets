@@ -2,7 +2,7 @@
 	MovePageWarnings
 	Generate warnings on Special:Movepage, per the states of the move destination.
 	@author [[User:Dragoniez]]
-	@version 1.0.10
+	@version 1.0.11
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -101,6 +101,12 @@
 			this.$submitButton = $submitButton;
 
 			/**
+			 * The "move associated talk page" button.
+			 * @type {HTMLInputElement?}
+			 */
+			this.moveTalkBox = document.querySelector('#wpMovetalk > input');
+
+			/**
 			 * The wrapper div for warning messages.
 			 * @type {JQuery<HTMLDivElement>}
 			 */
@@ -174,23 +180,14 @@
 			});
 
 			// Event listener for changes in "move associated talk page"
-			var moveTalkBox = getMoveTalkBox();
-			if (moveTalkBox) {
-				moveTalkBox.addEventListener('change', function() {
+			if (this.moveTalkBox) {
+				this.moveTalkBox.addEventListener('change', function() {
 					initWarnings(true);
 				});
 			}
 
 			initWarnings(false, true);
 
-		}
-
-		/**
-		 * Get the "move associated talk page" checkbox, if any.
-		 * @returns {HTMLInputElement?}
-		 */
-		function getMoveTalkBox() {
-			return document.querySelector('#wpMovetalk > input');
 		}
 
 		/**
@@ -273,8 +270,7 @@
 			 * @returns {boolean}
 			 */
 			get: function() {
-				var moveTalkBox = getMoveTalkBox();
-				return moveTalkBox && moveTalkBox.checked || false;
+				return this.moveTalkBox && this.moveTalkBox.checked || false;
 			}
 		});
 
