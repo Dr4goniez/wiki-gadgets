@@ -2,7 +2,7 @@
 	MovePageWarnings
 	Generate warnings on Special:Movepage, per the states of the move destination.
 	@author [[User:Dragoniez]]
-	@version 1.1.0
+	@version 1.1.1
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -79,6 +79,7 @@
 			/**
 			 * The page name of the moving target (the "from" page name).
 			 * @type {string}
+			 * @readonly
 			 */
 			this.target = moveFrom;
 
@@ -91,24 +92,28 @@
 			/**
 			 * The input tag in the OOUI InputWidget used as a wgTitle specifier.
 			 * @type {HTMLInputElement}
+			 * @readonly
 			 */
 			this.titleInput = titleInput;
 
 			/**
 			 * The span tag in the OOUI button for form submission.
 			 * @type {JQuery<HTMLSpanElement>}
+			 * @readonly
 			 */
 			this.$submitButton = $submitButton;
 
 			/**
 			 * The "move associated talk page" button.
 			 * @type {HTMLInputElement?}
+			 * @readonly
 			 */
 			this.moveTalkBox = document.querySelector('#wpMovetalk > input');
 
 			/**
 			 * The wrapper div for warning messages.
 			 * @type {JQuery<HTMLDivElement>}
+			 * @readonly
 			 */
 			this.$warning = $('<div>');
 			this.$warning
@@ -118,6 +123,7 @@
 			/**
 			 * The warning message list.
 			 * @type {JQuery<HTMLOListElement>}
+			 * @readonly
 			 */
 			this.$warningList = $('<ol>');
 			this.$warningList.prop('id', 'mpw-warnings-list');
@@ -143,7 +149,7 @@
 				return ['eliminator', 'sysop', 'interface-admin', 'global-deleter', 'staff', 'steward', 'sysadmin'].indexOf(group) !== -1;
 			});
 
-			/** @type {mw.Api} */
+			/** @type {mw.Api} @readonly */
 			this.api = new mw.Api();
 
 			// Watch the move destination specifiers
@@ -200,15 +206,12 @@
 				formReady()
 			).then(function() { // Load modules and the DOM, then
 
-				var prefixDropdown = document.getElementById('wpNewTitleNs');
-				var prefixLabel = prefixDropdown && prefixDropdown.querySelector('span.oo-ui-labelElement-label');
+				var prefixLabel = document.querySelector('#wpNewTitleNs span.oo-ui-labelElement-label');
 
 				/** @type {HTMLInputElement?} */
 				var titleInput = document.querySelector('#wpNewTitleMain > input');
 
-				var $submitButton = $('span').filter(function() {
-					return !!$(this).children('button[name="wpMove"]').length;
-				}).eq(0);
+				var $submitButton = $('button[name="wpMove"]').eq(0).parent('span');
 
 				// Run the script if all the above are defined
 				if (prefixLabel && titleInput && $submitButton.length) {
@@ -229,41 +232,32 @@
 		function formReady() {
 			var def = $.Deferred();
 
-			/**
-			 * @param {Element?} content
-			 * @returns {boolean}
-			 */
-			var elementsReady = function(content) {
+			/** @returns {boolean} */
+			var elementsReady = function() {
 				return !!(
-					content &&
-					content.querySelector('#wpNewTitleNs') &&
-					content.querySelector('#wpNewTitleMain') &&
-					content.querySelector('button[name="wpMove"]')
+					document.querySelector('#wpNewTitleNs') &&
+					document.querySelector('#wpNewTitleMain') &&
+					document.querySelector('button[name="wpMove"]')
 				);
 			};
 
 			$(function() { // When the document is ready
-				var content = document.querySelector('.mw-body-content');
-				if (content) {
 
-					// Check the ready state of form elements every 0.5 seconds (up to 10 times)
-					var iterations = 0;
-					var interval = setInterval(function() {
-						if ((++iterations) > 10) {
-							// If we have already done 10 iterations, reject the procedure
-							clearInterval(interval);
-							def.reject(new Error('[mpw] The form never got ready'));
-						} else if (elementsReady(content)) {
-							// If the form elements are ready, resolve the procedure
-							clearInterval(interval);
-							def.resolve();
-						}
-						// <= Proceed to the next interval
-					}, 500);
+				// Check the ready state of form elements every 0.5 seconds (up to 10 times)
+				var iterations = 0;
+				var interval = setInterval(function() {
+					if ((++iterations) > 10) {
+						// If we have already done 10 iterations, reject the procedure
+						clearInterval(interval);
+						def.reject(new Error('[mpw] The form never got ready'));
+					} else if (elementsReady()) {
+						// If the form elements are ready, resolve the procedure
+						clearInterval(interval);
+						def.resolve();
+					}
+					// <= Proceed to the next interval
+				}, 500);
 
-				} else {
-					def.reject(new Error('[mpw] ".mw-body-content" not found'));
-				}
 			});
 
 			return def.promise();
@@ -393,7 +387,7 @@
 						misplacedPrefix: hasPrefixInTitle ? [] : null,
 						duplicatePrefixes: hasDuplicatePrefixes ? [pagename] : null,
 						overwriteRedirect: isSingleRevisionRedirectToTarget ? [pagename] : null,
-						talkPageExists: talkTitle && exists(talkPagename) ? [talkTitle.getPrefixedText()] : null,
+						talkPageExists: talkPagename && exists(talkPagename) ? [talkPagename] : null,
 						deleteToMove: !(info.missing || isSingleRevisionRedirectToTarget) && _this.candelete ? [pagename] : null,
 						cantDelete: !(info.missing || isSingleRevisionRedirectToTarget) && !_this.candelete ? [pagename] : null
 					});
@@ -614,12 +608,11 @@
 			 * Keyed by a page title and valued by anchors
 			 */
 			/** @type {AnchorMap} */
-			var anchors = Array.prototype.reduce.call(
+			var anchors = Array.prototype.reduce.call( // Collect anchors by pagename and create a mapping object
 				this.$warningList.find('a'),
 				/**
 				 * @param {AnchorMap} acc
 				 * @param {HTMLAnchorElement} a
-				 * @returns {AnchorMap}
 				 */
 				function(acc, a) {
 					var title = mw.util.getParamValue('title', a.href);
@@ -633,12 +626,13 @@
 			);
 			if ($.isEmptyObject(anchors)) return $.Deferred().resolve(void 0);
 
+			// Check page existence
 			var pagenames = Object.keys(anchors);
 			return this.getExistenceFunc(pagenames).then(function(exists) {
 				pagenames.forEach(function(p) {
-					if (anchors[p] && !exists(p)) {
+					if (anchors[p] && !exists(p)) { // If the page doesn't exist
 						anchors[p].forEach(function(a) {
-							a.classList.add('new');
+							a.classList.add('new'); // Add class that applies the redlink CSS
 						});
 					}
 				});
@@ -862,11 +856,12 @@
 
 		/**
 		 * Get a function to sanitize a given pagename in API-response format.
-		 * @param {ApiResponseNormalized[]} [normalized]
-		 * @returns {(page: string) => string}
+		 *
+		 * @param {ApiResponseNormalized[]} [normalized] response.query.normalized
+		 * @returns {(page: string) => string} Function that takes a pagename and formats it
 		 */
 		function formatterFactory(normalized) {
-			var formatterMap = (normalized || []).reduce(/** @param {Record<String, string>} acc */ function(acc, obj) {
+			var formatterMap = (normalized || []).reduce(/** @param {Record<string, string>} acc */ function(acc, obj) {
 				acc[obj.from] = obj.to;
 				return acc;
 			}, Object.create(null));
@@ -877,6 +872,7 @@
 
 		/**
 		 * Get the name of the page to which a given page is redirected.
+		 *
 		 * @param {string} pagename
 		 * @returns {JQueryPromise<string?>} The redirected pagename if the queried page is a redirect, or else `null`.
 		 */
@@ -908,15 +904,16 @@
 
 		/**
 		 * Get a function from a pagename to its existence boolean.
+		 *
 		 * @param {string[]} [pagenames]
-		 * @returns {JQueryPromise<(page: string|undefined) => boolean>}
+		 * @returns {JQueryPromise<(page: string) => boolean>}
 		 */
 		MovePageWarnings.prototype.getExistenceFunc = function(pagenames) {
 			if (pagenames === void 0 || !pagenames.length) {
 				// eslint-disable-next-line @typescript-eslint/no-unused-vars
-				return $.Deferred().resolve(/** @param {string} [page] */ function(page) { return false; });
+				return $.Deferred().resolve(/** @param {string} page */ function(page) { return false; });
 			}
-			/** @typedef {Record<String, boolean>} ExistenceMap */
+			/** @typedef {Record<string, boolean>} ExistenceMap */
 			return this.api.get({
 				action: 'query',
 				titles: pagenames,
@@ -939,9 +936,9 @@
 				}
 				return Object.create(null);
 			}).then(/** @param {ExistenceMap} existenceMap */ function(existenceMap) {
-				/** @param {string} [page] */
+				/** @param {string} page */
 				return function(page) {
-					return !!existenceMap[page || ''];
+					return !!existenceMap[page];
 				};
 			});
 		};
@@ -960,12 +957,7 @@
 				MovePageWarnings.init();
 			}
 		};
-		try { // Make sure that the browser supports Document API: visibilitychange event
-			document.addEventListener(vc, init);
-		}
-		catch (err) {
-			console.log(err);
-		}
+		document.addEventListener(vc, init);
 	} else {
 		MovePageWarnings.init();
 	}
