@@ -2,7 +2,7 @@
 	MovePageWarnings
 	Generate warnings on Special:Movepage, per the states of the move destination.
 	@author [[User:Dragoniez]]
-	@version 1.1.1
+	@version 1.1.2
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -111,29 +111,6 @@
 			this.moveTalkBox = document.querySelector('#wpMovetalk > input');
 
 			/**
-			 * The wrapper div for warning messages.
-			 * @type {JQuery<HTMLDivElement>}
-			 * @readonly
-			 */
-			this.$warning = $('<div>');
-			this.$warning
-				.addClass('mw-message-box mw-message-box-warning')
-				.prop('id', 'mpw-warnings')
-				.hide();
-			/**
-			 * The warning message list.
-			 * @type {JQuery<HTMLOListElement>}
-			 * @readonly
-			 */
-			this.$warningList = $('<ol>');
-			this.$warningList.prop('id', 'mpw-warnings-list');
-			this.$warning.append(
-				$('<span>').prop('innerHTML', '<b>警告:</b> 移動先ページについて、以下の点を確認してください。'),
-				this.$warningList
-			);
-			$('.mw-body-content').children('h2').eq(0).before(this.$warning);
-
-			/**
 			 * Stores the page name of the move destination last inputted.
 			 * @type {string}
 			 */
@@ -191,6 +168,48 @@
 					initWarnings(true);
 				});
 			}
+
+			/**
+			 * The wrapper div for warning messages.
+			 * @type {JQuery<HTMLDivElement>}
+			 */
+			this.$warning = $('<div>');
+			this.$warning
+				.addClass('mw-message-box mw-message-box-warning')
+				.prop('id', 'mpw-warnings')
+				.hide();
+
+			/**
+			 * The warning message list.
+			 * @type {JQuery<HTMLOListElement>}
+			 */
+			this.$warningList = $('<ol>');
+			this.$warningList.prop('id', 'mpw-warnings-list');
+
+			// Append the warning wrapper to the DOM
+			$('.mw-body-content').children('h2').eq(0).before(
+				this.$warning.append(
+					$('<span>').append(
+						$('<b>').text('警告:'),
+						document.createTextNode(' 移動先ページについて、以下の点を確認してください。('),
+						$('<a>')
+							.prop({
+								id: 'mpw-warnings-reload',
+								href: '#',
+								role: 'button'
+							})
+							.text('更新')
+							.off('click').on('click', function(e) {
+								e.preventDefault();
+								_this.clearWarnings();
+								_this.lastPagename = '';
+								initWarnings(false, true);
+							}),
+						document.createTextNode(')')
+					),
+					this.$warningList
+				)
+			);
 
 			initWarnings(false, true);
 
