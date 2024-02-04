@@ -2,7 +2,7 @@
 	MovePageWarnings
 	Generate warnings on Special:Movepage, per the states of the move destination.
 	@author [[User:Dragoniez]]
-	@version 1.1.2
+	@version 1.1.3
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -13,12 +13,12 @@
 (function() {
 
 	// Check whether we should run the script
-	var moveFrom = mw.config.get('wgRelevantPageName');
+	var moveFrom = mw.config.get('wgRelevantPageName').replace(/_/g, ' ');
 	if (!(
 		// User is on Special:Movepage, and
 		mw.config.get('wgCanonicalSpecialPageName') === 'Movepage' &&
 		// User isn't on the root of Special:Movepage, and
-		moveFrom && moveFrom !== mw.config.get('wgPageName') &&
+		moveFrom && moveFrom !== mw.config.get('wgPageName').replace(/_/g, ' ') &&
 		// User has the right to move pages, and
 		mw.config.get('wgUserGroups').indexOf('autoconfirmed') !== -1 &&
 		// Browser is compatible with MutationObserver (we have to be able to detect changes in software-defined OOUI elements)
@@ -35,7 +35,7 @@
 		var wgFormattedNamespaces = mw.config.get('wgFormattedNamespaces');
 		var prefixes = Object.keys(wgFormattedNamespaces).reduce(/** @param {string[]} acc */ function(acc, key) {
 			var val = wgFormattedNamespaces[key];
-			if (val) acc.push(val);
+			if (val) acc.push(val); // Except for the main namespace
 			return acc;
 		}, []);
 
