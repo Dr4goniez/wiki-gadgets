@@ -767,8 +767,8 @@ module.exports = /** @class */ (function() {
 				mw.util.getParamValue('action', href) && !mw.util.getParamValue('redlink', href) ||
 				mw.util.getParamValue('diff', href) ||
 				mw.util.getParamValue('oldid', href) ||
-				a.type === 'button' ||
 				a.role === 'button' ||
+				a.classList.contains('ext-discussiontools-init-timestamplink') ||
 				pr && ignoredClassesPr.test(pr.className)
 			) {
 				return;
