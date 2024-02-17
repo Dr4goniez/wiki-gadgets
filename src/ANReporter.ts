@@ -1,7 +1,7 @@
 /*********************************************************************************\
 	AN Reporter
 	@author [[User:Dragoniez]]
-	@version 8.0.3
+	@version 8.1.0
 	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -859,14 +859,7 @@ class IdList {
 	 *
 	 * The usernames are formatted by `lib.clean` and underscores in it are represented by spaces.
 	 */
-	list: {
-		[username: string]: EventIds;
-	};
-
-	/** Initialize a new `IdList` instance. */
-	constructor() {
-		this.list = {};
-	}
+	list: {[username: string]: EventIds;} = {};
 
 	/**
 	 * Get event IDs of a user.
@@ -892,36 +885,75 @@ class IdList {
 	 * @returns
 	 */
 	private fetchIds(username: string): JQueryPromise<EventIds> {
-		const ret: EventIds = {};
-		return new mw.Api().get({
-			action: 'query',
-			list: 'logevents|usercontribs',
-			leprop: 'ids',
-			letype: 'newusers',
-			ledir: 'newer',
-			lelimit: 1,
-			leuser: username,
-			uclimit: 1,
-			ucuser: username,
-			ucprop: 'ids',
-			formatversion: '2'
-		}).then((res) => {
-			const resLgev = res && res.query && res.query.logevents;
-			const resCont = res && res.query && res.query.usercontribs;
-			if (resLgev && resLgev[0] && resLgev[0].logid !== void 0) {
-				ret.logid = resLgev[0].logid;
-			}
-			if (resCont && resCont[0] && resCont[0].revid !== void 0) {
-				ret.diffid = resCont[0].revid;
+
+		const api = new mw.Api();
+
+		/**
+		 * Get the oldest account creation logid with the parameters `type=newusers&user=username` and
+		 * the oldest diffid if the user has ever made an edit.
+		 */
+		const getIds1 = (): JQueryPromise<EventIds> => {
+			const ret: EventIds = {};
+			return api.get({
+				action: 'query',
+				list: 'logevents|usercontribs',
+				leprop: 'ids',
+				letype: 'newusers',
+				ledir: 'newer',
+				lelimit: 1,
+				leuser: username,
+				uclimit: 1,
+				ucuser: username,
+				ucprop: 'ids',
+				formatversion: '2'
+			}).then((res) => {
+				const resLgev = res && res.query && res.query.logevents;
+				const resCont = res && res.query && res.query.usercontribs;
+				if (resLgev && resLgev[0] && resLgev[0].logid !== void 0) {
+					ret.logid = resLgev[0].logid;
+				}
+				if (resCont && resCont[0] && resCont[0].revid !== void 0) {
+					ret.diffid = resCont[0].revid;
+				}
+				return ret;
+			}).catch((_, err) => {
+				console.error(err);
+				return ret;
+			});
+		};
+
+		/**
+		 * Get the oldest account creation logid with the parameters `type=newusers&page=User:username`.
+		 */
+		const getIds2 = (): JQueryPromise<number|null> => {
+			return api.get({
+				action: 'query',
+				list: 'logevents',
+				leprop: 'ids',
+				letype: 'newusers',
+				ledir: 'newer',
+				lelimit: 1,
+				letitle: 'User:' + username,
+				formatversion: '2'
+			}).then((res) => {
+				const resLgev = res && res.query && res.query.logevents;
+				return resLgev && resLgev[0] && resLgev[0].logid || null;
+			}).catch((_, err) => {
+				console.error(err);
+				return null;
+			});
+		};
+
+		return $.when(getIds1(), getIds2()).then((ret, logid) => {
+			if (!ret.logid && logid) {
+				ret.logid = logid;
 			}
 			if (Object.keys(ret).length) {
 				this.list[username] = {...ret};
 			}
 			return ret;
-		}).catch((_, err) => {
-			console.error(err);
-			return ret;
 		});
+
 	}
 
 	/**

@@ -2,7 +2,7 @@
 /*********************************************************************************\
     AN Reporter
     @author [[User:Dragoniez]]
-    @version 8.0.3
+    @version 8.1.0
     @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -767,8 +767,12 @@ var __assign = (this && this.__assign) || function () {
      * The IdList class. Administrates username-ID conversions.
      */
     var IdList = /** @class */ (function () {
-        /** Initialize a new `IdList` instance. */
         function IdList() {
+            /**
+             * The list object of objects, keyed by usernames.
+             *
+             * The usernames are formatted by `lib.clean` and underscores in it are represented by spaces.
+             */
             this.list = {};
         }
         /**
@@ -795,34 +799,68 @@ var __assign = (this && this.__assign) || function () {
          */
         IdList.prototype.fetchIds = function (username) {
             var _this_1 = this;
-            var ret = {};
-            return new mw.Api().get({
-                action: 'query',
-                list: 'logevents|usercontribs',
-                leprop: 'ids',
-                letype: 'newusers',
-                ledir: 'newer',
-                lelimit: 1,
-                leuser: username,
-                uclimit: 1,
-                ucuser: username,
-                ucprop: 'ids',
-                formatversion: '2'
-            }).then(function (res) {
-                var resLgev = res && res.query && res.query.logevents;
-                var resCont = res && res.query && res.query.usercontribs;
-                if (resLgev && resLgev[0] && resLgev[0].logid !== void 0) {
-                    ret.logid = resLgev[0].logid;
-                }
-                if (resCont && resCont[0] && resCont[0].revid !== void 0) {
-                    ret.diffid = resCont[0].revid;
+            var api = new mw.Api();
+            /**
+             * Get the oldest account creation logid with the parameters `type=newusers&user=username` and
+             * the oldest diffid if the user has ever made an edit.
+             */
+            var getIds1 = function () {
+                var ret = {};
+                return api.get({
+                    action: 'query',
+                    list: 'logevents|usercontribs',
+                    leprop: 'ids',
+                    letype: 'newusers',
+                    ledir: 'newer',
+                    lelimit: 1,
+                    leuser: username,
+                    uclimit: 1,
+                    ucuser: username,
+                    ucprop: 'ids',
+                    formatversion: '2'
+                }).then(function (res) {
+                    var resLgev = res && res.query && res.query.logevents;
+                    var resCont = res && res.query && res.query.usercontribs;
+                    if (resLgev && resLgev[0] && resLgev[0].logid !== void 0) {
+                        ret.logid = resLgev[0].logid;
+                    }
+                    if (resCont && resCont[0] && resCont[0].revid !== void 0) {
+                        ret.diffid = resCont[0].revid;
+                    }
+                    return ret;
+                }).catch(function (_, err) {
+                    console.error(err);
+                    return ret;
+                });
+            };
+            /**
+             * Get the oldest account creation logid with the parameters `type=newusers&page=User:username`.
+             */
+            var getIds2 = function () {
+                return api.get({
+                    action: 'query',
+                    list: 'logevents',
+                    leprop: 'ids',
+                    letype: 'newusers',
+                    ledir: 'newer',
+                    lelimit: 1,
+                    letitle: 'User:' + username,
+                    formatversion: '2'
+                }).then(function (res) {
+                    var resLgev = res && res.query && res.query.logevents;
+                    return resLgev && resLgev[0] && resLgev[0].logid || null;
+                }).catch(function (_, err) {
+                    console.error(err);
+                    return null;
+                });
+            };
+            return $.when(getIds1(), getIds2()).then(function (ret, logid) {
+                if (!ret.logid && logid) {
+                    ret.logid = logid;
                 }
                 if (Object.keys(ret).length) {
                     _this_1.list[username] = __assign({}, ret);
                 }
-                return ret;
-            }).catch(function (_, err) {
-                console.error(err);
                 return ret;
             });
         };
