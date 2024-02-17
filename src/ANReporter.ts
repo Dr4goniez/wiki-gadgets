@@ -1,7 +1,7 @@
 /*********************************************************************************\
 	AN Reporter
 	@author [[User:Dragoniez]]
-	@version 8.1.0
+	@version 8.1.1
 	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -416,7 +416,7 @@ class Config {
 				label: 'ポートレットID (上級)',
 				align: 'top',
 				help: new OO.ui.HtmlSnippet(
-					'<a href="https://doc.wikimedia.org/mediawiki-core/master/js/#!/api/mw.util-method-addPortletLink" target="_blank">mw.util.addPortletLink</a>の' +
+					'<a href="https://doc.wikimedia.org/mediawiki-core/REL1_41/js/#!/api/mw.util-method-addPortletLink" target="_blank">mw.util.addPortletLink</a>の' +
 					'<code style="font-family: inherit;">portletId</code>を指定します。未指定または値が無効の場合、使用中のスキンに応じて自動的にリンクの生成位置が決定されます。'
 				)
 			}),
@@ -3740,8 +3740,8 @@ function createLabelledCheckbox(labelText: string, options: LabelledCheckboxOpti
  * Extract a CIDR address from text.
  *
  * Regular expressions used in this method are adapted from `mediawiki.util`.
- * - {@link https://doc.wikimedia.org/mediawiki-core/master/js/source/util.html#mw-util-method-isIPv4Address | mw.util.isIPv4Address}
- * - {@link https://doc.wikimedia.org/mediawiki-core/master/js/source/util.html#mw-util-method-isIPv6Address | mw.util.isIPv6Address}
+ * - {@link https://doc.wikimedia.org/mediawiki-core/REL1_41/js/#!/api/mw.util-method-isIPv4Address | mw.util.isIPv4Address}
+ * - {@link https://doc.wikimedia.org/mediawiki-core/REL1_41/js/#!/api/mw.util-method-isIPv6Address | mw.util.isIPv6Address}
  *
  * @param text
  * @returns The extracted CIDR, or `null` if there's no match.
