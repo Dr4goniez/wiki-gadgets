@@ -55,7 +55,8 @@
 			})();
 
 			getMetaInfo().then(function(info) {
-				new (SRFactory($rbspans, parentNode, info));
+				var SR = SRFactory($rbspans, parentNode, info);
+				new SR();
 			});
 
 		});
