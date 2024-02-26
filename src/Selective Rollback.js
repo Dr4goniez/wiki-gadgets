@@ -88,20 +88,21 @@
 					throw new Error(err);
 				}
 			})();
-			var SRC = getSRConfig();
-			appendStyleTag(SRC);
-			var msg = getMessages(SRC);
+			var cfg = getSRConfig();
+			appendStyleTag(cfg);
+			var msg = getMessages(cfg);
 
 			// Get meta info from the API
 			getMetaInfo().then(function(meta) {
 
 				// Get the Dialog class and initialize an instance of it
-				var Dialog = DialogFactory(SRC, msg, meta);
+				var Dialog = DialogFactory(cfg, msg, meta);
 				var dialog = new Dialog();
 
 				// Get the SR class
-				var SR = SRFactory(dialog, SRC, msg, parentNode);
+				var SR = SRFactory(dialog, cfg, msg, parentNode);
 
+				// Initialize Selective Rollback
 				var /** @type {NodeJS.Timeout} */ hookTimeout;
 				var /** @type {Link} */ links;
 				mw.hook('wikipage.content').add(function() { // Listen to updates in the page content
@@ -145,7 +146,7 @@
 	 */
 	function getSRConfig() {
 
-		var /** @type {SelectiveRollbackConfig} @readonly */ ret = {
+		var /** @type {SelectiveRollbackConfig} @readonly */ cfg = {
 			lang: '',
 			editSummaries: {},
 			showKeys: false,
@@ -225,17 +226,18 @@
 					// } else if (/^3\s*year/.test(val)) {
 					//     val = '3 years';
 					} else {
-						return console.error('[SR] "' + val + '" is not a valid watch-page expiry.');
+						console.error('[SR] "' + val + '" is not a valid watch-page expiry.');
+						return;
 					}
 					userCfg[key] = val;
 				}
 				// @ts-ignore
-				ret[key] = userCfg[key];
+				cfg[key] = userCfg[key];
 
 			});
 		}
 
-		return ret;
+		return cfg;
 
 	}
 
@@ -275,10 +277,10 @@
 	 */
 	/**
 	 * Get interface messages as an object.
-	 * @param {SelectiveRollbackConfig} SRC
+	 * @param {SelectiveRollbackConfig} cfg
 	 * @returns {Messages}
 	 */
-	function getMessages(SRC) {
+	function getMessages(cfg) {
 
 		/**
 		 * @typedef {"ja"|"en"|"zh"|"es"|"ro"} Languages
@@ -449,12 +451,12 @@
 			}
 		};
 
-		var langSwitch = SRC.lang || mw.config.get('wgUserLanguage'); // Fall back to the user's language specified in preferences
+		var langSwitch = cfg.lang || mw.config.get('wgUserLanguage'); // Fall back to the user's language in preferences
 		if (['ja', 'zh', 'es', 'ro'].indexOf(langSwitch) !== -1) {
 			return i18n[langSwitch];
 		} else {
-			if (SRC.lang && SRC.lang !== 'en') {
-				console.error('[SR] Sorry, "' + SRC.lang + '" is unavaiable as the interface language.');
+			if (cfg.lang && cfg.lang !== 'en') {
+				console.error('[SR] Sorry, "' + cfg.lang + '" is unavaiable as the interface language.');
 			}
 			return i18n.en;
 		}
@@ -464,10 +466,10 @@
 
 	/**
 	 * Append to the document head a \<style> tag for SR.
-	 * @param {SelectiveRollbackConfig} SRC
+	 * @param {SelectiveRollbackConfig} cfg
 	 * @returns {void}
 	 */
-	function appendStyleTag(SRC) {
+	function appendStyleTag(cfg) {
 		var style = document.createElement('style');
 		style.textContent =
 			'.sr-checkbox-wrapper {' +
@@ -482,7 +484,7 @@
 			'}' +
 			'.sr-rollback-label {' +
 				'font-weight: bold;' +
-				'color: ' + SRC.checkboxLabelColor + ';' +
+				'color: ' + cfg.checkboxLabelColor + ';' +
 			'}' +
 			'.sr-dialog-borderbox {' +
 				'display: block;' +
@@ -505,7 +507,7 @@
 	 * @property {string[]} rights The current user's user rights.
 	 */
 	/**
-	 * Get the default rollback summary for the local wiki and the current user's user rights.
+	 * Get the default rollback summary and the current user's user rights on the local wiki.
 	 * @returns {JQueryPromise<MetaInfo>}
 	 */
 	function getMetaInfo() {
@@ -513,7 +515,7 @@
 			action: 'query',
 			meta: 'allmessages|userinfo',
 			ammessages: 'revertpage',
-			amlang: mw.config.get('wgContentLanguage'),
+			amlang: mw.config.get('wgContentLanguage'), // the language of the wiki
 			uiprop: 'rights',
 			formatversion: '2'
 		}).then(function(res) {
@@ -531,7 +533,7 @@
 				summary: void 0,
 				rights: []
 			};
-		}).then(/** @param {{summary: string|undefined; rights: string[]}} res */ function(res) {
+		}).then(/** @param {{summary: string|undefined; rights: string[];}} res */ function(res) {
 
 			var fetched = !!res.summary;
 			var summary = res.summary || 'Reverted edits by [[Special:Contributions/$2|$2]] ([[User talk:$2|talk]]) to last revision by [[User:$1|$1]]';
@@ -595,12 +597,12 @@
 	 */
 	/**
 	 * Return the Dialog class.
-	 * @param {SelectiveRollbackConfig} SRC
+	 * @param {SelectiveRollbackConfig} cfg
 	 * @param {Messages} msg
 	 * @param {MetaInfo} meta
 	 * @returns
 	 */
-	function DialogFactory(SRC, msg, meta) {
+	function DialogFactory(cfg, msg, meta) {
 
 		function Dialog() {
 
@@ -666,12 +668,12 @@
 								(function() {
 									// Append user-defined edit summaries if there's any
 									var $options = $([]);
-									if (!$.isEmptyObject(SRC.editSummaries)) {
-										Object.keys(SRC.editSummaries).forEach(function(key) {
+									if (!$.isEmptyObject(cfg.editSummaries)) {
+										Object.keys(cfg.editSummaries).forEach(function(key) {
 											$options = $options.add(
 												$('<option>')
-													.prop({value: SRC.editSummaries[key]})
-													.text(SRC.showKeys ? key : SRC.editSummaries[key])
+													.prop({value: cfg.editSummaries[key]})
+													.text(cfg.showKeys ? key : cfg.editSummaries[key])
 											);
 										});
 									}
@@ -728,8 +730,8 @@
 							})
 							.text(function() {
 								// Show a list of special expressions if defined by the user
-								if (!$.isEmptyObject(SRC.specialExpressions)) {
-									var seTooltip = Object.keys(SRC.specialExpressions).join(', ');
+								if (!$.isEmptyObject(cfg.specialExpressions)) {
+									var seTooltip = Object.keys(cfg.specialExpressions).join(', ');
 									$(this).css({
 										display: 'inline-block',
 										marginBottom: '0'
@@ -746,10 +748,7 @@
 					.append(
 						document.createTextNode(msg['summary-label-preview']),
 						($summaryPreview = $('<div>'))
-							.prop({
-								id: 'sr-summarypreview',
-								readonly: true
-							})
+							.prop({id: 'sr-summarypreview'})
 							.addClass('sr-dialog-borderbox')
 							.css({backgroundColor: 'initial'}),
 						($summaryPreviewTooltip =  $('<div>'))
@@ -770,7 +769,7 @@
 					.css('display', function() {
 						if (meta.rights.indexOf('markbotedits') !== -1) {
 							// If the current user has "markbotedits", show the checkbox and (un)check it in accordance with the config
-							botBox.$checkbox.prop('checked', SRC.markBot);
+							botBox.$checkbox.prop('checked', cfg.markBot);
 							return 'block';
 						} else {
 							// If the current user doesn't have "markbotedits", hide the checkbox
@@ -806,7 +805,7 @@
 													return $('<option>').prop('value', obj.value).text(obj.text);
 												})
 											)
-											.val(SRC.watchExpiry)
+											.val(cfg.watchExpiry)
 									)
 							)
 					)
@@ -818,7 +817,7 @@
 					// Show/hide the expiry dropdown when the checkbox is (un)checked
 					$watchUl.toggle($(this).is(':checked'));
 				})
-				.prop('checked', SRC.watchPage)
+				.prop('checked', cfg.watchPage)
 				.trigger('change');
 
 			// Define properties
@@ -895,7 +894,7 @@
 						var list = vipList.concat(ltaList);
 						$summary.autocomplete({
 							source: function(req, res) {
-								// Limit the list to the maximum number of 10, or the list can stick out of the viewport
+								// Limit the list to the maximum number of 10, or it can stick out of the viewport
 								var results = $.ui.autocomplete.filter(list, req.term);
 								res(results.slice(0, 10));
 							},
@@ -965,16 +964,6 @@
 		};
 
 		/**
-		 * Set up dialog buttons.
-		 * @param {JQueryUI.DialogButtonOptions[]} btns
-		 * @returns {Dialog}
-		 */
-		Dialog.prototype.setButtons = function(btns) {
-			this.$dialog.dialog({buttons: btns});
-			return this;
-		};
-
-		/**
 		 * Open the SR dialog.
 		 * @returns {Dialog}
 		 */
@@ -1019,9 +1008,9 @@
 				// Replace $0 with the default summary
 				summary = summary.replace('$0', meta.parsedsummary);
 			}
-			if (!$.isEmptyObject(SRC.specialExpressions)) { // Replace special expressions as defined by the user
-				for (var key in SRC.specialExpressions) {
-					summary = summary.split(key).join(SRC.specialExpressions[key]);
+			if (!$.isEmptyObject(cfg.specialExpressions)) { // Replace special expressions as defined by the user
+				for (var key in cfg.specialExpressions) {
+					summary = summary.split(key).join(cfg.specialExpressions[key]);
 				}
 			}
 			return summary;
@@ -1120,13 +1109,13 @@
 	 */
 	/**
 	 * Return the SR class.
-	 * @param {InstanceType<ReturnType<typeof DialogFactory>>} SRDialog An instance of the Dialog class.
-	 * @param {SelectiveRollbackConfig} SRC
+	 * @param {InstanceType<ReturnType<typeof DialogFactory>>} dialog An instance of the Dialog class.
+	 * @param {SelectiveRollbackConfig} cfg
 	 * @param {Messages} msg
 	 * @param {ParentNode} parentNode
 	 * @returns
 	 */
-	function SRFactory(SRDialog, SRC, msg, parentNode) {
+	function SRFactory(dialog, cfg, msg, parentNode) {
 
 		/** @readonly */
 		var onRCW = !parentNode;
@@ -1175,13 +1164,13 @@
 					};
 					if (e.ctrlKey) {
 						// If CTRL key is pressed down, just open the dialog, not executing rollback
-						SRDialog.open();
+						dialog.open();
 					} else if (
 						// Confirm rollback per config
 						!e.shiftKey && (
-							SRC.confirm === 'always' ||
-							onRCW && SRC.confirm === 'RCW' ||
-							!onRCW && SRC.confirm === 'nonRCW'
+							cfg.confirm === 'always' ||
+							onRCW && cfg.confirm === 'RCW' ||
+							!onRCW && cfg.confirm === 'nonRCW'
 						)
 					) {
 						OO.ui.confirm(msg['msg-confirm']).then(function(confirmed) {
@@ -1209,7 +1198,8 @@
 		 */
 		SR.createCheckbox = function() {
 			var box = createCheckbox('SR', 'sr-rollback-label');
-			var /** @type {JQuery<HTMLSpanElement>} */ $wrapper = $('<span>')
+			var /** @type {JQuery<HTMLSpanElement>} */ $wrapper =
+			$('<span>')
 				.addClass('sr-rollback')
 				.append(
 					$('<b>').text('['),
@@ -1231,7 +1221,7 @@
 
 			var _this = this;
 			if (box) box.$wrapper.remove();
-			params = params || SRDialog.getParams();
+			params = params || dialog.getParams();
 
 			// Collect required parameters to action=rollback from the rollback link internal to the rbspan
 			var rblink = rbspan.querySelector('a');
@@ -1263,7 +1253,7 @@
 		 *
 		 * This method also unbinds the rollback link from the class if needed.
 		 * @param {HTMLSpanElement} rbspan
-		 * @param {string?} [result] An error code on failure, `null` for a loading spinner.
+		 * @param {string?} [result] An error code on failure, `undefined` on success, `null` for a loading spinner.
 		 * @returns {void}
 		 */
 		SR.prototype.processRollbackLink = function(rbspan, result) {
@@ -1302,7 +1292,7 @@
 
 				// If no rbspan is bound to the class any longer, remove the dialog and the portlet link
 				if (!onRCW && $.isEmptyObject(this.links)) {
-					SRDialog.destroy();
+					dialog.destroy();
 				}
 
 			}
@@ -1331,11 +1321,9 @@
 		 */
 		SR.prototype.selectiveRollback = function() {
 
-			// Close the dialog and get request parameters
-			var params = SRDialog.close().getParams();
-
 			// Perform AJAX rollback on links whose associated SR checkboxes are checked
 			var /** @type {JQueryPromise<boolean>[]} */ deferreds = [];
+			var params = dialog.getParams();
 			for (var key in this.links) {
 				var obj = this.links[key];
 				if (obj.box && obj.box.$checkbox.is(':checked')) {
@@ -1348,8 +1336,9 @@
 				// Show a message if no SR checkbox is checked
 				mw.notify(msg['msg-nonechecked'], {type: 'warn'});
 			} else {
-				// When all rollback requests are done, show a message that tells how many rollback links were processed
+				dialog.close();
 				$.when.apply($, deferreds).then(function() {
+					// When all rollback requests are done, show a message that tells how many rollback links were processed
 					var reverted = 0;
 					var failed = 0;
 					Object.keys(arguments).forEach(function(key) {
