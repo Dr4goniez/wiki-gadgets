@@ -634,7 +634,7 @@
 			var /** @type {JQuery<HTMLSelectElement>} */ $summaryList;
 			var /** @type {JQuery<HTMLInputElement>} */ $summary;
 			var /** @type {JQuery<HTMLDivElement>} */ $summaryPreview;
-			var /** @type {JQuery<HTMLDivElement>} */ $summaryPreviewTooltip;
+			var /** @type {JQuery<HTMLParagraphElement>} */ $summaryPreviewTooltip;
 			var botBox = createCheckbox(msg['markbot-label']);
 			var watchBox = createCheckbox(msg['watchlist-label']);
 			var /** @type {JQuery<HTMLUListElement>} */ $watchUl;
@@ -693,7 +693,7 @@
 				// Custom summary wrapper
 				$('<div>')
 					.prop({id: 'sr-customsummary-wrapper'})
-					.css({marginBottom: '0.4em'})
+					.css({marginBottom: '0.3em'})
 					.append(
 						$('<label>')
 							.prop({htmlFor: csId})
@@ -751,17 +751,16 @@
 							.prop({id: 'sr-summarypreview'})
 							.addClass('sr-dialog-borderbox')
 							.css({backgroundColor: 'initial'}),
-						($summaryPreviewTooltip =  $('<div>'))
+						($summaryPreviewTooltip =  $('<p>'))
 							.prop({id: 'sr-summarypreview-tooltip'})
 							.text(msg['summary-tooltip-preview'])
 							.css({
 								fontSize: 'smaller',
-								marginTop: '0.4em',
-								marginBottom: '0'
+								margin: '0'
 							})
-							.hide()
+							.hide(),
 					)
-					.css({marginBottom: '0.5em'}),
+					.css({marginBottom: '0.8em'}),
 				// Markbot option wrapper
 				$('<div>')
 					.prop({id: 'sr-bot-wrapper'})
@@ -783,6 +782,7 @@
 						watchBox.$label,
 						($watchUl = $('<ul>'))
 							.prop({id: 'sr-watchlist-expiry'})
+							.css({marginTop: '0.2em'})
 							.hide()
 							.append(
 								$('<li>')
