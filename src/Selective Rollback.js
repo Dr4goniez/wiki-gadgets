@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.0.0
+	@version 4.0.1
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -423,12 +423,12 @@
 				'watchlist-label': 'Vigilar las páginas en tu lista de seguimiento',
 				'watchlist-expiry-label': 'Tiempo',
 				'watchlist-expiry-indefinite': 'Permanente',
-				'watchlist-expiry-1week': 'una semana',
-				'watchlist-expiry-1month': 'un mes',
-				'watchlist-expiry-3months': 'tres meses',
-				'watchlist-expiry-6months': 'seis meses',
-				'watchlist-expiry-1year': 'un año',
-				'watchlist-expiry-3years': 'tres años', // Not used
+				'watchlist-expiry-1week': '1 semana',
+				'watchlist-expiry-1month': '1 mes',
+				'watchlist-expiry-3months': '3 meses',
+				'watchlist-expiry-6months': '6 meses',
+				'watchlist-expiry-1year': '1 año',
+				'watchlist-expiry-3years': '3 años', // Not used
 				'button-rollbackchecked': 'Revertir elegidos',
 				'button-checkall': 'Elegir todos',
 				'button-close': 'Cerrar',
