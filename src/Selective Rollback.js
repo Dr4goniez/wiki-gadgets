@@ -106,7 +106,7 @@
 				/** @type {NodeJS.Timeout} */
 				var hookTimeout;
 				/**
-				 * The hook to watch.
+				 * The hook to listen to.
 				 */
 				var hook = mw.hook('wikipage.content');
 				/**
@@ -133,7 +133,7 @@
 							}, Object.create(null));
 						}
 						var sr = new SR(links); // Initialize rollback links and assign SR functionalities to them
-						links = sr.links; // Store the initialized links for a next hook event
+						links = sr.links; // Store the SR-ed links for a next hook event
 						dialog.bindSR(sr, onRCW); // Bind the SR instance to the Dialog instance
 					}, 100);
 				};
@@ -288,12 +288,12 @@
 	 * @property {string} watchlist-expiry-6months The text for the 6-month expiry dropdown option.
 	 * @property {string} watchlist-expiry-1year The text for the 1-year expiry dropdown option.
 	 * @property {string} watchlist-expiry-3years The text for the 3-year expiry dropdown option.
-	 * @property {string} button-rollbackchecked The text for "rollbackchecked" dialog button.
-	 * @property {string} button-checkall The text for "checkall" dialog button.
-	 * @property {string} button-close The text for "close" dialog button.
+	 * @property {string} button-rollbackchecked The text for the "Rollback checked" dialog button.
+	 * @property {string} button-checkall The text for the "Check all" dialog button.
+	 * @property {string} button-close The text for the "Close" dialog button.
 	 * @property {string} msg-nonechecked A mw.notify message for when no checkbox is checked for selective rollback.
-	 * @property {string} msg-linksresolved A mw.notify message for when there's no checkbox to check when the "checkall" button is hit.
-	 * @property {string} msg-confirm An OO.ui.confirm message to confirm rollback.
+	 * @property {string} msg-linksresolved A mw.notify message for when there's no checkbox to check when the "Check all" button is hit.
+	 * @property {string} msg-confirm An OO.ui.confirm message for rollback confirmation.
 	 * @property {string} rbstatus-reverted The text for reverted rollback links.
 	 * @property {string} rbstatus-failed The text for non-reverted rollback links.
 	 * @property {string} rbstatus-notify-success Internal text ("Success") for a mw.notify message that shows how many rollbacks succeeded.
@@ -321,7 +321,7 @@
 				'summary-tooltip-$0-error': '($0は<b>英語の</b>標準編集要約に置換されます。)',
 				'summary-tooltip-specialexpressions': '置換表現',
 				'summary-label-preview': '要約プレビュー', // v4.0.0
-				'summary-tooltip-preview': '(マジックワードは置換されます)', // v4.0.0
+				'summary-tooltip-preview': '(マジックワードは置換されます。)', // v4.0.0
 				'markbot-label': 'ボット編集として巻き戻し',
 				'watchlist-label': '対象ページをウォッチリストに追加',
 				'watchlist-expiry-label': '期間',
@@ -353,7 +353,7 @@
 				'summary-tooltip-$0-error': '($0 will be replaced with the default rollback summary <b>in English</b>.)',
 				'summary-tooltip-specialexpressions': 'Replacement expressions',
 				'summary-label-preview': 'Summary preview', // v4.0.0
-				'summary-tooltip-preview': '(Magic words will be replaced)', // v4.0.0
+				'summary-tooltip-preview': '(Magic words will be replaced.)', // v4.0.0
 				'markbot-label': 'Mark rollbacks as bot edits',
 				'watchlist-label': 'Add the target pages to watchlist',
 				'watchlist-expiry-label': 'Expiry',
@@ -385,7 +385,7 @@
 				'summary-tooltip-$0-error': '($0将会被默认编辑摘要为<b>英文</b>替代。)',
 				'summary-tooltip-specialexpressions': '替换表达',
 				'summary-label-preview': '编辑摘要的预览', // v4.0.0
-				'summary-tooltip-preview': '(魔术字将被替换)', // v4.0.0
+				'summary-tooltip-preview': '(魔术字将被替换。)', // v4.0.0
 				'markbot-label': '标记为机器人编辑',
 				'watchlist-label': '将目标页面加入监视页面',
 				'watchlist-expiry-label': '时间',
@@ -418,7 +418,7 @@
 				'summary-tooltip-$0-error': '($0 será reemplazada con la resumen de reversión automática <b>en inglés</b>.)',
 				'summary-tooltip-specialexpressions': 'Expresiones de reemplazo',
 				'summary-label-preview': 'Previsualización del resumen de edición', // v4.0.0
-				'summary-tooltip-preview': '(Las palabras mágicas serán reemplazadas)', // v4.0.0
+				'summary-tooltip-preview': '(Las palabras mágicas serán reemplazadas.)', // v4.0.0
 				'markbot-label': 'Marcar las reversiones cómo ediciones de un bot',
 				'watchlist-label': 'Vigilar las páginas en tu lista de seguimiento',
 				'watchlist-expiry-label': 'Tiempo',
@@ -451,7 +451,7 @@
 				'summary-tooltip-$0-error': '($0 va fi înlocuit cu descrierea implicită a revenirii <b>în engleză</b>.)',
 				'summary-tooltip-specialexpressions': 'Expresii de înlocuire',
 				'summary-label-preview': 'Previzualizare descriere', // v4.0.0
-				'summary-tooltip-preview': '(Cuvintele magice vor fi înlocuite)', // v4.0.0
+				'summary-tooltip-preview': '(Cuvintele magice vor fi înlocuite.)', // v4.0.0
 				'markbot-label': 'Marchează revenirile drept modificări făcute de robot',
 				'watchlist-label': 'Adaugă paginile țintă la pagini urmărite',
 				'watchlist-expiry-label': 'Expiră',
@@ -519,6 +519,10 @@
 				'border-radius: 1%;' +
 				'background-color: white;' +
 				'padding: 2px 4px;' +
+			'}' +
+			'.sr-dialog-tooltip {' +
+				'font-size: smaller;' +
+				'margin: 0;' +
 			'}';
 		document.head.appendChild(style);
 	}
@@ -644,7 +648,8 @@
 				.css({
 					padding: '1em',
 					maxWidth: '580px'
-				}).dialog({
+				})
+				.dialog({
 					dialogClass: 'sr-dialog',
 					height: 'auto',
 					width: 'auto',
@@ -742,27 +747,17 @@
 								id: 'sr-customsummary-$0',
 								innerHTML: msg[meta.fetched ? 'summary-tooltip-$0' : 'summary-tooltip-$0-error']
 							})
-							.css({
-								fontSize: 'smaller',
-								margin: '0'
-							}),
+							.addClass('sr-dialog-tooltip'),
 						$('<p>')
 							.prop({id: 'sr-customsummary-$SE'})
-							.css({
-								fontSize: 'smaller',
-								margin: '0',
-								display: 'none'
-							})
+							.addClass('sr-dialog-tooltip')
 							.text(function() {
 								// Show a list of special expressions if defined by the user
 								if (!$.isEmptyObject(cfg.specialExpressions)) {
 									var seTooltip = Object.keys(cfg.specialExpressions).join(', ');
-									$(this).css({
-										display: 'inline-block',
-										marginBottom: '0'
-									});
 									return '(' + msg['summary-tooltip-specialexpressions'] + ': ' + seTooltip + ')';
 								} else {
+									$(this).hide();
 									return '';
 								}
 							})
@@ -779,10 +774,7 @@
 						($summaryPreviewTooltip =  $('<p>'))
 							.prop({id: 'sr-summarypreview-tooltip'})
 							.text(msg['summary-tooltip-preview'])
-							.css({
-								fontSize: 'smaller',
-								margin: '0'
-							})
+							.addClass('sr-dialog-tooltip')
 							.hide()
 					)
 					.css({marginBottom: '0.8em'}),
@@ -952,7 +944,7 @@
 		}
 
 		/**
-		 * Bind an SR instance to this instance of the Dialog class and construct buttons.
+		 * Bind an SR instance to the Dialog instance, and construct buttons.
 		 * @param {InstanceType<ReturnType<typeof SRFactory>>} sr
 		 * @param {boolean} onRCW
 		 * @returns {Dialog}
@@ -969,14 +961,14 @@
 				{	// "Check all" button
 					text: msg['button-checkall'],
 					click: function() {
-						var cnt = 0;
-						for (var key in sr.links) {
+						var cnt = Object.keys(sr.links).reduce(function(acc, key) {
 							var obj = sr.links[key];
 							if (obj.box) {
 								obj.box.$checkbox.prop('checked', true);
-								cnt++;
+								acc++;
 							}
-						}
+							return acc;
+						}, 0);
 						if (!cnt) {
 							mw.notify(msg['msg-linksresolved'], {type: 'warn'});
 						}
@@ -1170,9 +1162,10 @@
 			var _this = this;
 
 			/**
-			 * An object of rollback spans and their associated SR checkboxes.
+			 * An object of rollback links and their associated SR checkboxes.
 			 *
-			 * Each rbspan has `data-sr-index` to be used to unbind the associated property from the class.
+			 * Each rbspan has `data-sr-index`, which corresponds to a key of the object.
+			 * This is used when we need to unbind the link from the class instance.
 			 * @type {Link}
 			 */
 			this.links = getRollbackLinks().reduce(function(acc, rbspan) {
@@ -1213,8 +1206,12 @@
 							!onRCW && cfg.confirm === 'nonRCW'
 						)
 					) {
-						OO.ui.confirm(msg['msg-confirm']).then(function(confirmed) {
-							if (confirmed) ajaxRollback();
+						window.requestAnimationFrame(function() { // Ensure that the popup takes place after the browser's repaint
+							rbspan.style.border = '1px dotted black'; // Visualize which rollback link has been clicked
+							OO.ui.confirm(msg['msg-confirm']).then(function(confirmed) {
+								rbspan.style.border = '';
+								if (confirmed) ajaxRollback();
+							});
 						});
 					} else {
 						ajaxRollback();
@@ -1331,6 +1328,7 @@
 				delete this.links[index];
 
 				// If no rbspan is bound to the class any longer, remove the dialog and the portlet link
+				// Never does this on RCW, because new rollback links can be generated when new changes are loaded
 				if (!onRCW && $.isEmptyObject(this.links)) {
 					dialog.destroy();
 				}
