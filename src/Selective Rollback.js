@@ -501,6 +501,7 @@
 			'}' +
 			'.sr-checkbox {' +
 				'margin-right: 0.5em;' +
+				'vertical-align: middle;' +
 			'}' +
 			'.sr-rollback {' +
 				'display: inline-block;' +
