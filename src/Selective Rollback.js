@@ -103,17 +103,41 @@
 				var SR = SRFactory(dialog, cfg, msg, parentNode);
 
 				// Initialize Selective Rollback
-				var /** @type {NodeJS.Timeout} */ hookTimeout;
-				var /** @type {Link} */ links;
-				mw.hook('wikipage.content').add(function() { // Listen to updates in the page content
+				/** @type {NodeJS.Timeout} */
+				var hookTimeout;
+				/**
+				 * The hook to watch.
+				 */
+				var hook = mw.hook('wikipage.content');
+				/**
+				 * Storage for SR-ed rollback links.
+				 * @type {Link}
+				 */
+				var links = Object.create(null);
+				/**
+				 * Function to execute when the page content is updated.
+				 */
+				var hookCallback = function() {
 					// The hook can fire multiple times, but we need only initialize rollback links once in consective hook events
 					clearTimeout(hookTimeout);
 					hookTimeout = setTimeout(function() {
+						if (dialog.isDestroyed()) {
+							// If the dialog has been destroyed, unlisten to changes in the page content
+							hook.remove(hookCallback);
+							return;
+						} else if (!$.isEmptyObject(links)) {
+							// Create a new object of links that are not detached from the DOM
+							links = Object.keys(links).reduce(function(acc, key) {
+								if (document.body.contains(links[key].rbspan)) acc[key] = links[key];
+								return acc;
+							}, Object.create(null));
+						}
 						var sr = new SR(links); // Initialize rollback links and assign SR functionalities to them
 						links = sr.links; // Store the initialized links for a next hook event
 						dialog.bindSR(sr, onRCW); // Bind the SR instance to the Dialog instance
 					}, 100);
-				});
+				};
+				hook.add(hookCallback); // Listen to updates in the page content
 
 			});
 
@@ -758,7 +782,7 @@
 								fontSize: 'smaller',
 								margin: '0'
 							})
-							.hide(),
+							.hide()
 					)
 					.css({marginBottom: '0.8em'}),
 				// Markbot option wrapper
@@ -885,6 +909,12 @@
 				console.error('[SR] Failed to create a portlet link.');
 			}
 
+			/**
+			 * Whether the dialog has been destroyed.
+			 * @type {boolean}
+			 */
+			this.destroyed = false;
+
 			// On jawp, set up autocomplete for the custom summary textbox
 			var moduleName = 'ext.gadget.WpLibExtra';
 			if (mw.config.get('wgWikiID') === 'jawiki' && mw.loader.getModuleNames().indexOf(moduleName) !== -1) {
@@ -987,7 +1017,16 @@
 		 */
 		Dialog.prototype.destroy = function() {
 			this.$dialog.empty().dialog('destroy');
+			this.destroyed = true;
 			if (this.portlet) this.portlet.remove();
+		};
+
+		/**
+		 * Get the destroyed state of the dialog.
+		 * @returns {boolean}
+		 */
+		Dialog.prototype.isDestroyed = function() {
+			return this.destroyed;
 		};
 
 		/**
@@ -1123,7 +1162,7 @@
 		/**
 		 * Initialize an SR instance.
 		 * @constructor
-		 * @param {Link} [unresolvedLinks] SR link objects previously instantiated, if any.
+		 * @param {Link} unresolvedLinks SR-ed rollback links previously initialized but yet to be resolved.
 		 */
 		function SR(unresolvedLinks) {
 
@@ -1187,7 +1226,7 @@
 				};
 				return acc;
 
-			}, unresolvedLinks || Object.create(null));
+			}, unresolvedLinks);
 
 		}
 
