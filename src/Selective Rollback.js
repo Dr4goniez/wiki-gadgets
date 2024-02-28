@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.0.1
+	@version 4.0.2
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -475,7 +475,7 @@
 			}
 		};
 
-		var langSwitch = cfg.lang || mw.config.get('wgUserLanguage'); // Fall back to the user's language in preferences
+		var langSwitch = (cfg.lang || mw.config.get('wgUserLanguage')).replace(/-.*$/, ''); // Fall back to the user's language in preferences
 		if (['ja', 'zh', 'es', 'ro'].indexOf(langSwitch) !== -1) {
 			return i18n[langSwitch];
 		} else {
