@@ -648,15 +648,29 @@ module.exports = /** @class */ (function() {
 						params: {
 							action: 'query',
 							list: 'blocks',
-							bklimit: 1,
 							bkip: ip,
 							bkprop: 'user|expiry|restrictions',
 							formatversion: '2'
 						},
 						callback: function(res) {
-							var /** @type {ApiResponseQueryListBlocks[]=} */ resBlk = res && res.query && res.query.blocks;
-							var /** @type {ApiResponseQueryListBlocks=} */ resObj;
-							if (resBlk && (resObj = resBlk[0])) {
+							// An IP may have multiple blocks
+							/** @type {ApiResponseQueryListBlocks[]} */
+							var resBlk = res && res.query && res.query.blocks || [];
+							var resObj = resBlk.reduce(/** @param {ApiResponseQueryListBlocks?} acc */ function(acc, obj, i) {
+								if (i === 0) {
+									acc = obj; // Just save the object in the first loop
+								} else {
+									// If the IP has multiple blocks, filter out the narrowest one CIDR-wise
+									var m;
+									var lastRange = acc && (m = acc.user.match(/\/(\d+)$/)) ? parseInt(m[1]) : 128;
+									var thisRange = (m = obj.user.match(/\/(\d+)$/)) !== null ? parseInt(m[1]) : 128;
+									if (thisRange > lastRange) { // e.g., /24 is narrower than /23
+										acc = obj; // Overwrite the previously substituted object
+									}
+								}
+								return acc;
+							}, null);
+							if (resObj) {
 								var partialBlk = resObj.restrictions && !Array.isArray(resObj.restrictions);
 								var clss;
 								if (/^in/.test(resObj.expiry)) {
@@ -700,15 +714,27 @@ module.exports = /** @class */ (function() {
 							action: 'query',
 							list: 'globalblocks',
 							bgip: ip,
-							bglimit: 1,
 							bgprop: 'address|expiry',
 							formatversion: '2'
 						},
 						callback: function(res) {
-							/** @typedef {{expiry: string;}} ApiResponseQueryListGlobalblocks */
-							var /** @type {ApiResponseQueryListGlobalblocks[]=} */ resGblk = res && res.query && res.query.globalblocks;
-							var /** @type {ApiResponseQueryListGlobalblocks=} */ resObj;
-							if (resGblk && (resObj = resGblk[0])) {
+							/** @typedef {{address: string; expiry: string;}} ApiResponseQueryListGlobalblocks */
+							/** @type {ApiResponseQueryListGlobalblocks[]} */
+							var resGblk = res && res.query && res.query.globalblocks || [];
+							var resObj = resGblk.reduce(/** @param {ApiResponseQueryListGlobalblocks?} acc */ function(acc, obj, i) {
+								if (i === 0) {
+									acc = obj;
+								} else {
+									var m;
+									var lastRange = acc && (m = acc.address.match(/\/(\d+)$/)) ? parseInt(m[1]) : 128;
+									var thisRange = (m = obj.address.match(/\/(\d+)$/)) !== null ? parseInt(m[1]) : 128;
+									if (thisRange > lastRange) {
+										acc = obj;
+									}
+								}
+								return acc;
+							}, null);
+							if (resObj) {
 								var clss = /^in/.test(resObj.expiry) ? 'mbl-globally-blocked-indef' : 'mbl-globally-blocked-temp';
 								addClass(userLinks, ip, clss);
 							}
