@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.0.2
+	@version 4.0.3
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -36,8 +36,9 @@
 	init();
 
 	/**
-	 * The parent node of rollback links and checkboxes, "li" or "#mw-diff-ntitle2". On RCW, the value is `null`.
-	 * @typedef {"li"|"#mw-diff-ntitle2"|null} ParentNode
+	 * The parent node that rollback links should look for for SR checkbox generation. If the checkbox shouldn't be generated, the value is `false`,
+	 * and if on RCW, the value is `null`.
+	 * @typedef {"li"|"#mw-diff-ntitle2"|false|null} ParentNode
 	 */
 	/**
 	 * Initialize the script.
@@ -54,15 +55,19 @@
 
 			// Set up variables
 			api = new mw.Api();
-			var spName = mw.config.get('wgCanonicalSpecialPageName');
-			var onRCW = typeof spName === 'string' && ['Recentchanges', 'Watchlist'].indexOf(spName) !== -1;
 			var /** @type {ParentNode} */ parentNode = (function() {
-				if (onRCW) {
-					return null;
+				var spName = mw.config.get('wgCanonicalSpecialPageName');
+				if (typeof spName === 'string' && ['Recentchanges', 'Watchlist'].indexOf(spName) !== -1) {
+					return null; // RCW
 				} else if (mw.config.get('wgAction') === 'history' || spName === 'Contributions') {
 					return 'li';
 				} else if (typeof mw.config.get('wgDiffNewId') === 'number') {
 					return '#mw-diff-ntitle2';
+				} else if (document.querySelector('.mw-changeslist-line')) {
+					// Special:Recentchanges can be transcluded, and rollback links can be generated in it depending on server settings,
+					// and only RC and Watchlist use the class "mw-changeslist-line" (presumably). This condition block thus checks
+					// whether the current page transcludes RC, and if so, SR checkboxes shouldn't be generated.
+					return false;
 				} else {
 					var err = '[SR] Parent node could not be defined.';
 					mw.notify(
@@ -134,7 +139,7 @@
 						}
 						var sr = new SR(links); // Initialize rollback links and assign SR functionalities to them
 						links = sr.links; // Store the SR-ed links for a next hook event
-						dialog.bindSR(sr, onRCW); // Bind the SR instance to the Dialog instance
+						dialog.bindSR(sr, parentNode); // Bind the SR instance to the Dialog instance
 					}, 100);
 				};
 				hook.add(hookCallback); // Listen to updates in the page content
@@ -946,10 +951,10 @@
 		/**
 		 * Bind an SR instance to the Dialog instance, and construct buttons.
 		 * @param {InstanceType<ReturnType<typeof SRFactory>>} sr
-		 * @param {boolean} onRCW
+		 * @param {ParentNode} parentNode
 		 * @returns {Dialog}
 		 */
-		Dialog.prototype.bindSR = function(sr, onRCW) {
+		Dialog.prototype.bindSR = function(sr, parentNode) {
 			var _this = this;
 			var btns = [
 				{	// "Rollback checked" button
@@ -981,7 +986,7 @@
 					}
 				}
 			];
-			if (onRCW) btns.splice(0, 2); // Only leave the "Close" button if the user is on RCW
+			if (!parentNode) btns.splice(0, 2); // Only leave the "Close" button if parentNode is a falsy value
 			this.$dialog.dialog({buttons: btns});
 			return this;
 		};
@@ -1150,7 +1155,7 @@
 	function SRFactory(dialog, cfg, msg, parentNode) {
 
 		/** @readonly */
-		var onRCW = !parentNode;
+		var onRCW = parentNode === null;
 
 		/**
 		 * Initialize an SR instance.
