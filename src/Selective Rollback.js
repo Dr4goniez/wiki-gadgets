@@ -514,10 +514,10 @@
 		};
 
 		var langSwitch = (cfg.lang || mw.config.get('wgUserLanguage')).replace(/-.*$/, ''); // Fall back to the user's language in preferences
-		if (Object.keys(i18n).indexOf(langSwitch) !== -1 && langSwitch !== 'en') {
+		if (Object.keys(i18n).indexOf(langSwitch) !== -1) {
 			return i18n[langSwitch];
 		} else {
-			if (cfg.lang && cfg.lang !== 'en') {
+			if (cfg.lang) {
 				console.error('[SR] Sorry, "' + cfg.lang + '" is unavaiable as the interface language.');
 			}
 			return i18n.en;
