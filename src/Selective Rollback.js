@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.0.3
+	@version 4.1.0
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -312,7 +312,7 @@
 	function getMessages(cfg) {
 
 		/**
-		 * @typedef {"ja"|"en"|"zh"|"es"|"ro"} Languages
+		 * @typedef {"ja"|"en"|"zh"|"es"|"ro"|"vi"} Languages
 		 */
 		/** @type {Record<Languages, Messages>} @readonly */
 		var i18n = {
@@ -477,11 +477,44 @@
 				'rbstatus-failed': 'revenire eșuată',
 				'rbstatus-notify-success': 'Succes', // v4.0.0
 				'rbstatus-notify-failure': 'Eșec' // v4.0.0
+			},
+			/** @author [[User:Hide on Rosé]] */
+			vi: {
+				'portletlink-tooltip': 'Mở hộp thoại Lùi sửa theo lựa chọn',
+				'summary-label-primary': 'Tóm lược sửa đổi',
+				'summary-option-default': 'Tóm lược sửa đổi mặc định',
+				'summary-option-custom': 'Tuỳ chỉnh',
+				'summary-label-custom': 'Tóm lược tuỳ chỉnh',
+				'summary-tooltip-$0': '($0 sẽ được thay bằng tóm lược sửa đổi mặc định.)',
+				'summary-tooltip-$0-error': '($0 sẽ được thay bằng tóm lược sửa đổi mặc định <b>trong tiếng Anh</b>.)',
+				'summary-tooltip-specialexpressions': 'Thay thế biểu thức',
+				'summary-label-preview': 'Xem trước tóm lược', // v4.0.0
+				'summary-tooltip-preview': '(Từ ma thuật sẽ được thay thế.)', // v4.0.0
+				'markbot-label': 'Đánh dấu là sửa đổi bot',
+				'watchlist-label': 'Thêm trang mục tiêu vào danh sách theo dõi',
+				'watchlist-expiry-label': 'Hết hạn',
+				'watchlist-expiry-indefinite': 'Vô hạn',
+				'watchlist-expiry-1week': '1 tuần',
+				'watchlist-expiry-1month': '1 tháng',
+				'watchlist-expiry-3months': '3 tháng',
+				'watchlist-expiry-6months': '6 tháng',
+				'watchlist-expiry-1year': '1 năm',
+				'watchlist-expiry-3years': '3 năm', // Not used
+				'button-rollbackchecked': 'Đã chọn để lùi sửa',
+				'button-checkall': 'Chọn tất cả',
+				'button-close': 'Đóng',
+				'msg-nonechecked': 'Chưa chọn sửa đổi.',
+				'msg-linksresolved': 'Đã xử lý tất cả liên kết lùi sửa.',
+				'msg-confirm': 'Bạn có muốn lùi sửa sửa đổi này không?',
+				'rbstatus-reverted': 'đã lùi sửa',
+				'rbstatus-failed': 'lùi lại không thành công',
+				'rbstatus-notify-success': 'Thành công', // v4.0.0
+				'rbstatus-notify-failure': 'Không thành công' // v4.0.0
 			}
 		};
 
 		var langSwitch = (cfg.lang || mw.config.get('wgUserLanguage')).replace(/-.*$/, ''); // Fall back to the user's language in preferences
-		if (['ja', 'zh', 'es', 'ro'].indexOf(langSwitch) !== -1) {
+		if (Object.keys(i18n).indexOf(langSwitch) !== -1 && langSwitch !== 'en') {
 			return i18n[langSwitch];
 		} else {
 			if (cfg.lang && cfg.lang !== 'en') {
