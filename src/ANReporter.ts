@@ -1,7 +1,7 @@
 /*********************************************************************************\
 	AN Reporter
 	@author [[User:Dragoniez]]
-	@version 8.1.2
+	@version 8.1.3
 	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -2849,9 +2849,9 @@ class Reporter {
 							} else if (/^(1|[uU]ser)$/.test(name)) {
 								param1 = value;
 							} else if (/^(t|[tT]ype)$/.test(name)) {
-								if (/^unl|usernolink$/i.test(value)) {
+								if (/^(unl|usernolink)$/i.test(value)) {
 									paramT = 'UNL';
-								} else if (/^ip(user)2$/i.test(value)) {
+								} else if (/^ip(user)?2$/i.test(value)) {
 									paramT = 'IP2';
 								} else if (/^log(id)?$/i.test(value)) {
 									if (!/^\d+$/.test(value)) return false;
