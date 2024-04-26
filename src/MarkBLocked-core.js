@@ -119,13 +119,15 @@ module.exports = /** @class */ (function() {
 		 * @type {object}
 		 * @property {RegExp} article `/wiki/PAGENAME`: $1: PAGENAME
 		 * @property {RegExp} script `/w/index.php?title=PAGENAME`: $1: PAGENAME
-		 * @property {RegExp} user `User:(USERNAME|CIDR)`: $1: USERNAME or CIDR
+		 * @property {RegExp} user `^User:(USERNAME|CIDR)`: $1: USERNAME or CIDR
+		 * @property {RegExp} special `^Special:XXX`
 		 */
 		/** @type {LinkRegex} */
 		this.regex = {
 			article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
 			script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)'),
-			user: new RegExp('^(?:' + rContribsCA + '|' + rUser + ')([^/#]+|[a-f\\d:\\.]+/\\d\\d)$', 'i')
+			user: new RegExp('^(?:' + rContribsCA + '|' + rUser + ')([^/#]+|[a-f\\d:\\.]+/\\d\\d)$', 'i'),
+			special: new RegExp('^(?:' + specialAliases.join('|') + '):', 'i')
 		};
 
 		// Validate apihighlimits
@@ -293,12 +295,12 @@ module.exports = /** @class */ (function() {
 					cfg.contribsCA = [];
 				}
 
-				var MBL = new MarkBLocked(cfg);
+				var mbl = new MarkBLocked(cfg);
 				if (onConfig) {
-					MBL.createConfigInterface();
+					mbl.createConfigInterface();
 				} else {
 
-					MBL.createPortletLink();
+					mbl.createPortletLink();
 
 					// wikipage.content hook handler
 					/**
@@ -311,7 +313,7 @@ module.exports = /** @class */ (function() {
 					var markup = function($content) {
 						hookTimeout = void 0; // Reset the value of `hookTimeout`
 						api.abort(); // Prevent the old HTTP requests from being taken over to the new markup procedure
-						MBL.markup($content || $('.mw-body-content'));
+						mbl.markup($content || $('.mw-body-content'));
 					};
 					/**
 					 * A callback to `mw.hook('wikipage.content').add`.
@@ -339,11 +341,11 @@ module.exports = /** @class */ (function() {
 
 					// Add a toggle button on RCW
 					if (isRCW) {
-						createToggleButton(MBL, hookHandler);
+						createToggleButton(mbl, hookHandler);
 					}
 
 				}
-				return MBL;
+				return mbl;
 
 			});
 
@@ -352,10 +354,10 @@ module.exports = /** @class */ (function() {
 		/**
 		 * Create a button to enable/disable MarkBLocked (for Special:Recentchanges and Special:Watchlist, on which `markup`
 		 * is recursively called when the page content is updated.)
-		 * @param {MarkBLocked} MBL An instance of MarkBLocked.
+		 * @param {MarkBLocked} mbl An instance of MarkBLocked.
 		 * @param {($content: JQuery<HTMLElement>) => void} hookHandler A function to (un)bind to the `wikipage.content` hook.
 		 */
-		function createToggleButton(MBL, hookHandler) {
+		function createToggleButton(mbl, hookHandler) {
 
 			// Create toggle button
 			var toggle = new OO.ui.ButtonWidget({
@@ -363,24 +365,24 @@ module.exports = /** @class */ (function() {
 				label: 'MBL',
 				icon: 'unLock',
 				flags: 'progressive',
-				title: MBL.getMessage('toggle-title-enabled')
+				title: mbl.getMessage('toggle-title-enabled')
 			});
 			toggle.$element.off('click').on('click', function() {
 				var disable = toggle.getFlags().indexOf('progressive') !== -1;
 				var icon, title, hookToggle, msg;
 				if (disable) {
 					icon = 'lock';
-					title = MBL.getMessage('toggle-title-disabled');
+					title = mbl.getMessage('toggle-title-disabled');
 					hookToggle = mw.hook('wikipage.content').remove;
-					msg = MBL.getMessage('toggle-notify-disabled');
+					msg = mbl.getMessage('toggle-notify-disabled');
 					$('.mbl-userlink').removeClass(function(_, className) { // Remove all mbl- classes from user links
 						return (className.match(/(^|\s)mbl-\S+/) || []).join(' ');
 					});
 				} else {
 					icon = 'unLock';
-					title = MBL.getMessage('toggle-title-enabled');
+					title = mbl.getMessage('toggle-title-enabled');
 					hookToggle = mw.hook('wikipage.content').add;
-					msg = MBL.getMessage('toggle-notify-enabled');
+					msg = mbl.getMessage('toggle-notify-enabled');
 					// Hook.add fires the `wikipage.content` hook, meaning that `markup` is automatically called and classes are reassigned
 				}
 				toggle
@@ -813,11 +815,20 @@ module.exports = /** @class */ (function() {
 			pagetitle = decodeURIComponent(pagetitle).replace(/ /g, '_');
 
 			// Extract a username from the pagetitle
-			m = _this.regex.user.exec(pagetitle);
-			if (!m) {
+			var username;
+			var tar = mw.util.getParamValue('target', href);
+			if (tar && _this.regex.special.test(pagetitle)) {
+				// If the parsing title is one for a special page, check whether there's a valid &target= query parameter.
+				// This parameter's value is prioritized than the subpage name, if any, hence "Special:CA/Foo?target=Bar"
+				// shows CentralAuth for User:Bar, not User:Foo.
+				username = tar;
+			} else if ((m = _this.regex.user.exec(pagetitle))) {
+				// If the condition above isn't met, just parse out a username from the pagetitle
+				username = m[1];
+			} else {
 				return;
 			}
-			var username = m[1].replace(/_/g, ' ').trim();
+			username = username.replace(/_/g, ' ').trim();
 			var /** @type {string[]} */ arr;
 			if (mw.util.isIPAddress(username, true)) {
 				// @ts-ignore
