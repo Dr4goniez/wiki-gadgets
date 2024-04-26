@@ -824,10 +824,11 @@ module.exports = /** @class */ (function() {
 				username = tar;
 			} else if ((m = _this.regex.user.exec(pagetitle))) {
 				// If the condition above isn't met, just parse out a username from the pagetitle
-				username = m[1].replace(/_/g, ' ').trim();
+				username = m[1];
 			} else {
 				return;
 			}
+			username = username.replace(/_/g, ' ').trim();
 			var /** @type {string[]} */ arr;
 			if (mw.util.isIPAddress(username, true)) {
 				// @ts-ignore
