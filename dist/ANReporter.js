@@ -2,7 +2,7 @@
 /*********************************************************************************\
     AN Reporter
     @author [[User:Dragoniez]]
-    @version 8.1.2
+    @version 8.1.3
     @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -2510,10 +2510,10 @@ var __assign = (this && this.__assign) || function () {
                                     param1 = value;
                                 }
                                 else if (/^(t|[tT]ype)$/.test(name_1)) {
-                                    if (/^unl|usernolink$/i.test(value)) {
+                                    if (/^(unl|usernolink)$/i.test(value)) {
                                         paramT = 'UNL';
                                     }
-                                    else if (/^ip(user)2$/i.test(value)) {
+                                    else if (/^ip(user)?2$/i.test(value)) {
                                         paramT = 'IP2';
                                     }
                                     else if (/^log(id)?$/i.test(value)) {
