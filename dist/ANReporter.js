@@ -2,7 +2,7 @@
 /*********************************************************************************\
     AN Reporter
     @author [[User:Dragoniez]]
-    @version 8.1.3
+    @version 8.1.4
     @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -2517,16 +2517,10 @@ var __assign = (this && this.__assign) || function () {
                                         paramT = 'IP2';
                                     }
                                     else if (/^log(id)?$/i.test(value)) {
-                                        if (!/^\d+$/.test(value))
-                                            return false;
                                         paramT = 'logid';
-                                        converted = idList.getRegisteredUsername(parseInt(value), 'logid');
                                     }
                                     else if (/^diff?$/i.test(value)) {
-                                        if (!/^\d+$/.test(value))
-                                            return false;
                                         paramT = 'diff';
-                                        converted = idList.getRegisteredUsername(parseInt(value), 'diffid');
                                     }
                                     else if (/^none$/i.test(value)) {
                                         paramT = 'none';
@@ -2539,6 +2533,17 @@ var __assign = (this && this.__assign) || function () {
                         }
                         else {
                             param1 = User.formatName(param1);
+                        }
+                        if (['logid', 'diff'].includes(paramT)) {
+                            // Ensure the 1= param value is of numerals if the t= param value is 'logid' or 'diff'
+                            if (!/^\d+$/.test(param1)) {
+                                return false;
+                            }
+                            else {
+                                // If the script user has ever converted the ID to an username, get the username
+                                var idType = paramT === 'logid' ? 'logid' : 'diffid';
+                                converted = idList.getRegisteredUsername(parseInt(param1), idType);
+                            }
                         }
                         // Evaluation
                         var isDuplicate = data.users.some(function (_a) {
