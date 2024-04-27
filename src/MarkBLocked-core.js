@@ -780,7 +780,7 @@ module.exports = /** @class */ (function() {
 		var _this = this;
 		var /** @type {string[]} */ users = [];
 		var /** @type {string[]} */ ips = [];
-		var ignoredClassesPr = /\b(mw-rollback-|autocomment)/;
+		var ignoredClassesPr = /\b((mw|twg?)-rollback-|autocomment)/;
 		var /** @type {UserLinks} */ userLinks = {};
 
 		// Filter out user links
