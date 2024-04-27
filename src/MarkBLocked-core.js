@@ -111,7 +111,7 @@ module.exports = /** @class */ (function() {
 			}
 		}
 		var rContribsCA = cfg.contribsCA && cfg.contribsCA.length ? '|' + cfg.contribsCA.join('|') : '';
-		rContribsCA = '(?:' + specialAliases.join('|') + '):(?:contrib(?:ution)?s|ca|centralauth|globalaccount' + rContribsCA + ')/';
+		rContribsCA = '(?:' + specialAliases.join('|') + '):(?:contrib(?:ution)?s|ca|centralauth|globalaccount' + rContribsCA + ')';
 		var rUser = '(?:' + userAliases.join('|') + '):';
 		/**
 		 * Regular expressions to collect user links.
@@ -119,15 +119,15 @@ module.exports = /** @class */ (function() {
 		 * @type {object}
 		 * @property {RegExp} article `/wiki/PAGENAME`: $1: PAGENAME
 		 * @property {RegExp} script `/w/index.php?title=PAGENAME`: $1: PAGENAME
-		 * @property {RegExp} user `^User:(USERNAME|CIDR)`: $1: USERNAME or CIDR
-		 * @property {RegExp} special `^Special:XXX`
+		 * @property {RegExp} contribsCA `^Special:(?:Contribs|CA)($|/)`
+		 * @property {RegExp} user `^(?:Special:.../|User:)(USERNAME|CIDR)`: $1: USERNAME or CIDR
 		 */
 		/** @type {LinkRegex} */
 		this.regex = {
 			article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
 			script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)'),
-			user: new RegExp('^(?:' + rContribsCA + '|' + rUser + ')([^/#]+|[a-f\\d:\\.]+/\\d\\d)$', 'i'),
-			special: new RegExp('^(?:' + specialAliases.join('|') + '):', 'i')
+			contribsCA: new RegExp('^' + rContribsCA + '($|/)', 'i'),
+			user: new RegExp('^(?:' + rContribsCA + '/|' + rUser + ')([^/#]+|[a-f\\d:\\.]+/\\d\\d)$', 'i')
 		};
 
 		// Validate apihighlimits
@@ -815,9 +815,8 @@ module.exports = /** @class */ (function() {
 			pagetitle = decodeURIComponent(pagetitle).replace(/ /g, '_');
 
 			// Extract a username from the pagetitle
-			var username;
-			var tar = mw.util.getParamValue('target', href);
-			if (tar && _this.regex.special.test(pagetitle)) {
+			var tar, username;
+			if (_this.regex.contribsCA.test(pagetitle) && (tar = mw.util.getParamValue('target', href))) {
 				// If the parsing title is one for a special page, check whether there's a valid &target= query parameter.
 				// This parameter's value is prioritized than the subpage name, if any, hence "Special:CA/Foo?target=Bar"
 				// shows CentralAuth for User:Bar, not User:Foo.
