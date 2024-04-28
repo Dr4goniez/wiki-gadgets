@@ -2,7 +2,7 @@
 /*********************************************************************************\
     AN Reporter
     @author [[User:Dragoniez]]
-    @version 8.1.4
+    @version 8.1.5
     @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -1726,88 +1726,82 @@ var __assign = (this && this.__assign) || function () {
             };
         };
         /**
-         * Convert all IDs to usernames and check whether the username fields have any duplicate values.
+         * Perform bilateral username-ID conversions against usernames collected from the Reporter dialog, in order to:
+         * - find mutiple occurrences of the same user in different formats (returned as `users` property), and
+         * - create an array of all the collected usernames, in which user-denoting IDs are "sanitized" into real usernames
+         * (returned as `info` property).
+         *
          * @param data
          * @returns
          */
         Reporter.prototype.processIds = function (data) {
-            var deferreds = data.users.map(function (obj) {
-                if (obj.type === 'logid' || obj.type === 'diff') {
-                    return idList.getUsername(parseInt(obj.user), obj.type === 'diff' ? 'diffid' : 'logid'); // Convert ID
-                }
-                else if (obj.type === 'none') {
-                    return $.Deferred().resolve(null); // Immediate resolve
-                }
-                else {
-                    return $.Deferred().resolve(obj.user); // Immediate resolve
+            // Loop through all the input values for sanitization
+            var registeredUsers = [];
+            var promisifiedInfo = data.users.map(function (obj) {
+                switch (obj.type) {
+                    case 'UNL':
+                    case 'User2':
+                        registeredUsers.push(obj.user);
+                    // Proceed without break
+                    // eslint-disable-next-line no-fallthrough
+                    case 'IP2':
+                        return $.Deferred().resolve(obj.user); // Username-denoting by nature
+                    case 'none':
+                        return $.Deferred().resolve(null); // This isn't a username-denoting value
+                    case 'logid':
+                    case 'diff':
+                        // Conversion of IDs to username-denoting values (null on failure)
+                        return idList.getUsername(parseInt(obj.user), obj.type === 'diff' ? 'diffid' : 'logid');
                 }
             }, []);
-            return $.when.apply($, deferreds).then(function () {
+            return $.when.apply($, promisifiedInfo).then(function () {
                 var info = [];
                 for (var _i = 0; _i < arguments.length; _i++) {
                     info[_i] = arguments[_i];
                 }
-                /**
-                 * An array of indexes that have already been checked.
-                 *
-                 * Suppose that the `data` array is as below:
-                 * ```js
-                 * [
-                 * 	{user: 'Foo', type: 'UNL'},
-                 * 	{user: '10000', type: 'logid'}, // Logid/10000 = Foo
-                 * 	{user: 'Bar', type: 'UNL'},
-                 * 	{user: '20000', type: 'diff'} // Diff/20000 = Foo
-                 * ]
-                 * ```
-                 * where the comments on the right represent the return values of the deferreds. Then, when
-                 * we check `data[0]` and look for its duplicates in `data[1-3]`, `1` and `3` should be pushed
-                 * into the `skip` array so that when we check `data[1]`, we can skip it. Otherwise, the
-                 * resulting array will be:
-                 * ```
-                 * [
-                 * 	['Foo', 'Logid/10000', 'Diff/20000'],
-                 * 	['Logid/10000', 'Diff/20000']
-                 * ]
-                 * ```
-                 * while we only want:
-                 * ```
-                 * [
-                 * 	['Foo', 'Logid/10000', 'Diff/20000']
-                 * ]
-                 * ```
-                 */
-                var skip = [];
+                // Create an array of arrays of duplicate usernames
+                var checkedIndexes = [];
                 var users = info.reduce(function (acc, username, i, arr) {
-                    if (username && !skip.includes(i)) { // username isn't null and not to be skipped
+                    if (!username)
+                        return acc;
+                    // Usernames just converted from IDs aren't in the registeredUsers array yet
+                    if (!registeredUsers.includes(username))
+                        registeredUsers.push(username);
+                    // Create an inner array as necessary
+                    if (!checkedIndexes.includes(i)) {
                         var ret = [];
                         for (var j = i; j < arr.length; j++) { // Check array elements from the current index
-                            if (j === i && arr.lastIndexOf(username) !== j ||
-                                j !== i && arr[j] === username) { // Found a duplicate username
-                                skip.push(j);
-                                var inputVal = data.users[j].user;
-                                var toPush = void 0;
-                                switch (data.users[j].type) { // Convert the username back to an ID if necessary
-                                    case 'logid':
-                                        toPush = "Logid/".concat(inputVal);
-                                        break;
-                                    case 'diff':
-                                        toPush = "\u5DEE\u5206/".concat(inputVal);
-                                        break;
-                                    default:
-                                        toPush = inputVal;
-                                }
-                                if (!ret.includes(toPush)) {
-                                    ret.push(toPush);
-                                }
+                            if (j === i && j !== arr.lastIndexOf(username) || j !== i && arr[j] === username) { // Found a duplicate username
+                                checkedIndexes.push(j);
+                                var _a = data.users[j], user = _a.user, type = _a.type;
+                                var dup = type === 'logid' ? 'Logid/' + user : // If the username is displayed as an ID on the dialog,
+                                    type === 'diff' ? '差分/' + user : // list the user with the ID as a duplicate
+                                        user;
+                                if (!ret.includes(dup))
+                                    ret.push(dup);
                             }
                         }
-                        if (ret.length) {
+                        if (ret.length)
                             acc.push(ret);
-                        }
                     }
                     return acc;
                 }, []);
-                return { users: users, info: info };
+                // Return
+                if (registeredUsers.length) {
+                    // If any registered user is to be reported, convert their names to IDs by calling IdList.getIds,
+                    // which registers username-ID correspondences into its class property of "list". We do this here
+                    // because we want to know associated IDs for every user for the sake of checkDuplicateReports.
+                    var deferreds = registeredUsers.reduce(function (acc, u, i, arr) {
+                        if (arr.indexOf(u) === i) { // If not duplicate
+                            acc.push(idList.getIds(u));
+                        }
+                        return acc;
+                    }, []);
+                    return $.when.apply($, deferreds).then(function () { return ({ users: users, info: info }); }); // Resolve ProcessedIds when username -> ID conversions are done
+                }
+                else {
+                    return { users: users, info: info };
+                }
             });
         };
         /**
