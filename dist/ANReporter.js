@@ -2,7 +2,7 @@
 /*********************************************************************************\
     AN Reporter
     @author [[User:Dragoniez]]
-    @version 8.1.5
+    @version 8.1.6
     @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -1655,7 +1655,7 @@ var __assign = (this && this.__assign) || function () {
          * @returns `null` if there's some error.
          */
         Reporter.prototype.collectData = function () {
-            //  -- Check first for required fields --
+            // -- Check first for required fields --
             var page = this.getPage();
             var section = this.getSection();
             var shiftClick = $.Event('click');
@@ -1667,7 +1667,7 @@ var __assign = (this && this.__assign) || function () {
                 if (!inputVal) { // Username is blank
                     User.$label.trigger(shiftClick); // Remove the user pane
                 }
-                else if (['logid', 'diff'].includes(selectedType) && !/^\d+$/.test(inputVal)) { // Invalid ID
+                else if (['logid', 'diffid'].includes(selectedType) && !/^\d+$/.test(inputVal)) { // Invalid ID
                     hasInvalidId = true;
                 }
                 else { // Valid
@@ -1706,7 +1706,7 @@ var __assign = (this && this.__assign) || function () {
                 mw.notify($err, { type: 'error', autoHideSeconds: errLen > 2 ? 'long' : 'short' });
                 return null;
             }
-            //  -- Collect secondary data --
+            // -- Collect secondary data --
             reason += '--~~~~'; // Add signature to reason
             var summary = this.$addComment.prop('checked') ? lib.clean(this.$comment.val()) : '';
             var blockCheck = this.$checkBlock.prop('checked');
@@ -1727,7 +1727,7 @@ var __assign = (this && this.__assign) || function () {
         };
         /**
          * Perform bilateral username-ID conversions against usernames collected from the Reporter dialog, in order to:
-         * - find mutiple occurrences of the same user in different formats (returned as `users` property), and
+         * - find multiple occurrences of the same user in different formats (returned as `users` property), and
          * - create an array of all the collected usernames, in which user-denoting IDs are "sanitized" into real usernames
          * (returned as `info` property).
          *
@@ -1749,9 +1749,9 @@ var __assign = (this && this.__assign) || function () {
                     case 'none':
                         return $.Deferred().resolve(null); // This isn't a username-denoting value
                     case 'logid':
-                    case 'diff':
+                    case 'diffid':
                         // Conversion of IDs to username-denoting values (null on failure)
-                        return idList.getUsername(parseInt(obj.user), obj.type === 'diff' ? 'diffid' : 'logid');
+                        return idList.getUsername(parseInt(obj.user), obj.type);
                 }
             }, []);
             return $.when.apply($, promisifiedInfo).then(function () {
@@ -1775,7 +1775,7 @@ var __assign = (this && this.__assign) || function () {
                                 checkedIndexes.push(j);
                                 var _a = data.users[j], user = _a.user, type = _a.type;
                                 var dup = type === 'logid' ? 'Logid/' + user : // If the username is displayed as an ID on the dialog,
-                                    type === 'diff' ? '差分/' + user : // list the user with the ID as a duplicate
+                                    type === 'diffid' ? '差分/' + user : // list the user with the ID as a duplicate
                                         user;
                                 if (!ret.includes(dup))
                                     ret.push(dup);
@@ -1843,7 +1843,7 @@ var __assign = (this && this.__assign) || function () {
                             links.push("[[\u7279\u5225:\u8EE2\u9001/logid/".concat(obj.user, "|Logid/").concat(obj.user, "]]"));
                         }
                         break;
-                    case 'diff':
+                    case 'diffid':
                         if (info[i] === null || info.indexOf(info[i]) === i) {
                             links.push("[[\u7279\u5225:\u5DEE\u5206/".concat(obj.user, "|\u5DEE\u5206/").concat(obj.user, "]]\u306E\u6295\u7A3F\u8005"));
                         }
@@ -2513,8 +2513,8 @@ var __assign = (this && this.__assign) || function () {
                                     else if (/^log(id)?$/i.test(value)) {
                                         paramT = 'logid';
                                     }
-                                    else if (/^diff?$/i.test(value)) {
-                                        paramT = 'diff';
+                                    else if (/^diff(id)?$/i.test(value)) {
+                                        paramT = 'diffid';
                                     }
                                     else if (/^none$/i.test(value)) {
                                         paramT = 'none';
@@ -2528,15 +2528,14 @@ var __assign = (this && this.__assign) || function () {
                         else {
                             param1 = User.formatName(param1);
                         }
-                        if (['logid', 'diff'].includes(paramT)) {
-                            // Ensure the 1= param value is of numerals if the t= param value is 'logid' or 'diff'
+                        if (['logid', 'diffid'].includes(paramT)) {
+                            // Ensure the 1= param value is of numerals if the t= param value is 'logid' or 'diffid'
                             if (!/^\d+$/.test(param1)) {
                                 return false;
                             }
                             else {
                                 // If the script user has ever converted the ID to an username, get the username
-                                var idType = paramT === 'logid' ? 'logid' : 'diffid';
-                                converted = idList.getRegisteredUsername(parseInt(param1), idType);
+                                converted = idList.getRegisteredUsername(parseInt(param1), paramT);
                             }
                         }
                         // Evaluation
@@ -2549,7 +2548,7 @@ var __assign = (this && this.__assign) || function () {
                                 case 'none':
                                     return user === param1 && /^(UNL|User2|IP2|none)$/.test(type) || info.includes(param1);
                                 case 'logid':
-                                case 'diff':
+                                case 'diffid':
                                     return user === param1 && type === paramT || converted && info.includes(converted);
                             }
                         });
@@ -2798,7 +2797,7 @@ var __assign = (this && this.__assign) || function () {
             }
             // Append a type dropdown
             var $typeWrapper = $('<div>').addClass('anr-option-usertype');
-            this.$type = addOptions($('<select>'), ['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map(function (el) { return ({ text: el }); }));
+            this.$type = addOptions($('<select>'), ['UNL', 'User2', 'IP2', 'logid', 'diffid', 'none'].map(function (el) { return ({ text: el }); }));
             this.$type // Initialize
                 .prop('disabled', true) // Disable
                 .off('change').on('change', function () {
@@ -2948,7 +2947,7 @@ var __assign = (this && this.__assign) || function () {
                     Reporter.toggle(this.$blockStatusWrapper, !!this.$blockStatus.text());
                     break;
                 case 'logid':
-                case 'diff':
+                case 'diffid':
                     Reporter.toggle(this.$hideUserWrapper, true);
                     Reporter.toggle(this.$idLinkWrapper, true);
                     Reporter.toggle(this.$blockStatusWrapper, !!this.$blockStatus.text());
@@ -2973,7 +2972,7 @@ var __assign = (this && this.__assign) || function () {
             var selectedType = this.getType();
             var inputVal = this.getName() || '';
             var clss = 'anr-option-invalidid';
-            if (['logid', 'diff'].includes(selectedType)) {
+            if (['logid', 'diffid'].includes(selectedType)) {
                 // Set up $input, $hideUser, and $idLink
                 var isNotNumber = !/^\d*$/.test(inputVal);
                 this.$input.toggleClass(clss, isNotNumber);
@@ -2988,8 +2987,7 @@ var __assign = (this && this.__assign) || function () {
                     .toggleClass('anr-disabledanchor', isNotNumber);
                 // Set up $blockStatus
                 if (!isNotNumber) {
-                    var idType = selectedType === 'diff' ? 'diffid' : selectedType;
-                    var username = idList.getRegisteredUsername(parseInt(inputVal), idType);
+                    var username = idList.getRegisteredUsername(parseInt(inputVal), selectedType);
                     if (username) {
                         this.processBlockStatus(username);
                     }
@@ -3051,7 +3049,7 @@ var __assign = (this && this.__assign) || function () {
             var typeMap = {
                 ip: ['IP2', 'none'],
                 user: ['UNL', 'User2', 'none'],
-                other: ['none', 'logid', 'diff']
+                other: ['none', 'logid', 'diffid']
             };
             var username = this.getName();
             if (!username) { // Blank
@@ -3062,7 +3060,7 @@ var __assign = (this && this.__assign) || function () {
             else { // Some username is in the input
                 Reporter.getBlockStatus(username).then(function (obj) {
                     if (/^\d+$/.test(username) && obj.usertype === 'user') {
-                        typeMap.user.push('logid', 'diff');
+                        typeMap.user.push('logid', 'diffid');
                     }
                     _this_1.setTypeOptions(typeMap[obj.usertype]).$type.prop('disabled', false);
                     _this_1.processTypeChange();
@@ -3094,9 +3092,9 @@ var __assign = (this && this.__assign) || function () {
                     // The username input should never be empty
                     throw new TypeError('User.getName returned null.');
                 }
-                else if (!checked && !['logid', 'diff'].includes(selectedType)) {
+                else if (!checked && !['logid', 'diffid'].includes(selectedType)) {
                     // The type dropdown should have either value when the box can be unchecked
-                    throw new Error('User.getType returned neither "logid" nor "diff".');
+                    throw new Error('User.getType returned neither "logid" nor "diffid".');
                 }
                 else if (!checked && !/^\d+$/.test(inputVal)) {
                     // The username input should only be of numbers when the box can be unchecked
@@ -3115,11 +3113,11 @@ var __assign = (this && this.__assign) || function () {
                 return idList.getIds(inputVal).then(function (_a) {
                     var logid = _a.logid, diffid = _a.diffid;
                     if (typeof logid === 'number') {
-                        _this_1.setName(logid.toString()).setTypeOptions(['logid', 'diff', 'none']).processTypeChange();
+                        _this_1.setName(logid.toString()).setTypeOptions(['logid', 'diffid', 'none']).processTypeChange();
                         mw.notify("\u5229\u7528\u8005\u540D\u300C".concat(inputVal, "\u300D\u3092\u30ED\u30B0ID\u306B\u5909\u63DB\u3057\u307E\u3057\u305F\u3002"), { type: 'success' });
                     }
                     else if (typeof diffid === 'number') {
-                        _this_1.setName(diffid.toString()).setTypeOptions(['diff', 'logid', 'none']).processTypeChange();
+                        _this_1.setName(diffid.toString()).setTypeOptions(['diffid', 'logid', 'none']).processTypeChange();
                         mw.notify("\u5229\u7528\u8005\u540D\u300C".concat(inputVal, "\u300D\u3092\u5DEE\u5206ID\u306B\u5909\u63DB\u3057\u307E\u3057\u305F\u3002"), { type: 'success' });
                     }
                     else {
@@ -3131,9 +3129,8 @@ var __assign = (this && this.__assign) || function () {
                 });
             }
             else { // ID to username
-                var idType = selectedType === 'diff' ? 'diffid' : selectedType;
                 var idTypeJa_1 = selectedType === 'logid' ? 'ログ' : '差分';
-                return idList.getUsername(parseInt(inputVal), idType).then(function (username) {
+                return idList.getUsername(parseInt(inputVal), selectedType).then(function (username) {
                     if (username) {
                         return _this_1.setName(username).processInputChange().then(function () {
                             mw.notify("".concat(idTypeJa_1, "ID\u300C").concat(inputVal, "\u300D\u3092\u5229\u7528\u8005\u540D\u306B\u5909\u63DB\u3057\u307E\u3057\u305F\u3002"), { type: 'success' });

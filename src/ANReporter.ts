@@ -1,7 +1,7 @@
 /*********************************************************************************\
 	AN Reporter
 	@author [[User:Dragoniez]]
-	@version 8.1.5
+	@version 8.1.6
 	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -823,7 +823,7 @@ function createStyleTag(cfg: ANReporterConfig): void {
 			'padding: 0.2em 0.5em;' +
 			'background: white;' +
 		'}' +
-		'#anr-dialog-preview-body .autocomment a {' +  // Change the color of the section link in summary
+		'#anr-dialog-preview-body .autocomment a {' + // Change the color of the section link in summary
 			'color: gray;' +
 		'}' +
 		// Dialog colors
@@ -1023,8 +1023,8 @@ class IdList {
  * The object returned by {@link Reporter.getBlockStatus}.
  */
 interface BlockStatus {
-    usertype: 'ip'|'user'|'other';
-    blocked: boolean|null;
+	usertype: 'ip'|'user'|'other';
+	blocked: boolean|null;
 }
 /** The object that stores data created out of the field values on the dialog. */
 interface ReportData {
@@ -1059,7 +1059,7 @@ interface ProcessedIds {
 	users: string[][];
 	/**
 	 * An array of all the usernames collected from the Reporter dialog, in which user-denoting IDs are "sanitized"
-	 * into real usernames. For `t=none` values and `t=logid` or `t=diff` IDs that failed to be converted, the value
+	 * into real usernames. For `t=none` values and `t=logid` or `t=diffid` IDs that failed to be converted, the value
 	 * is `null`.
 	 */
 	info: (string|null)[];
@@ -1595,27 +1595,27 @@ class Reporter {
 			if (Wkt) {
 				const exclude = [
 					'top',
-                    '系列が立てられていないもの',
-                    '著作権侵害・犯罪予告',
-                    '名誉毀損・なりすまし・個人情報',
-                    '妨害編集・いたずら',
-                    'その他',
-                    'A. 最優先',
-                    '暫定A',
-                    '休止中A',
-                    'B. 優先度高',
-                    '暫定B',
-                    '休止中B',
-                    'C. 優先度中',
-                    '暫定C',
-                    '休止中C',
-                    'D. 優先度低',
-                    '暫定D',
-                    '休止中D',
-                    'N. 未分類',
-                    'サブページなし',
-                    '休止中N'
-                ];
+					'系列が立てられていないもの',
+					'著作権侵害・犯罪予告',
+					'名誉毀損・なりすまし・個人情報',
+					'妨害編集・いたずら',
+					'その他',
+					'A. 最優先',
+					'暫定A',
+					'休止中A',
+					'B. 優先度高',
+					'暫定B',
+					'休止中B',
+					'C. 優先度中',
+					'暫定C',
+					'休止中C',
+					'D. 優先度低',
+					'暫定D',
+					'休止中D',
+					'N. 未分類',
+					'サブページなし',
+					'休止中N'
+				];
 				const optgroup = document.createElement('optgroup');
 				optgroup.label = 'LTA';
 				Wkt.parseSections().forEach(({title}) => {
@@ -1913,7 +1913,7 @@ class Reporter {
 	 */
 	private collectData(): ReportData|null {
 
-		//  -- Check first for required fields --
+		// -- Check first for required fields --
 
 		const page = this.getPage();
 		const section = this.getSection();
@@ -1926,7 +1926,7 @@ class Reporter {
 			const selectedType = User.getType();
 			if (!inputVal) { // Username is blank
 				User.$label.trigger(shiftClick); // Remove the user pane
-			} else if (['logid', 'diff'].includes(selectedType) && !/^\d+$/.test(inputVal)) { // Invalid ID
+			} else if (['logid', 'diffid'].includes(selectedType) && !/^\d+$/.test(inputVal)) { // Invalid ID
 				hasInvalidId = true;
 			} else { // Valid
 				acc.push({
@@ -1967,7 +1967,7 @@ class Reporter {
 			return null;
 		}
 
-		//  -- Collect secondary data --
+		// -- Collect secondary data --
 
 		reason += '--~~~~'; // Add signature to reason
 		const summary = this.$addComment.prop('checked') ? lib.clean(<string>this.$comment.val()) : '';
@@ -1992,7 +1992,7 @@ class Reporter {
 
 	/**
 	 * Perform bilateral username-ID conversions against usernames collected from the Reporter dialog, in order to:
-	 * - find mutiple occurrences of the same user in different formats (returned as `users` property), and
+	 * - find multiple occurrences of the same user in different formats (returned as `users` property), and
 	 * - create an array of all the collected usernames, in which user-denoting IDs are "sanitized" into real usernames
 	 * (returned as `info` property).
 	 *
@@ -2015,9 +2015,9 @@ class Reporter {
 				case 'none':
 					return $.Deferred().resolve(null); // This isn't a username-denoting value
 				case 'logid':
-				case 'diff':
+				case 'diffid':
 					// Conversion of IDs to username-denoting values (null on failure)
-					return idList.getUsername(parseInt(obj.user), obj.type === 'diff' ? 'diffid' : 'logid');
+					return idList.getUsername(parseInt(obj.user), obj.type);
 			}
 		}, []);
 
@@ -2040,7 +2040,7 @@ class Reporter {
 							checkedIndexes.push(j);
 							const {user, type} = data.users[j];
 							const dup = type === 'logid' ? 'Logid/' + user : // If the username is displayed as an ID on the dialog,
-										type === 'diff' ? '差分/' + user :	 // list the user with the ID as a duplicate
+										type === 'diffid' ? '差分/' + user :	 // list the user with the ID as a duplicate
 										user;
 							if (!ret.includes(dup)) ret.push(dup);
 						}
@@ -2113,7 +2113,7 @@ class Reporter {
 						links.push(`[[特別:転送/logid/${obj.user}|Logid/${obj.user}]]`);
 					}
 					break;
-				case 'diff':
+				case 'diffid':
 					if (info[i] === null || info.indexOf(info[i]) === i) {
 						links.push(`[[特別:差分/${obj.user}|差分/${obj.user}]]の投稿者`);
 					}
@@ -2855,8 +2855,8 @@ class Reporter {
 									paramT = 'IP2';
 								} else if (/^log(id)?$/i.test(value)) {
 									paramT = 'logid';
-								} else if (/^diff?$/i.test(value)) {
-									paramT = 'diff';
+								} else if (/^diff(id)?$/i.test(value)) {
+									paramT = 'diffid';
 								} else if (/^none$/i.test(value)) {
 									paramT = 'none';
 								}
@@ -2868,14 +2868,13 @@ class Reporter {
 					} else {
 						param1 = User.formatName(param1);
 					}
-					if (['logid', 'diff'].includes(paramT)) {
-						// Ensure the 1= param value is of numerals if the t= param value is 'logid' or 'diff'
+					if (['logid', 'diffid'].includes(paramT)) {
+						// Ensure the 1= param value is of numerals if the t= param value is 'logid' or 'diffid'
 						if (!/^\d+$/.test(param1)) {
 							return false;
 						} else {
 							// If the script user has ever converted the ID to an username, get the username
-							const idType = paramT === 'logid' ? 'logid' : 'diffid';
-							converted = idList.getRegisteredUsername(parseInt(param1), idType);
+							converted = idList.getRegisteredUsername(parseInt(param1), <'logid'|'diffid'>paramT);
 						}
 					}
 
@@ -2888,7 +2887,7 @@ class Reporter {
 							case 'none':
 								return user === param1 && /^(UNL|User2|IP2|none)$/.test(type) || info.includes(param1);
 							case 'logid':
-							case 'diff':
+							case 'diffid':
 								return user === param1 && type === paramT || converted && info.includes(converted);
 						}
 					});
@@ -3089,7 +3088,7 @@ interface UserOptions {
 /**
  * UserAN type argument values.
  */
-type antype = 'UNL'|'User2'|'IP2'|'logid'|'diff'|'none';
+type antype = 'UNL'|'User2'|'IP2'|'logid'|'diffid'|'none';
 
 let userPaneCnt = 0;
 /**
@@ -3198,7 +3197,7 @@ class User {
 		// Append a type dropdown
 		const $typeWrapper = $('<div>').addClass('anr-option-usertype');
 		this.$type = addOptions($('<select>'),
-			['UNL', 'User2', 'IP2', 'logid', 'diff', 'none'].map((el) => ({text: el}))
+			['UNL', 'User2', 'IP2', 'logid', 'diffid', 'none'].map((el) => ({text: el}))
 		);
 		this.$type // Initialize
 			.prop('disabled', true) // Disable
@@ -3365,7 +3364,7 @@ class User {
 				Reporter.toggle(this.$blockStatusWrapper, !!this.$blockStatus.text());
 				break;
 			case 'logid':
-			case 'diff':
+			case 'diffid':
 				Reporter.toggle(this.$hideUserWrapper, true);
 				Reporter.toggle(this.$idLinkWrapper, true);
 				Reporter.toggle(this.$blockStatusWrapper, !!this.$blockStatus.text());
@@ -3393,7 +3392,7 @@ class User {
 		const inputVal = this.getName() || '';
 		const clss = 'anr-option-invalidid';
 
-		if (['logid', 'diff'].includes(selectedType)) {
+		if (['logid', 'diffid'].includes(selectedType)) {
 
 			// Set up $input, $hideUser, and $idLink
 			const isNotNumber = !/^\d*$/.test(inputVal);
@@ -3410,8 +3409,7 @@ class User {
 
 			// Set up $blockStatus
 			if (!isNotNumber) {
-				const idType: 'logid'|'diffid' = selectedType === 'diff' ? 'diffid' : <'logid'>selectedType;
-				const username = idList.getRegisteredUsername(parseInt(inputVal), idType);
+				const username = idList.getRegisteredUsername(parseInt(inputVal), <'logid'|'diffid'>selectedType);
 				if (username) {
 					this.processBlockStatus(username);
 				} else {
@@ -3475,7 +3473,7 @@ class User {
 		const typeMap: Record<'ip'|'user'|'other', antype[]> = {
 			ip: ['IP2', 'none'],
 			user: ['UNL', 'User2', 'none'],
-			other: ['none', 'logid', 'diff']
+			other: ['none', 'logid', 'diffid']
 		};
 		const username = this.getName();
 		if (!username) { // Blank
@@ -3488,7 +3486,7 @@ class User {
 
 			Reporter.getBlockStatus(username).then((obj) => { // Get the type of the user with their block status
 				if (/^\d+$/.test(username) && obj.usertype === 'user') {
-					typeMap.user.push('logid', 'diff');
+					typeMap.user.push('logid', 'diffid');
 				}
 				this.setTypeOptions(typeMap[obj.usertype]).$type.prop('disabled', false);
 				this.processTypeChange();
@@ -3518,15 +3516,15 @@ class User {
 		 * by an unexpected value.
 		 */
 		const inputVal = this.getName();
-		const selectedType = this.getType();
+		const selectedType = <'logid'|'diffid'>this.getType();
 		const checked = this.$hideUser.prop('checked');
 		try {
 			if (typeof inputVal !== 'string') {
 				// The username input should never be empty
 				throw new TypeError('User.getName returned null.');
-			} else if (!checked && !['logid', 'diff'].includes(selectedType)) {
+			} else if (!checked && !['logid', 'diffid'].includes(selectedType)) {
 				// The type dropdown should have either value when the box can be unchecked
-				throw new Error('User.getType returned neither "logid" nor "diff".');
+				throw new Error('User.getType returned neither "logid" nor "diffid".');
 			} else if (!checked && !/^\d+$/.test(inputVal)) {
 				// The username input should only be of numbers when the box can be unchecked
 				throw new Error('User.getName returned a non-number.');
@@ -3544,10 +3542,10 @@ class User {
 		if (checked) { // username to ID
 			return idList.getIds(inputVal).then(({logid, diffid}) => {
 				if (typeof logid === 'number') {
-					this.setName(logid.toString()).setTypeOptions(['logid', 'diff', 'none']).processTypeChange();
+					this.setName(logid.toString()).setTypeOptions(['logid', 'diffid', 'none']).processTypeChange();
 					mw.notify(`利用者名「${inputVal}」をログIDに変換しました。`, {type: 'success'});
 				} else if (typeof diffid === 'number') {
-					this.setName(diffid.toString()).setTypeOptions(['diff', 'logid', 'none']).processTypeChange();
+					this.setName(diffid.toString()).setTypeOptions(['diffid', 'logid', 'none']).processTypeChange();
 					mw.notify(`利用者名「${inputVal}」を差分IDに変換しました。`, {type: 'success'});
 				} else {
 					this.$hideUser.prop('checked', !checked);
@@ -3557,9 +3555,8 @@ class User {
 				return this.setOverlay(false);
 			});
 		} else { // ID to username
-			const idType: "logid"|"diffid" = selectedType === 'diff' ? 'diffid' : <"logid">selectedType;
 			const idTypeJa = selectedType === 'logid' ? 'ログ' : '差分';
-			return idList.getUsername(parseInt(inputVal), idType).then((username) => {
+			return idList.getUsername(parseInt(inputVal), selectedType).then((username) => {
 				if (username) {
 					return this.setName(username).processInputChange().then(() => {
 						mw.notify(`${idTypeJa}ID「${inputVal}」を利用者名に変換しました。`, {type: 'success'});
@@ -3608,7 +3605,7 @@ class User {
  */
 function getImage(iconType: 'load'|'check'|'cross'|'cancel'|'gear'|'exclamation'|'bar'|'clock', cssText = '') {
 	const img = (() => {
-		if (iconType === 'load' || iconType === 'check' || iconType ===  'cross' || iconType === 'cancel') {
+		if (iconType === 'load' || iconType === 'check' || iconType === 'cross' || iconType === 'cancel') {
 			return lib.getIcon(iconType);
 		} else {
 			const tag = document.createElement('img');
@@ -3664,7 +3661,7 @@ function addOptions($dropdown: JQuery<HTMLSelectElement>, data: OptionElementDat
 interface LabelledCheckboxOptions {
 	/** An optional checkbox ID. If not provided, an automatically generated ID is used. */
 	checkboxId?: string;
-	/** Alter `anr-option-row` on the wrapper with these classes.  */
+	/** Alter `anr-option-row` on the wrapper with these classes. */
 	alterClasses?: string[];
 }
 let checkboxCnt = 0;
