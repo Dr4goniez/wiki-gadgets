@@ -3,3 +3,5 @@ src/Reverter.js
 
 #draft
 src/MarkAdmins.js
+src/SectLinkExtender.js
+src/Weba.js
