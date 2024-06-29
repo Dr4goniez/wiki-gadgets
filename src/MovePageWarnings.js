@@ -2,7 +2,7 @@
 	MovePageWarnings
 	Generate warnings on Special:Movepage, per the states of the move destination.
 	@author [[User:Dragoniez]]
-	@version 1.1.3
+	@version 1.2.0
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -20,7 +20,8 @@
 		// User isn't on the root of Special:Movepage, and
 		moveFrom && moveFrom !== mw.config.get('wgPageName').replace(/_/g, ' ') &&
 		// User has the right to move pages, and
-		mw.config.get('wgUserGroups').indexOf('autoconfirmed') !== -1 &&
+		// @ts-ignore
+		mw.config.get('wgUserGroups', []).indexOf('autoconfirmed') !== -1 &&
 		// Browser is compatible with MutationObserver (we have to be able to detect changes in software-defined OOUI elements)
 		MutationObserver
 	)) {
@@ -174,41 +175,41 @@
 			 * @type {JQuery<HTMLDivElement>}
 			 */
 			this.$warning = $('<div>');
-			this.$warning
-				.addClass('mw-message-box mw-message-box-warning')
-				.prop('id', 'mpw-warnings')
-				.hide();
 
 			/**
 			 * The warning message list.
 			 * @type {JQuery<HTMLOListElement>}
 			 */
 			this.$warningList = $('<ol>');
-			this.$warningList.prop('id', 'mpw-warnings-list');
 
 			// Append the warning wrapper to the DOM
 			$('.mw-body-content').children('h2').eq(0).before(
-				this.$warning.append(
-					$('<span>').append(
-						$('<b>').text('警告:'),
-						document.createTextNode(' 移動先ページについて、以下の点を確認してください。('),
-						$('<a>')
-							.prop({
-								id: 'mpw-warnings-reload',
-								href: '#',
-								role: 'button'
-							})
-							.text('更新')
-							.off('click').on('click', function(e) {
-								e.preventDefault();
-								_this.clearWarnings();
-								_this.lastPagename = '';
-								initWarnings(false, true);
-							}),
-						document.createTextNode(')')
-					),
-					this.$warningList
-				)
+				this.$warning
+					.addClass('mw-message-box mw-message-box-warning')
+					.prop('id', 'mpw-warnings')
+					.hide()
+					.append(
+						$('<span>').append(
+							$('<b>').text('警告:'),
+							document.createTextNode(' 移動先ページについて、以下の点を確認してください。('),
+							$('<a>')
+								.prop({
+									id: 'mpw-warnings-reload',
+									href: '#',
+									role: 'button'
+								})
+								.text('更新')
+								.off('click').on('click', function(e) {
+									e.preventDefault();
+									_this.clearWarnings();
+									_this.lastPagename = '';
+									initWarnings(false, true);
+								}),
+							document.createTextNode(')')
+						),
+						this.$warningList
+							.prop('id', 'mpw-warnings-list')
+					)
 			);
 
 			initWarnings(false, true);
@@ -389,31 +390,36 @@
 			var _this = this;
 			var talkTitle = this.moveTalk && Title && !Title.isTalkPage() && Title.getTalkPage() || void 0;
 			var talkPagename = talkTitle && talkTitle.getPrefixedText();
-			return $.when(
-				this.queryTitleInfo(pagename),
-				this.getRedirectTarget(pagename),
-				this.getExistenceFunc(typeof talkPagename === 'string' ? [talkPagename] : void 0)
-			).then(function(info, redirectTo, exists) {
+			return this.getVerificationFunc(pagename, talkPagename).then(function(is) {
 
-				if (info === null) {
+				if (!is('main', 'verifiable')) {
 					log('Exited for the reason of "info is null".');
 					_this.clearWarnings();
 				} else {
+
 					log('Generated warnings.');
-					var isSingleRevisionRedirectToTarget = !!(info.single && info.redirect && redirectTo === _this.target);
 					_this.setWarnings({
-						invalidPagename: info.invalid ? [pagename] : null,
+						invalidPagename: !is('main', 'valid') ? [pagename] : null,
 						misplacedPrefix: hasPrefixInTitle ? [] : null,
 						duplicatePrefixes: hasDuplicatePrefixes ? [pagename] : null,
-						overwriteRedirect: isSingleRevisionRedirectToTarget ? [pagename] : null,
-						talkPageExists: talkPagename && exists(talkPagename) ? [talkPagename] : null,
-						deleteToMove: !(info.missing || isSingleRevisionRedirectToTarget) && _this.candelete ? [pagename] : null,
-						cantDelete: !(info.missing || isSingleRevisionRedirectToTarget) && !_this.candelete ? [pagename] : null
+						overwriteRedirect: is('main', 'overwritable') ? [pagename] : null,
+						overwriteTalkRedirect: talkPagename && is('talk', 'overwritable') ? [talkPagename] : null,
+						talkPageExists: talkPagename && is('talk', 'verifiable') && !is('talk', 'missing') && !is('talk', 'overwritable') ? [talkPagename] : null,
+						deleteToMove: !(is('main', 'missing') || is('main', 'overwritable')) && _this.candelete ? [pagename] : null,
+						cantDelete: !(is('main', 'missing') || is('main', 'overwritable')) && !_this.candelete ? [pagename] : null
 					});
-					if (info.protected) {
-						var pwCnt = _this.setProtectionWarning(info.protection);
-						if (pwCnt) _this.searchRedlinks();
+
+					var prot, pwCnt = 0;
+					if ((prot = is('main', 'protected'))) {
+						pwCnt += _this.setProtectionWarning(prot);
 					}
+					if (talkPagename && (prot = is('talk', 'protected'))) {
+						pwCnt += _this.setProtectionWarning(prot);
+					}
+					if (pwCnt) {
+						_this.searchRedlinks();
+					}
+
 				}
 
 				if (_this.length) {
@@ -449,6 +455,8 @@
 			duplicatePrefixes: '「[[$1]]」には重複した[[H:NS#詳細|名前空間]]接頭辞が含まれています。',
 			/** `$1`: page name */
 			overwriteRedirect: 'リダイレクトの「[[$1]]」を上書きして移動します。',
+			/** `$1`: page name */
+			overwriteTalkRedirect: '付随移動により、ノートページリダイレクトの「[[$1]]」を上書きして移動します。',
 			/** `$1`: page name */
 			talkPageExists: '「[[$1]]」が存在するため、<b>ノートページは付随移動されません</b>。',
 			/** `$1`: page name */
@@ -558,12 +566,12 @@
 		/**
 		 * Set a protection warning.
 		 *
-		 * @param {TitleInfo["protection"]} info
+		 * @param {TitleInfoProtection} info
 		 * @returns {number} The number of warnings generated.
 		 */
 		MovePageWarnings.prototype.setProtectionWarning = function(info) {
 
-			if (!info || !info.action) return 0;
+			if (!info.action) return 0;
 
 			// Get template
 			var key = 'protect/' + info.action;
@@ -691,6 +699,62 @@
 		}
 
 		/**
+		 * Get a function that verifies the properties of moving destination(s).
+		 * @param {string} mainPagename
+		 * @param {string} [talkPagename]
+		 */
+		MovePageWarnings.prototype.getVerificationFunc = function(mainPagename, talkPagename) {
+			return $.when(
+				this.queryTitleInfo(mainPagename),
+				this.queryTitleInfo(talkPagename),
+				this.getRedirectMap(talkPagename ? [mainPagename, talkPagename] : [mainPagename])
+			).then(function(mInfo, tInfo, rMap) {
+				/**
+				 * @overload
+				 * @param {"main"|"talk"} target
+				 * @param {"verifiable"|"valid"|"missing"|"overwritable"} type
+				 * @returns {boolean}
+				 */
+				/**
+				 * @overload
+				 * @param {"main"|"talk"} target
+				 * @param {"protected"} type
+				 * @returns {TitleInfoProtection=}
+				 */
+				/**
+				 * @param {"main"|"talk"} target
+				 * @param {"verifiable"|"valid"|"missing"|"overwritable"|"protected"} type
+				 * @returns {boolean|TitleInfoProtection=}
+				 */
+				var verify = function(target, type) {
+					var info = target === 'main' ? mInfo : tInfo;
+					switch (type) {
+						case 'verifiable':
+							return !!info;
+						case "valid":
+							return !(info && info.invalid);
+						case "missing":
+							return !!(info && info.missing);
+						case "overwritable":
+							return !!(info && info.single && info.redirect && rMap[info.title || ''] === (function() {
+								if (target === 'main') {
+									return moveFrom;
+								} else {
+									var tp = new mw.Title(moveFrom).getTalkPage();
+									return tp && tp.getPrefixedText();
+								}
+							})());
+						case "protected":
+							return info && info.protection || void 0;
+						default:
+							throw new Error();
+					}
+				};
+				return verify;
+			});
+		};
+
+		/**
 		 * @typedef ApiResponse
 		 * @type {{
 		 * 	query?: {
@@ -758,32 +822,38 @@
 		 */
 		/**
 		 * The object returned by `MovePageWarnings.queryTitleInfo`.
-		 * @typedef TitleInfo
-		 * @type {object}
+		 * @typedef {object} TitleInfo
+		 * @property {string} [title]
 		 * @property {boolean} [missing]
 		 * @property {boolean} [redirect]
 		 * @property {boolean} [invalid]
 		 * @property {boolean} [protected]
 		 * @property {boolean} [single]
-		 * @property {object} [protection]
-		 * @property {("protect"|"modify"|"move_prot")?} protection.action `null` if hidden
-		 * @property {boolean} protection.actionhidden
-		 * @property {number} protection.logid
-		 * @property {string} protection.timestamp
-		 * @property {string?} protection.user `null` if hidden
-		 * @property {string} protection.target
-		 * @property {string} [protection.levels]
-		 * @property {string} [protection.moved_from]
-		 * @property {string?} protection.parsedcomment `null` if hidden
+		 * @property {TitleInfoProtection} [protection]
+		 */
+		/**
+		 * @typedef {object} TitleInfoProtection
+		 * @property {("protect"|"modify"|"move_prot")?} action `null` if hidden
+		 * @property {boolean} actionhidden
+		 * @property {number} logid
+		 * @property {string} timestamp
+		 * @property {string?} user `null` if hidden
+		 * @property {string} target
+		 * @property {string} [levels]
+		 * @property {string} [moved_from]
+		 * @property {string?} parsedcomment `null` if hidden
 		 */
 
 		/**
 		 * Get information about a move destination.
 		 *
-		 * @param {string} title
+		 * @param {string=} title
 		 * @returns {JQueryPromise<TitleInfo?>}
 		 */
 		MovePageWarnings.prototype.queryTitleInfo = function(title) {
+			if (!title) {
+				return $.Deferred().resolve(null);
+			}
 			return this.api.get({
 				action: 'query',
 				titles: title,
@@ -805,6 +875,7 @@
 				var resPg = res && res.query && res.query.pages && res.query.pages[0];
 				if (resPg) {
 					$.extend(ret, {
+						title: resPg.title,
 						missing: !!(resPg.missing && !resPg.known),
 						redirect: !!resPg.redirect,
 						invalid: !!resPg.invalid,
@@ -874,50 +945,46 @@
 		}
 
 		/**
-		 * Get a function to sanitize a given pagename in API-response format.
+		 * Get a function to normalize pagenames (as in API responses).
 		 *
 		 * @param {ApiResponseNormalized[]} [normalized] response.query.normalized
 		 * @returns {(page: string) => string} Function that takes a pagename and formats it
 		 */
-		function formatterFactory(normalized) {
-			var formatterMap = (normalized || []).reduce(/** @param {Record<string, string>} acc */ function(acc, obj) {
-				acc[obj.from] = obj.to;
+		function normalizerFactory(normalized) {
+			var normalizerMap = (normalized || []).reduce(/** @param {Record<string, string>} acc */ function(acc, obj) {
+				acc[obj.from] = obj.to; // Keyed by non-canonical pagenames and valued by canonical, normalized ones
 				return acc;
 			}, Object.create(null));
 			return /** @param {string} page */ function(page) {
-				return formatterMap[page] || page;
+				return normalizerMap[page] || page; // Get the normalized pagesname, falling back to the input pagename
 			};
 		}
 
 		/**
-		 * Get the name of the page to which a given page is redirected.
-		 *
-		 * @param {string} pagename
-		 * @returns {JQueryPromise<string?>} The redirected pagename if the queried page is a redirect, or else `null`.
+		 * Get mappings from redirecting pages to redirected pages.
+		 * @param {string[]} pagenames
+		 * @returns {JQueryPromise<Record<string, string>>} Object keyed by redirecting pages (where the titles are normalized)
+		 * and valued by redirected pages. 
 		 */
-		MovePageWarnings.prototype.getRedirectTarget = function(pagename) {
+		MovePageWarnings.prototype.getRedirectMap = function(pagenames) {
 			return this.api.get({
 				action: 'query',
-				titles: pagename,
+				titles: pagenames.join('|'),
 				redirects: true,
 				formatversion: '2'
 			}).then(/** @param {ApiResponse} res */ function(res) {
+				var ret = Object.create(null);
 				if (res && res.query) {
-					var resRedir = res.query.redirects || [];
-					var formatter = formatterFactory(res.query.normalized);
-					for (var i = 0; i < resRedir.length; i++) {
-						var obj = resRedir[i];
-						if (obj.from === formatter(pagename)) {
-							return obj.to;
-						}
-					}
+					(res.query.redirects || []).forEach(function(obj) {
+						ret[obj.from] = obj.to;
+					});
 				}
-				return null;
+				return ret;
 			}).catch(function(_, err) {
 				if (err && err['exception'] !== 'abort') {
 					console.log(err);
 				}
-				return null;
+				return Object.create(null);
 			});
 		};
 
@@ -938,14 +1005,14 @@
 				titles: pagenames,
 				formatversion: '2'
 			}).then(/** @param {ApiResponse} res */ function(res) {
-				var formatter = formatterFactory(res && res.query && res.query.normalized);
+				var normalize = normalizerFactory(res && res.query && res.query.normalized);
 				var fPagenames = pagenames.map(function(p) {
-					return formatter(p);
+					return normalize(p);
 				});
 				return (res && res.query && res.query.pages || []).reduce(/** @param {ExistenceMap} acc */ function(acc, obj) {
 					var index = fPagenames.indexOf(obj.title);
 					if (index !== -1) {
-						acc[pagenames[index]] = !obj.missing;
+						acc[pagenames[index]] = !(obj.missing && !obj.known);
 					}
 					return acc;
 				}, Object.create(null));
