@@ -367,7 +367,7 @@ module.exports = /** @class */ (function() {
 				flags: 'progressive',
 				title: mbl.getMessage('toggle-title-enabled')
 			});
-			toggle.$element.off('click').on('click', function() {
+			toggle.off('click').on('click', function() {
 				var disable = toggle.getFlags().indexOf('progressive') !== -1;
 				var icon, title, hookToggle, msg;
 				if (disable) {
@@ -393,7 +393,6 @@ module.exports = /** @class */ (function() {
 				mw.notify(msg);
 			});
 			var $wrapper = $('<div>')
-				.addClass('mw-rcfilters-ui-cell')
 				.prop('id', 'mbl-toggle-wrapper')
 				.append(toggle.$element);
 
@@ -405,8 +404,8 @@ module.exports = /** @class */ (function() {
 				$(selector).eq(0).before($wrapper);
 			} else if (spName === 'Watchlist') {
 				selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-watchlistTopSectionWidget-savedLinks';
-				$(selector).eq(0).after($wrapper);
-				$wrapper.css('margin-right', '1em');
+				$(selector).eq(0).before($wrapper);
+				$wrapper.css('margin-left', 'auto');
 			}
 
 		}
