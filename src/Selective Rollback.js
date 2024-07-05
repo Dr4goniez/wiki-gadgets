@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.2.0
+	@version 4.2.1
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -12,8 +12,9 @@
 
 \***************************************************************************************************/
 
+// @ts-check
+/// <reference path="./window/Selective Rollback.d.ts" />
 /* global mw, OO */
-/* eslint-disable @typescript-eslint/no-this-alias */
 //<nowiki>
 (function() {
 
@@ -209,10 +210,9 @@
 				return true;
 			}
 		};
-		// @ts-ignore
 		var userCfg = window.selectiveRollbackConfig;
 		if (typeof userCfg === 'object' && userCfg !== null) {
-			Object.keys(userCfg).forEach(function(key) {
+			for (var key in userCfg) {
 
 				key = key.replace(rUnicodeBidi, '').trim();
 				var val = userCfg[key];
@@ -220,8 +220,8 @@
 				// Strict type check
 				var v;
 				if (val === (v = null) || val === (v = undefined)) {
-					console.error('[SR] The value ' + v + ' for "' + key + '" is invalid.');
-					return;
+					console.error('[SR] The value ' + String(v) + ' for "' + key + '" is invalid.');
+					continue;
 				}
 				switch (key) {
 					case 'lang':
@@ -229,24 +229,24 @@
 					case 'confirm':
 					case 'mobileConfirm':
 					case 'checkboxLabelColor':
-						if (!isOfType('string', val, key)) return;
+						if (!isOfType('string', val, key)) continue;
 						if (['confirm', 'mobileConfirm'].indexOf(key) !== -1 && ['never', 'always', 'RCW', 'nonRCW'].indexOf(val) === -1) {
 							console.error('[SR] "' + val + '" isn\'t a valid value for "' + key + '".');
-							return;
+							continue;
 						}
 						break;
 					case 'editSummaries':
 					case 'specialExpressions':
-						if (!isOfType('object', val, key)) return;
+						if (!isOfType('object', val, key)) continue;
 						break;
 					case 'showKeys':
 					case 'markBot':
 					case 'watchPage':
-						if (!isOfType('boolean', val, key)) return;
+						if (!isOfType('boolean', val, key)) continue;
 						break;
 					default:
 						console.error('[SR] "' + key + '" isn\'t a valid config key.');
-						return;
+						continue;
 				}
 
 				if (key === 'watchExpiry') { // Some typo fix
@@ -262,14 +262,14 @@
 					//     val = '3 years';
 					} else {
 						console.error('[SR] "' + val + '" is not a valid watch-page expiry.');
-						return;
+						continue;
 					}
 					userCfg[key] = val;
 				}
 				// @ts-ignore
 				cfg[key] = userCfg[key];
 
-			});
+			}
 		}
 
 		return cfg;

@@ -1,5 +1,5 @@
 // @ts-check
-/* eslint-disable @typescript-eslint/no-this-alias */
+/// <reference path="./window/MarkBLocked.d.ts" />
 /* global mw, OO */
 //<nowiki>
 module.exports = /** @class */ (function() {
@@ -9,15 +9,13 @@ module.exports = /** @class */ (function() {
 	var defaultOptionKey = 'userjs-markblocked-config';
 
 	/**
-	 * @typedef UserOptions
-	 * @type {object}
+	 * @typedef {object} UserOptions
 	 * @property {boolean} localips
 	 * @property {boolean} globalusers
 	 * @property {boolean} globalips
 	 */
 	/**
-	 * @typedef ConstructorConfig
-	 * @type {object}
+	 * @typedef {object} ConstructorConfig
 	 * @property {UserOptions} [defaultOptions] Configured default option values. (Default: all `false`).
 	 * @property {string} [optionKey] The key of `mw.user.options`, defaulted to `userjs-markblocked-config`.
 	 * @property {boolean} [globalize] If `true`, save the options as global preferences.
@@ -115,8 +113,7 @@ module.exports = /** @class */ (function() {
 		var rUser = '(?:' + userAliases.join('|') + '):';
 		/**
 		 * Regular expressions to collect user links.
-		 * @typedef LinkRegex
-		 * @type {object}
+		 * @typedef {object} LinkRegex
 		 * @property {RegExp} article `/wiki/PAGENAME`: $1: PAGENAME
 		 * @property {RegExp} script `/w/index.php?title=PAGENAME`: $1: PAGENAME
 		 * @property {RegExp} contribsCA `^Special:(?:Contribs|CA)($|/)`
@@ -144,7 +141,7 @@ module.exports = /** @class */ (function() {
 		];
 		var groupsAHL = groupsAHLLocal.concat(groupsAHLGlobal);
 		// @ts-ignore
-		var hasAHL = mw.config.get('wgUserGroups').concat(mw.config.get('wgGlobalGroups') || []).some(function(group) {
+		var hasAHL = mw.config.get('wgUserGroups', []).concat(mw.config.get('wgGlobalGroups', [])).some(function(group) {
 			return groupsAHL.indexOf(group) !== -1;
 		});
 		/**
@@ -156,8 +153,7 @@ module.exports = /** @class */ (function() {
 	}
 
 	/**
-	 * @typedef Lang
-	 * @type {object}
+	 * @typedef {object} Lang
 	 * @property {string} config-notify-notloaded A `mw.notify` message to show when failed to load the config interface.
 	 * @property {string} config-label-heading The heading text of the config interface.
 	 * @property {string} config-label-fieldset The fieldset legend's text of the config interface.
@@ -237,7 +233,6 @@ module.exports = /** @class */ (function() {
 	 */
 	MarkBLocked.init = function(config) {
 
-		// @ts-ignore
 		if (window.MarkBLockedLoaded) {
 			mw.notify('Looks like MarkBLocked is loaded from multiple sources.', {type: 'error', autoHideSeconds: 'long'});
 		} else {
@@ -829,7 +824,6 @@ module.exports = /** @class */ (function() {
 			username = username.replace(/_/g, ' ').trim();
 			var /** @type {string[]} */ arr;
 			if (mw.util.isIPAddress(username, true)) {
-				// @ts-ignore
 				username = mw.util.sanitizeIP(username) || username; // The right operand is never reached
 				arr = ips;
 			} else if (/[/@#<>[\]|{}:]|^(\d{1,3}\.){3}\d{1,3}$/.test(username)) {
@@ -864,8 +858,7 @@ module.exports = /** @class */ (function() {
 	};
 
 	/**
-	 * @typedef ApiResponseQueryListBlocks
-	 * @type {object}
+	 * @typedef {object} ApiResponseQueryListBlocks
 	 * @property {[]|{}} [restrictions]
 	 * @property {string} expiry
 	 * @property {string} user
@@ -918,8 +911,7 @@ module.exports = /** @class */ (function() {
 				}
 				return void 0;
 			}).catch(function(_, err) {
-				// @ts-ignore
-				if (err.exception === 'abort') {
+				if (err['exception'] === 'abort') {
 					aborted = true;
 				} else {
 					console.error(err);
@@ -963,8 +955,7 @@ module.exports = /** @class */ (function() {
 	 * @typedef {Object.<string, any>} DynamicObject
 	 */
 	/**
-	 * @typedef BatchObject
-	 * @type {object}
+	 * @typedef {object} BatchObject
 	 * @property {DynamicObject} params
 	 * @property {(res?: DynamicObject) => void} callback
 	 */
@@ -1002,8 +993,7 @@ module.exports = /** @class */ (function() {
 			return api.get(batchObj.params)
 				.then(batchObj.callback)
 				.catch(function(_, err) {
-					// @ts-ignore
-					if (err.exception === 'abort') {
+					if (err['exception'] === 'abort') {
 						aborted = true;
 					} else {
 						console.error(err);
