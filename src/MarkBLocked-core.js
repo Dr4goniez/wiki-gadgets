@@ -9,6 +9,24 @@ module.exports = /** @class */ (function() {
 	var defaultOptionKey = 'userjs-markblocked-config';
 
 	/**
+	 * @param {boolean} [readOnlyPost]
+	 */
+	function getApiOptions(readOnlyPost) {
+		var ret = {
+			ajax: {
+				headers: {
+					'Api-User-Agent': 'MarkBLocked-core (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+				}
+			}
+		};
+		if (readOnlyPost) {
+			/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
+			ret.ajax.headers['Promise-Non-Write-API-Action'] = true;
+		}
+		return ret;
+	}
+
+	/**
 	 * @typedef {object} UserOptions
 	 * @property {boolean} localips
 	 * @property {boolean} globalusers
@@ -32,11 +50,15 @@ module.exports = /** @class */ (function() {
 	 * Initialize the properties of the `MarkBLocked` class. This is only to be called by `MarkBLocked.init`.
 	 * @param {ConstructorConfig} [config]
 	 * @constructor
-	 * @requires mw.user
+	 * @requires mediawiki.api
+	 * @requires mediawiki.user
 	 */
 	function MarkBLocked(config) {
 
 		var cfg = config || {};
+
+		this.api = new mw.Api(getApiOptions());
+		this.readApi = new mw.Api(getApiOptions(true));
 
 		// Warn if the config has any invalid property
 		var validKeys = ['defaultOptions', 'optionKey', 'globalize', 'i18n', 'lang', 'contribsCA', 'groupsAHL'];
@@ -153,6 +175,16 @@ module.exports = /** @class */ (function() {
 	}
 
 	/**
+	 * Abort all unfinished requests issued by the MarkBLocked class instance.
+	 * @returns {MarkBLocked}
+	 */
+	MarkBLocked.prototype.abort = function() {
+		this.api.abort();
+		this.readApi.abort();
+		return this;
+	};
+
+	/**
 	 * @typedef {object} Lang
 	 * @property {string} config-notify-notloaded A `mw.notify` message to show when failed to load the config interface.
 	 * @property {string} config-label-heading The heading text of the config interface.
@@ -221,11 +253,6 @@ module.exports = /** @class */ (function() {
 	};
 
 	/**
-	 * @type {mw.Api}
-	 * @readonly
-	 */
-	var api;
-	/**
 	 * Initialize `MarkBLocked`.
 	 * @param {ConstructorConfig} [config]
 	 * @returns {JQueryPromise<MarkBLocked>}
@@ -256,8 +283,6 @@ module.exports = /** @class */ (function() {
 		}
 		return mw.loader.using(modules).then(function() { // When ready
 
-			api = new mw.Api();
-
 			// For backwards compatibility, clear old config if any
 			var oldOptionKey = 'userjs-gmbl-preferences';
 			var /** @type {string?} */ oldCfgStr = mw.user.options.get(oldOptionKey);
@@ -266,7 +291,7 @@ module.exports = /** @class */ (function() {
 				var /** @type {Record<string, string?>} */ params = {};
 				params[oldOptionKey] = null;
 				params[defaultOptionKey] = oldCfgStr;
-				backwards = api.saveOptions(params).then(function() {
+				backwards = new mw.Api(getApiOptions()).saveOptions(params).then(function() {
 					mw.user.options.set(oldOptionKey, null);
 					mw.user.options.set(defaultOptionKey, oldCfgStr);
 				});
@@ -307,8 +332,7 @@ module.exports = /** @class */ (function() {
 					 */
 					var markup = function($content) {
 						hookTimeout = void 0; // Reset the value of `hookTimeout`
-						api.abort(); // Prevent the old HTTP requests from being taken over to the new markup procedure
-						mbl.markup($content || $('.mw-body-content'));
+						mbl.abort().markup($content || $('.mw-body-content'));
 					};
 					/**
 					 * A callback to `mw.hook('wikipage.content').add`.
@@ -414,7 +438,7 @@ module.exports = /** @class */ (function() {
 	 * @static
 	 */
 	MarkBLocked.getContribsCA = function() {
-		return api.get({
+		return new mw.Api(getApiOptions()).get({
 			action: 'query',
 			meta: 'siteinfo',
 			siprop: 'specialpagealiases',
@@ -554,7 +578,7 @@ module.exports = /** @class */ (function() {
 			var cfgStr = JSON.stringify(cfg);
 
 			// Save config
-			api.postWithToken('csrf', {
+			_this.api.postWithToken('csrf', {
 				action: _this.globalize ? 'globalpreferences' : 'options',
 				optionname: _this.optionKey,
 				optionvalue: cfgStr,
@@ -878,6 +902,7 @@ module.exports = /** @class */ (function() {
 			usersArr = usersArr.slice(); // Deep copy
 		}
 
+		var api = this.readApi;
 		var /** @type {string[]} */ marked = [];
 		var aborted = false;
 		/**
@@ -983,6 +1008,7 @@ module.exports = /** @class */ (function() {
 			return acc;
 		}, [[]]);
 
+		var api = this.api;
 		var aborted = false;
 		/**
 		 * Send an API request.
