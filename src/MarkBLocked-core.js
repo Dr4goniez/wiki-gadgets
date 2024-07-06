@@ -57,7 +57,13 @@ module.exports = /** @class */ (function() {
 
 		var cfg = config || {};
 
+		/**
+		 * @type {mw.Api}
+		 */
 		this.api = new mw.Api(getApiOptions());
+		/**
+		 * @type {mw.Api}
+		 */
 		this.readApi = new mw.Api(getApiOptions(true));
 
 		// Warn if the config has any invalid property
@@ -630,6 +636,7 @@ module.exports = /** @class */ (function() {
 	 */
 	MarkBLocked.prototype.markup = function($content) {
 
+		var _this = this;
 		var collected = this.collectLinks($content);
 		var userLinks = collected.userLinks;
 		if ($.isEmptyObject(userLinks)) {
@@ -764,7 +771,7 @@ module.exports = /** @class */ (function() {
 			}
 
 			if (batchArray.length) {
-				batchRequest(batchArray);
+				_this.batchRequest(batchArray);
 			}
 
 		});
@@ -966,7 +973,7 @@ module.exports = /** @class */ (function() {
 	function addClass(userLinks, userName, className) {
 		var links = userLinks[userName]; // Get all links related to the user
 		if (links) {
-			for (var i = 0; links && i < links.length; i++) {
+			for (var i = 0; i < links.length; i++) {
 				links[i].classList.add(className);
 			}
 			return userName;
@@ -995,7 +1002,7 @@ module.exports = /** @class */ (function() {
 	 * @returns {JQueryPromise<void>}
 	 * @requires mediawiki.api
 	 */
-	function batchRequest(batchArray) {
+	MarkBLocked.prototype.batchRequest = function(batchArray) {
 
 		// Unflatten the array of objects to an array of arrays of objects
 		var unflattened = batchArray.reduce(/** @param {BatchObject[][]} acc */ function(acc, obj) {
@@ -1051,7 +1058,7 @@ module.exports = /** @class */ (function() {
 
 		return batch(0);
 
-	}
+	};
 
 	return MarkBLocked;
 
