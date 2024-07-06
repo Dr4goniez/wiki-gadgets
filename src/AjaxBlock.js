@@ -5,265 +5,22 @@
 	special page.
 
 	@author [[User:Dragoniez]]
-	@version 1.1.10
+	@version 1.1.11
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock
 
 \**********************************************************************/
-//<nowiki>
-// @ts-check
-/* eslint-disable @typescript-eslint/no-this-alias */
-/* global mw */
 
-(function() { // An IIFE for a function scope
+// @ts-check
+/* global mw */
+//<nowiki>
+(function() {
 
 // *********************************************************************************************************************
 
-// Interfunctional constants
-
-var /** @readonly */ wgAction = mw.config.get('wgAction'),
-	/** @readonly */ wgArticlePath = mw.config.get('wgArticlePath'),
-	/** @readonly */ wgContentLanguage = mw.config.get('wgContentLanguage'),
-	/** @readonly */ wgDBname = mw.config.get('wgDBname'),
-	/** @readonly */ wgFormattedNamespaces = mw.config.get('wgFormattedNamespaces'),
-	// @ts-ignore
-	/** @readonly @type {string[]} */ wgGlobalGroups = mw.config.get('wgGlobalGroups') || [],
-	/** @readonly */ wgNamespaceIds = mw.config.get('wgNamespaceIds'),
-	/** @readonly */ wgNamespaceNumber = mw.config.get('wgNamespaceNumber'),
-	/** @readonly */ wgScript = mw.config.get('wgScript'),
-	/** @readonly */ wgServer = mw.config.get('wgServer'),
-	/** @readonly */ wgTitle = mw.config.get('wgTitle'),
-	/** @readonly */ wgUserGroups = mw.config.get('wgUserGroups'),
-	/** @readonly */ wgUserName = mw.config.get('wgUserName').replace(/ /g, '_');
-
 // Don't run the script on action=edit
-if (wgAction === 'edit') {
+if (mw.config.get('wgAction') === 'edit') {
 	return;
 }
-
-/**
- * The keys of the message object storing AjaxBlock's interface messages.
- * @typedef AjaxBlockMessages
- * @type {object}
- * @property {string} options-username-label The label of the username field.
- * @property {string} options-reason1-label The label of the first block reason dropdown.
- * @property {string} options-reason2-label The label of the second block reason dropdown.
- * @property {string} options-otherreason The display text of the 'other' option in the block reason dropdowns.
- * @property {string} options-userdefined The display text of the 'user-defined' optgroup in the block reason dropdowns.
- * @property {string} options-reasonC-placeholder The placeholder of the custom block reason textbox.
- * @property {string} options-reason-label The label of the unblock reason textbox.
- * @property {string} options-suffix-label The label of the 'suffix' dropdown, relevant to global users.
- * @property {string} options-suffix-none The display text of the 'none' option in the suffix dropdown.
- * @property {string} options-expiry-label The label of the block expiry dropdown.
- * @property {string} options-expiry-other The display text of the 'other' option in the block expiry dropdown.
- * @property {string} options-expiry-indefinite The display text of the 'indefinite' option in the block expiry dropdown.
- * @property {string} options-expiry-1hour The display text of the '1 hour' option in the block expiry dropdown.
- * @property {string} options-expiry-2hours The display text of the '2 hours' option in the block expiry dropdown.
- * @property {string} options-expiry-1day The display text of the '1 day' option in the block expiry dropdown.
- * @property {string} options-expiry-31hours The display text of the '31 hours' option in the block expiry dropdown.
- * @property {string} options-expiry-2days The display text of the '2 days' option in the block expiry dropdown.
- * @property {string} options-expiry-3days The display text of the '3 days' option in the block expiry dropdown.
- * @property {string} options-expiry-1week The display text of the '1 week' option in the block expiry dropdown.
- * @property {string} options-expiry-2weeks The display text of the '2 weeks' option in the block expiry dropdown.
- * @property {string} options-expiry-1month The display text of the '1 month' option in the block expiry dropdown.
- * @property {string} options-expiry-3months The display text of the '3 months' option in the block expiry dropdown.
- * @property {string} options-expiry-6months The display text of the '6 months' option in the block expiry dropdown.
- * @property {string} options-expiry-1year The display text of the '1 year' option in the block expiry dropdown.
- * @property {string} options-expiry-2years The display text of the '2 years' option in the block expiry dropdown.
- * @property {string} options-expiry-3years The display text of the '3 years' option in the block expiry dropdown.
- * @property {string} options-customexpiry-placeholder The placeholder of the custom block expiry textbox.
- * @property {string} options-checkbox-nocreate The label of the 'block account creation' checkbox.
- * @property {string} options-checkbox-noemail The label of the 'block e-mails' checkbox.
- * @property {string} options-checkbox-notalk The label of the 'block talk page' checkbox.
- * @property {string} options-checkbox-hardblock The label of the 'hard block' checkbox.
- * @property {string} options-checkbox-autoblock The label of the 'auto block' checkbox.
- * @property {string} options-checkbox-partial The label of the 'partial block' checkbox.
- * @property {string} options-partial-pages-label The label of the textbox to specify the target pages of partial block.
- * @property {string} options-partial-pages-placeholder The placeholder of the textbox to specify the target pages of partial block.
- * @property {string} options-partial-namespaces-label The label of the textbox to specify the target namespaces of partial block.
- * @property {string} options-partial-namespaces-placeholder The placeholder of the textbox to specify the target namespaces of partial block.
- * @property {string} options-partial-namespaces-tooltip The first line of the namespace tooltip.
- * @property {string} options-partial-namespaces-tooltip-main A pseudo-alias for the main namespace.
- * @property {string} options-checkbox-hideuser The label of the 'suppress username' checkbox.
- * @property {string} options-checkbox-watchuser The label of the 'watch this user' checkbox.
- * @property {string} options-makeglobal The label of the 'make this option global' checkbox.
- * @property {string} dialog-heading-block The text of the \<h2> tag for the block interface of the AjaxBlock dialog.
- * @property {string} dialog-heading-unblock The text of the \<h2> tag for the unblock interface of the AjaxBlock dialog.
- * @property {string} dialog-overwritewarning The warning message to show when action=block will have to overwrite the existing block.
- * @property {string} dialog-hasqueryparams The message to show when an (un)block link has predefined settings. This message needs to
- * be set as the parent element's innerHTML, and the child span with the class 'ab-replaceme' is to be replaced with an anchor button.
- * @property {string} dialog-hasqueryparams-get The label of the 'get query params' button.
- * @property {string} dialog-button-block The text of the 'block' button on the AjaxBlock dialog.
- * @property {string} dialog-button-unblock The text of the 'unblock' button on the AjaxBlock dialog.
- * @property {string} dialog-button-preset The text of the 'preset' button on the AjaxBlock dialog.
- * @property {string} dialog-button-currentblock The text of the 'current block' button on the AjaxBlock dialog.
- * @property {string} dialog-button-reset The text of the 'reset' button on the AjaxBlock dialog.
- * @property {string} dialog-button-close The text of the 'close' button on the AjaxBlock dialog.
- * @property {string} portlet-label The label text of the portlet link to the config page.
- * @property {string} config-header The heading text of the config page.
- * @property {string} config-header-nopermission The heading text of the config page when the user doesn't have the 'block' right.
- * @property {string} config-body-nopermission The config body innerHTML when the user doesn't have the 'block' right.
- * @property {string} config-loading The text displayed when the config interface is being loaded.
- * @property {string} config-loading-failed The text displayed when the config interface fails to be loaded.
- * @property {string} config-field-general The text of the legend for the wrapper fieldset of general options.
- * @property {string} config-field-language The text of the legend for the fieldset of the language option.
- * @property {string} config-field-userdefined-local The text of the legend for the fieldset of user-defined dropdown options for the local project.
- * @property {string} config-field-userdefined-global The text of the legend for the fieldset of user-defined dropdown options across projects.
- * @property {string} config-field-userdefined-add The text of the 'add' button in the field of user-defined dropdown options.
- * @property {string} config-field-userdefined-remove The text of the 'remove' button in the field of user-defined dropdown options.
- * @property {string} config-field-preset The text of the legend for the wrapper fieldset of preset options.
- * @property {string} config-field-preset-user The text of the legend for the fieldset of preset block options for registered users.
- * @property {string} config-field-preset-ip The text of the legend for the fieldset of preset block options for IP users.
- * @property {string} config-field-preset-unblock The text of the legend for the fieldset of preset unblock options.
- * @property {string} config-field-warning The text of the legend for the wrapper fieldset of warning options.
- * @property {string} config-field-warning-dialog The text of the legend for the fieldset of dialog action warining options.
- * @property {string} config-field-warning-oneclick The text of the legend for the fieldset of one-click action warining options.
- * @property {string} config-field-warning-noreason The label text of the checkbox for the 'no reason' warning option.
- * @property {string} config-field-warning-noexpiry The label text of the checkbox for the 'no expiry' warning option.
- * @property {string} config-field-warning-nopartialspecs The label text of the checkbox for the 'no partial specs' warning option.
- * (i.e. Partial block is enabled but neither pages nor namespaces are specified).
- * @property {string} config-field-warning-hardblock The label text of the checkbox for the 'hard block' warning option.
- * @property {string} config-field-warning-hideuser The label text of the checkbox for the 'suppress username' warning option.
- * @property {string} config-field-warning-overwrite The label text of the checkbox for the 'overwrite' warning option.
- * @property {string} config-field-warning-ignorepredefined The label text of the checkbox for the 'ignore predefined' warning option.
- * @property {string} config-field-warning-blockself The label text of the checkbox for the '(un)block self' warning option.
- * @property {string} config-field-warning-unblock The label text of the checkbox for the 'unblock' warning option.
- * @property {string} config-button-save The text of the button to save user configurations.
- * @property {string} config-saving The message to show when resolving an API request to save user configurations.
- * @property {string} config-savedone The message to show when user configurations have been saved.
- * @property {string} config-savefailed The message to show when user configurations have failed to be saved.
- * @property {string} error-fetch-dropdown A mw.notify message to show when the block reason dropdown has failed to be fetched.
- * @property {string} error-fetch-userrights A mw.notify message to show when user rights have failed to be fetched.
- * @property {string} error-fetch-aliases A mw.notify message to show when local special page aliases for (un)block have failed to be fetched.
- * @property {string} error-partial-morethan10 A mw.notify message to show when more than 10 pages are specified in the 'pages' field for
- * partial block ($1: The name of the field in which the values are specified, $2: Total number of pages).
- * @property {string} error-multiplecalls A mw.notify message to show when AjaxBlock is loaded from multiple files.
- * @property {string} warning-partial-removed A mw.notify message to let the user know that some values in the 'pages' field for partial block
- * have been removed because of being duplicate or invalid ($1: The name of the field in which the values are specified).
- * @property {string} warning-hideuser-unchecked A mw.notify message to let the user know that the 'hideuser' option has been unchecked because
- * an incompatible option has been enabled.
- * @property {string} warning-confirm-opening-block The opening line of the confirm dialog for warnings. ($1: The name of the user to block)
- * @property {string} warning-confirm-opening-unblock The opening line of the confirm dialog for warnings. ($1: The name of the user to unblock)
- * @property {string} warning-confirm-closing The closing line of the confirm dialog for warnings to ask the user to check all boxes.
- * @property {string} warning-confirm-noreason The checkbox label of the 'noreason' warning on the confirm dialog.
- * @property {string} warning-confirm-noexpiry The checkbox label of the 'noexpiry' warning on the confirm dialog.
- * @property {string} warning-confirm-nopartialspecs The checkbox label of the 'nopartialspecs' warning on the confirm dialog.
- * @property {string} warning-confirm-hardblock The checkbox label of the 'nopartialspecs' warning on the confirm dialog.
- * @property {string} warning-confirm-hideuser The checkbox label of the 'hideuser' warning on the confirm dialog.
- * @property {string} warning-confirm-overwrite The checkbox label of the 'overwrite' warning on the confirm dialog.
- * @property {string} warning-confirm-ignorepredefined The checkbox label of the 'ignore predefined' warning on the confirm dialog.
- * @property {string} warning-confirm-blockself The checkbox label of the '(un)blockself' warning on the confirm dialog.
- * @property {string} warning-confirm-unblock The checkbox label of the 'unblock' warning on the confirm dialog.
- * @property {string} warning-confirm-dialog-open The label of the 'open dialog when cancelled' checkbox on the confirm dialog.
- * @property {string} warning-confirm-dialog-proceed The text of the button for 'Proceed' on the confirm dialog.
- * @property {string} warning-confirm-dialog-cancel The text of the button for 'Cancel' on the confirm dialog.
- * @property {string} warning-confirm-dialog-cancelled A mw.notify message to show when 'Cancel' is clicked on the confirm dialog.
- * @property {string} warning-confirm-dialog-forcecancelled A mw.notify message to show when 'Proceed' on the confirm dialog
- * is clicked but some checkbox is not checked.
- * @property {string} progress-block-done The text to show when a user is successfully blocked.
- * @property {string} progress-block-failed The text to show when a user fails to be blocked.
- * @property {string} progress-unblock-done The text to show when a user is successfully unblocked.
- * @property {string} progress-unblock-failed The text to show when a user fails to be unblocked.
- */
-/**
- * Codes of languages that are available as AjaxBlock's interface language.
- * @typedef {"en"|"ja"} AvailableLanguages
- */
-/**
- * @typedef AjaxBlockPrivateConfig
- * @type {object}
- * @property {string} script The script name.
- * @property {boolean} isOnConfig Whether the user is on the config page.
- * @property {{local: string; global: string;}} prefkey The names of options used by AjaxBlock.
- * @property {AvailableLanguages[]} languages An array of language codes that are available as AjaxBlock's interface language.
- * @property {Record<AvailableLanguages, AjaxBlockMessages>} i18n Message object for internationalization.
- * @property {{dropdown: HTMLSelectElement; regex: RegExp?; fetched: boolean;}} reason Block reason dropdown.
- * @property {{block: string[]; unblock: string[]; special: string[];}} aliases Local aliases for special pages.
- * @property {{block: boolean?; oversight: boolean?; sysop: boolean;}} rights The current user's user rights.
- */
-
-/**
- * The possible user types associated with (un)block links.
- * @typedef {"user"|"ip"} AjaxBlockUserTypes
- */
-/**
- * Type of the object internal to the array returned by a list=blocks API request in res.query.blocks.
- * @typedef ApiResponseQueryListBlocks
- * @type {{
- *	user: string;
- *	reason: string;
- *	expiry: string;
- *	automatic: boolean;
- *	nocreate: boolean;
- *	noemail: boolean;
- *	allowusertalk: boolean;
- *	anononly: boolean;
- *	autoblock: boolean;
- *	hidden?: boolean;
- *	partial: boolean;
- *	restrictions: ApiResponseQueryListBlocksRestrictions;
- * }}
- */
-/**
- * Partial block details in the object elements of a res.query.blocks array fetched by a list=blocks API request.
- * @typedef ApiResponseQueryListBlocksRestrictions
- * @type {object}
- * @property {{id?: number; ns?: number; title: string;}[]=} pages
- * @property {string[]=} namespaces
- */
-/**
- * Type of the object created by the AjaxBlock dialog when passing/collecting block options specified on it.
- * AjaxBlockConfig also contains an object of this type for preset options.
- * @typedef {ApiResponseQueryListBlocks & {watchlist: boolean; watchlistexpiry: string;}} AjaxBlockDialogOptionsBlock
- */
-/**
- * Type of the object created by the AjaxBlock dialog when passing/collecting unblock options specified on it.
- * AjaxBlockConfig also contains an object of this type for preset options.
- * @typedef AjaxBlockDialogOptionsUnblock
- * @type {{
- *	reason: string;
- *	watchlist: boolean;
- *	watchlistexpiry: string;
- * }}
- */
-/**
- * The keys of the object for warning options.
- * @typedef AjaxBlockWarningOptions
- * @type {(
- *	|"noReason"
- *	|"noExpiry"
- *	|"noPartialSpecs"
- *	|"willHardblock"
- *	|"willHideUser"
- *	|"willOverwrite"
- *	|"willIgnorePredefined"
- *	|"willBlockSelf"
- *	|"willUnblock"
- * )}
- */
-/**
- * Type of the object storing warning opt-in/out options.
- * @typedef {Record<AjaxBlockWarningOptions, boolean>} AjaxBlockWarningOptionObject
- */
-/**
- * Type of actions taken to (un)block a user (or the ways in which the "execute" method is called).
- * @typedef {"dialog"|"oneclick"} AjaxBlockActions
- */
-/**
- * Type of the config for the AjaxBlock dialogs.
- * @typedef AjaxBlockPublicConfig
- * @type {object}
- * @property {AvailableLanguages} lang
- * @property {{local: string[]; global: string[];}} dropdown
- * @property {{
- *	block: Record<AjaxBlockUserTypes, AjaxBlockDialogOptionsBlock>;
- *	unblock: AjaxBlockDialogOptionsUnblock;
- * }} preset
- * @property {Record<AjaxBlockActions, AjaxBlockWarningOptionObject>} warning
- */
-/**
- * Type of the whole config of AjaxBlock.
- * @typedef {AjaxBlockPrivateConfig & AjaxBlockPublicConfig} AjaxBlockConfig
- */
 
 /**
  * AjaxBlock Config object.
@@ -272,26 +29,18 @@ if (wgAction === 'edit') {
  */
 var abCfg = {
 
-	/** @readonly */
 	script: 'AjaxBlock',
 
-	/** @readonly */
-	isOnConfig: wgNamespaceNumber === -1 && /^(AjaxBlockConfig|ABC)$/i.test(wgTitle),
+	isOnConfig: mw.config.get('wgNamespaceNumber') === -1 && /^(AjaxBlockConfig|ABC)$/i.test(mw.config.get('wgTitle')),
 
-	/** @readonly */
 	prefkey: {
-		/** @readonly */
 		local: 'userjs-ajaxblock',
-		/** @readonly */
 		global: 'userjs-ajaxblock-global'
 	},
 
-	/** @readonly */
 	languages: ['en', 'ja'],
 
-	/** @readonly */
 	i18n: {
-		/** @readonly */
 		en: {
 			'options-username-label': 'Username',
 			'options-reason1-label': 'Reason 1',
@@ -407,7 +156,6 @@ var abCfg = {
 			'progress-unblock-done': 'unblocked',
 			'progress-unblock-failed': 'unblock failed'
 		},
-		/** @readonly */
 		ja: {
 			'options-username-label': '利用者名',
 			'options-reason1-label': '理由1',
@@ -525,9 +273,7 @@ var abCfg = {
 		}
 	},
 
-	/** @readonly */
 	reason: {
-		/** @readonly */
 		dropdown: (function() {
 			var dd = document.createElement('select');
 			dd.style.minWidth = '36ch';
@@ -537,26 +283,23 @@ var abCfg = {
 		fetched: false
 	},
 
-	/** @readonly */
 	aliases: {
-		/** @readonly */
 		block: [],
-		/** @readonly */
 		unblock: [],
-		/** @readonly */
-		special: Object.keys(wgNamespaceIds).reduce(/** @param {string[]} acc */ function(acc, alias) {
-			var id = wgNamespaceIds[alias];
-			if (id === -1) acc.push(alias);
-			return acc;
-		}, [])
+		special: (function() {
+			var wgNamespaceIds = mw.config.get('wgNamespaceIds');
+			return Object.keys(wgNamespaceIds).reduce(/** @param {string[]} acc */ function(acc, alias) {
+				var id = wgNamespaceIds[alias];
+				if (id === -1) acc.push(alias);
+				return acc;
+			}, []);
+		})()
 	},
 
-	/** @readonly */
 	rights: {
 		block: null,
 		oversight: null,
-		/** @readonly */
-		sysop: wgUserGroups.indexOf('sysop') !== -1
+		sysop: (mw.config.get('wgUserGroups') || []).indexOf('sysop') !== -1
 	},
 
 	// @ts-ignore
@@ -571,7 +314,7 @@ var abCfg = {
 		block: {
 			user: {
 				user: '',
-				reason: wgContentLanguage === 'ja' ? '[[WP:SOCK|sockpuppet]]' : '[[WP:Vandalism|Vandalism]]',
+				reason: mw.config.get('wgContentLanguage') === 'ja' ? '[[WP:SOCK|sockpuppet]]' : '[[WP:Vandalism|Vandalism]]',
 				expiry: 'infinity',
 				automatic: false,
 				nocreate: true,
@@ -587,7 +330,7 @@ var abCfg = {
 			},
 			ip: {
 				user: '',
-				reason: wgContentLanguage === 'ja' ? '荒らし' : '[[WP:Vandalism|Vandalism]]',
+				reason: mw.config.get('wgContentLanguage') === 'ja' ? '荒らし' : '[[WP:Vandalism|Vandalism]]',
 				expiry: '1 week',
 				automatic: false,
 				nocreate: true,
@@ -644,7 +387,8 @@ var abCfg = {
 var msg;
 
 // Exit before init() if the current user doesn't belong to any group with the 'block' user right
-if (!wgUserGroups.concat(wgGlobalGroups).some(function(group) {
+// @ts-ignore
+if (!mw.config.get('wgUserGroups', []).concat(mw.config.get('wgGlobalGroups', [])).some(function(group) {
 		return ['sysop', 'global-sysop', 'staff', 'steward', 'sysadmin'].indexOf(group) !== -1;
 	})
 ) {
@@ -746,7 +490,7 @@ function load() {
 
 		// Check user config
 		/**
-		 * @requires mw.user
+		 * @requires mediawiki.user
 		 */
 		var userCfgStr = mw.user.options.get(abCfg.prefkey.local);
 		/** @type {AjaxBlockPublicConfig?} */
@@ -1972,6 +1716,7 @@ function BlockOptions(appendTo) {
 	partialNamespaces.rows = 2;
 	partialNamespaces.placeholder = msg['options-partial-namespaces-placeholder'];
 	var tooltipArray = [msg['options-partial-namespaces-tooltip']]; // Create a namespace number tooltip
+	var wgFormattedNamespaces = mw.config.get('wgFormattedNamespaces');
 	Object.keys(wgFormattedNamespaces).forEach(function(n) {
 		var num = parseInt(n);
 		if (num >= 0 && num % 2 === 0) {
@@ -2227,6 +1972,7 @@ BlockOptions.prototype.evalPartialBlockOptions = function(page$1, ns$1) {
 		var pageLc = page.toLowerCase();
 		var ns = 0;
 		var title = page; // This will be the non-prefixed title
+		var wgNamespaceIds = mw.config.get('wgNamespaceIds');
 		for (var alias in wgNamespaceIds) {
 			if (pageLc.indexOf(alias + ':') === 0) { // If the page title starts with a certain namespace prefix
 				ns = wgNamespaceIds[alias]; // Save the namespace number
@@ -2236,7 +1982,7 @@ BlockOptions.prototype.evalPartialBlockOptions = function(page$1, ns$1) {
 		}
 
 		// Get a tidied-up prefixed title and verify whether it is a valid page title for partial block
-		var prefixedTitle = (ns !== 0 ? wgFormattedNamespaces[ns] + ':' : '') + title.charAt(0).toUpperCase() + title.slice(1);
+		var prefixedTitle = (ns !== 0 ? mw.config.get('wgFormattedNamespaces')[ns] + ':' : '') + title.charAt(0).toUpperCase() + title.slice(1);
 		if (ns < 0 || !title || /[#<>[\]|{}]/.test(title)) { // Invalid titles to be removed
 			if (pagesRemoved.indexOf(prefixedTitle) === -1) {
 				pagesRemoved.push(prefixedTitle);
@@ -2272,7 +2018,7 @@ BlockOptions.prototype.evalPartialBlockOptions = function(page$1, ns$1) {
 	}
 
 	// Parse namespaces
-	var validNamespaceNumbers = Object.keys(wgFormattedNamespaces).reduce(/** @param {string[]} acc */ function(acc, num) {
+	var validNamespaceNumbers = Object.keys(mw.config.get('wgFormattedNamespaces')).reduce(/** @param {string[]} acc */ function(acc, num) {
 		if (parseInt(num) >= 0) {
 			acc.push(num); // Get valid namespace numbers as an array
 		}
@@ -2343,7 +2089,7 @@ BlockOptions.prototype.evalPartialBlockOptions = function(page$1, ns$1) {
  * @readonly
  */
 // @ts-ignore
-var gGroups = wgGlobalGroups.filter(function(group) {
+var gGroups = mw.config.get('wgGlobalGroups', []).filter(function(group) {
 	return ['global-sysop', 'staff', 'steward', 'sysadmin'].indexOf(group) !== -1;
 });
 /**
@@ -2625,7 +2371,7 @@ function getAutocompleteSource() {
 
 	// Send API requests
 	var deferreds = [getLtaList()];
-	if (wgDBname === 'jawiki') {
+	if (mw.config.get('wgWikiID') === 'jawiki') {
 		deferreds.push(getVipList());
 	}
 	return $.when.apply($, deferreds).then(function(ltalist, viplist) {
@@ -2830,7 +2576,7 @@ function initializeBlockLinks() {
 	/** @readonly */
 	var regex = {
 		/** @readonly /wiki/PAGENAME */
-		article: new RegExp('^' + wgArticlePath.replace('$1', '([^?]+)')),
+		article: new RegExp('^' + mw.config.get('wgArticlePath').replace('$1', '([^?]+)')),
 		/** @readonly Special:(XXX)/?(YYY)? */
 		special: new RegExp('^(?:' + abCfg.aliases.special.join('|') + '):([^/]+)(?:/([^#]+))?', 'i'),
 		/** @readonly ^Block$ */
@@ -2844,7 +2590,7 @@ function initializeBlockLinks() {
 	 * E.g. 'ja.wikipedia.org'. Used to find project-internal links.
 	 * @readonly
 	 */
-	var host = wgServer.replace(/^\/\//, '');
+	var host = mw.config.get('wgServer').replace(/^\/\//, '');
 	var linkCnt = 0;
 	/**
 	 * Milliseconds from the epoch when the logo is appended.
@@ -2890,8 +2636,8 @@ function initializeBlockLinks() {
 			// Get pagetitle from the URI
 			var /** @type {RegExpExecArray?} */ m,
 				/** @type {string} */ pagetitle;
-			if (uri.path === wgScript) { // /w/index.php
-				pagetitle = (uri.query.title || '').trim().replace(/ /g, '_'); // ?title=
+			if (uri.path === mw.config.get('wgScript')) { // /w/index.php
+				pagetitle = (typeof uri.query.title === 'string' ? uri.query.title : '').trim().replace(/ /g, '_'); // ?title=
 			} else if ((m = regex.article.exec(uri.path))) { // /wiki/($1)
 				pagetitle = decodeURIComponent((m[1] || '').trim().replace(/ /g, '_')); // $1
 			} else {
@@ -2909,7 +2655,7 @@ function initializeBlockLinks() {
 				} else {
 					return acc;
 				}
-				username = (uri.query.wpTarget || m[2] || '').replace(/ /g, '_'); // wpTarget overrides the username specified in 'Special:Block/USERNAME'
+				username = (typeof uri.query.wpTarget === 'string' ? m[2] : ''); // wpTarget overrides the username specified in 'Special:Block/USERNAME'
 			} else {
 				return acc;
 			}
@@ -2949,6 +2695,7 @@ function initializeBlockLinks() {
 			if (linktype === 'block') {
 				query = Object.keys(uri.query).reduce(/** @param {AjaxBlockDialogOptionsBlock} acc */ function(acc, key) {
 					/** @type {string?} */
+					// @ts-ignore
 					var val = uri.query[key];
 					if (!val) {
 						return acc;
@@ -3040,6 +2787,7 @@ function initializeBlockLinks() {
 			} else { // Unblock
 				query = Object.keys(uri.query).reduce(/** @param {AjaxBlockDialogOptionsUnblock} acc */ function(acc, key) {
 					/** @type {string?} */
+					// @ts-ignore
 					var val = uri.query[key];
 					if (!val) return acc;
 					switch (key) {
@@ -3751,7 +3499,8 @@ ABDialog.prototype.getParams = function(suppressWarnings) {
 		) {
 			createCheckbox(wDialog, msg['warning-confirm-ignorepredefined']);
 		}
-		if (w[warningType].willBlockSelf && target === wgUserName) {
+		// @ts-ignore
+		if (w[warningType].willBlockSelf && target === mw.config.get('wgUserName').replace(/ /g, '_')) {
 			createCheckbox(wDialog, msg['warning-confirm-blockself']);
 		}
 		if (w[warningType].willUnblock && !isBlock) {
@@ -3998,4 +3747,223 @@ init();
 
 // *********************************************************************************************************************
 })();
+
+/**
+ * The keys of the message object storing AjaxBlock's interface messages.
+ * @typedef {object} AjaxBlockMessages
+ * @property {string} options-username-label The label of the username field.
+ * @property {string} options-reason1-label The label of the first block reason dropdown.
+ * @property {string} options-reason2-label The label of the second block reason dropdown.
+ * @property {string} options-otherreason The display text of the 'other' option in the block reason dropdowns.
+ * @property {string} options-userdefined The display text of the 'user-defined' optgroup in the block reason dropdowns.
+ * @property {string} options-reasonC-placeholder The placeholder of the custom block reason textbox.
+ * @property {string} options-reason-label The label of the unblock reason textbox.
+ * @property {string} options-suffix-label The label of the 'suffix' dropdown, relevant to global users.
+ * @property {string} options-suffix-none The display text of the 'none' option in the suffix dropdown.
+ * @property {string} options-expiry-label The label of the block expiry dropdown.
+ * @property {string} options-expiry-other The display text of the 'other' option in the block expiry dropdown.
+ * @property {string} options-expiry-indefinite The display text of the 'indefinite' option in the block expiry dropdown.
+ * @property {string} options-expiry-1hour The display text of the '1 hour' option in the block expiry dropdown.
+ * @property {string} options-expiry-2hours The display text of the '2 hours' option in the block expiry dropdown.
+ * @property {string} options-expiry-1day The display text of the '1 day' option in the block expiry dropdown.
+ * @property {string} options-expiry-31hours The display text of the '31 hours' option in the block expiry dropdown.
+ * @property {string} options-expiry-2days The display text of the '2 days' option in the block expiry dropdown.
+ * @property {string} options-expiry-3days The display text of the '3 days' option in the block expiry dropdown.
+ * @property {string} options-expiry-1week The display text of the '1 week' option in the block expiry dropdown.
+ * @property {string} options-expiry-2weeks The display text of the '2 weeks' option in the block expiry dropdown.
+ * @property {string} options-expiry-1month The display text of the '1 month' option in the block expiry dropdown.
+ * @property {string} options-expiry-3months The display text of the '3 months' option in the block expiry dropdown.
+ * @property {string} options-expiry-6months The display text of the '6 months' option in the block expiry dropdown.
+ * @property {string} options-expiry-1year The display text of the '1 year' option in the block expiry dropdown.
+ * @property {string} options-expiry-2years The display text of the '2 years' option in the block expiry dropdown.
+ * @property {string} options-expiry-3years The display text of the '3 years' option in the block expiry dropdown.
+ * @property {string} options-customexpiry-placeholder The placeholder of the custom block expiry textbox.
+ * @property {string} options-checkbox-nocreate The label of the 'block account creation' checkbox.
+ * @property {string} options-checkbox-noemail The label of the 'block e-mails' checkbox.
+ * @property {string} options-checkbox-notalk The label of the 'block talk page' checkbox.
+ * @property {string} options-checkbox-hardblock The label of the 'hard block' checkbox.
+ * @property {string} options-checkbox-autoblock The label of the 'auto block' checkbox.
+ * @property {string} options-checkbox-partial The label of the 'partial block' checkbox.
+ * @property {string} options-partial-pages-label The label of the textbox to specify the target pages of partial block.
+ * @property {string} options-partial-pages-placeholder The placeholder of the textbox to specify the target pages of partial block.
+ * @property {string} options-partial-namespaces-label The label of the textbox to specify the target namespaces of partial block.
+ * @property {string} options-partial-namespaces-placeholder The placeholder of the textbox to specify the target namespaces of partial block.
+ * @property {string} options-partial-namespaces-tooltip The first line of the namespace tooltip.
+ * @property {string} options-partial-namespaces-tooltip-main A pseudo-alias for the main namespace.
+ * @property {string} options-checkbox-hideuser The label of the 'suppress username' checkbox.
+ * @property {string} options-checkbox-watchuser The label of the 'watch this user' checkbox.
+ * @property {string} options-makeglobal The label of the 'make this option global' checkbox.
+ * @property {string} dialog-heading-block The text of the \<h2> tag for the block interface of the AjaxBlock dialog.
+ * @property {string} dialog-heading-unblock The text of the \<h2> tag for the unblock interface of the AjaxBlock dialog.
+ * @property {string} dialog-overwritewarning The warning message to show when action=block will have to overwrite the existing block.
+ * @property {string} dialog-hasqueryparams The message to show when an (un)block link has predefined settings. This message needs to
+ * be set as the parent element's innerHTML, and the child span with the class 'ab-replaceme' is to be replaced with an anchor button.
+ * @property {string} dialog-hasqueryparams-get The label of the 'get query params' button.
+ * @property {string} dialog-button-block The text of the 'block' button on the AjaxBlock dialog.
+ * @property {string} dialog-button-unblock The text of the 'unblock' button on the AjaxBlock dialog.
+ * @property {string} dialog-button-preset The text of the 'preset' button on the AjaxBlock dialog.
+ * @property {string} dialog-button-currentblock The text of the 'current block' button on the AjaxBlock dialog.
+ * @property {string} dialog-button-reset The text of the 'reset' button on the AjaxBlock dialog.
+ * @property {string} dialog-button-close The text of the 'close' button on the AjaxBlock dialog.
+ * @property {string} portlet-label The label text of the portlet link to the config page.
+ * @property {string} config-header The heading text of the config page.
+ * @property {string} config-header-nopermission The heading text of the config page when the user doesn't have the 'block' right.
+ * @property {string} config-body-nopermission The config body innerHTML when the user doesn't have the 'block' right.
+ * @property {string} config-loading The text displayed when the config interface is being loaded.
+ * @property {string} config-loading-failed The text displayed when the config interface fails to be loaded.
+ * @property {string} config-field-general The text of the legend for the wrapper fieldset of general options.
+ * @property {string} config-field-language The text of the legend for the fieldset of the language option.
+ * @property {string} config-field-userdefined-local The text of the legend for the fieldset of user-defined dropdown options for the local project.
+ * @property {string} config-field-userdefined-global The text of the legend for the fieldset of user-defined dropdown options across projects.
+ * @property {string} config-field-userdefined-add The text of the 'add' button in the field of user-defined dropdown options.
+ * @property {string} config-field-userdefined-remove The text of the 'remove' button in the field of user-defined dropdown options.
+ * @property {string} config-field-preset The text of the legend for the wrapper fieldset of preset options.
+ * @property {string} config-field-preset-user The text of the legend for the fieldset of preset block options for registered users.
+ * @property {string} config-field-preset-ip The text of the legend for the fieldset of preset block options for IP users.
+ * @property {string} config-field-preset-unblock The text of the legend for the fieldset of preset unblock options.
+ * @property {string} config-field-warning The text of the legend for the wrapper fieldset of warning options.
+ * @property {string} config-field-warning-dialog The text of the legend for the fieldset of dialog action warining options.
+ * @property {string} config-field-warning-oneclick The text of the legend for the fieldset of one-click action warining options.
+ * @property {string} config-field-warning-noreason The label text of the checkbox for the 'no reason' warning option.
+ * @property {string} config-field-warning-noexpiry The label text of the checkbox for the 'no expiry' warning option.
+ * @property {string} config-field-warning-nopartialspecs The label text of the checkbox for the 'no partial specs' warning option.
+ * (i.e. Partial block is enabled but neither pages nor namespaces are specified).
+ * @property {string} config-field-warning-hardblock The label text of the checkbox for the 'hard block' warning option.
+ * @property {string} config-field-warning-hideuser The label text of the checkbox for the 'suppress username' warning option.
+ * @property {string} config-field-warning-overwrite The label text of the checkbox for the 'overwrite' warning option.
+ * @property {string} config-field-warning-ignorepredefined The label text of the checkbox for the 'ignore predefined' warning option.
+ * @property {string} config-field-warning-blockself The label text of the checkbox for the '(un)block self' warning option.
+ * @property {string} config-field-warning-unblock The label text of the checkbox for the 'unblock' warning option.
+ * @property {string} config-button-save The text of the button to save user configurations.
+ * @property {string} config-saving The message to show when resolving an API request to save user configurations.
+ * @property {string} config-savedone The message to show when user configurations have been saved.
+ * @property {string} config-savefailed The message to show when user configurations have failed to be saved.
+ * @property {string} error-fetch-dropdown A mw.notify message to show when the block reason dropdown has failed to be fetched.
+ * @property {string} error-fetch-userrights A mw.notify message to show when user rights have failed to be fetched.
+ * @property {string} error-fetch-aliases A mw.notify message to show when local special page aliases for (un)block have failed to be fetched.
+ * @property {string} error-partial-morethan10 A mw.notify message to show when more than 10 pages are specified in the 'pages' field for
+ * partial block ($1: The name of the field in which the values are specified, $2: Total number of pages).
+ * @property {string} error-multiplecalls A mw.notify message to show when AjaxBlock is loaded from multiple files.
+ * @property {string} warning-partial-removed A mw.notify message to let the user know that some values in the 'pages' field for partial block
+ * have been removed because of being duplicate or invalid ($1: The name of the field in which the values are specified).
+ * @property {string} warning-hideuser-unchecked A mw.notify message to let the user know that the 'hideuser' option has been unchecked because
+ * an incompatible option has been enabled.
+ * @property {string} warning-confirm-opening-block The opening line of the confirm dialog for warnings. ($1: The name of the user to block)
+ * @property {string} warning-confirm-opening-unblock The opening line of the confirm dialog for warnings. ($1: The name of the user to unblock)
+ * @property {string} warning-confirm-closing The closing line of the confirm dialog for warnings to ask the user to check all boxes.
+ * @property {string} warning-confirm-noreason The checkbox label of the 'noreason' warning on the confirm dialog.
+ * @property {string} warning-confirm-noexpiry The checkbox label of the 'noexpiry' warning on the confirm dialog.
+ * @property {string} warning-confirm-nopartialspecs The checkbox label of the 'nopartialspecs' warning on the confirm dialog.
+ * @property {string} warning-confirm-hardblock The checkbox label of the 'nopartialspecs' warning on the confirm dialog.
+ * @property {string} warning-confirm-hideuser The checkbox label of the 'hideuser' warning on the confirm dialog.
+ * @property {string} warning-confirm-overwrite The checkbox label of the 'overwrite' warning on the confirm dialog.
+ * @property {string} warning-confirm-ignorepredefined The checkbox label of the 'ignore predefined' warning on the confirm dialog.
+ * @property {string} warning-confirm-blockself The checkbox label of the '(un)blockself' warning on the confirm dialog.
+ * @property {string} warning-confirm-unblock The checkbox label of the 'unblock' warning on the confirm dialog.
+ * @property {string} warning-confirm-dialog-open The label of the 'open dialog when cancelled' checkbox on the confirm dialog.
+ * @property {string} warning-confirm-dialog-proceed The text of the button for 'Proceed' on the confirm dialog.
+ * @property {string} warning-confirm-dialog-cancel The text of the button for 'Cancel' on the confirm dialog.
+ * @property {string} warning-confirm-dialog-cancelled A mw.notify message to show when 'Cancel' is clicked on the confirm dialog.
+ * @property {string} warning-confirm-dialog-forcecancelled A mw.notify message to show when 'Proceed' on the confirm dialog
+ * is clicked but some checkbox is not checked.
+ * @property {string} progress-block-done The text to show when a user is successfully blocked.
+ * @property {string} progress-block-failed The text to show when a user fails to be blocked.
+ * @property {string} progress-unblock-done The text to show when a user is successfully unblocked.
+ * @property {string} progress-unblock-failed The text to show when a user fails to be unblocked.
+ */
+/**
+ * Codes of languages that are available as AjaxBlock's interface language.
+ * @typedef {"en"|"ja"} AvailableLanguages
+ */
+/**
+ * @typedef {object} AjaxBlockPrivateConfig
+ * @property {string} script The script name.
+ * @property {boolean} isOnConfig Whether the user is on the config page.
+ * @property {{local: string; global: string;}} prefkey The names of options used by AjaxBlock.
+ * @property {AvailableLanguages[]} languages An array of language codes that are available as AjaxBlock's interface language.
+ * @property {Record<AvailableLanguages, AjaxBlockMessages>} i18n Message object for internationalization.
+ * @property {{dropdown: HTMLSelectElement; regex: RegExp?; fetched: boolean;}} reason Block reason dropdown.
+ * @property {{block: string[]; unblock: string[]; special: string[];}} aliases Local aliases for special pages.
+ * @property {{block: boolean?; oversight: boolean?; sysop: boolean;}} rights The current user's user rights.
+ */
+
+/**
+ * The possible user types associated with (un)block links.
+ * @typedef {"user"|"ip"} AjaxBlockUserTypes
+ */
+/**
+ * Type of the object internal to the array returned by a list=blocks API request in res.query.blocks.
+ * @typedef {object} ApiResponseQueryListBlocks
+ * @property {string} user
+ * @property {string} reason
+ * @property {string} expiry
+ * @property {boolean} automatic
+ * @property {boolean} nocreate
+ * @property {boolean} noemail
+ * @property {boolean} allowusertalk
+ * @property {boolean} anononly
+ * @property {boolean} autoblock
+ * @property {boolean} [hidden]
+ * @property {boolean} partial
+ * @property {ApiResponseQueryListBlocksRestrictions} restrictions
+ */
+/**
+ * Partial block details in the object elements of a res.query.blocks array fetched by a list=blocks API request.
+ * @typedef {object} ApiResponseQueryListBlocksRestrictions
+ * @property {{id?: number; ns?: number; title: string;}[]=} pages
+ * @property {string[]=} namespaces
+ */
+/**
+ * Type of the object created by the AjaxBlock dialog when passing/collecting block options specified on it.
+ * AjaxBlockConfig also contains an object of this type for preset options.
+ * @typedef AjaxBlockDialogOptionsBlock
+ * @type {ApiResponseQueryListBlocks & {watchlist: boolean; watchlistexpiry: string;}}
+ */
+/**
+ * Type of the object created by the AjaxBlock dialog when passing/collecting unblock options specified on it.
+ * AjaxBlockConfig also contains an object of this type for preset options.
+ * @typedef {object} AjaxBlockDialogOptionsUnblock
+ * @property {string} reason
+ * @property {boolean} watchlist
+ * @property {string} watchlistexpiry
+ */
+/**
+ * The keys of the object for warning options.
+ * @typedef AjaxBlockWarningOptions
+ * @type {(
+ *	|"noReason"
+ *	|"noExpiry"
+ *	|"noPartialSpecs"
+ *	|"willHardblock"
+ *	|"willHideUser"
+ *	|"willOverwrite"
+ *	|"willIgnorePredefined"
+ *	|"willBlockSelf"
+ *	|"willUnblock"
+ * )}
+ */
+/**
+ * Type of the object storing warning opt-in/out options.
+ * @typedef {Record<AjaxBlockWarningOptions, boolean>} AjaxBlockWarningOptionObject
+ */
+/**
+ * Type of actions taken to (un)block a user (or the ways in which the "execute" method is called).
+ * @typedef {"dialog"|"oneclick"} AjaxBlockActions
+ */
+/**
+ * Type of the config for the AjaxBlock dialogs.
+ * @typedef {object} AjaxBlockPublicConfig
+ * @property {AvailableLanguages} lang
+ * @property {{local: string[]; global: string[];}} dropdown
+ * @property {{
+ *	block: Record<AjaxBlockUserTypes, AjaxBlockDialogOptionsBlock>;
+ *	unblock: AjaxBlockDialogOptionsUnblock;
+ * }} preset
+ * @property {Record<AjaxBlockActions, AjaxBlockWarningOptionObject>} warning
+ */
+/**
+ * Type of the whole config of AjaxBlock.
+ * @typedef {AjaxBlockPrivateConfig & AjaxBlockPublicConfig} AjaxBlockConfig
+ */
+
 //</nowiki>
