@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.1
+	@version 1.0.2
 
 \**************************************************************************************************/
 
@@ -1415,8 +1415,8 @@ class PrivateSandbox {
 			this.sco.toggle(false, 1000).then(notifyResult);
 
 			if (cfg.debug) {
-				const {savedProfiles, deletedProfiles, renameLogs} = this;
-				console.log({options, savedProfiles, deletedProfiles, renameLogs});
+				const {savedProfiles, profiles, deletedProfiles, renameLogs} = this;
+				console.log({options, savedProfiles, profiles, deletedProfiles, renameLogs});
 			}
 
 		});
