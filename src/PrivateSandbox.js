@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.0
+	@version 1.0.1
 
 \**************************************************************************************************/
 
@@ -24,8 +24,13 @@
 //<nowiki>
 (() => {
 
-// Run the script only when the user is on Special:PrivateSandbox
-if (!(mw.config.get('wgNamespaceNumber') === -1 && /^(PrivateSandbox|PS)$/i.test(mw.config.get('wgTitle')))) {
+// Exit on certain conditions
+if (
+	// User is not on Special:PrivateSandbox, or
+	!(mw.config.get('wgNamespaceNumber') === -1 && /^(PrivateSandbox|PS)$/i.test(mw.config.get('wgTitle'))) ||
+	// User is not logged in
+	mw.config.get('wgUserId') === null
+) {
 	return;
 }
 
