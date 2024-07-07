@@ -1,6 +1,7 @@
 interface Window {
 	privateSandboxConfig?:  {
 		debug?: boolean;
+		lang?: string;
 	}
 }
 

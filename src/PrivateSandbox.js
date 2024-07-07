@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.2
+	@version 1.0.3
 
 \**************************************************************************************************/
 
@@ -297,7 +297,19 @@ const cfg = Object.assign({
  */
 class PrivateSandbox {
 
-	static messages = i18n[mw.config.get('wgUserLanguage').replace(/-.*$/, '')] || i18n.en;
+	/**
+	 * @type {PrivateSandboxMessage}
+	 */
+	static messages = (() => {
+		const lang = cfg.lang || mw.config.get('wgUserLanguage').replace(/-.*$/, '');
+		if (cfg.lang && !i18n[cfg.lang]) {
+			mw.notify(
+				$(`<div>Sorry, PrivateSandbox does not currently have <code>${cfg.lang}</code> language support for its interface.</div>`),
+				{type: 'error', autoHideSeconds: 'long'}
+			);
+		}
+		return i18n[lang] || i18n.en;
+	})();
 
 	/**
 	 * Get an interface message.
