@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.3
+	@version 1.0.4
 
 \**************************************************************************************************/
 
@@ -248,7 +248,9 @@ const i18n = {
 		'label-dialog-listunsaved-deleteditem': 'deleted',
 		'message-save-doing': 'Saving...',
 		'message-save-done': 'Saved the profile(s).',
-		'message-save-failed': 'Failed to save the profile(s). Please see the browser console for details.'
+		'message-save-failed': 'Failed to save the profile(s). Please see the browser console for details.',
+		'label-preview': 'Preview',
+		'message-preview-failed': 'Failed to fetch preview.'
 	},
 	ja: {
 		'message-load-interface': 'インターフェースを読み込み中...',
@@ -284,12 +286,15 @@ const i18n = {
 		'label-dialog-listunsaved-deleteditem': '削除',
 		'message-save-doing': '保存中...',
 		'message-save-done': 'プロファイルを保存しました。',
-		'message-save-failed': 'プロファイルの保存に失敗しました。詳細はブラウザーコンソールをご覧ください。'
+		'message-save-failed': 'プロファイルの保存に失敗しました。詳細はブラウザーコンソールをご覧ください。',
+		'label-preview': 'プレビュー',
+		'message-preview-failed': 'プレビューの取得に失敗しました。'
 	}
 };
 
 const cfg = Object.assign({
-	debug: false
+	debug: false,
+	expandPreview: false
 }, window.privateSandboxConfig);
 
 /**
@@ -334,6 +339,7 @@ class PrivateSandbox {
 				'mediawiki.user',
 				'mediawiki.api',
 				'oojs-ui',
+				'oojs-ui.styles.icons-content',
 				'oojs-ui.styles.icons-interactions',
 				'oojs-ui.styles.icons-moderation',
 				'oojs-ui.styles.icons-editing-core',
@@ -395,6 +401,24 @@ class PrivateSandbox {
 				'}' +
 				'#pvtsand-savebutton-container {' +
 					'margin-top: 1em;' +
+				'}' +
+				'#pvtsand-preview-container {' +
+					'margin-top: 1em;' +
+					'border: 1px solid #c0c0c0;' +
+				'}' +
+				'#pvtsand-preview-header {' +
+					'background-color: #f8f8f8;' +
+					'padding-left: 1em;' +
+					'padding-right: 1em;' +
+					'border-bottom: 1px solid #c0c0c0;' +
+				'}' +
+				'#pvtsand-preview-loading {' +
+					'height: 1em;' +
+				'}' +
+				'#pvtsand-preview-content {' +
+					'text-align: justify;' +
+					'min-height: 1em;' +
+					'padding: 0.3em 1em;' +
 				'}';
 			document.head.appendChild(style);
 
@@ -777,6 +801,38 @@ class PrivateSandbox {
 			);
 		});
 
+		/**
+		 * @type {JQuery<HTMLImageElement>}
+		 */
+		this.$previewLoader = $('<img>')
+
+		/**
+		 * The container for preview content.
+		 * @type {JQuery<HTMLDivElement>}
+		 */
+		this.$previewContent = $('<div>');
+
+		/**
+		 * A mw.Api instance for content preview.
+		 * @type {mw.Api}
+		 */
+		this.previewApi = new mw.Api({
+			ajax: {
+				headers: {
+					'Api-User-Agent': 'PrivateSandbox/1.0.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
+					// @ts-ignore
+					'Promise-Non-Write-API-Action': true
+				}
+			}
+		});
+
+		/**
+		 * Wikitext that was previewed last time.
+		 * @type {string}
+		 */
+		this.lastPreviewed = '';
+
 		// Construct the interface
 		$content.empty().append(
 			$('<div>')
@@ -820,6 +876,34 @@ class PrivateSandbox {
 							this.btnSave.$element,
 							this.btnSaveAll.$element,
 							this.btnListUnsaved.$element
+						),
+					$('<div>')
+						.prop('id', 'pvtsand-preview-container')
+						.append(
+							$('<div>')
+								.prop('id', 'pvtsand-preview-header')
+								.append(
+									new OO.ui.ButtonWidget({
+										framed: false,
+										label: PrivateSandbox.getMessage('label-preview'),
+										icon: 'article'
+									}).off('click').on('click', () => {
+										const show = !this.$previewContent.is(':visible');
+										this.$previewContent.toggle(show);
+										if (show) {
+											this.preview(this.getEditorValue());
+										}
+									}).$element,
+									this.$previewLoader
+										.prop({
+											id: 'pvtsand-preview-loading',
+											src: 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif'
+										})
+										.hide()
+								),
+							this.$previewContent
+								.prop('id', 'pvtsand-preview-content')
+								.toggle(!!cfg.expandPreview)
 						)
 				),
 			this.$overlay
@@ -930,6 +1014,10 @@ class PrivateSandbox {
 		// Event handler for when the editor content is changed
 		mw.hook('pvtsand.content').add(/** @param {string} value */ (value) => {
 
+			if (this.$previewContent.is(':visible')) {
+				this.preview(value);
+			}
+
 			// Update the profile
 			const prof = this.getSelectedProfile();
 			if (!prof) {
@@ -984,7 +1072,7 @@ class PrivateSandbox {
 		const optionKey = 'userjs-pvtsand-welcomed';
 		if (mw.user.options.get(optionKey) !== '') {
 			PrivateSandbox.saveOptions({[optionKey]: ''}).then(() => {
-				this.sco.toggle(false, 1000).then(() => {
+				this.sco.toggle(false, 800).then(() => {
 					OO.ui.alert(PrivateSandbox.getMessage(this.processed ? 'message-load-updated' : 'message-load-welcome'), {
 						title: 'Welcome!',
 						size: 'medium'
@@ -992,7 +1080,7 @@ class PrivateSandbox {
 				});
 			});
 		} else {
-			this.sco.toggle(false, 1000);
+			this.sco.toggle(false, 800);
 		}
 	}
 
@@ -1424,7 +1512,7 @@ class PrivateSandbox {
 			}
 
 			// Hide the "now saving" message and notify the result
-			this.sco.toggle(false, 1000).then(notifyResult);
+			this.sco.toggle(false, 800).then(notifyResult);
 
 			if (cfg.debug) {
 				const {savedProfiles, profiles, deletedProfiles, renameLogs} = this;
@@ -1460,6 +1548,66 @@ class PrivateSandbox {
 			}
 			return ret;
 		}
+	}
+
+	/**
+	 * Parse a wikitext as HTML for preview.
+	 * @param {string} wikitext Wikitext to parse for preview.
+	 * @returns {void}
+	 */
+	preview(wikitext) {
+		if (wikitext === this.lastPreviewed) {
+			return;
+		} else {
+			this.lastPreviewed = wikitext;
+		}
+		this.previewApi.abort();
+		this.$previewLoader.show();
+		this.previewApi.post({
+			action: 'parse',
+			text: wikitext,
+			title: 'Special:PrivateSandbox',
+			prop: 'text|categorieshtml|modules|jsconfigvars',
+			pst: true,
+			disablelimitreport: true,
+			disableeditsection: true,
+			contentmodel: 'wikitext',
+			formatversion: '2'
+		}).then(/** @param {ApiResponseParse} res */ (res) => {
+			const resParse = res?.parse;
+			if (resParse) {
+				const {text, modules, modulestyles, categorieshtml} = resParse;
+				if (modules.length) {
+					mw.loader.load(modules);
+				}
+				if (modulestyles.length) {
+					mw.loader.load(modulestyles);
+				}
+				return text + (categorieshtml || '');
+			} else {
+				return null;
+			}
+		}).catch(function(_, err) {
+			if (err['exception'] === 'abort') {
+				return '';
+			} else {
+				console.error(err);
+				return null;
+			}
+		}).then(/** @param {string?} html */ (html) => {
+			this.$previewLoader.hide();
+			if (typeof html === 'string') {
+				const $content = $(html);
+				this.$previewContent.empty().append($content);
+				mw.hook('wikipage.content').fire($content);
+			} else {
+				this.$previewContent.empty().append(
+					$('<span>')
+						.text(PrivateSandbox.getMessage('message-preview-failed'))
+						.css('color', 'red')
+				);
+			}
+		});
 	}
 
 }

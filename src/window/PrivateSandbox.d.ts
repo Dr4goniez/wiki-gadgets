@@ -1,8 +1,9 @@
 interface Window {
-	privateSandboxConfig?:  {
+	privateSandboxConfig?: {
 		debug?: boolean;
 		lang?: string;
-	}
+		expandPreview?: boolean;
+	};
 }
 
 interface PrivateSandboxMessage {
@@ -45,4 +46,24 @@ interface PrivateSandboxMessage {
 	'message-save-doing': string;
 	'message-save-done': string;
 	'message-save-failed': string;
+	'label-preview': string;
+	'message-preview-failed': string;
+}
+
+interface ApiResponseParse {
+	parse?: {
+		title: string;
+		pageid: number;
+		text: string;
+		categorieshtml: string;
+		modules: string[];
+        modulescripts: string[];
+        modulestyles: string[];
+        jsconfigvars: {
+			[key: string]: {
+                alert: string;
+                notice: string;
+            };
+        };
+	};
 }
