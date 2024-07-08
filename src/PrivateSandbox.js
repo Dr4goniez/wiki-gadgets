@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.4
+	@version 1.0.5
 
 \**************************************************************************************************/
 
@@ -224,9 +224,9 @@ const i18n = {
 		'label-profiles-select': 'Select profile:',
 		'label-profiles-edit': 'Edit profile:',
 		'label-profiles-edit-placeholder': 'Enter a profile name',
-		'label-profiles-edit-help': 'The profile name must consist only of alphanumeric characeters, underscores, and hyphens (<code>a-zA-Z0-9_-</code>).',
+		'label-profiles-edit-help': 'The profile name must consist only of alphanumeric characters, underscores, and hyphens (<code>a-zA-Z0-9_-</code>).',
 		'title-profiles-empty': 'Enter a profile name.',
-		'title-profiles-invalidchars': 'The profile name must consist only of alphanumeric characeters, underscores, and hyphens.',
+		'title-profiles-invalidchars': 'The profile name must consist only of alphanumeric characters, underscores, and hyphens.',
 		'title-profiles-toomanychars': 'The byte length of the profile name must be 255 or less.',
 		'label-profiles-button-create': 'Create',
 		'label-profiles-button-rename': 'Rename',
@@ -250,7 +250,10 @@ const i18n = {
 		'message-save-done': 'Saved the profile(s).',
 		'message-save-failed': 'Failed to save the profile(s). Please see the browser console for details.',
 		'label-preview': 'Preview',
-		'message-preview-failed': 'Failed to fetch preview.'
+		'message-preview-failed': 'Failed to fetch preview.',
+		'title-preview-expand': 'Expand the preview tab',
+		'title-preview-collapse': 'Collapse the preview tab',
+		'title-preview-disabled': 'Create a profile to use the preview tab.'
 	},
 	ja: {
 		'message-load-interface': 'インターフェースを読み込み中...',
@@ -288,7 +291,10 @@ const i18n = {
 		'message-save-done': 'プロファイルを保存しました。',
 		'message-save-failed': 'プロファイルの保存に失敗しました。詳細はブラウザーコンソールをご覧ください。',
 		'label-preview': 'プレビュー',
-		'message-preview-failed': 'プレビューの取得に失敗しました。'
+		'message-preview-failed': 'プレビューの取得に失敗しました。',
+		'title-preview-expand': 'プレビュータブを展開',
+		'title-preview-collapse': 'プレビュータブを格納',
+		'title-preview-disabled': 'プレビュータブを使用するにはプロファイルを作成してください。'
 	}
 };
 
@@ -380,11 +386,11 @@ class PrivateSandbox {
 				'#pvtsand-profiles-input-warning.pvtsand-warning {' +
 					'color: red;' +
 				'}' +
-				'#pvtsand-editor-container {' +
+				'.pvtsand-overlay-parent {' +
 					'width: 100%;' +
 					'position: relative;' +
 				'}' +
-				'#pvtsand-editor-overlay {' +
+				'.pvtsand-overlay {' +
 					'width: 100%;' +
 					'height: 100%;' +
 					'position: absolute;' +
@@ -712,6 +718,8 @@ class PrivateSandbox {
 			label: PrivateSandbox.getMessage('label-profiles-button-create'),
 			flags: 'progressive',
 			icon: 'add'
+		}).off('click').on('click', () => {
+			this.modifyProfile('create');
 		});
 
 		/**
@@ -721,6 +729,8 @@ class PrivateSandbox {
 		this.btnRename = new OO.ui.ButtonWidget({
 			label: PrivateSandbox.getMessage('label-profiles-button-rename'),
 			icon: 'edit'
+		}).off('click').on('click', () => {
+			this.modifyProfile('rename');
 		});
 
 		/**
@@ -731,13 +741,15 @@ class PrivateSandbox {
 			label: PrivateSandbox.getMessage('label-profiles-button-delete'),
 			flags: 'destructive',
 			icon: 'trash'
+		}).off('click').on('click', () => {
+			this.modifyProfile('delete');
 		});
 
 		/**
-		 * The container of the editor textarea.
+		 * The overlay of the editor.
 		 * @type {JQuery<HTMLDivElement>}
 		 */
-		this.$editorOverlay = $('<div>');
+		const $editorOverlay = $('<div>');
 
 		/**
 		 * The textarea that holds a profile content.
@@ -756,6 +768,8 @@ class PrivateSandbox {
 			title: PrivateSandbox.getMessage('title-profiles-save'),
 			flags: ['progressive', 'primary'],
 			icon: 'check'
+		}).off('click').on('click', () => {
+			this.saveProfiles(this.getSelectedProfile(true));
 		});
 
 		/**
@@ -767,6 +781,8 @@ class PrivateSandbox {
 			title: PrivateSandbox.getMessage('title-profiles-saveall'),
 			flags: 'progressive',
 			icon: 'checkAll'
+		}).off('click').on('click', () => {
+			this.saveProfiles();
 		});
 
 		/**
@@ -802,9 +818,15 @@ class PrivateSandbox {
 		});
 
 		/**
+		 * The overlay of the preview tab.
+		 * @type {JQuery<HTMLDivElement>}
+		 */
+		const $previewOverlay = $('<div>');
+
+		/**
 		 * @type {JQuery<HTMLImageElement>}
 		 */
-		this.$previewLoader = $('<img>')
+		this.$previewLoader = $('<img>');
 
 		/**
 		 * The container for preview content.
@@ -819,7 +841,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.5 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -832,6 +854,24 @@ class PrivateSandbox {
 		 * @type {string}
 		 */
 		this.lastPreviewed = '';
+
+		/**
+		 * The button to expand/collapse the preview tab.
+		 * @type {OO.ui.ButtonWidget}
+		 */
+		const btnPreview = new OO.ui.ButtonWidget({
+			framed: false,
+			label: PrivateSandbox.getMessage('label-preview'),
+			title: PrivateSandbox.getMessage(cfg.expandPreview ? 'title-preview-collapse' : 'title-preview-expand'),
+			icon: 'article'
+		}).off('click').on('click', () => {
+			const show = !this.$previewContent.is(':visible');
+			this.$previewContent.toggle(show);
+			btnPreview.setTitle(PrivateSandbox.getMessage(show ? 'title-preview-collapse' : 'title-preview-expand'));
+			if (show) {
+				this.preview(this.getEditorValue());
+			}
+		});
 
 		// Construct the interface
 		$content.empty().append(
@@ -856,12 +896,14 @@ class PrivateSandbox {
 						),
 					$('<div>')
 						.prop('id', 'pvtsand-editor-container')
+						.addClass('pvtsand-overlay-parent')
 						.append(
-							this.$editorOverlay
+							$editorOverlay
 								.prop({
 									id: 'pvtsand-editor-overlay',
 									title: PrivateSandbox.getMessage('title-editor-disabled')
-								}),
+								})
+								.addClass('pvtsand-overlay'),
 							this.$editor
 								.prop({
 									id: 'wpTextbox1',
@@ -879,21 +921,18 @@ class PrivateSandbox {
 						),
 					$('<div>')
 						.prop('id', 'pvtsand-preview-container')
+						.addClass('pvtsand-overlay-parent')
 						.append(
+							$previewOverlay
+								.prop({
+									id: 'pvtsand-preview-overlay',
+									title: PrivateSandbox.getMessage('title-preview-disabled')
+								})
+								.addClass('pvtsand-overlay'),
 							$('<div>')
 								.prop('id', 'pvtsand-preview-header')
 								.append(
-									new OO.ui.ButtonWidget({
-										framed: false,
-										label: PrivateSandbox.getMessage('label-preview'),
-										icon: 'article'
-									}).off('click').on('click', () => {
-										const show = !this.$previewContent.is(':visible');
-										this.$previewContent.toggle(show);
-										if (show) {
-											this.preview(this.getEditorValue());
-										}
-									}).$element,
+									btnPreview.$element,
 									this.$previewLoader
 										.prop({
 											id: 'pvtsand-preview-loading',
@@ -928,7 +967,7 @@ class PrivateSandbox {
 
 		}
 
-		// Set up events
+		// Set up events (for non-buttons)
 
 		// When a different profile is selected in the dropdown
 		// The event is triggered also when the profile buttons are clicked
@@ -948,8 +987,9 @@ class PrivateSandbox {
 			// Set the profile content to the textarea
 			this.setEditorValue(profileName && this.getProfileContent(profileName) || '');
 
-			// Make the editor unreachable when there's no profile
-			this.$editorOverlay.toggle(!profileName);
+			// Toggle the visibility of the overlays based on whether there's a profile
+			$editorOverlay.toggle(!profileName);
+			$previewOverlay.toggle(!profileName);
 
 		});
 
@@ -982,23 +1022,6 @@ class PrivateSandbox {
 					}
 				}
 			});
-		});
-
-		// Add events to the buttons
-		this.btnCreate.off('click').on('click', () => {
-			this.modifyProfile('create');
-		});
-		this.btnRename.off('click').on('click', () => {
-			this.modifyProfile('rename');
-		});
-		this.btnDelete.off('click').on('click', () => {
-			this.modifyProfile('delete');
-		});
-		this.btnSave.off('click').on('click', () => {
-			this.saveProfiles(this.getSelectedProfile(true));
-		});
-		this.btnSaveAll.off('click').on('click', () => {
-			this.saveProfiles();
 		});
 
 		// Fire the "pvtsand.content" hook when the content is edited

@@ -48,6 +48,9 @@ interface PrivateSandboxMessage {
 	'message-save-failed': string;
 	'label-preview': string;
 	'message-preview-failed': string;
+	'title-preview-expand': string;
+	'title-preview-collapse': string;
+	'title-preview-disabled': string;
 }
 
 interface ApiResponseParse {
