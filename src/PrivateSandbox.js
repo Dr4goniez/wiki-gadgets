@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.8
+	@version 1.0.9
 
 \**************************************************************************************************/
 
@@ -598,8 +598,11 @@ class PrivateSandbox {
 			return $.Deferred().resolve(false);
 		}
 		const sep = '\u001F';
-		// @ts-ignore
-		return new mw.Api({timeout: 0}).postWithToken('csrf', {
+		return new mw.Api({
+			ajax: {
+				timeout: 60*1000 // 60 seconds, overwriting the default value of 30 seconds
+			}
+		}).postWithToken('csrf', {
 			action: 'options',
 			change: sep + data.join(sep),
 			formatversion: '2'
@@ -900,7 +903,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.8 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.9 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -1095,11 +1098,16 @@ class PrivateSandbox {
 		});
 
 		// Event handler for when the editor content is changed
+		/** @type {NodeJS.Timeout} */
+		let previewTimeout;
 		mw.hook('pvtsand.content').add(/** @param {string} value */ (value) => {
 
-			if (this.$previewContent.is(':visible')) {
-				this.preview(value);
-			}
+			clearTimeout(previewTimeout);
+			previewTimeout = setTimeout(() => {
+				if (this.$previewContent.is(':visible')) {
+					this.preview(value);
+				}
+			}, 1000);
 
 			// Update the profile
 			const prof = this.getSelectedProfile();
