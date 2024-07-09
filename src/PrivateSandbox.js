@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.5
+	@version 1.0.6beta
 
 \**************************************************************************************************/
 
@@ -446,7 +446,8 @@ class PrivateSandbox {
 				[
 					'ext.TemplateWizard',
 					'ext.cite.wikiEditor',
-					// 'ext.CodeMirror.v6.WikiEditor'
+					'ext.CodeMirror.v6.WikiEditor',
+					'ext.CodeMirror.v6.mode.mediawiki'
 				]
 				.forEach((m) => {
 					if (mw.loader.getState(m)) {
@@ -514,11 +515,45 @@ class PrivateSandbox {
 			};
 
 			// When modules are ready, create the PrivateSandbox interface
-			$.when(defModules, edModules).then((req) => {
-				/** @type {MwString} */
+			$.when(defModules, edModules).then((req, req2) => {
+
+				/**
+				 * @type {MwString}
+				 */
 				const mwString = req('mediawiki.String');
+				/**
+				 * @type {CodeMirrorWikiEditor?}
+				 */
+				let CodeMirrorWikiEditor = null;
+				/**
+				 * @type {function?}
+				 */
+				let mediawikiLang = null;
+				const cmModules = [
+					'ext.CodeMirror.v6.WikiEditor',
+					'ext.CodeMirror.v6.mode.mediawiki'
+				];
+				if (req2 && cmModules.every((mod) => dependencies.ed.indexOf(mod) !== -1)) {
+					CodeMirrorWikiEditor = req2(cmModules[0]);
+					mediawikiLang = req2(cmModules[1]);
+				}
+				/**
+				 * @param {JQuery<HTMLTextAreaElement>} $textarea
+				 * @returns {InstanceType<CodeMirrorWikiEditor>?}
+				 */
+				const syntaxHighlight = ($textarea) => {
+					if (CodeMirrorWikiEditor && mediawikiLang) {
+						const cmWe = new CodeMirrorWikiEditor($textarea);
+						cmWe.initialize([cmWe.defaultExtensions, mediawikiLang()]);
+						cmWe.addCodeMirrorToWikiEditor();
+						return cmWe;
+					} else {
+						return null;
+					}
+				};
+
 				processOldProfile().then((processed) => {
-					const ps = new PrivateSandbox(mwString, processed, sco, $content);
+					const ps = new PrivateSandbox(mwString, processed, sco, $content, syntaxHighlight);
 					ps.welcomeOnFirstVisit();
 					if (cfg.debug) {
 						// @ts-ignore
@@ -580,7 +615,7 @@ class PrivateSandbox {
 	 * @param {ScreenOverlay} sco
 	 * @param {JQuery<HTMLElement>} $content
 	 */
-	constructor(mwString, processed, sco, $content) {
+	constructor(mwString, processed, sco, $content, syntaxHighlight) {
 
 		/**
 		 * @type {MwString}
@@ -841,7 +876,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.5 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.6beta (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -956,6 +991,7 @@ class PrivateSandbox {
 		if (typeof addWikiEditor === 'function') {
 
 			addWikiEditor(this.$editor);
+			syntaxHighlight(this.$editor);
 
 			// Load realtimepreview if available. The extension internally defines a "context" variable, and
 			// the loading must be deferred until wikiEditor is initialized.

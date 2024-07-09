@@ -70,3 +70,37 @@ interface ApiResponseParse {
         };
 	};
 }
+
+type Extension = never;
+
+declare class CodeMirror {
+
+	/**
+	 * Instantiate a new CodeMirror instance.
+	 * @param textarea Textarea to add syntax highlighting to.
+	 */
+	constructor(textarea: HTMLTextAreaElement|JQuery<HTMLElement>|string);
+
+	/**
+	 * The textarea that CodeMirror is bound to.
+	 */
+	$textarea: JQuery<HTMLTextAreaElement>;
+
+	/**
+	 * Setup CodeMirror and add it to the DOM. This will hide the original textarea.
+	 * @param extensions
+	 */
+	initialize(extensions: Extension|Extension[]): void;
+
+}
+
+declare class CodeMirrorWikiEditor {
+
+	constructor($textarea: JQuery<HTMLTextAreaElement>);
+
+	/**
+	 * Adds the CodeMirror button to WikiEditor.
+	 */
+	addCodeMirrorToWikiEditor(): void;
+
+}
