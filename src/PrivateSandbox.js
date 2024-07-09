@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.7
+	@version 1.0.8
 
 \**************************************************************************************************/
 
@@ -246,6 +246,8 @@ const i18n = {
 		'message-load-welcome': 'Welcome to the private sandbox! Create your first profile to get started.',
 		'message-load-updated': 'Welcome to the new private sandbox! The private sandbox now supports profile management, and your old data have been saved as profile "1".',
 		'message-unload': 'You have unsaved changes. Are you sure you want to leave the page?',
+		'title-othertabs': 'Caution',
+		'message-othertabs': 'It seems that the private sandbox for this project is already open in another tab (or tabs). Please close all those tabs before saving any changes on this page to prevent data corruption. (Note: This detection might be inaccurate. If it does not apply to your situation, you can disregard this warning.)',
 		'label-profiles': 'Profiles',
 		'label-profiles-select': 'Select profile:',
 		'label-profiles-edit': 'Edit profile:',
@@ -293,6 +295,8 @@ const i18n = {
 		'message-load-welcome': 'プライベートサンドボックスへようこそ！最初のプロファイルを作成して始めましょう。',
 		'message-load-updated': '新しいプライベートサンドボックスへようこそ！プライベートサンドボックスはプロファイル管理に対応し、あなたの古いデータはプロファイル「1」として保存されました。',
 		'message-unload': '未保存の変更があります。ページを離れますか？',
+		'title-othertabs': '警告',
+		'message-othertabs': '現在のプロジェクト用のプライベートサンドボックスが別タブで既に開かれているようです。データの破損を防ぐため、このページで変更を保存する前に当該タブを全て閉じてください。（注意：この検出は不正確である場合があります。上記に該当しない場合、この警告は無視してください。）',
 		'label-profiles': 'プロファイル',
 		'label-profiles-select': 'プロファイルを選択:',
 		'label-profiles-edit': 'プロファイルを編集:',
@@ -896,7 +900,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.7 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.8 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -1130,6 +1134,23 @@ class PrivateSandbox {
 			}
 		};
 
+		// Decrement or reset the visit log on unload
+		const storageKey = `pvtsand-${mw.config.get('wgWikiID')}`;
+		window.onunload = () => { // This is deprecated but fine
+			try {
+				const item = localStorage.getItem(storageKey);
+				const index = item !== null ? parseInt(item) : null;
+				if (index !== null) {
+					if (index > 1) {
+						localStorage.setItem(storageKey, String(index - 1));
+					} else {
+						localStorage.removeItem(storageKey);
+					}
+				}
+			}
+			catch { /* empty */ }
+		};
+
 		// Initialize profile display
 		const keys = Object.keys(this.profiles);
 		if (keys.length) {
@@ -1140,6 +1161,20 @@ class PrivateSandbox {
 			// If there's no profile, trigger a labelChange event to initialize the interface elements
 			this.prfDropdown.emit('labelChange');
 		}
+
+		// Increment the localStorage index to detect the private sandbox open in other tabs
+		try {
+			const item = localStorage.getItem(storageKey);
+			const index = item !== null ? parseInt(item) : 0;
+			localStorage.setItem(storageKey, String(index + 1));
+			if (index !== 0) {
+				OO.ui.alert(PrivateSandbox.getMessage('message-othertabs'), {
+					title: PrivateSandbox.getMessage('title-othertabs'),
+					size: 'medium'
+				});
+			}
+		}
+		catch { /* empty */ }
 
 	}
 

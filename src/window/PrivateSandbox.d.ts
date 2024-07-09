@@ -15,6 +15,8 @@ interface PrivateSandboxMessage {
 	'message-load-welcome': string;
 	'message-load-updated': string;
 	'message-unload': string;
+	'title-othertabs': string;
+	'message-othertabs': string;
 	'label-profiles': string;
 	'label-profiles-select': string;
 	'label-profiles-edit': string;
