@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.5
+	@version 1.0.6
 
 \**************************************************************************************************/
 
@@ -25,12 +25,16 @@
 (() => {
 
 // Exit on certain conditions
-if (
-	// User is not on Special:PrivateSandbox, or
-	!(mw.config.get('wgNamespaceNumber') === -1 && /^(PrivateSandbox|PS)$/i.test(mw.config.get('wgTitle'))) ||
+let exit = false;
+if (!(mw.config.get('wgNamespaceNumber') === -1 && /^(PrivateSandbox|PS)$/i.test(mw.config.get('wgTitle')))) {
+	// User is not on Special:PrivateSandbox
+	exit = true;
+} else if (mw.config.get('wgUserId') === null) {
 	// User is not logged in
-	mw.config.get('wgUserId') === null
-) {
+	exit = true;
+	mw.notify('You are not logged in. Please log in to your account to access the private sandbox.', {type: 'error', autoHideSeconds: 'long'});
+}
+if (exit) {
 	return;
 }
 
@@ -841,7 +845,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.5 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.6 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
