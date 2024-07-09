@@ -1,9 +1,12 @@
 interface Window {
-	privateSandboxConfig?: {
-		debug?: boolean;
-		lang?: string;
-		expandPreview?: boolean;
-	};
+	privateSandboxConfig?: PrivateSandboxConfig;
+}
+
+interface PrivateSandboxConfig {
+	debug: boolean;
+	lang: string;
+	expandPreview: boolean;
+	showDeleter: boolean;
 }
 
 interface PrivateSandboxMessage {
@@ -41,6 +44,12 @@ interface PrivateSandboxMessage {
 	'title-profiles-saveall': string;
 	'label-profiles-listunsaved': string;
 	'title-profiles-listunsaved': string;
+	'label-deletedata': string;
+	'title-deletedata': string;
+	'message-deletedata-confirm': string;
+	'message-deletedata-doing': string;
+	'message-deletedata-done': string;
+	'message-deletedata-failed': string;
 	'title-dialog-listunsaved': string;
 	'label-dialog-listunsaved-deleteditem': string;
 	'message-save-doing': string;

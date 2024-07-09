@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.6
+	@version 1.0.7
 
 \**************************************************************************************************/
 
@@ -46,6 +46,7 @@ class ScreenOverlay {
 	/**
 	 * @typedef {object} ScreenOverlayOptions
 	 * @property {string} [text] The text to use to initialize ScreenOverlay.
+	 * @property {boolean} [showSpinner] Whether to show the spinner on the side of the text, defaulted to `true`.
 	 * @property {boolean} [autoStart] Whether to auto-start ScreenOverlay, defaulted to `true`.
 	 */
 	/**
@@ -54,6 +55,12 @@ class ScreenOverlay {
 	 */
 	constructor(options = {}) {
 
+		if (options.text !== void 0) {
+			options.text = String(options.text);
+		}
+		if (typeof options.showSpinner !== 'boolean') {
+			options.showSpinner = true;
+		}
 		if (typeof options.autoStart !== 'boolean') {
 			options.autoStart = true;
 		}
@@ -104,6 +111,12 @@ class ScreenOverlay {
 		this.$text = $('<span>');
 
 		/**
+		 * The overlay spinner image.
+		 * @type {JQuery<HTMLImageElement>}
+		 */
+		this.$image = $('<img>');
+
+		/**
 		 * Date object that saves when the overlay started to show.
 		 * @type {Date}
 		 */
@@ -120,7 +133,7 @@ class ScreenOverlay {
 							$('<p>')
 								.append(
 									this.$text,
-									$('<img>')
+									this.$image
 										.prop('src', 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif')
 								)
 						)
@@ -128,9 +141,13 @@ class ScreenOverlay {
 		);
 
 		// Initialize per the options
-		if (options.text) {
-			options.text = options.text.trim() ? options.text.trim() + ' ' : '';
-			this.$text.text(options.text);
+		if (typeof options.text === 'string') {
+			options.text = options.text.trim();
+			const delimiter = options.text && options.showSpinner ? ' ' : '';
+			this.$text.text(options.text + delimiter);
+		}
+		if (!options.showSpinner) {
+			this.$image.hide();
 		}
 		if (!options.autoStart) {
 			this.$overlay.hide();
@@ -191,6 +208,7 @@ class ScreenOverlay {
 	 * Set text to the overlay.
 	 * @overload
 	 * @param {string} str
+	 * @param {boolean} showSpinner
 	 * @returns {ScreenOverlay}
 	 */
 	/**
@@ -200,12 +218,16 @@ class ScreenOverlay {
 	 */
 	/**
 	 * @param {string} [str]
+	 * @param {boolean} [showSpinner]
 	 * @returns {ScreenOverlay|string}
 	 */
-	text(str) {
+	text(str, showSpinner) {
 		if (typeof str === 'string') {
-			str = str.trim() ? str.trim() + ' ' : '';
-			this.$text.text(str);
+			str = str.trim();
+			showSpinner = !!showSpinner;
+			const delimiter = str && showSpinner ? ' ' : '';
+			this.$text.text(str + delimiter);
+			this.$image.toggle(showSpinner);
 			return this;
 		} else {
 			return this.$text.text();
@@ -248,6 +270,12 @@ const i18n = {
 		'title-profiles-saveall': 'Save all the profiles',
 		'label-profiles-listunsaved': 'List unsaved',
 		'title-profiles-listunsaved': 'Show a list of unsaved profiles',
+		'label-deletedata': 'Delete data',
+		'title-deletedata': 'Delete all data managed by PrivateSandbox',
+		'message-deletedata-confirm': 'This action cannot be undone. Are you sure you want to delete all data?',
+		'message-deletedata-doing': 'Deleting all data...',
+		'message-deletedata-done': 'Deleted all the data. Please close this page once.',
+		'message-deletedata-failed': 'Failed to delete the data. Please try again.',
 		'title-dialog-listunsaved': 'Unsaved profiles',
 		'label-dialog-listunsaved-deleteditem': 'deleted',
 		'message-save-doing': 'Saving...',
@@ -289,6 +317,12 @@ const i18n = {
 		'title-profiles-saveall': '全てのプロファイルを保存',
 		'label-profiles-listunsaved': '未保存リスト',
 		'title-profiles-listunsaved': '未保存のプロファイルをリスト表示',
+		'label-deletedata': 'データ削除',
+		'title-deletedata': 'PrivateSandboxに関わる全てのデータを削除',
+		'message-deletedata-confirm': 'この操作は元に戻せません。全てのデータを削除しますか？',
+		'message-deletedata-doing': '全てのデータを削除しています...',
+		'message-deletedata-done': '全てのデータを削除しました。このページを一度閉じてください。',
+		'message-deletedata-failed': 'データを削除に失敗しました。もう一度お試しください。',
 		'title-dialog-listunsaved': '未保存プロファイル',
 		'label-dialog-listunsaved-deleteditem': '削除',
 		'message-save-doing': '保存中...',
@@ -302,9 +336,12 @@ const i18n = {
 	}
 };
 
+/** @type {PrivateSandboxConfig} */
 const cfg = Object.assign({
 	debug: false,
-	expandPreview: false
+	lang: '',
+	expandPreview: false,
+	showDeleter: false
 }, window.privateSandboxConfig);
 
 /**
@@ -316,6 +353,7 @@ class PrivateSandbox {
 	 * @type {PrivateSandboxMessage}
 	 */
 	static messages = (() => {
+		cfg.lang = String(cfg.lang);
 		const lang = cfg.lang || mw.config.get('wgUserLanguage').replace(/-.*$/, '');
 		if (cfg.lang && !i18n[cfg.lang]) {
 			mw.notify(
@@ -822,6 +860,19 @@ class PrivateSandbox {
 		});
 
 		/**
+		 * The button to delete all data managed by PrivateSandbox.
+		 * @type {OO.ui.ButtonWidget}
+		 */
+		this.btnDeleteData = new OO.ui.ButtonWidget({
+			label: PrivateSandbox.getMessage('label-deletedata'),
+			title: PrivateSandbox.getMessage('title-deletedata'),
+			icon: 'trash',
+			flags: ['destructive', 'primary']
+		}).off('click').on('click', () => {
+			this.deleteData();
+		});
+
+		/**
 		 * The overlay of the preview tab.
 		 * @type {JQuery<HTMLDivElement>}
 		 */
@@ -845,7 +896,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.6 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.7 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -921,7 +972,8 @@ class PrivateSandbox {
 						.append(
 							this.btnSave.$element,
 							this.btnSaveAll.$element,
-							this.btnListUnsaved.$element
+							this.btnListUnsaved.$element,
+							this.btnDeleteData.$element.toggle(!!cfg.showDeleter)
 						),
 					$('<div>')
 						.prop('id', 'pvtsand-preview-container')
@@ -1444,6 +1496,43 @@ class PrivateSandbox {
 	}
 
 	/**
+	 * Delete all data managed by PrivateSandbox.
+	 * @returns {void}
+	 */
+	deleteData() {
+		OO.ui.confirm(PrivateSandbox.getMessage('message-deletedata-confirm'), {
+			size: 'medium'
+		}).then((confirmed) => {
+			if (confirmed) {
+
+				// Show a "now deleting" message
+				this.sco.text(PrivateSandbox.getMessage('message-deletedata-doing'), true).toggle(true);
+
+				// Collect profiles to delete
+				const options = Object.keys(this.savedProfiles).reduce(/** @param {Record<string, null>} acc */ (acc, prof) => {
+					for (let i = 0; i < this.savedProfiles[prof].length; i++) {
+						acc[`userjs-pvtsand-${prof}-${i}`] = null;
+					}
+					return acc;
+				}, Object.create(null));
+				options['userjs-pvtsand-welcomed'] = null; // Also add the welcome log
+
+				// Delete data
+				PrivateSandbox.saveOptions(options).then((success) => {
+					if (success) {
+						this.sco.text(PrivateSandbox.getMessage('message-deletedata-done'), false);
+					} else {
+						this.sco.toggle(false, 800).then(() => {
+							mw.notify(PrivateSandbox.getMessage('message-deletedata-failed'), {type: 'error'});
+						});
+					}
+				});
+
+			}
+		});
+	}
+
+	/**
 	 * Save a given profile.
 	 * @overload
 	 * @param {string} name
@@ -1461,7 +1550,7 @@ class PrivateSandbox {
 	saveProfiles(name) {
 
 		// Show a "now saving" message
-		this.sco.text(PrivateSandbox.getMessage('message-save-doing')).toggle(true);
+		this.sco.text(PrivateSandbox.getMessage('message-save-doing'), true).toggle(true);
 
 		// Collect profiles that need to be updated
 		const options = this.getUnsavedProfiles(name).reduce(/** @param {Record<string, string?>} acc */ (acc, prof) => {
@@ -1469,7 +1558,7 @@ class PrivateSandbox {
 			 * @type {(string|null)[]}
 			 */
 			const values = [];
-			if (this.profiles[prof]) {
+			if (typeof this.profiles[prof] === 'string') {
 				// Push the profile's content that's been byte-split
 				values.push(...this.byteSplit(this.profiles[prof]));
 			}
