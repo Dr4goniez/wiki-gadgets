@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.10
+	@version 1.0.11
 
 \**************************************************************************************************/
 
@@ -278,6 +278,13 @@ const i18n = {
 		'message-deletedata-failed': 'Failed to delete the data. Please try again.',
 		'title-dialog-listunsaved': 'Unsaved profiles',
 		'label-dialog-listunsaved-deleteditem': 'deleted',
+		'message-presave-failed': 'The procedure has been cenceled because PrivateSandbox failed to fetch the newest profiles in the pre-saving process. Please try again in a few minutes. (See the browser console for the details of this error.)',
+		'message-conflict-created': 'Created elsewhere',
+		'message-conflict-modified': 'Modified elsewhere',
+		'message-conflict-deleted': 'Deleted elsewhere',
+		'message-conflict-alert1': 'PrivateSandbox has detected edit conflicts in the following profiles:',
+		'message-conflict-alert2': 'This occurs when new changes are saved in another tab after opening PrivateSandbox in the current tab. To prevent any potential data corruption, it is highly recommended that you press "Cancel", emigrate your changes in this tab to the tab where the changes above were made, and close PrivateSandbox in this tab. If it is okay to overwrite the newest profiles with the data on this page, close all other tabs that have opened PrivateSandbox and press "OK". This will refresh the current tab when the saving process is finished.',
+		'title-conflict': 'Edit conflict',
 		'message-save-doing': 'Saving...',
 		'message-save-done': 'Saved the profile(s).',
 		'message-save-failed': 'Failed to save the profile(s). Please see the browser console for details.',
@@ -325,6 +332,13 @@ const i18n = {
 		'message-deletedata-failed': 'データを削除に失敗しました。もう一度お試しください。',
 		'title-dialog-listunsaved': '未保存プロファイル',
 		'label-dialog-listunsaved-deleteditem': '削除',
+		'message-presave-failed': '保存の準備プロセスにおいて、最新版プロファイルの取得に失敗したため保存処理が中止されました。数分おいて再度お試しください。(エラーの詳細をブラウザーコンソールにて確認できます。)',
+		'message-conflict-created': '他所で新規作成',
+		'message-conflict-modified': '他所で内容更新',
+		'message-conflict-deleted': '他所で削除',
+		'message-conflict-alert1': '下記のプロファイルで編集競合を検知しました:',
+		'message-conflict-alert2': 'これは、現在のタブでPrivateSandboxを開いた後に別タブ内で変更が保存された場合に発生します。データの破損を避けるため、「キャンセル」をクリック後、このタブ上のデータを上記の更新が保存されたタブに全て移し、このタブのPrivateSandboxを閉じることを強く推奨します。このページ上のデータで最新版プロファイルを上書きしてもよろしければ、PrivateSandboxを開いている別タブを全て閉じた後「OK」をクリックしてください。この場合、保存処理の終了後に現在のタブをリロードします。',
+		'title-conflict': '編集競合',
 		'message-save-doing': '保存中...',
 		'message-save-done': 'プロファイルを保存しました。',
 		'message-save-failed': 'プロファイルの保存に失敗しました。詳細はブラウザーコンソールをご覧ください。',
@@ -646,11 +660,6 @@ class PrivateSandbox {
 		// Get profiles as an object
 
 		/**
-		 * Initial options for the profile selector dropdown.
-		 * @type {OO.ui.MenuOptionWidget[]}
-		 */
-		const ddItems = [];
-		/**
 		 * @type {Record<string, string>}
 		 */
 		const options = mw.user.options.get();
@@ -659,17 +668,13 @@ class PrivateSandbox {
 		 * Profiles that have been saved to the server, stored as arrays.
 		 * @type {Record<string, string[]>}
 		 */
-		this.savedProfiles = Object.keys(options).reduce(/** @param {Record<string, string[]>} acc */ (acc, key) => {
-			const m = key.match(/^userjs-pvtsand-(.+?)-(\d+)$/); // $1: profile name, $2: index
-			if (m) {
-				if (!acc[m[1]]) {
-					acc[m[1]] = [];
-					ddItems.push(new OO.ui.MenuOptionWidget({label: m[1], data: m[1]}));
-				}
-				acc[m[1]][m[2]] = options[key];
-			}
-			return acc;
-		}, Object.create(null));
+		this.savedProfiles = PrivateSandbox.objectifySavedOptions(options);
+
+		/**
+		 * Initial options for the profile selector dropdown.
+		 * @type {OO.ui.MenuOptionWidget[]}
+		 */
+		const ddItems = [];
 
 		/**
 		 * Profiles that have yet to be saved to the server, stored as strings.
@@ -677,6 +682,7 @@ class PrivateSandbox {
 		 */
 		this.profiles = Object.keys(this.savedProfiles).reduce(/** @param {Record<string, string>} acc */ (acc, key) => {
 			acc[key] = this.savedProfiles[key].join('');
+			ddItems.push(new OO.ui.MenuOptionWidget({label: key, data: key}));
 			return acc;
 		}, Object.create(null));
 
@@ -899,7 +905,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.10 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.11 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -1149,6 +1155,25 @@ class PrivateSandbox {
 			this.prfDropdown.emit('labelChange');
 		}
 
+	}
+
+	/**
+	 * Extract `userjs-pvtsand-PROFILE-INDEX` options out of a given object of user options and create a new object
+	 * keyed by `PROFILE` and valued by string arrays in accordance with the number of `INDEX`s.
+	 * @param {Record<string, string>} options
+	 * @returns {Record<string, string[]>}
+	 */
+	static objectifySavedOptions(options) {
+		return Object.keys(options).reduce(/** @param {Record<string, string[]>} acc */ (acc, key) => {
+			const m = key.match(/^userjs-pvtsand-(.+?)-(\d+)$/); // $1: profile name, $2: index
+			if (m) {
+				if (!acc[m[1]]) {
+					acc[m[1]] = [];
+				}
+				acc[m[1]][m[2]] = options[key];
+			}
+			return acc;
+		}, Object.create(null));
 	}
 
 	/**
@@ -1560,91 +1585,190 @@ class PrivateSandbox {
 		// Show a "now saving" message
 		this.sco.text(PrivateSandbox.getMessage('message-save-doing'), true).toggle(true);
 
-		// Collect profiles that need to be updated
-		const options = this.getUnsavedProfiles(name).reduce(/** @param {Record<string, string?>} acc */ (acc, prof) => {
-			/**
-			 * @type {(string|null)[]}
-			 */
-			const values = [];
-			if (typeof this.profiles[prof] === 'string') {
-				// Push the profile's content that's been byte-split
-				values.push(...this.byteSplit(this.profiles[prof]));
-			}
-			let gap;
-			if (this.savedProfiles[prof] && (gap = this.savedProfiles[prof].length - values.length) > 0) {
-				// If the profile previously had more entries, fill the gap with null
-				// e.g. profile "pfl" had "pfl-0" and "pfl-1" (i.e. ['content1', 'content2']) but the "values" array only has one element
-				// In this case, the array should be padded (['content1'] => ['content1', null])
-				values.push(...new Array(gap).fill(null));
-			}
-			if (!values.length) {
-				throw new Error(`Unexpected error: Failed to collect values for the profile "${prof}".`);
-			}
-			for (let i = 0; i < values.length; i++) {
-				// Register the values into the options object
-				acc[`userjs-pvtsand-${prof}-${i}`] = values[i];
-			}
-			return acc;
-		}, Object.create(null));
+		// Fetch the newest profiles from the API
+		PrivateSandbox.fetchProfiles().then((newestProfiles) => {
 
-		// Save the profiles
-		PrivateSandbox.saveOptions(options).then((success) => {
+			// Exit if the fetching failed
+			if (newestProfiles === null) {
+				this.sco.toggle(false, 500).then(() => {
+					mw.notify(PrivateSandbox.getMessage('message-presave-failed'), {type: 'error', autoHideSeconds: 'long'});
+				});
+				return;
+			}
 
-			let notifyResult;
-			if (success) {
+			// Check for edit conflicts
+			const conflicts = Object.keys(newestProfiles).reduce(/** @param {Record<string, string>} acc */ (acc, key) => {
+				const value = newestProfiles[key].join('');
+				/** @type {string=} */
+				const oldValue = this.savedProfiles[key]?.join('');
+				if (typeof oldValue === 'string') {
+					if (value !== oldValue) { // Profile has been modified elsewhere
+						acc[key] = PrivateSandbox.getMessage('message-conflict-modified');
+					}
+				} else { // Profile has been created elsewhere
+					acc[key] = PrivateSandbox.getMessage('message-conflict-created');
+				}
+				return acc;
+			}, Object.create(null));
+			Object.keys(this.savedProfiles).forEach((key) => {
+				if (newestProfiles[key] === void 0) { // Profile has been deleted elsewhere
+					conflicts[key] = PrivateSandbox.getMessage('message-conflict-deleted');
+				}
+			});
 
-				notifyResult = () => mw.notify(PrivateSandbox.getMessage('message-save-done'), {type: 'success'});
-				mw.user.options.set(options);
-
-				// Update saved profiles
-				const keys = Object.keys(options).reduce(/** @param {string[]} acc */ (acc, key) => {
-					const val = options[key];
-					let m;
-					if ((m = key.match(/^userjs-pvtsand-(.+?)-(\d+)$/))) { // $1: profile name, $2: index
-						acc.push(m[1]);
-						if (val) {
-							if (!this.savedProfiles[m[1]]) {
-								this.savedProfiles[m[1]] = [];
-							}
-							this.savedProfiles[m[1]][m[2]] = val;
-						} else {
-							delete this.savedProfiles[m[1]];
+			// Deal with edits conflicts
+			/** @type {JQueryPromise<boolean?>} */
+			let conflictPromise;
+			if (Object.keys(conflicts).length) { // Edit conflict detected
+				conflictPromise = (() => {
+					this.sco.$overlay.css('z-index', 0); // Show the confirmation window on top
+					return OO.ui.confirm(
+						$('<div style="text-align: justify;">').append(
+							PrivateSandbox.getMessage('message-conflict-alert1'),
+							$('<ul style="max-height: 5em; overflow-y: auto;">').append(
+								Object.keys(conflicts).map((prof) => $('<li>').text(`"${prof}": ${conflicts[prof]}`))
+							),
+							PrivateSandbox.getMessage('message-conflict-alert2')
+						),
+						{
+							size: 'large',
+							title: PrivateSandbox.getMessage('title-conflict')
 						}
+					).then((confirmed) => {
+						this.sco.$overlay.css('z-index', ''); // Reset to the default
+						return confirmed;
+					});
+				})();
+			} else {
+				conflictPromise = $.Deferred().resolve(null);
+			}
+
+			// Continue the saving process
+			conflictPromise.then((confirmed) => {
+
+				if (confirmed === false) {
+					this.sco.toggle(false);
+					return;
+				}
+
+				// Collect profiles that need to be updated
+				const options = this.getUnsavedProfiles(name).reduce(/** @param {Record<string, string?>} acc */ (acc, prof) => {
+					/**
+					 * @type {(string|null)[]}
+					 */
+					const values = [];
+					if (typeof this.profiles[prof] === 'string') {
+						// Push the profile's content that's been byte-split
+						values.push(...this.byteSplit(this.profiles[prof]));
+					}
+					let gap;
+					if (this.savedProfiles[prof] && (gap = this.savedProfiles[prof].length - values.length) > 0) {
+						// If the profile previously had more entries, fill the gap with null
+						// e.g. profile "pfl" had "pfl-0" and "pfl-1" (i.e. ['content1', 'content2']) but the "values" array
+						// only has one element. In this case, the array should be padded (['content1'] => ['content1', null])
+						values.push(...new Array(gap).fill(null));
+					}
+					if (!values.length) {
+						throw new Error(`Unexpected error: Failed to collect values for the profile "${prof}".`);
+					}
+					for (let i = 0; i < values.length; i++) {
+						// Register the values into the options object
+						acc[`userjs-pvtsand-${prof}-${i}`] = values[i];
 					}
 					return acc;
-				}, []);
+				}, Object.create(null));
 
-				// Update unsaved profiles, rename logs, and deleted profiles
-				for (const key of keys) {
-					let arr;
-					if ((arr = this.savedProfiles[key])) {
-						this.profiles[key] = arr.join('');
+				// Save the profiles
+				PrivateSandbox.saveOptions(options).then((success) => {
+
+					let notifyResult;
+					if (success) {
+
+						notifyResult = () => mw.notify(PrivateSandbox.getMessage('message-save-done'), {type: 'success'});
+						mw.user.options.set(options);
+
+						// Update saved profiles
+						const keys = Object.keys(options).reduce(/** @param {string[]} acc */ (acc, key) => {
+							const val = options[key];
+							let m;
+							if ((m = key.match(/^userjs-pvtsand-(.+?)-(\d+)$/))) { // $1: profile name, $2: index
+								acc.push(m[1]);
+								if (val) {
+									if (!this.savedProfiles[m[1]]) {
+										this.savedProfiles[m[1]] = [];
+									}
+									this.savedProfiles[m[1]][m[2]] = val;
+								} else {
+									delete this.savedProfiles[m[1]];
+								}
+							}
+							return acc;
+						}, []);
+
+						// Update unsaved profiles, rename logs, and deleted profiles
+						for (const key of keys) {
+							let arr;
+							if ((arr = this.savedProfiles[key])) {
+								this.profiles[key] = arr.join('');
+							} else {
+								delete this.profiles[key];
+							}
+							if (this.renameLogs[key]) {
+								delete this.renameLogs[key];
+							}
+						}
+						this.deletedProfiles = this.deletedProfiles.filter((v) => keys.indexOf(v) === -1);
+
+						// Update the disabled states of the save buttons
+						mw.hook('pvtsand.content').fire(this.getEditorValue());
+
 					} else {
-						delete this.profiles[key];
+						notifyResult = () => mw.notify(PrivateSandbox.getMessage('message-save-failed'), {type: 'error'});
 					}
-					if (this.renameLogs[key]) {
-						delete this.renameLogs[key];
+
+					if (confirmed) {
+						window.location.reload();
+					} else {
+
+						// Hide the "now saving" message and notify the result
+						this.sco.toggle(false, 800).then(notifyResult);
+
+						if (cfg.debug) {
+							const {savedProfiles, profiles, deletedProfiles, renameLogs} = this;
+							console.log({options, savedProfiles, profiles, deletedProfiles, renameLogs});
+						}
+
 					}
-				}
-				this.deletedProfiles = this.deletedProfiles.filter((v) => keys.indexOf(v) === -1);
 
-				// Update the disabled states of the save buttons
-				mw.hook('pvtsand.content').fire(this.getEditorValue());
+				});
 
-			} else {
-				notifyResult = () => mw.notify(PrivateSandbox.getMessage('message-save-failed'), {type: 'error'});
-			}
-
-			// Hide the "now saving" message and notify the result
-			this.sco.toggle(false, 800).then(notifyResult);
-
-			if (cfg.debug) {
-				const {savedProfiles, profiles, deletedProfiles, renameLogs} = this;
-				console.log({options, savedProfiles, profiles, deletedProfiles, renameLogs});
-			}
+			});
 
 		});
 
+	}
+
+	/**
+	 * Fetch PrivateSandbox profiles from the API.
+	 * @returns {JQueryPromise<Record<string, string[]>?>}
+	 */
+	static fetchProfiles() {
+		return new mw.Api().get({
+			action: 'query',
+			meta: 'userinfo',
+			uiprop: 'options',
+			formatversion: '2'
+		}).then(/** @param {ApiResponseUserinfo} res */ (res) => {
+			const options = res?.query?.userinfo?.options;
+			if (typeof options === 'object') {
+				return PrivateSandbox.objectifySavedOptions(options);
+			} else {
+				return null;
+			}
+		}).catch((_, err) => {
+			console.warn(err);
+			return null;
+		});
 	}
 
 	/**

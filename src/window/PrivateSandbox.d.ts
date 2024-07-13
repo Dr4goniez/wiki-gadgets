@@ -52,6 +52,13 @@ interface PrivateSandboxMessage {
 	'message-deletedata-failed': string;
 	'title-dialog-listunsaved': string;
 	'label-dialog-listunsaved-deleteditem': string;
+	'message-presave-failed': string;
+	'message-conflict-created': string;
+	'message-conflict-modified': string;
+	'message-conflict-deleted': string;
+	'message-conflict-alert1': string;
+	'message-conflict-alert2': string;
+	'title-conflict': string;
 	'message-save-doing': string;
 	'message-save-done': string;
 	'message-save-failed': string;
@@ -77,5 +84,15 @@ interface ApiResponseParse {
                 notice: string;
             };
         };
+	};
+}
+
+interface ApiResponseUserinfo {
+	query?: {
+		userinfo?: {
+			id: number;
+			name: string;
+			options?: Record<string, string>; // This is actually "Record<string, number|string|boolean>"
+		};
 	};
 }
