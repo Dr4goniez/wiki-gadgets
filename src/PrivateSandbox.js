@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.13
+	@version 1.0.14
 
 \**************************************************************************************************/
 
@@ -24,17 +24,36 @@
 //<nowiki>
 (() => {
 
+// Initialize configs
+/** @type {PrivateSandboxConfig} */
+const cfg = Object.assign({
+	debug: false,
+	lang: '',
+	expandPreview: false,
+	showDeleter: false,
+	generatePortletLink: false
+}, window.privateSandboxConfig);
+
 // Exit on certain conditions
-let exit = false;
 if (!(mw.config.get('wgNamespaceNumber') === -1 && /^(PrivateSandbox|PS)$/i.test(mw.config.get('wgTitle')))) {
 	// User is not on Special:PrivateSandbox
-	exit = true;
+
+	// Add a portlet link to the special page per config
+	if (cfg.generatePortletLink) {
+		return $.when(mw.loader.using('mediawiki.util'), $.ready).then(() => {
+			mw.util.addPortletLink(
+				document.getElementById('p-cactions') ? 'p-cactions' : 'p-personal',
+				mw.util.getUrl('Special:PrivateSandbox'),
+				'PrivateSandbox',
+				'ca-pvtsand'
+			);
+		});
+	}
+
+	return;
 } else if (mw.config.get('wgUserId') === null) {
 	// User is not logged in
-	exit = true;
 	mw.notify('You are not logged in. Please log in to your account to access the private sandbox.', {type: 'error', autoHideSeconds: 'long'});
-}
-if (exit) {
 	return;
 }
 
@@ -351,14 +370,6 @@ const i18n = {
 		'title-preview-disabled': 'プレビュータブを使用するにはプロファイルを作成してください。'
 	}
 };
-
-/** @type {PrivateSandboxConfig} */
-const cfg = Object.assign({
-	debug: false,
-	lang: '',
-	expandPreview: false,
-	showDeleter: false
-}, window.privateSandboxConfig);
 
 /**
  * The PrivateSandbox class.
@@ -907,7 +918,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.13 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.14 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true

@@ -7,6 +7,7 @@ interface PrivateSandboxConfig {
 	lang: string;
 	expandPreview: boolean;
 	showDeleter: boolean;
+	generatePortletLink: boolean;
 }
 
 interface PrivateSandboxMessage {
