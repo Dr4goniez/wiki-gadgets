@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.12
+	@version 1.0.13
 
 \**************************************************************************************************/
 
@@ -907,7 +907,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.12 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.13 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -933,11 +933,18 @@ class PrivateSandbox {
 		}).off('click').on('click', () => {
 			const show = !this.$previewContent.is(':visible');
 			this.$previewContent.toggle(show);
-			btnPreview.setTitle(PrivateSandbox.getMessage(show ? 'title-preview-collapse' : 'title-preview-expand'));
+			btnPreview
+				.setFlags({progressive: show})
+				.setTitle(PrivateSandbox.getMessage(show ? 'title-preview-collapse' : 'title-preview-expand'));
 			if (show) {
 				this.preview(this.getEditorValue());
 			}
 		});
+		if (cfg.expandPreview) {
+			// The collapsed state of $previewContent is initialized when it's added to the DOM,
+			// meaning that no click event fires on it; hence add the flag if needed
+			btnPreview.setFlags({progressive: true});
+		}
 
 		// Construct the interface
 		$content.empty().append(
