@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.11
+	@version 1.0.12
 
 \**************************************************************************************************/
 
@@ -276,9 +276,10 @@ const i18n = {
 		'message-deletedata-doing': 'Deleting all data...',
 		'message-deletedata-done': 'Deleted all the data. Please close this page once.',
 		'message-deletedata-failed': 'Failed to delete the data. Please try again.',
+		'message-predeletedata-failed': 'The procedure has been canceled because PrivateSandbox failed to fetch the newest profiles in the pre-deletion process. Please try again in a few minutes. (See the browser console for the details of this error.)',
 		'title-dialog-listunsaved': 'Unsaved profiles',
 		'label-dialog-listunsaved-deleteditem': 'deleted',
-		'message-presave-failed': 'The procedure has been cenceled because PrivateSandbox failed to fetch the newest profiles in the pre-saving process. Please try again in a few minutes. (See the browser console for the details of this error.)',
+		'message-presave-failed': 'The procedure has been canceled because PrivateSandbox failed to fetch the newest profiles in the pre-saving process. Please try again in a few minutes. (See the browser console for the details of this error.)',
 		'message-conflict-created': 'Created elsewhere',
 		'message-conflict-modified': 'Modified elsewhere',
 		'message-conflict-deleted': 'Deleted elsewhere',
@@ -330,6 +331,7 @@ const i18n = {
 		'message-deletedata-doing': '全てのデータを削除しています...',
 		'message-deletedata-done': '全てのデータを削除しました。このページを一度閉じてください。',
 		'message-deletedata-failed': 'データを削除に失敗しました。もう一度お試しください。',
+		'message-predeletedata-failed': '削除の準備プロセスにおいて、最新版プロファイルの取得に失敗したため削除処理が中止されました。数分おいて再度お試しください。(エラーの詳細をブラウザーコンソールにて確認できます。)',
 		'title-dialog-listunsaved': '未保存プロファイル',
 		'label-dialog-listunsaved-deleteditem': '削除',
 		'message-presave-failed': '保存の準備プロセスにおいて、最新版プロファイルの取得に失敗したため保存処理が中止されました。数分おいて再度お試しください。(エラーの詳細をブラウザーコンソールにて確認できます。)',
@@ -905,7 +907,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.11 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.12 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -1541,24 +1543,36 @@ class PrivateSandbox {
 				// Show a "now deleting" message
 				this.sco.text(PrivateSandbox.getMessage('message-deletedata-doing'), true).toggle(true);
 
-				// Collect profiles to delete
-				const options = Object.keys(this.savedProfiles).reduce(/** @param {Record<string, null>} acc */ (acc, prof) => {
-					for (let i = 0; i < this.savedProfiles[prof].length; i++) {
-						acc[`userjs-pvtsand-${prof}-${i}`] = null;
-					}
-					return acc;
-				}, Object.create(null));
-				options['userjs-pvtsand-welcomed'] = null; // Also add the welcome log
+				// Fetch the up-to-date user options from the API
+				PrivateSandbox.fetchOptions().then((fetchedOptions) => {
 
-				// Delete data
-				PrivateSandbox.saveOptions(options).then((success) => {
-					if (success) {
-						this.sco.text(PrivateSandbox.getMessage('message-deletedata-done'), false);
-					} else {
+					if (!fetchedOptions) {
 						this.sco.toggle(false, 800).then(() => {
-							mw.notify(PrivateSandbox.getMessage('message-deletedata-failed'), {type: 'error'});
+							mw.notify(PrivateSandbox.getMessage('message-predeletedata-failed'), {type: 'error', autoHideSeconds: 'long'});
 						});
+						return;
 					}
+
+					// Collect profiles to delete
+					const options = Object.keys(fetchedOptions).reduce(/** @param {Record<string, null>} acc */ (acc, key) => {
+						if (/^userjs-pvtsand-.+?-\d+$/.test(key)) {
+							acc[key] = null;
+						}
+						return acc;
+					}, Object.create(null));
+					options['userjs-pvtsand-welcomed'] = null; // Also add the welcome log
+
+					// Delete data
+					PrivateSandbox.saveOptions(options).then((success) => {
+						if (success) {
+							this.sco.text(PrivateSandbox.getMessage('message-deletedata-done'), false);
+						} else {
+							this.sco.toggle(false, 800).then(() => {
+								mw.notify(PrivateSandbox.getMessage('message-deletedata-failed'), {type: 'error'});
+							});
+						}
+					});
+
 				});
 
 			}
@@ -1586,15 +1600,16 @@ class PrivateSandbox {
 		this.sco.text(PrivateSandbox.getMessage('message-save-doing'), true).toggle(true);
 
 		// Fetch the newest profiles from the API
-		PrivateSandbox.fetchProfiles().then((newestProfiles) => {
+		PrivateSandbox.fetchOptions().then((fetchedOptions) => {
 
 			// Exit if the fetching failed
-			if (newestProfiles === null) {
+			if (!fetchedOptions) {
 				this.sco.toggle(false, 500).then(() => {
 					mw.notify(PrivateSandbox.getMessage('message-presave-failed'), {type: 'error', autoHideSeconds: 'long'});
 				});
 				return;
 			}
+			const newestProfiles = PrivateSandbox.objectifySavedOptions(fetchedOptions);
 
 			// Check for edit conflicts
 			const conflicts = Object.keys(newestProfiles).reduce(/** @param {Record<string, string>} acc */ (acc, key) => {
@@ -1749,22 +1764,17 @@ class PrivateSandbox {
 	}
 
 	/**
-	 * Fetch PrivateSandbox profiles from the API.
-	 * @returns {JQueryPromise<Record<string, string[]>?>}
+	 * Fetch user options from the API.
+	 * @returns {JQueryPromise<Record<string, string>?>}
 	 */
-	static fetchProfiles() {
+	static fetchOptions() {
 		return new mw.Api().get({
 			action: 'query',
 			meta: 'userinfo',
 			uiprop: 'options',
 			formatversion: '2'
 		}).then(/** @param {ApiResponseUserinfo} res */ (res) => {
-			const options = res?.query?.userinfo?.options;
-			if (typeof options === 'object') {
-				return PrivateSandbox.objectifySavedOptions(options);
-			} else {
-				return null;
-			}
+			return res?.query?.userinfo?.options || null;
 		}).catch((_, err) => {
 			console.warn(err);
 			return null;

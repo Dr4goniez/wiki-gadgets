@@ -50,6 +50,7 @@ interface PrivateSandboxMessage {
 	'message-deletedata-doing': string;
 	'message-deletedata-done': string;
 	'message-deletedata-failed': string;
+	'message-predeletedata-failed': string;
 	'title-dialog-listunsaved': string;
 	'label-dialog-listunsaved-deleteditem': string;
 	'message-presave-failed': string;
