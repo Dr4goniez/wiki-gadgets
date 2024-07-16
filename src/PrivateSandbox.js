@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.17
+	@version 1.0.18
 
 \**************************************************************************************************/
 
@@ -455,6 +455,9 @@ class PrivateSandbox {
 				'}' +
 				'#pvtsand-profiles-input-warning.pvtsand-warning {' +
 					'color: red;' +
+				'}' +
+				'.pvtsand-warning code {' +
+					'color: inherit;' +
 				'}' +
 				'.pvtsand-overlay-parent {' +
 					'width: 100%;' +
@@ -920,7 +923,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.17 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.18 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
