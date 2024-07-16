@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.2.2
+	@version 4.2.3
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -1396,14 +1396,14 @@
 					// When all rollback requests are done, show a message that tells how many rollback links were processed
 					var reverted = 0;
 					var failed = 0;
-					Object.keys(arguments).forEach(function(key) {
-						var success = arguments[key];
-						if (success) {
+					for (var i = 0; i < arguments.length; i++) {
+						if (arguments[i]) {
 							reverted++;
 						} else {
 							failed++;
 						}
-					});
+					}
+					console.log(arguments); // Temporary
 					mw.notify(
 						$('<div>').append(
 							document.createTextNode('Selective Rollback (' + (reverted + failed) + ')'),
