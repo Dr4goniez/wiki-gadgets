@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.2.4
+	@version 4.3.0
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -58,7 +58,7 @@
 			api = new mw.Api({
 				ajax: {
 					headers: {
-						'Api-User-Agent': 'Selective_Rollback/4.2.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+						'Api-User-Agent': 'Selective_Rollback/4.3.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 					}
 				}
 			});
@@ -517,12 +517,19 @@
 				'box-sizing: border-box;' +
 				'border: 1px solid #777;' +
 				'border-radius: 1%;' +
-				'background-color: white;' +
 				'padding: 2px 4px;' +
 			'}' +
 			'.sr-dialog-tooltip {' +
 				'font-size: smaller;' +
 				'margin: 0;' +
+			'}' +
+			'#sr-summarypreview {' +
+				'max-height: 5em;' +
+				'overflow: auto;' +
+				'overflow-wrap: break-word;' +
+				'word-wrap: break-word;' +
+				'color: var(--color-base, white);' +
+				'background-color: var(--background-color-neutral, #54595d);' +
 			'}';
 		document.head.appendChild(style);
 	}
@@ -768,8 +775,7 @@
 						document.createTextNode(msg['summary-label-preview']),
 						($summaryPreview = $('<div>'))
 							.prop({id: 'sr-summarypreview'})
-							.addClass('sr-dialog-borderbox')
-							.css({backgroundColor: 'initial'}),
+							.addClass('sr-dialog-borderbox'),
 						($summaryPreviewTooltip =  $('<p>'))
 							.prop({id: 'sr-summarypreview-tooltip'})
 							.text(msg['summary-tooltip-preview'])
@@ -1087,7 +1093,7 @@
 		var /** @type {mw.Api} @readonly */ previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective Rollback/4.2.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
+					'Api-User-Agent': 'Selective Rollback/4.3.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
