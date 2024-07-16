@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.2.1
+	@version 4.2.2
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -159,22 +159,6 @@
 	}
 
 	/**
-	 * @typedef {"never"|"always"|"RCW"|"nonRCW"} SRConfirm
-	 */
-	/**
-	 * @typedef SelectiveRollbackConfig
-	 * @property {string} lang
-	 * @property {Record<string, string>} editSummaries
-	 * @property {boolean} showKeys
-	 * @property {Record<string, string>} specialExpressions
-	 * @property {boolean} markBot
-	 * @property {boolean} watchPage
-	 * @property {string} watchExpiry
-	 * @property {SRConfirm} confirm
-	 * @property {SRConfirm} mobileConfirm
-	 * @property {string} checkboxLabelColor
-	 */
-	/**
 	 * Get the Selective Rollback config, merged with the user config.
 	 * @returns {SelectiveRollbackConfig}
 	 */
@@ -276,40 +260,6 @@
 
 	}
 
-	/**
-	 * @typedef {object} Messages
-	 * @property {string} portletlink-tooltip Tooltip for the portlet link used to open the SR dialog.
-	 * @property {string} summary-label-primary The label for the edit summary dropdown.
-	 * @property {string} summary-option-default The text for the default edit summary dropdown option.
-	 * @property {string} summary-option-custom The text for the custom edit summary dropdown option.
-	 * @property {string} summary-label-custom The label for the custom edit summary inputbox.
-	 * @property {string} summary-tooltip-$0 Tooltip that says $0 will be replaced with the default edit summary.
-	 * @property {string} summary-tooltip-$0-error [Contains a \<b> tag]: Tooltip that says $0 will be replaced with
-	 * the default edit summary **in English**.
-	 * @property {string} summary-tooltip-specialexpressions The leading text for replacement expressions.
-	 * @property {string} summary-label-preview The label for the summary preview div.
-	 * @property {string} summary-tooltip-preview Tooltip that says magic words in previewed summary will be replaced.
-	 * @property {string} markbot-label The label for the markbot checkbox.
-	 * @property {string} watchlist-label The label for the watch-page checkbox.
-	 * @property {string} watchlist-expiry-label The label for the watch-expiry dropdown.
-	 * @property {string} watchlist-expiry-indefinite The text for the indefinite expiry dropdown option.
-	 * @property {string} watchlist-expiry-1week The text for the 1-week expiry dropdown option.
-	 * @property {string} watchlist-expiry-1month The text for the 1-month expiry dropdown option.
-	 * @property {string} watchlist-expiry-3months The text for the 3-month expiry dropdown option.
-	 * @property {string} watchlist-expiry-6months The text for the 6-month expiry dropdown option.
-	 * @property {string} watchlist-expiry-1year The text for the 1-year expiry dropdown option.
-	 * @property {string} watchlist-expiry-3years The text for the 3-year expiry dropdown option.
-	 * @property {string} button-rollbackchecked The text for the "Rollback checked" dialog button.
-	 * @property {string} button-checkall The text for the "Check all" dialog button.
-	 * @property {string} button-close The text for the "Close" dialog button.
-	 * @property {string} msg-nonechecked A mw.notify message for when no checkbox is checked for selective rollback.
-	 * @property {string} msg-linksresolved A mw.notify message for when there's no checkbox to check when the "Check all" button is hit.
-	 * @property {string} msg-confirm An OO.ui.confirm message for rollback confirmation.
-	 * @property {string} rbstatus-reverted The text for reverted rollback links.
-	 * @property {string} rbstatus-failed The text for non-reverted rollback links.
-	 * @property {string} rbstatus-notify-success Internal text ("Success") for a mw.notify message that shows how many rollbacks succeeded.
-	 * @property {string} rbstatus-notify-failure Internal text ("Failure") for a mw.notify message that shows how many rollbacks failed.
-	 */
 	/**
 	 * Get interface messages as an object.
 	 * @param {SelectiveRollbackConfig} cfg
@@ -572,8 +522,7 @@
 	}
 
 	/**
-	 * @typedef MetaInfo
-	 * @type {object}
+	 * @typedef {object} MetaInfo
 	 * @property {string} summary The raw `revertpage` message.
 	 * @property {string} parsedsummary The `revertpage` message with {{PLURAL}} margic words parsed.
 	 * @property {boolean} fetched Whether the default rollback summary was fetched.
@@ -662,7 +611,7 @@
 
 	/**
 	 * Additional parameters to `action=rollback`.
-	 * @typedef RollbackParams
+	 * @typedef {object} RollbackParams
 	 * @property {string} summary An empty string will be altered with the default summary by the mediawiki software
 	 * @property {boolean} markbot
 	 * @property {"nochange"|"preferences"|"unwatch"|"watch"} watchlist Default: preferences
