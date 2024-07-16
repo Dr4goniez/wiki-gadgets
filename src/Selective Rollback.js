@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.2.3
+	@version 4.2.4
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -55,7 +55,13 @@
 			if (!getRollbackLinks().length) return;
 
 			// Set up variables
-			api = new mw.Api();
+			api = new mw.Api({
+				ajax: {
+					headers: {
+						'Api-User-Agent': 'Selective_Rollback/4.2.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					}
+				}
+			});
 			var /** @type {ParentNode} */ parentNode = (function() {
 				var spName = mw.config.get('wgCanonicalSpecialPageName');
 				if (typeof spName === 'string' && ['Recentchanges', 'Watchlist'].indexOf(spName) !== -1) {
@@ -1078,7 +1084,16 @@
 			};
 		};
 
-		var /** @type {mw.Api} @readonly */ previewApi = new mw.Api();
+		var /** @type {mw.Api} @readonly */ previewApi = new mw.Api({
+			ajax: {
+				headers: {
+					'Api-User-Agent': 'Selective Rollback/4.2.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
+					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
+					// @ts-ignore
+					'Promise-Non-Write-API-Action': true
+				}
+			}
+		});
 		var /** @type {NodeJS.Timeout} */ previewTimeout;
 		/**
 		 * Preview summary.
