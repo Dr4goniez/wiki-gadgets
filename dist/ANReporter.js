@@ -2,41 +2,29 @@
 /*********************************************************************************\
     AN Reporter
     @author [[User:Dragoniez]]
-    @version 8.1.6
+    @version 8.2.0
     @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
 /* global mw, $, OO */
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
-(function () {
+(() => {
     // ******************************************************************************************
     // Across-the-board variables
     /** The script name. */
-    var ANR = 'AN Reporter';
-    var ANI = 'Wikipedia:管理者伝言板/投稿ブロック';
-    var ANS = 'Wikipedia:管理者伝言板/投稿ブロック/ソックパペット';
-    var AN3RR = 'Wikipedia:管理者伝言板/3RR';
+    const ANR = 'AN Reporter';
+    const ANI = 'Wikipedia:管理者伝言板/投稿ブロック';
+    const ANS = 'Wikipedia:管理者伝言板/投稿ブロック/ソックパペット';
+    const AN3RR = 'Wikipedia:管理者伝言板/3RR';
     /**
      * This variable being a string means that we're in a debugging mode. (cf. {@link Reporter.collectData})
      */
-    var ANTEST = false;
+    const ANTEST = false;
     /**
      * Format the `ANTEST` variable to a processable page name.
      * @param toWikipedia Whether to format to a page name in the Wikipedia namespace, defaulted to `false`.
      * @returns Always `false` if `ANTEST` is set to `false`, otherwise a formatted page name.
      */
-    var formatANTEST = function (toWikipedia) {
-        if (toWikipedia === void 0) { toWikipedia = false; }
+    const formatANTEST = (toWikipedia = false) => {
         if (typeof ANTEST === 'string') {
             return toWikipedia ? eval(ANTEST) : '利用者:DragoTest/test/WP' + ANTEST;
         }
@@ -47,17 +35,17 @@ var __assign = (this && this.__assign) || function () {
     /**
      * Whether to use the library on testwiki.
      */
-    var useDevLibrary = false;
-    var ad = ' ([[利用者:Dragoniez/scripts/AN_Reporter|AN Reporter]])';
-    var lib;
-    var mwString;
-    var idList;
+    const useDevLibrary = false;
+    const ad = ' ([[利用者:Dragoniez/scripts/AN_Reporter|AN Reporter]])';
+    let lib;
+    let mwString;
+    let idList;
     // ******************************************************************************************
     // Main functions
     /** Initialize the script. */
     function init() {
         // Is the user autoconfirmed?
-        if (mw.config.get('wgUserGroups').indexOf('autoconfirmed') === -1) {
+        if ((mw.config.get('wgUserGroups') || []).indexOf('autoconfirmed') === -1) {
             mw.notify('あなたは自動承認されていません。AN Reporterを終了します。', { type: 'warn' });
             return;
         }
@@ -66,53 +54,49 @@ var __assign = (this && this.__assign) || function () {
             return;
         }
         /** Whether the user is on the config page. */
-        var onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(ANReporterConfig|ANRC)$/i.test(mw.config.get('wgTitle'));
+        const onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(ANReporterConfig|ANRC)$/i.test(mw.config.get('wgTitle'));
         // Load the library and dependent modules, then go on to the main procedure
-        loadLibrary(useDevLibrary).then(function (libReady) {
+        loadLibrary(useDevLibrary).then((libReady) => {
             if (!libReady)
                 return;
             // Main procedure
             if (onConfig) {
                 // If on the config page, create the interface after loading dependent modules
                 $(loadConfigInterface); // Show a 'now loading' message as soon as the DOM gets ready
-                var modules = [
-                    'mediawiki.user',
+                const modules = [
+                    'mediawiki.user', // mw.user.options
                     'oojs-ui',
                     'oojs-ui.styles.icons-editing-core',
                     'oojs-ui.styles.icons-moderation',
                     'mediawiki.api', // mw.Api().saveOption
                 ];
-                $.when(mw.loader.using(modules), $.ready).then(function () {
+                $.when(mw.loader.using(modules), $.ready).then(() => {
                     createStyleTag(Config.merge());
                     createConfigInterface();
                 });
             }
             else {
                 // If not on the config page, create a portlet link to open the ANR dialog after loading dependent modules
-                var modules_1 = [
-                    'mediawiki.String',
-                    'mediawiki.user',
-                    'mediawiki.util',
-                    'mediawiki.api',
-                    'mediawiki.Title',
+                const modules = [
+                    'mediawiki.String', // IdList
+                    'mediawiki.user', // mw.user.options
+                    'mediawiki.util', // addPortletLink
+                    'mediawiki.api', // API queries
+                    'mediawiki.Title', // lib
                     'jquery.ui',
                 ];
-                $.when(mw.loader.using(modules_1), mw.loader.getScript('https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.js'), $.ready).then(function (require) {
-                    mwString = require(modules_1[0]);
-                    var portlet = createPortletLink();
+                $.when(mw.loader.using(modules), mw.loader.getScript('https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.js'), $.ready).then((require) => {
+                    mwString = require(modules[0]);
+                    const portlet = createPortletLink();
                     if (!portlet) {
-                        console.error("".concat(ANR, ": \u30DD\u30FC\u30C8\u30EC\u30C3\u30C8\u30EA\u30F3\u30AF\u306E\u4F5C\u6210\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002"));
+                        console.error(`${ANR}: ポートレットリンクの作成に失敗しました。`);
                         return;
                     }
                     createStyleTag(Config.merge());
                     $('head').append('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.css">');
                     idList = new IdList();
                     portlet.addEventListener('click', Reporter.new);
-                }).catch(function () {
-                    var err = [];
-                    for (var _i = 0; _i < arguments.length; _i++) {
-                        err[_i] = arguments[_i];
-                    }
+                }).catch((...err) => {
                     console.warn(err);
                     mw.notify(ANR + ': モジュールの読み込みに失敗しました。', { type: 'error' });
                 });
@@ -124,34 +108,25 @@ var __assign = (this && this.__assign) || function () {
      * @param dev Whether to load the dev version of the library.
      * @returns
      */
-    function loadLibrary(dev) {
-        if (dev === void 0) { dev = false; }
-        var libName = 'ext.gadget.WpLibExtra' + (dev ? 'Dev' : '');
-        var loadLocal = function () {
+    function loadLibrary(dev = false) {
+        const libName = 'ext.gadget.WpLibExtra' + (dev ? 'Dev' : '');
+        const loadLocal = () => {
             return mw.loader.using(libName)
-                .then(function (require) {
+                .then((require) => {
                 lib = require(libName);
                 if (typeof (lib && lib.version) !== 'string') { // Validate the library
-                    console.error("".concat(ANR, ": \u30E9\u30A4\u30D6\u30E9\u30EA\u306E\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002"));
+                    console.error(`${ANR}: ライブラリの読み込みに失敗しました。`);
                     return false;
                 }
                 return true;
             })
-                .catch(function () {
-                var err = [];
-                for (var _i = 0; _i < arguments.length; _i++) {
-                    err[_i] = arguments[_i];
-                }
+                .catch((...err) => {
                 console.error(err);
                 return false;
             });
         };
         if (dev) {
-            return mw.loader.getScript('https://test.wikipedia.org/w/load.php?modules=' + libName).then(loadLocal).catch(function () {
-                var err = [];
-                for (var _i = 0; _i < arguments.length; _i++) {
-                    err[_i] = arguments[_i];
-                }
+            return mw.loader.getScript('https://test.wikipedia.org/w/load.php?modules=' + libName).then(loadLocal).catch((...err) => {
                 console.error(err);
                 return false;
             });
@@ -168,49 +143,82 @@ var __assign = (this && this.__assign) || function () {
         // Change the document's title
         document.title = 'ANReporterConfig' + ' - ' + mw.config.get('wgSiteName');
         // Get the first heading and content body
-        var $heading = $('.mw-first-heading');
-        var $content = $('.mw-body-content');
+        const $heading = $('.mw-first-heading');
+        const $content = $('.mw-body-content');
         if (!$heading.length || !$content.length) {
             return { $heading: null, $content: null };
         }
         // Set up the elements
         $heading.text(ANR + 'の設定');
         $content.empty().append(document.createTextNode('インターフェースを読み込み中'), getImage('load', 'margin-left: 0.5em;'));
-        return { $heading: $heading, $content: $content };
+        return { $heading, $content };
     }
     /**
      * Create the config interface.
      * @returns
      */
     function createConfigInterface() {
-        var _a = loadConfigInterface(), $heading = _a.$heading, $content = _a.$content;
+        const { $heading, $content } = loadConfigInterface();
         if (!$heading || !$content) {
             mw.notify('インターフェースの読み込みに失敗しました。', { type: 'error', autoHide: false });
             return;
         }
         // Create a config container
-        var $container = $('<div>').prop('id', 'anrc-container');
+        const $container = $('<div>').prop('id', 'anrc-container');
         $content.empty().append($container);
         // Create the config body
         new Config($container);
     }
     /** Class to create/manipulate the config interface. */
-    var Config = /** @class */ (function () {
+    class Config {
+        /**
+         * Merge and retrieve the ANReporter config.
+         * @param getDefault If `true`, get the default config. (Default: `false`)
+         * @returns
+         * @requires mediawiki.user
+         */
+        static merge(getDefault = false) {
+            // Default config
+            const cfg = {
+                reasons: [],
+                blockCheck: true,
+                duplicateCheck: true,
+                watchUser: false,
+                watchExpiry: 'infinity',
+                headerColor: '#FEC493',
+                backgroundColor: '#FFF0E4',
+                portletlinkPosition: ''
+            };
+            if (getDefault) {
+                return cfg;
+            }
+            // Objectify the user config
+            const strCfg = mw.user.options.get(this.key) || '{}';
+            let userCfg;
+            try {
+                userCfg = JSON.parse(strCfg);
+            }
+            catch (err) {
+                console.warn(err);
+                return cfg;
+            }
+            // Merge the configs
+            return Object.assign(cfg, userCfg);
+        }
         /**
          * @param $container The container in which to create config options.
-         * @requires mw.user
+         * @requires mediawiki.user
          * @requires oojs-ui
          * @requires oojs-ui.styles.icons-editing-core
          * @requires oojs-ui.styles.icons-moderation
          * @requires mediawiki.api - Used to save the config
          */
-        function Config($container) {
-            var _this_1 = this;
+        constructor($container) {
             // Transparent overlay of the container used to make elements in it unclickable
             this.$overlay = $('<div>').prop('id', 'anrc-container-overlay').hide();
             $container.after(this.$overlay);
             // Get config
-            var cfg = Config.merge();
+            const cfg = Config.merge();
             // Fieldset that stores config options
             this.fieldset = new OO.ui.FieldsetLayout({
                 label: 'ダイアログ設定',
@@ -334,141 +342,102 @@ var __assign = (this && this.__assign) || function () {
             ]);
             // Append the fieldset to the container (do this here and get DOM elements in it)
             $container.append(this.fieldset.$element);
-            var $headerColorDemo = $('#anrc-headercolor-demo').css('background-color', cfg.headerColor);
-            var $backgroundColorDemo = $('#anrc-backgroundcolor-demo').css('background-color', cfg.backgroundColor);
+            const $headerColorDemo = $('#anrc-headercolor-demo').css('background-color', cfg.headerColor);
+            const $backgroundColorDemo = $('#anrc-backgroundcolor-demo').css('background-color', cfg.backgroundColor);
             // Event listeners
-            var headerColorTimeout;
+            let headerColorTimeout;
             this.headerColor.$input.off('input').on('input', function () {
-                var _this_1 = this;
                 // Change the background color of span that demonstrates the color of the dialog header
                 clearTimeout(headerColorTimeout);
-                headerColorTimeout = setTimeout(function () {
-                    $headerColorDemo.css('background-color', _this_1.value);
+                headerColorTimeout = setTimeout(() => {
+                    $headerColorDemo.css('background-color', this.value);
                 }, 500);
             });
-            var backgroundColorTimeout;
+            let backgroundColorTimeout;
             this.backgroundColor.$input.off('input').on('input', function () {
-                var _this_1 = this;
                 // Change the background color of span that demonstrates the color of the dialog body
                 clearTimeout(backgroundColorTimeout);
-                backgroundColorTimeout = setTimeout(function () {
-                    $backgroundColorDemo.css('background-color', _this_1.value);
+                backgroundColorTimeout = setTimeout(() => {
+                    $backgroundColorDemo.css('background-color', this.value);
                 }, 500);
             });
             // Buttons
-            var $buttonGroup1 = $('<div>').addClass('anrc-buttonwrapper');
-            var resetButton = new OO.ui.ButtonWidget({
+            const $buttonGroup1 = $('<div>').addClass('anrc-buttonwrapper');
+            const resetButton = new OO.ui.ButtonWidget({
                 label: 'リセット',
                 id: 'anrc-reset',
                 icon: 'undo',
                 flags: 'destructive'
             });
-            resetButton.$element.off('click').on('click', function () {
-                _this_1.reset();
+            resetButton.$element.off('click').on('click', () => {
+                this.reset();
             });
             $buttonGroup1.append(resetButton.$element);
-            var $buttonGroup2 = $('<div>').addClass('anrc-buttonwrapper');
+            const $buttonGroup2 = $('<div>').addClass('anrc-buttonwrapper');
             this.saveButton = new OO.ui.ButtonWidget({
                 label: '設定を保存',
                 id: 'anrc-save',
                 icon: 'bookmarkOutline',
                 flags: ['primary', 'progressive']
             });
-            this.saveButton.$element.off('click').on('click', function () {
-                _this_1.save();
+            this.saveButton.$element.off('click').on('click', () => {
+                this.save();
             });
             $buttonGroup2.append(this.saveButton.$element);
             // Append the buttons to the container
             $container.append($buttonGroup1, $buttonGroup2);
         }
         /**
-         * Merge and retrieve the ANReporter config.
-         * @param getDefault If `true`, get the default config. (Default: `false`)
-         * @returns
-         * @requires mw.user
-         */
-        Config.merge = function (getDefault) {
-            if (getDefault === void 0) { getDefault = false; }
-            // Default config
-            var cfg = {
-                reasons: [],
-                blockCheck: true,
-                duplicateCheck: true,
-                watchUser: false,
-                watchExpiry: 'infinity',
-                headerColor: '#FEC493',
-                backgroundColor: '#FFF0E4',
-                portletlinkPosition: ''
-            };
-            if (getDefault) {
-                return cfg;
-            }
-            // Objectify the user config
-            var strCfg = mw.user.options.get(this.key) || '{}';
-            var userCfg;
-            try {
-                userCfg = JSON.parse(strCfg);
-            }
-            catch (err) {
-                console.warn(err);
-                return cfg;
-            }
-            // Merge the configs
-            return Object.assign(cfg, userCfg);
-        };
-        /**
          * Reset the options to their default values.
          */
-        Config.prototype.reset = function () {
-            var _this_1 = this;
-            OO.ui.confirm('設定をリセットしますか？').then(function (confirmed) {
+        reset() {
+            OO.ui.confirm('設定をリセットしますか？').then((confirmed) => {
                 if (!confirmed) {
                     mw.notify('キャンセルしました。');
                     return;
                 }
-                var defaultCfg = Config.merge(true);
-                _this_1.reasons.setValue('');
-                _this_1.blockCheck.setSelected(defaultCfg.blockCheck);
-                _this_1.duplicateCheck.setSelected(defaultCfg.duplicateCheck);
-                _this_1.watchUser.setSelected(defaultCfg.watchUser);
-                _this_1.watchExpiry.getMenu().selectItemByData(defaultCfg.watchExpiry);
-                _this_1.headerColor.setValue(defaultCfg.headerColor).$input.trigger('input');
-                _this_1.backgroundColor.setValue(defaultCfg.backgroundColor).$input.trigger('input');
-                _this_1.portletlinkPosition.setValue('');
+                const defaultCfg = Config.merge(true);
+                this.reasons.setValue('');
+                this.blockCheck.setSelected(defaultCfg.blockCheck);
+                this.duplicateCheck.setSelected(defaultCfg.duplicateCheck);
+                this.watchUser.setSelected(defaultCfg.watchUser);
+                this.watchExpiry.getMenu().selectItemByData(defaultCfg.watchExpiry);
+                this.headerColor.setValue(defaultCfg.headerColor).$input.trigger('input');
+                this.backgroundColor.setValue(defaultCfg.backgroundColor).$input.trigger('input');
+                this.portletlinkPosition.setValue('');
                 mw.notify('設定をリセットしました。', { type: 'success' });
             });
-        };
+        }
         /**
          * Set the visibility of the overlay div and toggle accesibility to DOM elements in the config body.
          * @param show
          */
-        Config.prototype.setOverlay = function (show) {
+        setOverlay(show) {
             this.$overlay.toggle(show);
-        };
+        }
         /**
          * Save the config.
          * @requires mediawiki.api
          */
-        Config.prototype.save = function () {
-            var _this_1 = this;
+        save() {
             this.setOverlay(true);
             // Change the save button's label
-            var $label = $('<span>');
+            const $label = $('<span>');
             $label.append(getImage('load', 'margin-right: 1em;'));
-            var textNode = document.createTextNode('設定を保存しています...');
+            const textNode = document.createTextNode('設定を保存しています...');
             $label.append(textNode);
             this.saveButton.setIcon(null).setLabel($label);
             // Get config
-            var reasons = this.reasons.getValue().split('\n').reduce(function (acc, r) {
-                var rsn = lib.clean(r);
+            const reasons = this.reasons.getValue().split('\n').reduce((acc, r) => {
+                const rsn = lib.clean(r);
                 if (rsn && !acc.includes(rsn)) {
                     acc.push(rsn);
                 }
                 return acc;
             }, []);
             this.reasons.setValue(reasons.join('\n'));
-            var cfg = {
-                reasons: reasons,
+            const cfg = {
+                reasons,
                 blockCheck: this.blockCheck.isSelected(),
                 duplicateCheck: this.duplicateCheck.isSelected(),
                 watchUser: this.watchUser.isSelected(),
@@ -477,47 +446,46 @@ var __assign = (this && this.__assign) || function () {
                 backgroundColor: this.backgroundColor.getValue(),
                 portletlinkPosition: this.portletlinkPosition.getValue()
             };
-            var strCfg = JSON.stringify(cfg);
+            const strCfg = JSON.stringify(cfg);
             // Save config
             new mw.Api().saveOption(Config.key, strCfg)
-                .then(function () {
+                .then(() => {
                 mw.user.options.set(Config.key, strCfg);
                 return null;
             })
-                .catch(function (code, err) {
+                .catch((code, err) => {
                 console.warn(err);
                 return code;
             })
-                .then(function (err) {
+                .then((err) => {
                 if (err) {
-                    mw.notify("\u4FDD\u5B58\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002(".concat(err, ")"), { type: 'error' });
+                    mw.notify(`保存に失敗しました。(${err})`, { type: 'error' });
                 }
                 else {
                     mw.notify('保存しました。', { type: 'success' });
                 }
-                _this_1.saveButton.setIcon('bookmarkOutline').setLabel('設定を保存');
-                _this_1.setOverlay(false);
+                this.saveButton.setIcon('bookmarkOutline').setLabel('設定を保存');
+                this.setOverlay(false);
             });
-        };
-        /**
-         * The key of `mw.user.options`.
-         */
-        Config.key = 'userjs-anreporter';
-        return Config;
-    }());
+        }
+    }
+    /**
+     * The key of `mw.user.options`.
+     */
+    Config.key = 'userjs-anreporter';
     /**
      * Create a Reporter portlet link.
      * @returns The Reporter portlet link.
      */
     function createPortletLink() {
-        var cfg = Config.merge();
-        var portletlinkPosition = '';
+        const cfg = Config.merge();
+        let portletlinkPosition = '';
         if (cfg.portletlinkPosition) {
             if (document.getElementById(cfg.portletlinkPosition)) {
                 portletlinkPosition = cfg.portletlinkPosition;
             }
             else {
-                mw.notify("AN Reporter: \"".concat(cfg.portletlinkPosition, "\" \u306F\u30DD\u30FC\u30C8\u30EC\u30C3\u30C8\u30EA\u30F3\u30AF\u306E\u751F\u6210\u4F4D\u7F6E\u3068\u3057\u3066\u4E0D\u6B63\u306AID\u3067\u3059\u3002"), { type: 'error' });
+                mw.notify(`AN Reporter: "${cfg.portletlinkPosition}" はポートレットリンクの生成位置として不正なIDです。`, { type: 'error' });
             }
         }
         if (!portletlinkPosition) {
@@ -533,15 +501,15 @@ var __assign = (this && this.__assign) || function () {
                     portletlinkPosition = 'p-cactions';
             }
         }
-        var portlet = mw.util.addPortletLink(portletlinkPosition, '#', '報告', 'ca-anr', '管理者伝言板に利用者を報告');
+        const portlet = mw.util.addPortletLink(portletlinkPosition, '#', '報告', 'ca-anr', '管理者伝言板に利用者を報告');
         return portlet || null;
     }
     /**
      * Create a /<style> tag for the script.
      */
     function createStyleTag(cfg) {
-        var fontSize;
-        var select2FontSize;
+        let fontSize;
+        let select2FontSize;
         switch (mw.config.get('skin')) {
             case 'vector':
             case 'vector-2022':
@@ -561,7 +529,7 @@ var __assign = (this && this.__assign) || function () {
                 fontSize = '80%';
                 select2FontSize = '0.9em';
         }
-        var style = document.createElement('style');
+        const style = document.createElement('style');
         style.textContent =
             // Config
             '#anrc-container {' +
@@ -753,22 +721,22 @@ var __assign = (this && this.__assign) || function () {
                 '.anr-dialog.ui-draggable,' +
                 '.anr-dialog.ui-resizable,' +
                 '.anr-dialog .ui-dialog-buttonpane {' +
-                "background: ".concat(cfg.backgroundColor, ";") +
+                `background: ${cfg.backgroundColor};` +
                 '}' +
                 '.anr-dialog .ui-dialog-titlebar.ui-widget-header,' +
                 '.anr-dialog .ui-dialog-titlebar-close {' +
-                "background: ".concat(cfg.headerColor, " !important;") +
+                `background: ${cfg.headerColor} !important;` +
                 '}' +
                 '.anr-preview-duplicate {' +
-                "background-color: ".concat(cfg.headerColor, ";") +
+                `background-color: ${cfg.headerColor};` +
                 '}';
         document.head.appendChild(style);
     }
     /**
      * The IdList class. Administrates username-ID conversions.
      */
-    var IdList = /** @class */ (function () {
-        function IdList() {
+    class IdList {
+        constructor() {
             /**
              * The list object of objects, keyed by usernames.
              *
@@ -781,26 +749,25 @@ var __assign = (this && this.__assign) || function () {
          * @param username
          * @returns
          */
-        IdList.prototype.getIds = function (username) {
+        getIds(username) {
             username = User.formatName(username);
-            for (var user in this.list) {
+            for (const user in this.list) {
                 if (user === username) {
-                    var _a = this.list[user], logid = _a.logid, diffid = _a.diffid;
+                    const { logid, diffid } = this.list[user];
                     if (typeof logid === 'number' || typeof diffid === 'number') {
-                        return $.Deferred().resolve(__assign({}, this.list[user]));
+                        return $.Deferred().resolve(Object.assign({}, this.list[user]));
                     }
                 }
             }
             return this.fetchIds(username);
-        };
+        }
         /**
          * Search for the oldest account creation logid and the diffid of the newest edit of a user.
          * @param username
          * @returns
          */
-        IdList.prototype.fetchIds = function (username) {
-            var _this_1 = this;
-            var ret = {};
+        fetchIds(username) {
+            const ret = {};
             return new mw.Api().get({
                 action: 'query',
                 list: 'logevents|usercontribs',
@@ -813,10 +780,10 @@ var __assign = (this && this.__assign) || function () {
                 ucuser: username,
                 ucprop: 'ids',
                 formatversion: '2'
-            }).then(function (res) {
-                var resLgev, resUc;
-                var logid = res && res.query && (resLgev = res.query.logevents) && resLgev[0] && resLgev[0].logid;
-                var diffid = res && res.query && (resUc = res.query.usercontribs) && resUc[0] && resUc[0].revid;
+            }).then((res) => {
+                let resLgev, resUc;
+                const logid = res && res.query && (resLgev = res.query.logevents) && resLgev[0] && resLgev[0].logid;
+                const diffid = res && res.query && (resUc = res.query.usercontribs) && resUc[0] && resUc[0].revid;
                 if (logid) {
                     ret.logid = logid;
                 }
@@ -824,65 +791,64 @@ var __assign = (this && this.__assign) || function () {
                     ret.diffid = diffid;
                 }
                 if (logid || diffid) {
-                    _this_1.list[username] = __assign({}, ret);
+                    this.list[username] = Object.assign({}, ret);
                 }
                 return ret;
-            }).catch(function (_, err) {
+            }).catch((_, err) => {
                 console.error(err);
                 return ret;
             });
-        };
+        }
         /**
          * Get a username from a log/diff ID.
          * @param id
          * @param type
          * @returns
          */
-        IdList.prototype.getUsername = function (id, type) {
-            var _this_1 = this;
+        getUsername(id, type) {
             // Attempt to convert the ID without making an HTTP request
-            var registeredUsername = this.getRegisteredUsername(id, type);
+            const registeredUsername = this.getRegisteredUsername(id, type);
             if (registeredUsername) {
                 return $.Deferred().resolve(registeredUsername);
             }
             // Attempt to convert the ID through an HTTP request
-            var fetcher = type === 'logid' ? this.scrapeUsername : this.fetchEditorName;
-            return fetcher(id).then(function (username) {
+            const fetcher = type === 'logid' ? this.scrapeUsername : this.fetchEditorName;
+            return fetcher(id).then((username) => {
                 if (username) {
                     username = User.formatName(username);
-                    if (!_this_1.list[username]) {
-                        _this_1.list[username] = {};
+                    if (!this.list[username]) {
+                        this.list[username] = {};
                     }
-                    _this_1.list[username][type] = id;
+                    this.list[username][type] = id;
                 }
                 return username;
             });
-        };
+        }
         /**
          * Attempt to convert an ID to a username based on the current username-ID list (no HTTP request).
          * @param id
          * @param type
          * @returns
          */
-        IdList.prototype.getRegisteredUsername = function (id, type) {
-            for (var user in this.list) {
-                var relId = this.list[user][type];
+        getRegisteredUsername(id, type) {
+            for (const user in this.list) {
+                const relId = this.list[user][type];
                 if (relId === id) {
                     return user;
                 }
             }
             return null;
-        };
+        }
         /**
          * Scrape [[Special:Log]] by a logid and attempt to get the associated username (if any).
          * @param logid
          * @returns
          */
-        IdList.prototype.scrapeUsername = function (logid) {
-            var url = mw.util.getUrl('特別:ログ', { logid: logid.toString() });
+        scrapeUsername(logid) {
+            const url = mw.util.getUrl('特別:ログ', { logid: logid.toString() });
             return $.get(url)
-                .then(function (html) {
-                var $newusers = $(html).find('.mw-logline-newusers').last();
+                .then((html) => {
+                const $newusers = $(html).find('.mw-logline-newusers').last();
                 if ($newusers.length) {
                     switch ($newusers.data('mw-logaction')) {
                         case 'newusers/create':
@@ -897,50 +863,44 @@ var __assign = (this && this.__assign) || function () {
                 }
                 return null;
             })
-                .catch(function () {
-                var err = [];
-                for (var _i = 0; _i < arguments.length; _i++) {
-                    err[_i] = arguments[_i];
-                }
+                .catch((...err) => {
                 console.log(err);
                 return null;
             });
-        };
+        }
         /**
          * Convert a revision ID to a username.
          * @param diffid
          * @returns
          */
-        IdList.prototype.fetchEditorName = function (diffid) {
+        fetchEditorName(diffid) {
             return new mw.Api().get({
                 action: 'query',
                 prop: 'revisions',
                 revids: diffid,
                 formatversion: '2'
-            }).then(function (res) {
-                var resPg = res && res.query && res.query.pages;
+            }).then((res) => {
+                const resPg = res && res.query && res.query.pages;
                 if (!resPg || !resPg.length)
                     return null;
-                var resRev = resPg[0].revisions;
-                var user = Array.isArray(resRev) && !!resRev.length && resRev[0].user;
+                const resRev = resPg[0].revisions;
+                const user = Array.isArray(resRev) && !!resRev.length && resRev[0].user;
                 return user || null;
-            }).catch(function (_, err) {
+            }).catch((_, err) => {
                 console.log(err);
                 return null;
             });
-        };
-        return IdList;
-    }());
+        }
+    }
     /**
      * The Reporter class. Manipulates the ANR dialog.
      */
-    var Reporter = /** @class */ (function () {
+    class Reporter {
         /**
          * Initializes a `Reporter` instance. This constructor only creates the base components of the dialog, and
          * asynchronous procedures are externally handled by {@link new}.
          */
-        function Reporter() {
-            var _this_1 = this;
+        constructor() {
             this.cfg = Config.merge();
             Reporter.blockStatus = {}; // Reset
             // Create dialog contour
@@ -960,12 +920,12 @@ var __assign = (this && this.__assign) || function () {
                 }
             });
             // Create button that redirects the user to the config page
-            var $config = $('<div>');
+            const $config = $('<div>');
             $config.prop('id', 'anr-dialog-configlink-wrapper');
-            var $configLink = $('<label>')
+            const $configLink = $('<label>')
                 .prop('id', 'anr-dialog-configlink')
                 .append(getImage('gear', 'margin-right: 0.5em;'), $('<span>').text('設定'))
-                .off('click').on('click', function () {
+                .off('click').on('click', () => {
                 window.open(mw.util.getUrl('特別:ANReporterConfig'), '_blank');
             });
             $config.append($configLink);
@@ -989,8 +949,8 @@ var __assign = (this && this.__assign) || function () {
             });
             this.$content.append(this.$fieldset);
             // Create target page option
-            var $pageWrapper = Reporter.createRow();
-            var $pageLabel = Reporter.createRowLabel($pageWrapper, '報告先');
+            const $pageWrapper = Reporter.createRow();
+            const $pageLabel = Reporter.createRowLabel($pageWrapper, '報告先');
             this.$page = $('<select>');
             this.$page
                 .addClass('anr-juxtaposed') // Important for the dropdown to fill the remaining space
@@ -998,14 +958,14 @@ var __assign = (this && this.__assign) || function () {
                 '<option>' + ANI + '</option>' +
                 '<option>' + ANS + '</option>' +
                 '<option>' + AN3RR + '</option>')
-                .off('change').on('change', function () {
-                _this_1.switchSectionDropdown();
+                .off('change').on('change', () => {
+                this.switchSectionDropdown();
             });
-            var $pageDropdownWrapper = Reporter.wrapElement($pageWrapper, this.$page); // As important as above
+            const $pageDropdownWrapper = Reporter.wrapElement($pageWrapper, this.$page); // As important as above
             this.$fieldset.append($pageWrapper);
             Reporter.verticalAlign($pageLabel, $pageDropdownWrapper);
             // Create target page anchor
-            var $pageLinkWrapper = Reporter.createRow();
+            const $pageLinkWrapper = Reporter.createRow();
             Reporter.createRowLabel($pageLinkWrapper, '');
             this.$pageLink = $('<a>');
             this.$pageLink
@@ -1016,22 +976,22 @@ var __assign = (this && this.__assign) || function () {
             this.$fieldset.append($pageLinkWrapper);
             // Create section option for ANI and AN3RR
             this.$sectionWrapper = Reporter.createRow();
-            var $sectionLabel = Reporter.createRowLabel(this.$sectionWrapper, '節');
+            const $sectionLabel = Reporter.createRowLabel(this.$sectionWrapper, '節');
             this.$section = $('<select>');
             this.$section
                 .prop({
                 innerHTML: '<option selected disabled hidden value="">選択してください</option>',
                 disabled: true
             })
-                .off('change').on('change', function () {
-                _this_1.setPageLink();
+                .off('change').on('change', () => {
+                this.setPageLink();
             });
-            var $sectionDropdownWrapper = Reporter.wrapElement(this.$sectionWrapper, this.$section);
+            const $sectionDropdownWrapper = Reporter.wrapElement(this.$sectionWrapper, this.$section);
             this.$fieldset.append(this.$sectionWrapper);
             Reporter.verticalAlign($sectionLabel, $sectionDropdownWrapper);
             // Create section option for ANS
             this.$sectionAnsWrapper = Reporter.createRow(true);
-            var $sectionAnsLabel = Reporter.createRowLabel(this.$sectionAnsWrapper, '節');
+            const $sectionAnsLabel = Reporter.createRowLabel(this.$sectionAnsWrapper, '節');
             this.$sectionAns = $('<select>');
             this.$sectionAns
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してください</option>' +
@@ -1041,16 +1001,16 @@ var __assign = (this && this.__assign) || function () {
                 '<option>妨害編集・いたずら</option>' +
                 '<option>その他</option>' +
                 '</optgroup>')
-                .off('change').on('change', function () {
-                _this_1.setPageLink();
+                .off('change').on('change', () => {
+                this.setPageLink();
             });
-            var $sectionAnsDropdownWrapper = Reporter.wrapElement(this.$sectionAnsWrapper, this.$sectionAns);
+            const $sectionAnsDropdownWrapper = Reporter.wrapElement(this.$sectionAnsWrapper, this.$sectionAns);
             this.$fieldset.append(this.$sectionAnsWrapper);
             Reporter.select2(this.$sectionAns);
             Reporter.verticalAlign($sectionAnsLabel, $sectionAnsDropdownWrapper);
             // Create an 'add' button
             this.$fieldset.append(document.createElement('hr'));
-            var $addButtonWrapper = Reporter.createRow();
+            const $addButtonWrapper = Reporter.createRow();
             this.$addButton = $('<input>');
             this.$addButton.prop('type', 'button').val('追加');
             $addButtonWrapper.append(this.$addButton);
@@ -1060,28 +1020,28 @@ var __assign = (this && this.__assign) || function () {
             this.Users = [
                 new User($addButtonWrapper, { removable: false })
             ];
-            this.$addButton.off('click').on('click', function () {
+            this.$addButton.off('click').on('click', () => {
                 // eslint-disable-next-line @typescript-eslint/no-this-alias
-                var _this = _this_1;
+                const _this = this;
                 new User($addButtonWrapper, {
-                    addCallback: function (User) {
-                        var minWidth = User.$label.outerWidth() + 'px';
-                        $.each([User.$wrapper, User.$hideUserWrapper, User.$idLinkWrapper, User.$blockStatusWrapper], function (_, $wrapper) {
+                    addCallback(User) {
+                        const minWidth = User.$label.outerWidth() + 'px';
+                        $.each([User.$wrapper, User.$hideUserWrapper, User.$idLinkWrapper, User.$blockStatusWrapper], (_, $wrapper) => {
                             $wrapper.children('.anr-option-label').css('min-width', minWidth);
                         });
                         _this.Users.push(User);
                     },
-                    removeCallback: function (User) {
-                        var idx = _this.Users.findIndex(function (U) { return U.id === User.id; });
+                    removeCallback(User) {
+                        const idx = _this.Users.findIndex((U) => U.id === User.id);
                         if (idx !== -1) { // Should never be -1
-                            var U = _this.Users[idx];
+                            const U = _this.Users[idx];
                             U.$wrapper.remove();
                             _this.Users.splice(idx, 1);
                         }
                     }
                 });
             });
-            var dialogWith = this.$fieldset.outerWidth(true);
+            const dialogWith = this.$fieldset.outerWidth(true);
             this.$fieldset.css('width', dialogWith); // Assign an absolute width to $content
             this.$progress.css('width', dialogWith);
             Reporter.centerDialog(this.$dialog); // Recenter the dialog because the width has been changed
@@ -1090,48 +1050,48 @@ var __assign = (this && this.__assign) || function () {
              *
              * Copy the selected value to the clipboard and reset the selection.
              */
-            var copyThenResetSelection = function () {
+            const copyThenResetSelection = function () {
                 lib.copyToClipboard(this.value, 'ja');
                 this.selectedIndex = 0;
             };
             // Create VIP copier
             this.$vipWrapper = Reporter.createRow(true);
-            var $vipLabel = Reporter.createRowLabel(this.$vipWrapper, 'VIP');
+            const $vipLabel = Reporter.createRowLabel(this.$vipWrapper, 'VIP');
             this.$vip = $('<select>');
             this.$vip
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
                 .off('change').on('change', copyThenResetSelection);
-            var $vipDropdownWrapper = Reporter.wrapElement(this.$vipWrapper, this.$vip);
+            const $vipDropdownWrapper = Reporter.wrapElement(this.$vipWrapper, this.$vip);
             this.$fieldset.append(this.$vipWrapper);
             Reporter.select2(this.$vip);
             Reporter.verticalAlign($vipLabel, $vipDropdownWrapper);
             // Create LTA copier
             this.$ltaWrapper = Reporter.createRow(true);
-            var $ltaLabel = Reporter.createRowLabel(this.$ltaWrapper, 'LTA');
+            const $ltaLabel = Reporter.createRowLabel(this.$ltaWrapper, 'LTA');
             this.$lta = $('<select>');
             this.$lta
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
                 .off('change').on('change', copyThenResetSelection);
-            var $ltaDropdownWrapper = Reporter.wrapElement(this.$ltaWrapper, this.$lta);
+            const $ltaDropdownWrapper = Reporter.wrapElement(this.$ltaWrapper, this.$lta);
             this.$fieldset.append(this.$ltaWrapper);
             Reporter.select2(this.$lta);
             Reporter.verticalAlign($ltaLabel, $ltaDropdownWrapper);
             // Create predefined reason selector
-            var $predefinedWrapper = Reporter.createRow(true);
-            var $predefinedLabel = Reporter.createRowLabel($predefinedWrapper, '定型文');
+            const $predefinedWrapper = Reporter.createRow(true);
+            const $predefinedLabel = Reporter.createRowLabel($predefinedWrapper, '定型文');
             this.$predefined = $('<select>');
             this.$predefined
                 .prop('innerHTML', '<option selected disabled hidden value="">選択してコピー</option>')
                 .append($('<optgroup>')
                 .css('display', 'none')
-                .prop('innerHTML', this.cfg.reasons.map(function (el) { return '<option>' + el + '</option>'; }).join('')))
+                .prop('innerHTML', this.cfg.reasons.map((el) => '<option>' + el + '</option>').join('')))
                 .off('change').on('change', copyThenResetSelection);
-            var $predefinedDropdownWrapper = Reporter.wrapElement($predefinedWrapper, this.$predefined);
+            const $predefinedDropdownWrapper = Reporter.wrapElement($predefinedWrapper, this.$predefined);
             this.$fieldset.append($predefinedWrapper);
             Reporter.select2(this.$predefined);
             Reporter.verticalAlign($predefinedLabel, $predefinedDropdownWrapper);
             // Create reason field
-            var $reasonWrapper = Reporter.createRow();
+            const $reasonWrapper = Reporter.createRow();
             Reporter.createRowLabel($reasonWrapper, '理由');
             this.$reason = $('<textarea>');
             this.$reason.prop({
@@ -1142,7 +1102,7 @@ var __assign = (this && this.__assign) || function () {
             $reasonWrapper.append(this.$reason);
             this.$fieldset.append($reasonWrapper);
             // Create "add comment" option
-            var addCommentElements = createLabelledCheckbox('要約にコメントを追加', { checkboxId: 'anr-option-addcomment' });
+            const addCommentElements = createLabelledCheckbox('要約にコメントを追加', { checkboxId: 'anr-option-addcomment' });
             this.$addComment = addCommentElements.$checkbox;
             this.$fieldset.append(addCommentElements.$wrapper);
             this.$comment = $('<textarea>');
@@ -1151,21 +1111,21 @@ var __assign = (this && this.__assign) || function () {
                 rows: 2
             });
             addCommentElements.$wrapper.append(this.$comment);
-            this.$addComment.off('change').on('change', function () {
-                Reporter.toggle(_this_1.$comment, _this_1.$addComment.prop('checked'));
+            this.$addComment.off('change').on('change', () => {
+                Reporter.toggle(this.$comment, this.$addComment.prop('checked'));
             }).trigger('change');
             // Create "block check" option
-            var checkBlockElements = createLabelledCheckbox('報告前にブロック状態をチェック', { checkboxId: 'anr-option-checkblock' });
+            const checkBlockElements = createLabelledCheckbox('報告前にブロック状態をチェック', { checkboxId: 'anr-option-checkblock' });
             this.$checkBlock = checkBlockElements.$checkbox;
             this.$checkBlock.prop('checked', this.cfg.blockCheck);
             this.$fieldset.append(checkBlockElements.$wrapper);
             // Create "duplicate check" option
-            var checkDuplicatesElements = createLabelledCheckbox('報告前に重複報告をチェック', { checkboxId: 'anr-option-checkduplicates' });
+            const checkDuplicatesElements = createLabelledCheckbox('報告前に重複報告をチェック', { checkboxId: 'anr-option-checkduplicates' });
             this.$checkDuplicates = checkDuplicatesElements.$checkbox;
             this.$checkDuplicates.prop('checked', this.cfg.duplicateCheck);
             this.$fieldset.append(checkDuplicatesElements.$wrapper);
             // Create "watch user" option
-            var watchUserElements = createLabelledCheckbox('報告対象者をウォッチ', { checkboxId: 'anr-option-watchuser' });
+            const watchUserElements = createLabelledCheckbox('報告対象者をウォッチ', { checkboxId: 'anr-option-watchuser' });
             this.$watchUser = watchUserElements.$checkbox;
             this.$watchUser.prop('checked', this.cfg.watchUser);
             this.$fieldset.append(watchUserElements.$wrapper);
@@ -1182,7 +1142,7 @@ var __assign = (this && this.__assign) || function () {
                     '<option value="1 year">1年</option>'
             })
                 .val(this.cfg.watchExpiry);
-            var $watchExpiryWrapper = $('<div>');
+            const $watchExpiryWrapper = $('<div>');
             $watchExpiryWrapper
                 .prop({ id: 'anr-option-watchexpiry-wrapper' })
                 .css({
@@ -1191,8 +1151,8 @@ var __assign = (this && this.__assign) || function () {
             })
                 .append(document.createTextNode('期間: '), this.$watchExpiry);
             watchUserElements.$wrapper.append($watchExpiryWrapper);
-            this.$watchUser.off('change').on('change', function () {
-                Reporter.toggle($watchExpiryWrapper, _this_1.$watchUser.prop('checked'));
+            this.$watchUser.off('change').on('change', () => {
+                Reporter.toggle($watchExpiryWrapper, this.$watchUser.prop('checked'));
             }).trigger('change');
             // Set all the row labels to the same width
             Reporter.setWidestWidth($('.anr-option-label'));
@@ -1210,23 +1170,23 @@ var __assign = (this && this.__assign) || function () {
          * @param $elements
          * @returns The width.
          */
-        Reporter.setWidestWidth = function ($elements) {
+        static setWidestWidth($elements) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            var optionsWidths = Array.prototype.map.call($elements, function (el) { return el.offsetWidth; } // Collect the widths of all the elements
+            const optionsWidths = Array.prototype.map.call($elements, (el) => el.offsetWidth // Collect the widths of all the elements
             );
-            var optionWidth = Math.max.apply(Math, optionsWidths); // Get the max value
+            const optionWidth = Math.max(...optionsWidths); // Get the max value
             $elements.css('min-width', optionWidth); // Set the value to all
             return optionWidth;
-        };
+        }
         /**
          * Toggle the visibility of an element by (de)assigning the `anr-hidden` class.
          * @param $element The element of which to toggle the visibility.
          * @param show Whether to show the element.
          * @returns The passed element.
          */
-        Reporter.toggle = function ($element, show) {
+        static toggle($element, show) {
             return $element.toggleClass('anr-hidden', !show);
-        };
+        }
         /**
          * Create a \<div> that works as a Reporter row.
          * ```html
@@ -1238,12 +1198,11 @@ var __assign = (this && this.__assign) || function () {
          * @param hasSelect2 `false` by default.
          * @returns The created row.
          */
-        Reporter.createRow = function (hasSelect2) {
-            if (hasSelect2 === void 0) { hasSelect2 = false; }
-            var $row = $('<div>');
+        static createRow(hasSelect2 = false) {
+            const $row = $('<div>');
             $row.addClass(!hasSelect2 ? 'anr-option-row' : 'anr-option-row-withselect2');
             return $row;
-        };
+        }
         /**
          * Create a \<div> that works as a left-aligned label.
          * ```html
@@ -1253,8 +1212,8 @@ var __assign = (this && this.__assign) || function () {
          * @param labelText The text of the label (technically, the innerHTML). If an empty string is passed, `&nbsp;` is used.
          * @returns The created label.
          */
-        Reporter.createRowLabel = function ($appendTo, labelText) {
-            var $label = $('<div>');
+        static createRowLabel($appendTo, labelText) {
+            const $label = $('<div>');
             $label.addClass('anr-option-label');
             if (typeof labelText === 'string') {
                 $label.prop('innerHTML', labelText || '&nbsp;');
@@ -1264,7 +1223,7 @@ var __assign = (this && this.__assign) || function () {
             }
             $appendTo.append($label);
             return $label;
-        };
+        }
         /**
          * Compare the outerHeight of a row label div and that of a sibling div, and if the former is smaller than the latter,
          * assign `padding-top` to the former.
@@ -1273,13 +1232,13 @@ var __assign = (this && this.__assign) || function () {
          * @param $label
          * @param $sibling
          */
-        Reporter.verticalAlign = function ($label, $sibling) {
-            var labelHeight = $label.outerHeight();
-            var siblingHeight = $sibling.outerHeight();
+        static verticalAlign($label, $sibling) {
+            const labelHeight = $label.outerHeight();
+            const siblingHeight = $sibling.outerHeight();
             if ($label.text() && labelHeight < siblingHeight) {
                 $label.css('padding-top', ((siblingHeight - labelHeight) / 2) + 'px');
             }
-        };
+        }
         /**
          * Wrap a (non-block) element (next to a row label) with a div. This is for the element to fill the remaining space.
          * ```html
@@ -1294,31 +1253,30 @@ var __assign = (this && this.__assign) || function () {
          * @param $element The element to wrap.
          * @returns The wrapper div.
          */
-        Reporter.wrapElement = function ($appendTo, $element) {
-            var $wrapper = $('<div>');
+        static wrapElement($appendTo, $element) {
+            const $wrapper = $('<div>');
             $wrapper.addClass('anr-option-wrapper');
             $element.addClass('anr-juxtaposed');
             $wrapper.append($element);
             $appendTo.append($wrapper);
             return $wrapper;
-        };
+        }
         /**
          * Set up `select2` to a dropdown.
          * @param $dropdown
          */
-        Reporter.select2 = function ($dropdown) {
+        static select2($dropdown) {
             $dropdown.select2({
-                width: '100%',
+                width: '100%', // Without this, the right end of the dropdown overflows
                 dropdownCssClass: 'anr-select2' // This needs select2.full.js
             });
-        };
+        }
         /**
          * Bring a jQuery UI dialog to the center of the viewport.
          * @param $dialog
          * @param absoluteCenter Whether to apply `center` instead of `top+5%`, defaulted to `false`.
          */
-        Reporter.centerDialog = function ($dialog, absoluteCenter) {
-            if (absoluteCenter === void 0) { absoluteCenter = false; }
+        static centerDialog($dialog, absoluteCenter = false) {
             $dialog.dialog({
                 position: {
                     my: absoluteCenter ? 'center' : 'top',
@@ -1326,32 +1284,32 @@ var __assign = (this && this.__assign) || function () {
                     of: window
                 }
             });
-        };
+        }
         /**
          * Create a new Reporter dialog. This static method handles asynchronous procedures that are necessary
          * after calling the constructor.
          * @param e
          */
-        Reporter.new = function (e) {
+        static new(e) {
             // Cancel portletlink click event
             e.preventDefault();
             // Create a Reporter dialog
-            var R = new Reporter();
+            const R = new Reporter();
             // Get a username associated with the current page if any
-            var heading = document.querySelector('.mw-first-heading') ||
+            const heading = document.querySelector('.mw-first-heading') ||
                 document.querySelector('.firstHeading') ||
                 document.querySelector('#firstHeading');
-            var relevantUser = mw.config.get('wgRelevantUserName') ||
+            const relevantUser = mw.config.get('wgRelevantUserName') ||
                 mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' && heading && heading.textContent && extractCidr(heading.textContent);
-            var U = R.Users[0];
+            const U = R.Users[0];
             U.$input.val(relevantUser || '');
-            var def = U.processInputChange();
+            const def = U.processInputChange();
             // Process additional asynchronous procedures for Reporter
             $.when(lib.Wikitext.newFromTitle(ANS), lib.getVipList(), lib.getLtaList())
-                .then(function (Wkt, vipList, ltaList) {
+                .then((Wkt, vipList, ltaList) => {
                 // Initialize the ANS section dropdown
                 if (Wkt) {
-                    var exclude_1 = [
+                    const exclude = [
                         'top',
                         '系列が立てられていないもの',
                         '著作権侵害・犯罪予告',
@@ -1374,18 +1332,17 @@ var __assign = (this && this.__assign) || function () {
                         'サブページなし',
                         '休止中N'
                     ];
-                    var optgroup_1 = document.createElement('optgroup');
-                    optgroup_1.label = 'LTA';
-                    Wkt.parseSections().forEach(function (_a) {
-                        var title = _a.title;
-                        if (!exclude_1.includes(title)) {
-                            var option = document.createElement('option');
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = 'LTA';
+                    Wkt.parseSections().forEach(({ title }) => {
+                        if (!exclude.includes(title)) {
+                            const option = document.createElement('option');
                             option.textContent = title;
-                            optgroup_1.appendChild(option);
+                            optgroup.appendChild(option);
                         }
                     });
-                    if (optgroup_1.querySelector('option')) {
-                        R.$sectionAns[0].add(optgroup_1);
+                    if (optgroup.querySelector('option')) {
+                        R.$sectionAns[0].add(optgroup);
                     }
                     else {
                         mw.notify('WP:AN/Sのセクション情報の取得に失敗しました。節構成が変更された、またはスクリプトのバグの可能性があります。', { type: 'error' });
@@ -1396,75 +1353,73 @@ var __assign = (this && this.__assign) || function () {
                 }
                 // Initialize the VIP copier dropdown
                 if (vipList.length) {
-                    var optgroup_2 = document.createElement('optgroup');
-                    optgroup_2.style.display = 'none'; // Wrap with optgroup to adjust font size
-                    vipList.forEach(function (vip) {
-                        var option = document.createElement('option');
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.style.display = 'none'; // Wrap with optgroup to adjust font size
+                    vipList.forEach((vip) => {
+                        const option = document.createElement('option');
                         option.textContent = vip;
                         option.value = '[[WP:VIP#' + vip + ']]';
-                        optgroup_2.appendChild(option);
+                        optgroup.appendChild(option);
                     });
-                    R.$vip[0].add(optgroup_2);
+                    R.$vip[0].add(optgroup);
                     Reporter.toggle(R.$vipWrapper, true);
                 }
                 // Initialize the LTA copier dropdown
                 if (ltaList.length) {
-                    var optgroup_3 = document.createElement('optgroup');
-                    optgroup_3.style.display = 'none'; // Wrap with optgroup to adjust font size
-                    ltaList.forEach(function (lta) {
-                        var option = document.createElement('option');
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.style.display = 'none'; // Wrap with optgroup to adjust font size
+                    ltaList.forEach((lta) => {
+                        const option = document.createElement('option');
                         option.textContent = lta;
                         option.value = '[[LTA:' + lta + ']]';
-                        optgroup_3.appendChild(option);
+                        optgroup.appendChild(option);
                     });
-                    R.$lta[0].add(optgroup_3);
+                    R.$lta[0].add(optgroup);
                     Reporter.toggle(R.$ltaWrapper, true);
                 }
-                def.then(function () {
+                def.then(() => {
                     Reporter.toggle(R.$progress, false);
                     R.$progress.css('padding', '');
                     Reporter.toggle(R.$content, true);
                     R.setMainButtons();
                 });
             });
-        };
+        }
         /**
          * Set the main dialog buttons.
          */
-        Reporter.prototype.setMainButtons = function () {
-            var _this_1 = this;
+        setMainButtons() {
             this.$dialog.dialog({
                 buttons: [
                     {
                         text: '報告',
-                        click: function () { return _this_1.report(); }
+                        click: () => this.report()
                     },
                     {
                         text: 'プレビュー',
-                        click: function () { return _this_1.preview(); }
+                        click: () => this.preview()
                     },
                     {
                         text: '閉じる',
-                        click: function () { return _this_1.close(); }
+                        click: () => this.close()
                     }
                 ]
             });
-        };
+        }
         /**
          * Close the Reporter dialog (will be destroyed).
          */
-        Reporter.prototype.close = function () {
+        close() {
             this.$dialog.dialog('close');
-        };
+        }
         /**
          * Get `YYYY年MM月D1日 - D2日新規依頼`, relative to the current day.
          * @param getLast Whether to get the preceding section, defaulted to `false`.
          * @returns
          */
-        Reporter.getCurrentAniSection = function (getLast) {
-            if (getLast === void 0) { getLast = false; }
-            var d = new Date();
-            var subtract;
+        static getCurrentAniSection(getLast = false) {
+            const d = new Date();
+            let subtract;
             if (getLast) {
                 if (d.getDate() === 1 || d.getDate() === 2) {
                     subtract = 3;
@@ -1477,8 +1432,8 @@ var __assign = (this && this.__assign) || function () {
                 }
                 d.setDate(d.getDate() - subtract);
             }
-            var multiplier = Math.ceil(d.getDate() / 5); // 1 to 7
-            var lastDay, startDay;
+            const multiplier = Math.ceil(d.getDate() / 5); // 1 to 7
+            let lastDay, startDay;
             if (multiplier < 6) {
                 lastDay = 5 * multiplier; // 5, 10, 15, 20, 25
                 startDay = lastDay - 4; // 1, 6, 11, 16, 21
@@ -1487,30 +1442,30 @@ var __assign = (this && this.__assign) || function () {
                 lastDay = Reporter.getLastDay(d.getFullYear(), d.getMonth()); // 28-31
                 startDay = 26;
             }
-            return "".concat(d.getFullYear(), "\u5E74").concat(d.getMonth() + 1, "\u6708").concat(startDay, "\u65E5 - ").concat(lastDay, "\u65E5\u65B0\u898F\u5831\u544A");
-        };
+            return `${d.getFullYear()}年${d.getMonth() + 1}月${startDay}日 - ${lastDay}日新規報告`;
+        }
         /**
          * Get the last day of a given month in a given year.
          * @param year A 4-digit year.
          * @param month The month as a number between 0 and 11 (January to December).
          * @returns
          */
-        Reporter.getLastDay = function (year, month) {
+        static getLastDay(year, month) {
             return new Date(year, month + 1, 0).getDate();
-        };
+        }
         /**
          * Get the page to which to forward the report.
          * @returns
          */
-        Reporter.prototype.getPage = function () {
+        getPage() {
             return this.$page.val() || null;
-        };
+        }
         /**
          * Set an href to {@link $pageLink}. If {@link $page} is not selected, disable the anchor.
          * @returns
          */
-        Reporter.prototype.setPageLink = function () {
-            var page = this.getPage();
+        setPageLink() {
+            const page = this.getPage();
             if (page) {
                 this.$pageLink
                     .removeClass('anr-disabledanchor')
@@ -1522,15 +1477,14 @@ var __assign = (this && this.__assign) || function () {
                     .prop('href', '');
             }
             return this;
-        };
+        }
         /**
          * Get the selected section.
          * @param addHash Add '#' to the beginning when there's a value to return. (Default: `false`)
          * @returns
          */
-        Reporter.prototype.getSection = function (addHash) {
-            if (addHash === void 0) { addHash = false; }
-            var ret = null;
+        getSection(addHash = false) {
+            let ret = null;
             switch (this.getPage()) {
                 case ANI:
                     ret = this.$section.val() || null;
@@ -1544,14 +1498,14 @@ var __assign = (this && this.__assign) || function () {
                 default: // Section not selected
             }
             return ret && (addHash ? '#' : '') + ret;
-        };
+        }
         /**
          * Switch the section dropdown options in accordance with the selection in the page dropdown.
          * This method calls {@link setPageLink} when done.
          * @returns
          */
-        Reporter.prototype.switchSectionDropdown = function () {
-            var page = this.getPage();
+        switchSectionDropdown() {
+            const page = this.getPage();
             if (page) {
                 switch (page) {
                     case ANI:
@@ -1593,16 +1547,16 @@ var __assign = (this && this.__assign) || function () {
                 this.setPageLink();
             }
             return this;
-        };
+        }
         /**
          * Evaluate a username, classify it into a type, and check the block status of the relevant user.
          * @param username Automatically formatted by {@link User.formatName}.
          * @returns
          */
-        Reporter.getBlockStatus = function (username) {
+        static getBlockStatus(username) {
             username = User.formatName(username);
-            var isIp = mw.util.isIPAddress(username, true);
-            var bkpara = {};
+            const isIp = mw.util.isIPAddress(username, true);
+            const bkpara = {};
             if (!username || !isIp && User.containsInvalidCharacter(username)) { // Blank or invalid
                 return $.Deferred().resolve({
                     usertype: 'other',
@@ -1610,7 +1564,7 @@ var __assign = (this && this.__assign) || function () {
                 });
             }
             else if (Reporter.blockStatus[username]) {
-                return $.Deferred().resolve(__assign({}, Reporter.blockStatus[username]));
+                return $.Deferred().resolve(Object.assign({}, Reporter.blockStatus[username]));
             }
             else if (isIp) {
                 bkpara.bkip = username;
@@ -1618,29 +1572,29 @@ var __assign = (this && this.__assign) || function () {
             else {
                 bkpara.bkusers = username;
             }
-            var params = Object.assign({
+            const params = Object.assign({
                 action: 'query',
                 list: 'users|blocks',
                 ususers: username,
                 formatversion: '2'
             }, bkpara);
             return new mw.Api().get(params)
-                .then(function (res) {
-                var resUs = res && res.query && res.query.users;
-                var resBl = res && res.query && res.query.blocks;
+                .then((res) => {
+                const resUs = res && res.query && res.query.users;
+                const resBl = res && res.query && res.query.blocks;
                 if (resUs && resBl) {
-                    var ret = {
+                    const ret = {
                         usertype: isIp ? 'ip' : resUs[0].userid !== void 0 ? 'user' : 'other',
                         blocked: !!resBl.length
                     };
-                    Reporter.blockStatus[username] = __assign({}, ret);
+                    Reporter.blockStatus[username] = Object.assign({}, ret);
                     return ret;
                 }
                 else {
                     throw new Error('APIリクエストにおける不明なエラー');
                 }
             })
-                .catch(function (_, err) {
+                .catch((_, err) => {
                 console.error(err);
                 mw.notify('ユーザー情報の取得に失敗しました。', { type: 'error' });
                 return {
@@ -1648,22 +1602,22 @@ var __assign = (this && this.__assign) || function () {
                     blocked: null
                 };
             });
-        };
+        }
         // -- Methods related to the dialog buttons of "report" and "preview" --
         /**
          * Collect option values.
          * @returns `null` if there's some error.
          */
-        Reporter.prototype.collectData = function () {
+        collectData() {
             // -- Check first for required fields --
-            var page = this.getPage();
-            var section = this.getSection();
-            var shiftClick = $.Event('click');
+            const page = this.getPage();
+            const section = this.getSection();
+            const shiftClick = $.Event('click');
             shiftClick.shiftKey = true;
-            var hasInvalidId = false;
-            var users = this.Users.reduceRight(function (acc, User) {
-                var inputVal = User.getName();
-                var selectedType = User.getType();
+            let hasInvalidId = false;
+            const users = this.Users.reduceRight((acc, User) => {
+                const inputVal = User.getName();
+                const selectedType = User.getType();
                 if (!inputVal) { // Username is blank
                     User.$label.trigger(shiftClick); // Remove the user pane
                 }
@@ -1678,11 +1632,11 @@ var __assign = (this && this.__assign) || function () {
                 }
                 return acc;
             }, []).reverse();
-            var reason = this.$reason.val();
+            let reason = this.$reason.val();
             reason = lib.clean(reason.replace(/[\s-~]*$/, '')); // Remove signature (if any)
             this.$reason.val(reason);
             // Look for errors
-            var $errList = $('<ul>');
+            const $errList = $('<ul>');
             if (!page) {
                 $errList.append($('<li>').text('報告先のページ名が未指定'));
             }
@@ -1698,9 +1652,9 @@ var __assign = (this && this.__assign) || function () {
             if (!reason) {
                 $errList.append($('<li>').text('報告理由が未指定'));
             }
-            var errLen = $errList.children('li').length;
+            const errLen = $errList.children('li').length;
             if (errLen) {
-                var $err = $('<div>')
+                const $err = $('<div>')
                     .text('以下のエラーを修正してください。')
                     .append($errList);
                 mw.notify($err, { type: 'error', autoHideSeconds: errLen > 2 ? 'long' : 'short' });
@@ -1708,23 +1662,23 @@ var __assign = (this && this.__assign) || function () {
             }
             // -- Collect secondary data --
             reason += '--~~~~'; // Add signature to reason
-            var summary = this.$addComment.prop('checked') ? lib.clean(this.$comment.val()) : '';
-            var blockCheck = this.$checkBlock.prop('checked');
-            var duplicateCheck = this.$checkDuplicates.prop('checked');
-            var watchUser = this.$watchUser.prop('checked');
-            var watch = watchUser ? this.$watchExpiry.val() : null;
+            const summary = this.$addComment.prop('checked') ? lib.clean(this.$comment.val()) : '';
+            const blockCheck = this.$checkBlock.prop('checked');
+            const duplicateCheck = this.$checkDuplicates.prop('checked');
+            const watchUser = this.$watchUser.prop('checked');
+            const watch = watchUser ? this.$watchExpiry.val() : null;
             // Return
             return {
                 page: formatANTEST() || page,
                 section: section,
-                users: users,
-                reason: reason,
-                summary: summary,
-                blockCheck: blockCheck,
-                duplicateCheck: duplicateCheck,
-                watch: watch
+                users,
+                reason,
+                summary,
+                blockCheck,
+                duplicateCheck,
+                watch
             };
-        };
+        }
         /**
          * Perform bilateral username-ID conversions against usernames collected from the Reporter dialog, in order to:
          * - find multiple occurrences of the same user in different formats (returned as `users` property), and
@@ -1734,10 +1688,10 @@ var __assign = (this && this.__assign) || function () {
          * @param data
          * @returns
          */
-        Reporter.prototype.processIds = function (data) {
+        processIds(data) {
             // Loop through all the input values for sanitization
-            var registeredUsers = [];
-            var promisifiedInfo = data.users.map(function (obj) {
+            const registeredUsers = [];
+            const promisifiedInfo = data.users.map((obj) => {
                 switch (obj.type) {
                     case 'UNL':
                     case 'User2':
@@ -1754,14 +1708,10 @@ var __assign = (this && this.__assign) || function () {
                         return idList.getUsername(parseInt(obj.user), obj.type);
                 }
             }, []);
-            return $.when.apply($, promisifiedInfo).then(function () {
-                var info = [];
-                for (var _i = 0; _i < arguments.length; _i++) {
-                    info[_i] = arguments[_i];
-                }
+            return $.when(...promisifiedInfo).then((...info) => {
                 // Create an array of arrays of duplicate usernames
-                var checkedIndexes = [];
-                var users = info.reduce(function (acc, username, i, arr) {
+                const checkedIndexes = [];
+                const users = info.reduce((acc, username, i, arr) => {
                     if (!username)
                         return acc;
                     // Usernames just converted from IDs aren't in the registeredUsers array yet
@@ -1769,12 +1719,12 @@ var __assign = (this && this.__assign) || function () {
                         registeredUsers.push(username);
                     // Create an inner array as necessary
                     if (!checkedIndexes.includes(i)) {
-                        var ret = [];
-                        for (var j = i; j < arr.length; j++) { // Check array elements from the current index
+                        const ret = [];
+                        for (let j = i; j < arr.length; j++) { // Check array elements from the current index
                             if (j === i && j !== arr.lastIndexOf(username) || j !== i && arr[j] === username) { // Found a duplicate username
                                 checkedIndexes.push(j);
-                                var _a = data.users[j], user = _a.user, type = _a.type;
-                                var dup = type === 'logid' ? 'Logid/' + user : // If the username is displayed as an ID on the dialog,
+                                const { user, type } = data.users[j];
+                                const dup = type === 'logid' ? 'Logid/' + user : // If the username is displayed as an ID on the dialog,
                                     type === 'diffid' ? '差分/' + user : // list the user with the ID as a duplicate
                                         user;
                                 if (!ret.includes(dup))
@@ -1791,32 +1741,32 @@ var __assign = (this && this.__assign) || function () {
                     // If any registered user is to be reported, convert their names to IDs by calling IdList.getIds,
                     // which registers username-ID correspondences into its class property of "list". We do this here
                     // because we want to know associated IDs for every user for the sake of checkDuplicateReports.
-                    var deferreds = registeredUsers.reduce(function (acc, u, i, arr) {
+                    const deferreds = registeredUsers.reduce((acc, u, i, arr) => {
                         if (arr.indexOf(u) === i) { // If not duplicate
                             acc.push(idList.getIds(u));
                         }
                         return acc;
                     }, []);
-                    return $.when.apply($, deferreds).then(function () { return ({ users: users, info: info }); }); // Resolve ProcessedIds when username -> ID conversions are done
+                    return $.when(...deferreds).then(() => ({ users, info })); // Resolve ProcessedIds when username -> ID conversions are done
                 }
                 else {
-                    return { users: users, info: info };
+                    return { users, info };
                 }
             });
-        };
+        }
         /**
          * Create the report text and summary out of the return values of {@link collectData} and {@link processIds}.
          * @param data The (null-proof) return value of {@link collectData}.
          * @param info The partial return value of {@link processIds}.
          * @returns The report text and summary.
          */
-        Reporter.prototype.createReport = function (data, info) {
+        createReport(data, info) {
             // Create UserANs and summary links
-            var templates = [];
-            var links = [];
-            for (var i = 0; i < data.users.length; i++) {
-                var obj = data.users[i];
-                var Temp = new lib.Template('UserAN').addArgs([
+            const templates = [];
+            const links = [];
+            for (let i = 0; i < data.users.length; i++) {
+                const obj = data.users[i];
+                const Temp = new lib.Template('UserAN').addArgs([
                     {
                         name: 't',
                         value: obj.type
@@ -1834,18 +1784,18 @@ var __assign = (this && this.__assign) || function () {
                     case 'IP2':
                         // If this username is the first occurrence in the "info" array in which IDs have been converted to usernames
                         if (info.indexOf(info[i]) === i) {
-                            links.push("[[\u7279\u5225:\u6295\u7A3F\u8A18\u9332/".concat(obj.user, "|").concat(obj.user, "]]"));
+                            links.push(`[[特別:投稿記録/${obj.user}|${obj.user}]]`);
                         }
                         break;
                     case 'logid':
                         // The ID failed to be converted to a username or the converted username is the first occurrence and not a duplicate
                         if (info[i] === null || info.indexOf(info[i]) === i) {
-                            links.push("[[\u7279\u5225:\u8EE2\u9001/logid/".concat(obj.user, "|Logid/").concat(obj.user, "]]"));
+                            links.push(`[[特別:転送/logid/${obj.user}|Logid/${obj.user}]]`);
                         }
                         break;
                     case 'diffid':
                         if (info[i] === null || info.indexOf(info[i]) === i) {
-                            links.push("[[\u7279\u5225:\u5DEE\u5206/".concat(obj.user, "|\u5DEE\u5206/").concat(obj.user, "]]\u306E\u6295\u7A3F\u8005"));
+                            links.push(`[[特別:差分/${obj.user}|差分/${obj.user}]]の投稿者`);
                         }
                         break;
                     default: // none
@@ -1855,28 +1805,28 @@ var __assign = (this && this.__assign) || function () {
                 }
             }
             // Create the report text
-            var text = '';
-            templates.forEach(function (Temp, i) {
-                text += "".concat(i === 0 ? '' : '\n', "* ").concat(Temp.toString());
+            let text = '';
+            templates.forEach((Temp, i) => {
+                text += `${i === 0 ? '' : '\n'}* ${Temp.toString()}`;
             });
             text += templates.length > 1 ? '\n:' : ' - ';
             text += data.reason;
             // Create the report summary
-            var summary = '';
-            var fixed = [
-                "/*".concat(data.section, "*/+"),
+            let summary = '';
+            const fixed = [
+                `/*${data.section}*/+`,
                 ad
             ];
-            var fixedLen = fixed.join('').length; // The length of the fixed summary
-            var summaryComment = data.summary ? ' - ' + data.summary : '';
-            for (var i = 0; i < Math.min(5, links.length); i++) { // Loop the reportee links
-                var userLinks = links.slice(0, i + 1).join(', ') + // The first "i + 1" links
-                    (links.slice(i + 1).length ? ", \u307B\u304B".concat(links.slice(i + 1).length, "\u30A2\u30AB\u30A6\u30F3\u30C8") : ''); // and the number of the remaining links if any
-                var totalLen = fixedLen + userLinks.length + summaryComment.length; // The total length of the summary
+            const fixedLen = fixed.join('').length; // The length of the fixed summary
+            const summaryComment = data.summary ? ' - ' + data.summary : '';
+            for (let i = 0; i < Math.min(5, links.length); i++) { // Loop the reportee links
+                const userLinks = links.slice(0, i + 1).join(', ') + // The first "i + 1" links
+                    (links.slice(i + 1).length ? `, ほか${links.slice(i + 1).length}アカウント` : ''); // and the number of the remaining links if any
+                const totalLen = fixedLen + userLinks.length + summaryComment.length; // The total length of the summary
                 if (i === 0 && totalLen > 500) { // The summary exceeds the word count limit only with the first link
-                    var maxLen = 500 - fixedLen - userLinks.length;
-                    var trunc = summaryComment.slice(0, maxLen - 3) + '...'; // Truncate the additional comment
-                    var augFixed = fixed.slice(); // Copy the fixed summary array
+                    const maxLen = 500 - fixedLen - userLinks.length;
+                    const trunc = summaryComment.slice(0, maxLen - 3) + '...'; // Truncate the additional comment
+                    const augFixed = fixed.slice(); // Copy the fixed summary array
                     augFixed.splice(1, 0, userLinks, trunc); // Augment the copied array by inserting the first user link and the truncated comment
                     summary = augFixed.join(''); // Join the array elements and that will be the whole of the summary
                     break;
@@ -1887,24 +1837,23 @@ var __assign = (this && this.__assign) || function () {
                     break;
                 }
                 else { // If the word count limit isn't exceeded in the first loop, the code always reaches this block
-                    var augFixed = fixed.slice();
+                    const augFixed = fixed.slice();
                     augFixed.splice(1, 0, userLinks, summaryComment);
                     summary = augFixed.join('');
                 }
             }
-            return { text: text, summary: summary };
-        };
+            return { text, summary };
+        }
         // The 3 methods above are used both in "report" and "preview" (the former needs additional functions, and they are defined below).
         /**
          * Preview the report.
          * @returns
          */
-        Reporter.prototype.preview = function () {
-            var _this_1 = this;
-            var data = this.collectData();
+        preview() {
+            const data = this.collectData();
             if (!data)
                 return;
-            var $preview = $('<div>')
+            const $preview = $('<div>')
                 .css({
                 maxHeight: '70vh',
                 maxWidth: '80vw'
@@ -1920,19 +1869,18 @@ var __assign = (this && this.__assign) || function () {
                     $(this).empty().dialog('destroy');
                 }
             });
-            var $previewContent = $('<div>')
+            const $previewContent = $('<div>')
                 .prop('id', 'anr-dialog-preview-content')
                 .text('読み込み中')
                 .append(getImage('load', 'margin-left: 0.5em;'));
             $preview.append($previewContent);
-            this.processIds(data).then(function (_a) {
-                var info = _a.info;
-                var _b = _this_1.createReport(data, info), text = _b.text, summary = _b.summary;
+            this.processIds(data).then(({ info }) => {
+                const { text, summary } = this.createReport(data, info);
                 new mw.Api().post({
                     action: 'parse',
                     title: data.page,
-                    text: text,
-                    summary: summary,
+                    text,
+                    summary,
                     prop: 'text|modules|jsconfigvars',
                     pst: true,
                     disablelimitreport: true,
@@ -1940,10 +1888,10 @@ var __assign = (this && this.__assign) || function () {
                     disabletoc: true,
                     contentmodel: 'wikitext',
                     formatversion: '2'
-                }).then(function (res) {
-                    var resParse = res && res.parse;
-                    var content = resParse.text;
-                    var comment = resParse.parsedsummary;
+                }).then((res) => {
+                    const resParse = res && res.parse;
+                    const content = resParse.text;
+                    const comment = resParse.parsedsummary;
                     if (content && comment) {
                         if (resParse.modules.length) {
                             mw.loader.load(resParse.modules);
@@ -1951,14 +1899,14 @@ var __assign = (this && this.__assign) || function () {
                         if (resParse.modulestyles.length) {
                             mw.loader.load(resParse.modulestyles);
                         }
-                        var $header = $('<div>')
+                        const $header = $('<div>')
                             .prop('id', 'anr-dialog-preview-header')
                             .append($('<p>' +
                             '注意1: このプレビュー上のリンクは全て新しいタブで開かれます<br>' +
                             '注意2: 報告先が <a href="' + mw.util.getUrl('WP:AN/S#OTH') + '" target="_blank">WP:AN/S#その他</a> の場合、' +
                             'このプレビューには表示されませんが「他M月D日」のヘッダーは必要に応じて自動挿入されます' +
                             '</p>'));
-                        var $body = $('<div>').prop('id', 'anr-dialog-preview-body');
+                        const $body = $('<div>').prop('id', 'anr-dialog-preview-body');
                         $body.append($(content), $('<div>')
                             .css('margin-top', '0.8em')
                             .append($(comment)));
@@ -1970,7 +1918,7 @@ var __assign = (this && this.__assign) || function () {
                             buttons: [
                                 {
                                     text: '閉じる',
-                                    click: function () {
+                                    click: () => {
                                         $preview.dialog('close');
                                     }
                                 }
@@ -1981,7 +1929,7 @@ var __assign = (this && this.__assign) || function () {
                     else {
                         throw new Error('action=parseのエラー');
                     }
-                }).catch(function (_, err) {
+                }).catch((_, err) => {
                     console.log(err);
                     $previewContent
                         .empty()
@@ -1991,7 +1939,7 @@ var __assign = (this && this.__assign) || function () {
                         buttons: [
                             {
                                 text: '閉じる',
-                                click: function () {
+                                click: () => {
                                     $preview.dialog('close');
                                 }
                             }
@@ -1999,15 +1947,14 @@ var __assign = (this && this.__assign) || function () {
                     });
                 });
             });
-        };
+        }
         /**
          * Submit the report.
          * @returns
          */
-        Reporter.prototype.report = function () {
-            var _this_1 = this;
+        report() {
             // Collect dialog data and check for errors
-            var data = this.collectData();
+            const data = this.collectData();
             if (!data)
                 return;
             // Create progress dialog
@@ -2015,60 +1962,60 @@ var __assign = (this && this.__assign) || function () {
             Reporter.toggle(this.$content, false);
             Reporter.toggle(this.$progress, true);
             this.$dialog.dialog({ buttons: [] });
-            var $progressField = $('<fieldset>').prop('id', 'anr-dialog-progress-field');
+            const $progressField = $('<fieldset>').prop('id', 'anr-dialog-progress-field');
             this.$progress.append($progressField);
             $progressField.append($('<legend>').text('報告の進捗'), $('<div>').prop('id', 'anr-dialog-progress-icons').append(getImage('check'), document.createTextNode('処理通過'), getImage('exclamation'), document.createTextNode('要確認'), getImage('bar'), document.createTextNode('スキップ'), getImage('clock'), document.createTextNode('待機中'), getImage('cross'), document.createTextNode('処理失敗')), $('<hr>'));
-            var $progressTable = $('<table>');
+            const $progressTable = $('<table>');
             $progressField.append($progressTable);
-            var $dupUsersRow = $('<tr>');
+            const $dupUsersRow = $('<tr>');
             $progressTable.append($dupUsersRow);
-            var $dupUsersLabel = $('<td>').append(getImage('load'));
-            var $dupUsersText = $('<td>').text('利用者名重複');
+            const $dupUsersLabel = $('<td>').append(getImage('load'));
+            const $dupUsersText = $('<td>').text('利用者名重複');
             $dupUsersRow.append($dupUsersLabel, $dupUsersText);
-            var $dupUsersListRow = $('<tr>');
+            const $dupUsersListRow = $('<tr>');
             $progressTable.append($dupUsersListRow);
-            var $dupUsersListText = $('<td>');
+            const $dupUsersListText = $('<td>');
             $dupUsersListRow.append($('<td>'), $dupUsersListText);
-            var $dupUsersList = $('<ul>');
+            const $dupUsersList = $('<ul>');
             $dupUsersListText.append($dupUsersList);
             Reporter.toggle($dupUsersListRow, false);
-            var $blockedUsersRow = $('<tr>');
+            const $blockedUsersRow = $('<tr>');
             $progressTable.append($blockedUsersRow);
-            var $blockedUsersLabel = $('<td>').append(getImage(data.blockCheck ? 'clock' : 'bar'));
-            var $blockedUsersText = $('<td>').text('既存ブロック');
+            const $blockedUsersLabel = $('<td>').append(getImage(data.blockCheck ? 'clock' : 'bar'));
+            const $blockedUsersText = $('<td>').text('既存ブロック');
             $blockedUsersRow.append($blockedUsersLabel, $blockedUsersText);
-            var $blockedUsersListRow = $('<tr>');
+            const $blockedUsersListRow = $('<tr>');
             $progressTable.append($blockedUsersListRow);
-            var $blockedUsersListText = $('<td>');
+            const $blockedUsersListText = $('<td>');
             $blockedUsersListRow.append($('<td>'), $blockedUsersListText);
-            var $blockedUsersList = $('<ul>');
+            const $blockedUsersList = $('<ul>');
             $blockedUsersListText.append($blockedUsersList);
             Reporter.toggle($blockedUsersListRow, false);
-            var $dupReportsRow = $('<tr>');
+            const $dupReportsRow = $('<tr>');
             $progressTable.append($dupReportsRow);
-            var $dupReportsLabel = $('<td>').append(getImage(data.duplicateCheck ? 'clock' : 'bar'));
-            var $dupReportsText = $('<td>').text('重複報告');
+            const $dupReportsLabel = $('<td>').append(getImage(data.duplicateCheck ? 'clock' : 'bar'));
+            const $dupReportsText = $('<td>').text('重複報告');
             $dupReportsRow.append($dupReportsLabel, $dupReportsText);
-            var $dupReportsButtonRow = $('<tr>');
+            const $dupReportsButtonRow = $('<tr>');
             $progressTable.append($dupReportsButtonRow);
-            var $dupReportsButtonCell = $('<td>');
+            const $dupReportsButtonCell = $('<td>');
             $dupReportsButtonRow.append($('<td>'), $dupReportsButtonCell);
             Reporter.toggle($dupReportsButtonRow, false);
-            var $reportRow = $('<tr>');
+            const $reportRow = $('<tr>');
             $progressTable.append($reportRow);
-            var $reportLabel = $('<td>').append(getImage('clock'));
-            var $reportText = $('<td>').text('報告');
+            const $reportLabel = $('<td>').append(getImage('clock'));
+            const $reportText = $('<td>').text('報告');
             $reportRow.append($reportLabel, $reportText);
-            var $errorWrapper = $('<div>').prop('id', 'anr-dialog-progress-error');
+            const $errorWrapper = $('<div>').prop('id', 'anr-dialog-progress-error');
             $progressField.append($errorWrapper);
-            var $errorMessage = $('<p>').prop('id', 'anr-dialog-progress-error-message');
-            var $errorReportText = $('<textarea>');
+            const $errorMessage = $('<p>').prop('id', 'anr-dialog-progress-error-message');
+            const $errorReportText = $('<textarea>');
             $errorReportText.prop({
                 id: 'anr-dialog-progress-error-text',
                 rows: 5,
                 disabled: true
             });
-            var $errorReportSummary = $('<textarea>');
+            const $errorReportSummary = $('<textarea>');
             $errorReportSummary.prop({
                 id: 'anr-dialog-progress-error-summary',
                 rows: 3,
@@ -2077,45 +2024,44 @@ var __assign = (this && this.__assign) || function () {
             $errorWrapper.append($('<hr>'), $errorMessage, $('<label>').text('手動編集用'), $errorReportText, $errorReportSummary);
             Reporter.toggle($errorWrapper, false);
             // Process IDs that need to be converted to usernames
-            this.processIds(data).then(function (_a) {
-                var users = _a.users, info = _a.info;
+            this.processIds(data).then(({ users, info }) => {
                 // Post-procedure of username-ID conversions and duplicate username check
-                (function () {
-                    var def = $.Deferred();
+                (() => {
+                    const def = $.Deferred();
                     if (!users.length) {
                         $dupUsersLabel.empty().append(getImage('check'));
                         def.resolve(true);
                     }
                     else {
                         $dupUsersLabel.empty().append(getImage('exclamation'));
-                        users.forEach(function (arr) {
-                            var $li = $('<li>').text(arr.join(', '));
+                        users.forEach((arr) => {
+                            const $li = $('<li>').text(arr.join(', '));
                             $dupUsersList.append($li);
                         });
                         Reporter.toggle($dupUsersListRow, true);
-                        _this_1.$dialog.dialog({
+                        this.$dialog.dialog({
                             buttons: [
                                 {
                                     text: '続行',
-                                    click: function () {
+                                    click: () => {
                                         Reporter.toggle($dupUsersListRow, false);
-                                        _this_1.$dialog.dialog({ buttons: [] });
+                                        this.$dialog.dialog({ buttons: [] });
                                         def.resolve(true);
                                     }
                                 },
                                 {
                                     text: '戻る',
-                                    click: function () {
-                                        Reporter.toggle(_this_1.$progress, false);
-                                        Reporter.toggle(_this_1.$content, true);
-                                        _this_1.setMainButtons();
+                                    click: () => {
+                                        Reporter.toggle(this.$progress, false);
+                                        Reporter.toggle(this.$content, true);
+                                        this.setMainButtons();
                                         def.resolve(false);
                                     }
                                 },
                                 {
                                     text: '閉じる',
-                                    click: function () {
-                                        _this_1.close();
+                                    click: () => {
+                                        this.close();
                                         def.resolve(false);
                                     }
                                 }
@@ -2125,30 +2071,30 @@ var __assign = (this && this.__assign) || function () {
                     }
                     return def.promise();
                 })()
-                    .then(function (duplicateUsernamesResolved) {
+                    .then((duplicateUsernamesResolved) => {
                     if (!duplicateUsernamesResolved)
                         return;
-                    var deferreds = [];
+                    const deferreds = [];
                     if (data.blockCheck && data.duplicateCheck) {
                         $blockedUsersLabel.empty().append(getImage('load'));
                         $dupReportsLabel.empty().append(getImage('load'));
-                        deferreds.push(_this_1.checkBlocks(info), _this_1.checkDuplicateReports(data, info));
+                        deferreds.push(this.checkBlocks(info), this.checkDuplicateReports(data, info));
                     }
                     else if (data.blockCheck) {
                         $blockedUsersLabel.empty().append(getImage('load'));
-                        deferreds.push(_this_1.checkBlocks(info), $.Deferred().resolve(void 0));
+                        deferreds.push(this.checkBlocks(info), $.Deferred().resolve(void 0));
                     }
                     else if (data.duplicateCheck) {
                         $dupReportsLabel.empty().append(getImage('load'));
-                        deferreds.push($.Deferred().resolve(void 0), _this_1.checkDuplicateReports(data, info));
+                        deferreds.push($.Deferred().resolve(void 0), this.checkDuplicateReports(data, info));
                     }
                     else {
                         deferreds.push($.Deferred().resolve(void 0), $.Deferred().resolve(void 0));
                     }
-                    $.when.apply($, deferreds).then(function (blocked, dup) {
-                        (function () {
-                            var def = $.Deferred();
-                            var stop = false;
+                    $.when(...deferreds).then((blocked, dup) => {
+                        (() => {
+                            const def = $.Deferred();
+                            let stop = false;
                             // Process the result of block check
                             if (blocked) {
                                 if (!blocked.length) {
@@ -2156,7 +2102,7 @@ var __assign = (this && this.__assign) || function () {
                                 }
                                 else {
                                     $blockedUsersLabel.empty().append(getImage('exclamation'));
-                                    blocked.forEach(function (user) {
+                                    blocked.forEach((user) => {
                                         $blockedUsersList.append($('<li>').append($('<a>')
                                             .prop({
                                             href: mw.util.getUrl('特別:投稿記録/' + user),
@@ -2178,8 +2124,8 @@ var __assign = (this && this.__assign) || function () {
                                 $dupReportsButtonCell.append($('<input>')
                                     .prop('type', 'button')
                                     .val('確認')
-                                    .off('click').on('click', function () {
-                                    _this_1.previewDuplicateReports(data, dup);
+                                    .off('click').on('click', () => {
+                                    this.previewDuplicateReports(data, dup);
                                 }));
                                 Reporter.toggle($dupReportsButtonRow, true);
                                 mw.notify('重複報告を検出しました。', { type: 'warn' });
@@ -2187,7 +2133,7 @@ var __assign = (this && this.__assign) || function () {
                             }
                             else if (dup === false || dup === null) {
                                 $dupReportsLabel.empty().append(getImage('cross'));
-                                mw.notify("\u91CD\u8907\u5831\u544A\u30C1\u30A7\u30C3\u30AF\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002(".concat(dup === null ? '通信エラー' : 'ページ非存在', ")"), { type: 'error' });
+                                mw.notify(`重複報告チェックに失敗しました。(${dup === null ? '通信エラー' : 'ページ非存在'})`, { type: 'error' });
                                 stop = true;
                             }
                             if (!stop && dup instanceof lib.Wikitext) {
@@ -2197,30 +2143,30 @@ var __assign = (this && this.__assign) || function () {
                                 def.resolve(void 0);
                             }
                             else {
-                                _this_1.$dialog.dialog({
+                                this.$dialog.dialog({
                                     buttons: [
                                         {
                                             text: '続行',
-                                            click: function () {
+                                            click: () => {
                                                 Reporter.toggle($blockedUsersListRow, false);
                                                 Reporter.toggle($dupReportsButtonRow, false);
-                                                _this_1.$dialog.dialog({ buttons: [] });
+                                                this.$dialog.dialog({ buttons: [] });
                                                 def.resolve(void 0);
                                             }
                                         },
                                         {
                                             text: '戻る',
-                                            click: function () {
-                                                Reporter.toggle(_this_1.$progress, false);
-                                                Reporter.toggle(_this_1.$content, true);
-                                                _this_1.setMainButtons();
+                                            click: () => {
+                                                Reporter.toggle(this.$progress, false);
+                                                Reporter.toggle(this.$content, true);
+                                                this.setMainButtons();
                                                 def.reject(); // Reject
                                             }
                                         },
                                         {
                                             text: '閉じる',
-                                            click: function () {
-                                                _this_1.close();
+                                            click: () => {
+                                                this.close();
                                                 def.reject(); // Reject
                                             }
                                         }
@@ -2229,22 +2175,22 @@ var __assign = (this && this.__assign) || function () {
                             }
                             return def.promise();
                         })()
-                            .done(function (inheritedWkt) {
+                            .done((inheritedWkt) => {
                             // Recheck the target section for ANI
                             if (data.page === ANI && data.section === Reporter.getCurrentAniSection(true)) { // If the date range has changed since it was selected in the dropdown
-                                _this_1.switchSectionDropdown().$section.prop('selectedIndex', 1); // Update selection
-                                data.section = _this_1.getSection();
+                                this.switchSectionDropdown().$section.prop('selectedIndex', 1); // Update selection
+                                data.section = this.getSection();
                             }
                             // Create report text and summary
                             $reportLabel.empty().append(getImage('load'));
-                            var report = _this_1.createReport(data, info);
-                            var reportText = report.text;
-                            var summary = report.summary;
+                            const report = this.createReport(data, info);
+                            let reportText = report.text;
+                            const summary = report.summary;
                             /**
                              * Handle an error thrown on an edit attempt.
                              * @param err
                              */
-                            var errorHandler = function (err) {
+                            const errorHandler = (err) => {
                                 console.error(err);
                                 $reportLabel.empty().append(getImage('cross'));
                                 $errorMessage.text(err.message);
@@ -2252,52 +2198,51 @@ var __assign = (this && this.__assign) || function () {
                                 $errorReportSummary.val(summary.replace(new RegExp(mw.util.escapeRegExp(ad) + '$'), ''));
                                 Reporter.toggle($errorWrapper, true);
                                 mw.notify('報告に失敗しました。', { type: 'error' });
-                                _this_1.$dialog.dialog({
+                                this.$dialog.dialog({
                                     buttons: [
                                         {
                                             text: '再試行',
-                                            click: function () { return _this_1.report(); }
+                                            click: () => this.report()
                                         },
                                         {
                                             text: '報告先',
-                                            click: function () {
-                                                window.open(_this_1.$pageLink.prop('href'), '_blank');
+                                            click: () => {
+                                                window.open(this.$pageLink.prop('href'), '_blank');
                                             }
                                         },
                                         {
                                             text: '戻る',
-                                            click: function () {
-                                                Reporter.toggle(_this_1.$progress, false);
-                                                Reporter.toggle(_this_1.$content, true);
-                                                _this_1.setMainButtons();
+                                            click: () => {
+                                                Reporter.toggle(this.$progress, false);
+                                                Reporter.toggle(this.$content, true);
+                                                this.setMainButtons();
                                             }
                                         },
                                         {
                                             text: '閉じる',
-                                            click: function () {
-                                                _this_1.close();
+                                            click: () => {
+                                                this.close();
                                             }
                                         }
                                     ]
                                 });
                             };
                             // Create a Wikitext instance for the report
-                            var $when = inheritedWkt ?
+                            const $when = inheritedWkt ?
                                 $.when($.Deferred().resolve(inheritedWkt)) :
                                 $.when(lib.Wikitext.newFromTitle(data.page));
-                            $when.then(function (Wkt) {
+                            $when.then((Wkt) => {
                                 // Validate the Wikitext instance
                                 if (Wkt === false) {
-                                    throw new Error("\u30DA\u30FC\u30B8\u300C".concat(data.page, "\u300D\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F\u3002"));
+                                    throw new Error(`ページ「${data.page}」が見つかりませんでした。`);
                                 }
                                 else if (Wkt === null) {
                                     throw new Error('通信エラーが発生しました。');
                                 }
                                 // Get the index of the section to edit
-                                var sectionIdx = -1;
-                                var sectionContent = '';
-                                for (var _i = 0, _a = Wkt.parseSections(); _i < _a.length; _i++) {
-                                    var _b = _a[_i], title = _b.title, index = _b.index, content = _b.content;
+                                let sectionIdx = -1;
+                                let sectionContent = '';
+                                for (const { title, index, content } of Wkt.parseSections()) {
                                     if (title === data.section) {
                                         sectionIdx = index;
                                         sectionContent = content;
@@ -2305,29 +2250,29 @@ var __assign = (this && this.__assign) || function () {
                                     }
                                 }
                                 if (sectionIdx === -1) {
-                                    throw new Error("\u7BC0\u300C".concat(data.section, "\u300D\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F\u3002"));
+                                    throw new Error(`節「${data.section}」が見つかりませんでした。`);
                                 }
                                 // Create a new content for the section to edit
                                 if (data.page === ANS || formatANTEST(true) === ANS) { // ANS
                                     // Add div if the target section is 'その他' but lacks div for the current date
-                                    var d = new Date();
-                                    var today = (d.getMonth() + 1) + '月' + d.getDate() + '日';
-                                    var miscHeader = '{{bgcolor|#eee|{{Visible anchor|他' + today + '}}|div}}';
+                                    const d = new Date();
+                                    const today = (d.getMonth() + 1) + '月' + d.getDate() + '日';
+                                    const miscHeader = '{{bgcolor|#eee|{{Visible anchor|他' + today + '}}|div}}';
                                     if (data.section === 'その他' && !sectionContent.includes(miscHeader)) {
                                         reportText = '; ' + miscHeader + '\n\n' + reportText;
                                     }
                                     // Get the report text to submit
-                                    var sockInfoArr = new lib.Wikitext(sectionContent).parseTemplates({
-                                        namePredicate: function (name) { return name === 'SockInfo/M'; },
-                                        recursivePredicate: function (Temp) { return !Temp || Temp.getName('clean') !== 'SockInfo/M'; }
+                                    const sockInfoArr = new lib.Wikitext(sectionContent).parseTemplates({
+                                        namePredicate: (name) => name === 'SockInfo/M',
+                                        recursivePredicate: (Temp) => !Temp || Temp.getName('clean') !== 'SockInfo/M'
                                     });
                                     if (!sockInfoArr.length) {
-                                        throw new Error("\u7BC0\u300C".concat(data.section, "\u300D\u5185\u306B\u30C6\u30F3\u30D7\u30EC\u30FC\u30C8\u300CSockInfo/M\u300D\u304C\u5B58\u5728\u3057\u306A\u3044\u305F\u3081\u5831\u544A\u5834\u6240\u3092\u7279\u5B9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"));
+                                        throw new Error(`節「${data.section}」内にテンプレート「SockInfo/M」が存在しないため報告場所を特定できませんでした。`);
                                     }
                                     else if (sockInfoArr.length > 1) {
-                                        throw new Error("\u7BC0\u300C".concat(data.section, "\u300D\u5185\u306B\u30C6\u30F3\u30D7\u30EC\u30FC\u30C8\u300CSockInfo/M\u300D\u304C\u8907\u6570\u500B\u3042\u308B\u305F\u3081\u5831\u544A\u5834\u6240\u3092\u7279\u5B9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"));
+                                        throw new Error(`節「${data.section}」内にテンプレート「SockInfo/M」が複数個あるため報告場所を特定できませんでした。`);
                                     }
-                                    var sockInfo = sockInfoArr[0];
+                                    const sockInfo = sockInfoArr[0];
                                     sectionContent = sockInfo.replaceIn(sectionContent, {
                                         with: sockInfo.renderOriginal().replace(/\s*?\}{2}$/, '') + '\n\n' + reportText + '\n\n}}'
                                     });
@@ -2336,34 +2281,34 @@ var __assign = (this && this.__assign) || function () {
                                     sectionContent = lib.clean(sectionContent) + '\n\n' + reportText;
                                 }
                                 // Send action=watch requests in the background (if relevant)
-                                _this_1.watchUsers(data, info);
+                                this.watchUsers(data, info);
                                 // Edit page
-                                var _c = Wkt.getRevision(), basetimestamp = _c.basetimestamp, curtimestamp = _c.curtimestamp;
+                                const { basetimestamp, curtimestamp } = Wkt.getRevision();
                                 new mw.Api().postWithEditToken({
                                     action: 'edit',
                                     title: data.page,
                                     section: sectionIdx,
                                     text: sectionContent,
-                                    summary: summary,
-                                    basetimestamp: basetimestamp,
-                                    curtimestamp: curtimestamp,
+                                    summary,
+                                    basetimestamp,
+                                    curtimestamp,
                                     formatversion: '2'
-                                }).then(function (res) {
+                                }).then((res) => {
                                     if (res && res.edit && res.edit.result === 'Success') {
                                         $reportLabel.empty().append(getImage('check'));
                                         mw.notify('報告が完了しました。', { type: 'success' });
-                                        _this_1.$dialog.dialog({
+                                        this.$dialog.dialog({
                                             buttons: [
                                                 {
                                                     text: '報告先',
-                                                    click: function () {
-                                                        window.open(_this_1.$pageLink.prop('href'), '_blank');
+                                                    click: () => {
+                                                        window.open(this.$pageLink.prop('href'), '_blank');
                                                     }
                                                 },
                                                 {
                                                     text: '閉じる',
-                                                    click: function () {
-                                                        _this_1.close();
+                                                    click: () => {
+                                                        this.close();
                                                     }
                                                 }
                                             ]
@@ -2372,27 +2317,25 @@ var __assign = (this && this.__assign) || function () {
                                     else {
                                         errorHandler(new Error('報告に失敗しました。(不明なエラー)'));
                                     }
-                                }).catch(function (code, err) {
+                                }).catch((code, err) => {
                                     console.warn(err);
-                                    errorHandler(new Error("\u5831\u544A\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002(".concat(code, ")")));
+                                    errorHandler(new Error(`報告に失敗しました。(${code})`));
                                 });
                             }).catch(errorHandler);
                         });
                     });
                 });
             });
-        };
+        }
         /**
          * Check the block statuses of the reportees.
          * @param userInfoArray The `info` property array of the return value of {@link processIds}.
          * @returns An array of blocked users and IPs.
          */
-        Reporter.prototype.checkBlocks = function (userInfoArray) {
-            var _this_1 = this;
-            var users = [];
-            var ips = [];
-            for (var _i = 0, userInfoArray_1 = userInfoArray; _i < userInfoArray_1.length; _i++) {
-                var user = userInfoArray_1[_i];
+        checkBlocks(userInfoArray) {
+            const users = [];
+            const ips = [];
+            for (const user of userInfoArray) {
                 if (!user) {
                     // Do nothing
                 }
@@ -2408,7 +2351,7 @@ var __assign = (this && this.__assign) || function () {
                         users.push(user);
                 }
             }
-            var processUsers = function (usersArr) {
+            const processUsers = (usersArr) => {
                 if (!usersArr.length) {
                     return $.Deferred().resolve([]);
                 }
@@ -2419,11 +2362,10 @@ var __assign = (this && this.__assign) || function () {
                     bklimit: 'max',
                     formatversion: '2'
                 }, 'bkusers')
-                    .then(function (response) {
-                    return response.reduce(function (acc, res) {
-                        var resBk = res && res.query && res.query.blocks;
-                        (resBk || []).forEach(function (_a) {
-                            var user = _a.user;
+                    .then((response) => {
+                    return response.reduce((acc, res) => {
+                        const resBk = res && res.query && res.query.blocks;
+                        (resBk || []).forEach(({ user }) => {
                             if (user) {
                                 acc.push(user);
                             }
@@ -2432,7 +2374,7 @@ var __assign = (this && this.__assign) || function () {
                     }, []);
                 });
             };
-            var processIps = function (ipsArr) {
+            const processIps = (ipsArr) => {
                 if (!ipsArr.length) {
                     return $.Deferred().resolve([]);
                 }
@@ -2443,9 +2385,9 @@ var __assign = (this && this.__assign) || function () {
                     bklimit: 1,
                     formatversion: '2'
                 }, 'bkip', 1)
-                    .then(function (response) {
-                    return response.reduce(function (acc, res, i) {
-                        var resBk = res && res.query && res.query.blocks;
+                    .then((response) => {
+                    return response.reduce((acc, res, i) => {
+                        const resBk = res && res.query && res.query.blocks;
                         if (resBk && resBk[0]) {
                             acc.push(ipsArr[i]);
                         }
@@ -2453,20 +2395,20 @@ var __assign = (this && this.__assign) || function () {
                     }, []);
                 });
             };
-            return $.when(processUsers(users), processIps(ips)).then(function (blockedUsers, blockedIps) {
-                var blocked = blockedUsers.concat(blockedIps);
+            return $.when(processUsers(users), processIps(ips)).then((blockedUsers, blockedIps) => {
+                const blocked = blockedUsers.concat(blockedIps);
                 // Update block status info
-                users.concat(ips).forEach(function (user) {
+                users.concat(ips).forEach((user) => {
                     if (Reporter.blockStatus[user]) {
                         Reporter.blockStatus[user].blocked = blocked.includes(user);
                     }
                 });
-                _this_1.Users.forEach(function (U) {
+                this.Users.forEach((U) => {
                     U.processTypeChange(); // Toggle the visibility of block status links
                 });
                 return blocked;
             });
-        };
+        }
         /**
          * Check for duplicate reports.
          * @param data The return value of {@link collectData}.
@@ -2474,36 +2416,34 @@ var __assign = (this && this.__assign) || function () {
          * @returns `string` if duplicate reports are found, a `Wikitext` instance if no duplicate reports are found,
          * `false` if the page isn't found, and `null` if there's an issue with the connection.
          */
-        Reporter.prototype.checkDuplicateReports = function (data, info) {
-            return lib.Wikitext.newFromTitle(data.page).then(function (Wkt) {
-                var _a;
+        checkDuplicateReports(data, info) {
+            return lib.Wikitext.newFromTitle(data.page).then((Wkt) => {
                 // Wikitext instance failed to be initialized
                 if (!Wkt)
                     return Wkt; // false or null
                 // Find UserANs that contain duplicate reports
-                var UserANs = Wkt.parseTemplates({
-                    namePredicate: function (name) { return name === 'UserAN'; },
-                    recursivePredicate: function (Temp) { return !Temp || Temp.getName('clean') !== 'UserAN'; },
+                const UserANs = Wkt.parseTemplates({
+                    namePredicate: (name) => name === 'UserAN',
+                    recursivePredicate: (Temp) => !Temp || Temp.getName('clean') !== 'UserAN',
                     hierarchy: [
                         ['1', 'user', 'User'],
                         ['t', 'type', 'Type'],
                         ['状態', 's', 'status', 'Status']
                     ],
-                    templatePredicate: function (Temp) {
+                    templatePredicate: (Temp) => {
                         // Get 1= and t= parameter values of this UserAN
-                        var param1 = '';
-                        var paramT = 'User2';
-                        var converted = null;
-                        for (var _i = 0, _a = Temp.args; _i < _a.length; _i++) {
-                            var _b = _a[_i], name_1 = _b.name, value = _b.value;
+                        let param1 = '';
+                        let paramT = 'User2';
+                        let converted = null;
+                        for (const { name, value } of Temp.args) {
                             if (value) {
-                                if (name_1 === '2') {
+                                if (name === '2') {
                                     return false; // Ignore closed ones
                                 }
-                                else if (/^(1|[uU]ser)$/.test(name_1)) {
+                                else if (/^(1|[uU]ser)$/.test(name)) {
                                     param1 = value;
                                 }
-                                else if (/^(t|[tT]ype)$/.test(name_1)) {
+                                else if (/^(t|[tT]ype)$/.test(name)) {
                                     if (/^(unl|usernolink)$/i.test(value)) {
                                         paramT = 'UNL';
                                     }
@@ -2539,8 +2479,7 @@ var __assign = (this && this.__assign) || function () {
                             }
                         }
                         // Evaluation
-                        var isDuplicate = data.users.some(function (_a) {
-                            var user = _a.user, type = _a.type;
+                        const isDuplicate = data.users.some(({ user, type }) => {
                             switch (paramT) {
                                 case 'UNL':
                                 case 'User2':
@@ -2558,16 +2497,16 @@ var __assign = (this && this.__assign) || function () {
                 if (!UserANs.length)
                     return Wkt;
                 // Highlight the duplicate UserANs
-                var wikitext = Wkt.wikitext;
-                var spanStart = '<span class="anr-preview-duplicate">';
-                UserANs.reverse().forEach(function (Temp) {
+                let wikitext = Wkt.wikitext;
+                const spanStart = '<span class="anr-preview-duplicate">';
+                UserANs.reverse().forEach((Temp) => {
                     wikitext = Temp.replaceIn(wikitext, { with: spanStart + Temp.renderOriginal() + '</span>' });
                 });
                 if (wikitext === Wkt.wikitext)
                     return Wkt;
                 // The sections in which to search for duplicate reports
-                var tarSectionsAll = (_a = {},
-                    _a[ANI] = [
+                const tarSectionsAll = {
+                    [ANI]: [
                         Reporter.getCurrentAniSection(true),
                         Reporter.getCurrentAniSection(false),
                         '不適切な利用者名',
@@ -2575,25 +2514,24 @@ var __assign = (this && this.__assign) || function () {
                         '公開プロキシ・ゾンビマシン・ボット・不特定多数',
                         '犯罪行為またはその疑いのある投稿'
                     ],
-                    _a[ANS] = [
+                    [ANS]: [
                         '著作権侵害・犯罪予告',
                         '名誉毀損・なりすまし・個人情報',
                         '妨害編集・いたずら',
                         'その他'
                     ],
-                    _a[AN3RR] = ['3RR'],
-                    _a);
-                var testKey = formatANTEST(true);
-                var tarSections = tarSectionsAll[(testKey || data.page)];
+                    [AN3RR]: ['3RR']
+                };
+                const testKey = formatANTEST(true);
+                const tarSections = tarSectionsAll[(testKey || data.page)];
                 if (!tarSections) {
-                    console.error("\"tarSectionsAll['".concat(data.page, "']\" is undefined."));
+                    console.error(`"tarSectionsAll['${data.page}']" is undefined.`);
                 }
                 else if ((data.page === ANS || testKey === ANS) && !tarSections.includes(data.section)) {
                     tarSections.push(data.section);
                 }
                 // Filter out the content of the relevant sections
-                var ret = new lib.Wikitext(wikitext).parseSections().reduce(function (acc, _a) {
-                    var title = _a.title, content = _a.content;
+                const ret = new lib.Wikitext(wikitext).parseSections().reduce((acc, { title, content }) => {
                     if (tarSections.includes(title) && content.includes(spanStart)) {
                         acc.push(content.trim());
                     }
@@ -2606,15 +2544,15 @@ var __assign = (this && this.__assign) || function () {
                     return ret.join('\n\n');
                 }
             });
-        };
+        }
         /**
          * Preview duplicate reports.
          * @param data The return value of {@link collectData}.
          * @param wikitext The wikitext to parse as HTML.
          */
-        Reporter.prototype.previewDuplicateReports = function (data, wikitext) {
+        previewDuplicateReports(data, wikitext) {
             // Create preview dialog
-            var $preview = $('<div>')
+            const $preview = $('<div>')
                 .css({
                 maxHeight: '70vh',
                 maxWidth: '80vw'
@@ -2630,7 +2568,7 @@ var __assign = (this && this.__assign) || function () {
                     $(this).empty().dialog('destroy');
                 }
             });
-            var $previewContent = $('<div>')
+            const $previewContent = $('<div>')
                 .prop('id', 'anr-dialog-drpreview-content')
                 .text('読み込み中')
                 .append(getImage('load', 'margin-left: 0.5em;'));
@@ -2645,11 +2583,11 @@ var __assign = (this && this.__assign) || function () {
                 disableeditsection: true,
                 disabletoc: true,
                 formatversion: '2'
-            }).then(function (res) {
-                var content = res && res.parse && res.parse.text;
+            }).then((res) => {
+                const content = res && res.parse && res.parse.text;
                 if (content) {
                     // Append the parsed HTML to the preview dialog
-                    var $body = $('<div>').prop('id', 'anr-dialog-drpreview-body');
+                    const $body = $('<div>').prop('id', 'anr-dialog-drpreview-body');
                     $body.append(content);
                     $previewContent
                         .empty()
@@ -2659,7 +2597,7 @@ var __assign = (this && this.__assign) || function () {
                         buttons: [
                             {
                                 text: '閉じる',
-                                click: function () {
+                                click: () => {
                                     $preview.dialog('close');
                                 }
                             }
@@ -2673,7 +2611,7 @@ var __assign = (this && this.__assign) || function () {
                 else {
                     throw new Error('action=parseのエラー');
                 }
-            }).catch(function (_, err) {
+            }).catch((_, err) => {
                 console.log(err);
                 $previewContent
                     .empty()
@@ -2683,14 +2621,14 @@ var __assign = (this && this.__assign) || function () {
                     buttons: [
                         {
                             text: '閉じる',
-                            click: function () {
+                            click: () => {
                                 $preview.dialog('close');
                             }
                         }
                     ]
                 });
             });
-        };
+        }
         /**
          * Watch user pages on report. If `data.watch` isn't a string (i.e. not a watch expiry), the method
          * will not send any API request of `action=watch`.
@@ -2698,13 +2636,13 @@ var __assign = (this && this.__assign) || function () {
          * @param info The partial return value of {@link processIds}.
          * @returns
          */
-        Reporter.prototype.watchUsers = function (data, info) {
+        watchUsers(data, info) {
             if (!data.watch) {
                 return;
             }
-            var users = info.reduce(function (acc, val) {
+            const users = info.reduce((acc, val) => {
                 if (val) {
-                    var username = '利用者:' + val;
+                    const username = '利用者:' + val;
                     if (!acc.includes(username)) {
                         acc.push(username);
                     }
@@ -2715,21 +2653,20 @@ var __assign = (this && this.__assign) || function () {
                 return;
             }
             new mw.Api().watch(users, data.watch);
-        };
-        /**
-         * Storage of the return value of {@link getBlockStatus}.
-         *
-         * This property is initialized every time when the constructor is called. This per se would tempt one to make the method non-static,
-         * but this isn't an option because the property is accessed by {@link getBlockStatus}, which is a static method.
-         */
-        Reporter.blockStatus = {};
-        return Reporter;
-    }());
-    var userPaneCnt = 0;
+        }
+    }
+    /**
+     * Storage of the return value of {@link getBlockStatus}.
+     *
+     * This property is initialized every time when the constructor is called. This per se would tempt one to make the method non-static,
+     * but this isn't an option because the property is accessed by {@link getBlockStatus}, which is a static method.
+     */
+    Reporter.blockStatus = {};
+    let userPaneCnt = 0;
     /**
      * The User class. An instance of this handles a User field row on the Reporter dialog.
      */
-    var User = /** @class */ (function () {
+    class User {
         /**
          * Create a user pane of the Reporter dialog with the following structure.
          * ```html
@@ -2769,8 +2706,7 @@ var __assign = (this && this.__assign) || function () {
          * @param $next The element before which to create a user pane.
          * @param options
          */
-        function User($next, options) {
-            var _this_1 = this;
+        constructor($next, options) {
             options = Object.assign({ removable: true }, options || {});
             // Create user pane row
             this.$wrapper = Reporter.createRow();
@@ -2786,44 +2722,44 @@ var __assign = (this && this.__assign) || function () {
                 this.$wrapper.addClass('anr-option-removable');
                 this.$label
                     .prop('title', 'SHIFTクリックで除去')
-                    .off('click').on('click', function (e) {
+                    .off('click').on('click', (e) => {
                     if (e.shiftKey) { // Remove the user pane when the label is shift-clicked
-                        _this_1.$wrapper.remove();
+                        this.$wrapper.remove();
                         if (options && options.removeCallback) {
-                            options.removeCallback(_this_1);
+                            options.removeCallback(this);
                         }
                     }
                 });
             }
             // Append a type dropdown
-            var $typeWrapper = $('<div>').addClass('anr-option-usertype');
-            this.$type = addOptions($('<select>'), ['UNL', 'User2', 'IP2', 'logid', 'diffid', 'none'].map(function (el) { return ({ text: el }); }));
+            const $typeWrapper = $('<div>').addClass('anr-option-usertype');
+            this.$type = addOptions($('<select>'), ['UNL', 'User2', 'IP2', 'logid', 'diffid', 'none'].map((el) => ({ text: el })));
             this.$type // Initialize
                 .prop('disabled', true) // Disable
-                .off('change').on('change', function () {
-                _this_1.processTypeChange();
+                .off('change').on('change', () => {
+                this.processTypeChange();
             })
                 .children('option').eq(5).prop('selected', true); // Select 'none'
             $typeWrapper.append(this.$type);
             this.$wrapper.append($typeWrapper);
             // Append a username input
             this.$input = $('<input>');
-            var inputTimeout;
+            let inputTimeout;
             this.$input
                 .addClass('anr-option-username') // Currently not used for anything
                 .prop({
                 type: 'text',
                 placeholder: '入力してください'
             })
-                .off('input').on('input', function () {
+                .off('input').on('input', () => {
                 clearTimeout(inputTimeout);
-                inputTimeout = setTimeout(function () {
-                    _this_1.processInputChange();
+                inputTimeout = setTimeout(() => {
+                    this.processInputChange();
                 }, 350);
             });
-            var $userWrapper = Reporter.wrapElement(this.$wrapper, this.$input);
+            const $userWrapper = Reporter.wrapElement(this.$wrapper, this.$input);
             $next.before(this.$wrapper);
-            var selectHeight;
+            let selectHeight;
             if ((selectHeight = this.$type.height()) > this.$input.height()) {
                 this.$input.height(selectHeight);
             }
@@ -2832,10 +2768,10 @@ var __assign = (this && this.__assign) || function () {
             this.$hideUserWrapper = Reporter.createRow();
             this.$hideUserWrapper.removeAttr('class').addClass('anr-option-row-inner anr-option-hideuser-wrapper');
             Reporter.createRowLabel(this.$hideUserWrapper, '');
-            var hideUserElements = createLabelledCheckbox('利用者名を隠す', { alterClasses: ['anr-option-hideuser'] });
+            const hideUserElements = createLabelledCheckbox('利用者名を隠す', { alterClasses: ['anr-option-hideuser'] });
             this.$hideUser = hideUserElements.$checkbox;
-            this.$hideUser.off('change').on('change', function () {
-                _this_1.processHideUserChange();
+            this.$hideUser.off('change').on('change', () => {
+                this.processHideUserChange();
             });
             this.$hideUserLabel = hideUserElements.$label;
             this.$hideUserWrapper.append(hideUserElements.$wrapper);
@@ -2869,8 +2805,8 @@ var __assign = (this && this.__assign) || function () {
          * @param username
          * @returns The formatted username.
          */
-        User.formatName = function (username) {
-            var user = lib.clean(username.replace(/_/g, ' '));
+        static formatName(username) {
+            let user = lib.clean(username.replace(/_/g, ' '));
             if (mw.util.isIPv6Address(user, true)) {
                 user = user.toUpperCase();
             }
@@ -2878,61 +2814,61 @@ var __assign = (this && this.__assign) || function () {
                 user = mwString.ucFirst(user);
             }
             return user;
-        };
+        }
         /**
          * Get the username in the textbox (underscores are replaced by spaces).
          * @returns
          */
-        User.prototype.getName = function () {
+        getName() {
             return User.formatName(this.$input.val()) || null;
-        };
+        }
         /**
          * Set a value into the username input. Note that this method does not call {@link processInputChange}.
          * @param val
          * @returns
          */
-        User.prototype.setName = function (val) {
+        setName(val) {
             this.$input.val(val);
             return this;
-        };
+        }
         /**
          * Get the UserAN type selected in the dropdown.
          * @returns
          */
-        User.prototype.getType = function () {
+        getType() {
             return this.$type.val();
-        };
+        }
         /**
          * Select a type in the UserAN type dropdown. Note that this method does not call {@link processTypeChange}.
          * @param type
          * @returns
          */
-        User.prototype.setType = function (type) {
+        setType(type) {
             this.$type.val(type);
             return this;
-        };
+        }
         /**
          * Change the hidden state of the options in the type dropdown.
          * @param types An array of type options to make visible. The element at index 0 will be selected.
          * @returns
          */
-        User.prototype.setTypeOptions = function (types) {
-            this.$type.children('option').each(function (_, opt) {
+        setTypeOptions(types) {
+            this.$type.children('option').each((_, opt) => {
                 // Set up the UserAN type dropdown
-                var idx = types.indexOf(opt.value);
+                const idx = types.indexOf(opt.value);
                 opt.hidden = idx === -1; // Show/hide options
                 if (idx === 0) {
                     opt.selected = true; // Select types[0]
                 }
             });
             return this;
-        };
+        }
         /**
          * Update the visibility of auxiliary wrappers when the selection is changed in the type dropdown.
          * @returns
          */
-        User.prototype.processTypeChange = function () {
-            var selectedType = this.processAuxiliaryElements().getType();
+        processTypeChange() {
+            const selectedType = this.processAuxiliaryElements().getType();
             this.$type.toggleClass('anr-option-usertype-none', false);
             switch (selectedType) {
                 case 'UNL':
@@ -2959,7 +2895,7 @@ var __assign = (this && this.__assign) || function () {
                     this.$type.toggleClass('anr-option-usertype-none', !this.$type.prop('disabled'));
             }
             return this;
-        };
+        }
         /**
          * Update the properties of auxiliary elements in the user pane.
          * - Toggle the application of a red border on the username input.
@@ -2968,26 +2904,26 @@ var __assign = (this && this.__assign) || function () {
          * - Set up the display text and the href of the block status link (by {@link processBlockStatus}).
          * @returns
          */
-        User.prototype.processAuxiliaryElements = function () {
-            var selectedType = this.getType();
-            var inputVal = this.getName() || '';
-            var clss = 'anr-option-invalidid';
+        processAuxiliaryElements() {
+            const selectedType = this.getType();
+            const inputVal = this.getName() || '';
+            const clss = 'anr-option-invalidid';
             if (['logid', 'diffid'].includes(selectedType)) {
                 // Set up $input, $hideUser, and $idLink
-                var isNotNumber = !/^\d*$/.test(inputVal);
+                const isNotNumber = !/^\d*$/.test(inputVal);
                 this.$input.toggleClass(clss, isNotNumber);
                 this.$hideUser.prop({
                     disabled: isNotNumber,
                     checked: true
                 });
-                var idTitle = (selectedType === 'logid' ? '特別:転送/logid/' : '特別:差分/') + inputVal;
+                const idTitle = (selectedType === 'logid' ? '特別:転送/logid/' : '特別:差分/') + inputVal;
                 this.$idLink
                     .text(idTitle)
                     .prop('href', mw.util.getUrl(idTitle))
                     .toggleClass('anr-disabledanchor', isNotNumber);
                 // Set up $blockStatus
                 if (!isNotNumber) {
-                    var username = idList.getRegisteredUsername(parseInt(inputVal), selectedType);
+                    const username = idList.getRegisteredUsername(parseInt(inputVal), selectedType);
                     if (username) {
                         this.processBlockStatus(username);
                     }
@@ -3006,15 +2942,15 @@ var __assign = (this && this.__assign) || function () {
                 this.processBlockStatus(inputVal);
             }
             return this;
-        };
+        }
         /**
          * Set up the display text and the href of the block status link
          * @param username
          * @returns
          */
-        User.prototype.processBlockStatus = function (username) {
+        processBlockStatus(username) {
             username = User.formatName(username);
-            var status = Reporter.blockStatus[username];
+            const status = Reporter.blockStatus[username];
             if (status) {
                 if (status.usertype === 'user' || status.usertype === 'ip') {
                     this.$blockStatus.prop('href', mw.util.getUrl('特別:投稿記録/' + username));
@@ -3037,46 +2973,44 @@ var __assign = (this && this.__assign) || function () {
                 this.$blockStatus.text('');
             }
             return this;
-        };
+        }
         /**
          * Evaluate the input value, figure out its user type (and block status if relevant), and change selection
          * in the type dropdown (which proceeds to {@link processTypeChange}).
          * @returns
          */
-        User.prototype.processInputChange = function () {
-            var _this_1 = this;
-            var def = $.Deferred();
-            var typeMap = {
+        processInputChange() {
+            const def = $.Deferred();
+            const typeMap = {
                 ip: ['IP2', 'none'],
                 user: ['UNL', 'User2', 'none'],
                 other: ['none', 'logid', 'diffid']
             };
-            var username = this.getName();
+            const username = this.getName();
             if (!username) { // Blank
                 this.setType('none').$type.prop('disabled', true); // Disable dropdown and select 'none'
                 this.processTypeChange();
                 def.resolve(this);
             }
             else { // Some username is in the input
-                Reporter.getBlockStatus(username).then(function (obj) {
+                Reporter.getBlockStatus(username).then((obj) => {
                     if (/^\d+$/.test(username) && obj.usertype === 'user') {
                         typeMap.user.push('logid', 'diffid');
                     }
-                    _this_1.setTypeOptions(typeMap[obj.usertype]).$type.prop('disabled', false);
-                    _this_1.processTypeChange();
-                    def.resolve(_this_1);
+                    this.setTypeOptions(typeMap[obj.usertype]).$type.prop('disabled', false);
+                    this.processTypeChange();
+                    def.resolve(this);
                 });
             }
             return def.promise();
-        };
+        }
         /**
          * Process the change event of the hideuser checkbox and do a username-ID conversion.
          * @returns
          */
-        User.prototype.processHideUserChange = function () {
-            var _this_1 = this;
+        processHideUserChange() {
             // Show a spinner aside the hideuser checkbox label
-            var $processing = $(getImage('load', 'margin-left: 0.5em;'));
+            const $processing = $(getImage('load', 'margin-left: 0.5em;'));
             this.$hideUserLabel.append($processing);
             this.setOverlay(true);
             /*!
@@ -3084,9 +3018,9 @@ var __assign = (this && this.__assign) || function () {
              * or processTypeChange because the hideuser checkbox should be unclickable when the variables would be substituted
              * by an unexpected value.
              */
-            var inputVal = this.getName();
-            var selectedType = this.getType();
-            var checked = this.$hideUser.prop('checked');
+            const inputVal = this.getName();
+            const selectedType = this.getType();
+            const checked = this.$hideUser.prop('checked');
             try {
                 if (typeof inputVal !== 'string') {
                     // The username input should never be empty
@@ -3110,52 +3044,51 @@ var __assign = (this && this.__assign) || function () {
                 return $.Deferred().resolve(this);
             }
             if (checked) { // username to ID
-                return idList.getIds(inputVal).then(function (_a) {
-                    var logid = _a.logid, diffid = _a.diffid;
+                return idList.getIds(inputVal).then(({ logid, diffid }) => {
                     if (typeof logid === 'number') {
-                        _this_1.setName(logid.toString()).setTypeOptions(['logid', 'diffid', 'none']).processTypeChange();
-                        mw.notify("\u5229\u7528\u8005\u540D\u300C".concat(inputVal, "\u300D\u3092\u30ED\u30B0ID\u306B\u5909\u63DB\u3057\u307E\u3057\u305F\u3002"), { type: 'success' });
+                        this.setName(logid.toString()).setTypeOptions(['logid', 'diffid', 'none']).processTypeChange();
+                        mw.notify(`利用者名「${inputVal}」をログIDに変換しました。`, { type: 'success' });
                     }
                     else if (typeof diffid === 'number') {
-                        _this_1.setName(diffid.toString()).setTypeOptions(['diffid', 'logid', 'none']).processTypeChange();
-                        mw.notify("\u5229\u7528\u8005\u540D\u300C".concat(inputVal, "\u300D\u3092\u5DEE\u5206ID\u306B\u5909\u63DB\u3057\u307E\u3057\u305F\u3002"), { type: 'success' });
+                        this.setName(diffid.toString()).setTypeOptions(['diffid', 'logid', 'none']).processTypeChange();
+                        mw.notify(`利用者名「${inputVal}」を差分IDに変換しました。`, { type: 'success' });
                     }
                     else {
-                        _this_1.$hideUser.prop('checked', !checked);
-                        mw.notify("\u5229\u7528\u8005\u540D\u300C".concat(inputVal, "\u300D\u3092ID\u306B\u5909\u63DB\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"), { type: 'warn' });
+                        this.$hideUser.prop('checked', !checked);
+                        mw.notify(`利用者名「${inputVal}」をIDに変換できませんでした。`, { type: 'warn' });
                     }
                     $processing.remove();
-                    return _this_1.setOverlay(false);
+                    return this.setOverlay(false);
                 });
             }
             else { // ID to username
-                var idTypeJa_1 = selectedType === 'logid' ? 'ログ' : '差分';
-                return idList.getUsername(parseInt(inputVal), selectedType).then(function (username) {
+                const idTypeJa = selectedType === 'logid' ? 'ログ' : '差分';
+                return idList.getUsername(parseInt(inputVal), selectedType).then((username) => {
                     if (username) {
-                        return _this_1.setName(username).processInputChange().then(function () {
-                            mw.notify("".concat(idTypeJa_1, "ID\u300C").concat(inputVal, "\u300D\u3092\u5229\u7528\u8005\u540D\u306B\u5909\u63DB\u3057\u307E\u3057\u305F\u3002"), { type: 'success' });
+                        return this.setName(username).processInputChange().then(() => {
+                            mw.notify(`${idTypeJa}ID「${inputVal}」を利用者名に変換しました。`, { type: 'success' });
                             $processing.remove();
-                            return _this_1.setOverlay(false);
+                            return this.setOverlay(false);
                         });
                     }
                     else {
-                        _this_1.$hideUser.prop('checked', !checked);
-                        mw.notify("".concat(idTypeJa_1, "ID\u300C").concat(inputVal, "\u300D\u3092\u5229\u7528\u8005\u540D\u306B\u5909\u63DB\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"), { type: 'warn' });
+                        this.$hideUser.prop('checked', !checked);
+                        mw.notify(`${idTypeJa}ID「${inputVal}」を利用者名に変換できませんでした。`, { type: 'warn' });
                         $processing.remove();
-                        return _this_1.setOverlay(false);
+                        return this.setOverlay(false);
                     }
                 });
             }
-        };
+        }
         /**
          * Toggle the visibility of the overlay.
          * @param show
          * @returns
          */
-        User.prototype.setOverlay = function (show) {
+        setOverlay(show) {
             Reporter.toggle(this.$overlay, show);
             return this;
-        };
+        }
         /**
          * Check the validity of a username (by checking the inclusion of `/[@/#<>[\]|{}:]/`).
          *
@@ -3163,25 +3096,23 @@ var __assign = (this && this.__assign) || function () {
          * @param username
          * @returns
          */
-        User.containsInvalidCharacter = function (username) {
+        static containsInvalidCharacter(username) {
             return /[@/#<>[\]|{}:]/.test(username);
-        };
-        return User;
-    }());
+        }
+    }
     /**
      * Get an \<img> tag.
      * @param iconType
      * @param cssText Additional styles to apply (Default styles: `vertical-align: middle; height: 1em; border: 0;`)
      * @returns
      */
-    function getImage(iconType, cssText) {
-        if (cssText === void 0) { cssText = ''; }
-        var img = (function () {
+    function getImage(iconType, cssText = '') {
+        const img = (() => {
             if (iconType === 'load' || iconType === 'check' || iconType === 'cross' || iconType === 'cancel') {
                 return lib.getIcon(iconType);
             }
             else {
-                var tag = document.createElement('img');
+                const tag = document.createElement('img');
                 switch (iconType) {
                     case 'gear':
                         tag.src = 'https://upload.wikimedia.org/wikipedia/commons/0/05/OOjs_UI_icon_advanced.svg';
@@ -3209,9 +3140,8 @@ var __assign = (this && this.__assign) || function () {
      * @returns The passed dropdown.
      */
     function addOptions($dropdown, data) {
-        data.forEach(function (_a) {
-            var text = _a.text, value = _a.value, disabled = _a.disabled, selected = _a.selected, hidden = _a.hidden;
-            var option = document.createElement('option');
+        data.forEach(({ text, value, disabled, selected, hidden }) => {
+            const option = document.createElement('option');
             option.textContent = text;
             if (value !== undefined) {
                 option.value = value;
@@ -3223,7 +3153,7 @@ var __assign = (this && this.__assign) || function () {
         });
         return $dropdown;
     }
-    var checkboxCnt = 0;
+    let checkboxCnt = 0;
     /**
      * Create a labelled checkbox.
      * ```html
@@ -3238,24 +3168,23 @@ var __assign = (this && this.__assign) || function () {
      * @param options
      * @returns
      */
-    function createLabelledCheckbox(labelText, options) {
-        if (options === void 0) { options = {}; }
-        var id = options.checkboxId && !document.getElementById(options.checkboxId) ? options.checkboxId : 'anr-checkbox-' + (checkboxCnt++);
-        var $outerLabel = $('<label>');
+    function createLabelledCheckbox(labelText, options = {}) {
+        const id = options.checkboxId && !document.getElementById(options.checkboxId) ? options.checkboxId : 'anr-checkbox-' + (checkboxCnt++);
+        const $outerLabel = $('<label>');
         $outerLabel.attr('for', id);
-        var $wrapper = Reporter.createRow();
+        const $wrapper = Reporter.createRow();
         $wrapper.removeAttr('class').addClass((options.alterClasses || ['anr-option-row']).join(' ')).append($outerLabel);
-        var $checkbox = $('<input>');
+        const $checkbox = $('<input>');
         $checkbox
             .prop({
-            id: id,
+            id,
             type: 'checkbox'
         })
             .addClass('anr-checkbox');
-        var $label = $('<span>');
+        const $label = $('<span>');
         $label.addClass('anr-checkbox-label').text(labelText);
         $outerLabel.append($checkbox, $label);
-        return { $wrapper: $wrapper, $checkbox: $checkbox, $label: $label };
+        return { $wrapper, $checkbox, $label };
     }
     /**
      * Extract a CIDR address from text.
@@ -3268,13 +3197,13 @@ var __assign = (this && this.__assign) || function () {
      * @returns The extracted CIDR, or `null` if there's no match.
      */
     function extractCidr(text) {
-        var v4_byte = '(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|0?[0-9]?[0-9])';
-        var v4_regex = new RegExp('(?:' + v4_byte + '\\.){3}' + v4_byte + '\\/(?:3[0-2]|[12]?\\d)');
-        var v6_block = '\\/(?:12[0-8]|1[01][0-9]|[1-9]?\\d)';
-        var v6_regex = new RegExp('(?::(?::|(?::[0-9A-Fa-f]{1,4}){1,7})|[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,6}::|[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){7})' +
+        const v4_byte = '(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|0?[0-9]?[0-9])';
+        const v4_regex = new RegExp('(?:' + v4_byte + '\\.){3}' + v4_byte + '\\/(?:3[0-2]|[12]?\\d)');
+        const v6_block = '\\/(?:12[0-8]|1[01][0-9]|[1-9]?\\d)';
+        const v6_regex = new RegExp('(?::(?::|(?::[0-9A-Fa-f]{1,4}){1,7})|[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,6}::|[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){7})' +
             v6_block);
-        var v6_regex2 = new RegExp('[0-9A-Fa-f]{1,4}(?:::?[0-9A-Fa-f]{1,4}){1,6}' + v6_block);
-        var m;
+        const v6_regex2 = new RegExp('[0-9A-Fa-f]{1,4}(?:::?[0-9A-Fa-f]{1,4}){1,6}' + v6_block);
+        let m;
         if ((m = text.match(v4_regex)) ||
             (m = text.match(v6_regex)) ||
             (m = text.match(v6_regex2)) && /::/.test(m[0]) && !/::.*::/.test(m[0])) {

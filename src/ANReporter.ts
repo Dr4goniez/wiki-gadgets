@@ -1,7 +1,7 @@
 /*********************************************************************************\
 	AN Reporter
 	@author [[User:Dragoniez]]
-	@version 8.1.6
+	@version 8.2.0
 	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -54,7 +54,7 @@ let idList: IdList;
 function init() {
 
 	// Is the user autoconfirmed?
-	if (mw.config.get('wgUserGroups').indexOf('autoconfirmed') === -1) {
+	if ((mw.config.get('wgUserGroups') || []).indexOf('autoconfirmed') === -1) {
 		mw.notify('あなたは自動承認されていません。AN Reporterを終了します。', {type: 'warn'});
 		return;
 	}
@@ -241,7 +241,7 @@ class Config {
 	 * Merge and retrieve the ANReporter config.
 	 * @param getDefault If `true`, get the default config. (Default: `false`)
 	 * @returns
-	 * @requires mw.user
+	 * @requires mediawiki.user
 	 */
 	static merge(getDefault = false): ANReporterConfig {
 
@@ -278,7 +278,7 @@ class Config {
 
 	/**
 	 * @param $container The container in which to create config options.
-	 * @requires mw.user
+	 * @requires mediawiki.user
 	 * @requires oojs-ui
 	 * @requires oojs-ui.styles.icons-editing-core
 	 * @requires oojs-ui.styles.icons-moderation
