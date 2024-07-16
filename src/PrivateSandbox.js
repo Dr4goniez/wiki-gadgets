@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.15
+	@version 1.0.16
 
 \**************************************************************************************************/
 
@@ -98,7 +98,8 @@ class ScreenOverlay {
 					'width: 100%;' +
 					'z-index: 1000;' +
 					'overflow: hidden;' +
-					'background-color: rgba(255, 255, 255, 0.8);' +
+					'background-color: var(--background-color-base, white);' +
+					'opacity: 0.8;' +
 				'}' +
 				'#pvtsand-scoverlay-inner {' +
 					'position: fixed;' +
@@ -446,7 +447,7 @@ class PrivateSandbox {
 				'#pvtsand-profiles-container {' +
 					'padding: 1em;' +
 					'margin-bottom: 1em;' +
-					'border: 1px solid #ccc;' +
+					'border: 1px solid var(--border-color-base, #ccc);' +
 				'}' +
 				'#pvtsand-profiles-buttons {' +
 					'margin-top: 12px;' +
@@ -466,7 +467,7 @@ class PrivateSandbox {
 					'top: 0;' +
 					'left: 0;' +
 					'z-index: 10;' +
-					'border: 1px solid #c0c0c0;' +
+					'border: 1px solid var(--border-color-base, #ccc);' +
 					'background-color: rgba(200, 204, 209, 0.6);' +
 					'cursor: not-allowed;' +
 					'user-select: none;' +
@@ -479,13 +480,13 @@ class PrivateSandbox {
 				'}' +
 				'#pvtsand-preview-container {' +
 					'margin-top: 1em;' +
-					'border: 1px solid #c0c0c0;' +
+					'border: 1px solid var(--border-color-base, #ccc);' +
 				'}' +
 				'#pvtsand-preview-header {' +
-					'background-color: #f8f8f8;' +
+					'background-color: var(--background-color-neutral-subtle, #f8f8f8);' +
 					'padding-left: 1em;' +
 					'padding-right: 1em;' +
-					'border-bottom: 1px solid #c0c0c0;' +
+					'border-bottom: 1px solid var(--border-color-base, #ccc);' +
 				'}' +
 				'#pvtsand-preview-loading {' +
 					'height: 1em;' +
@@ -918,7 +919,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.15 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.16 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
