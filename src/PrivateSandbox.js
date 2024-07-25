@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.18
+	@version 1.0.19
 
 \**************************************************************************************************/
 
@@ -490,7 +490,6 @@ class PrivateSandbox {
 					'background-color: var(--background-color-neutral-subtle, #f8f8f8);' +
 					'padding-left: 1em;' +
 					'padding-right: 1em;' +
-					'border-bottom: 1px solid var(--border-color-base, #ccc);' +
 				'}' +
 				'#pvtsand-preview-loading {' +
 					'height: 1em;' +
@@ -499,6 +498,7 @@ class PrivateSandbox {
 					'text-align: justify;' +
 					'min-height: 1em;' +
 					'padding: 0.3em 1em;' +
+					'border-top: 1px solid var(--border-color-base, #ccc);' +
 				'}';
 			document.head.appendChild(style);
 
@@ -923,7 +923,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.18 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.19 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -1637,8 +1637,7 @@ class PrivateSandbox {
 			// Check for edit conflicts
 			const conflicts = Object.keys(newestProfiles).reduce(/** @param {Record<string, string>} acc */ (acc, key) => {
 				const value = newestProfiles[key].join('');
-				/** @type {string=} */
-				const oldValue = this.savedProfiles[key]?.join('');
+				const oldValue = key in this.savedProfiles && this.savedProfiles[key].join('');
 				if (typeof oldValue === 'string') {
 					if (value !== oldValue) { // Profile has been modified elsewhere
 						acc[key] = PrivateSandbox.getMessage('message-conflict-modified');
@@ -1797,7 +1796,7 @@ class PrivateSandbox {
 			uiprop: 'options',
 			formatversion: '2'
 		}).then(/** @param {ApiResponseUserinfo} res */ (res) => {
-			return res?.query?.userinfo?.options || null;
+			return res && res.query && res.query.userinfo && res.query.userinfo.options || null;
 		}).catch((_, err) => {
 			console.warn(err);
 			return null;
@@ -1855,7 +1854,7 @@ class PrivateSandbox {
 			contentmodel: 'wikitext',
 			formatversion: '2'
 		}).then(/** @param {ApiResponseParse} res */ (res) => {
-			const resParse = res?.parse;
+			const resParse = res && res.parse;
 			if (resParse) {
 				const {text, modules, modulestyles, categorieshtml} = resParse;
 				if (modules.length) {
