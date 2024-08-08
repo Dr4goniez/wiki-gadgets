@@ -28,7 +28,6 @@
                 "caughtErrorsIgnorePattern": "^_"
             }
         ],
-        "@typescript-eslint/no-this-alias": "off",
         "@typescript-eslint/triple-slash-reference": "off"
     }
 }

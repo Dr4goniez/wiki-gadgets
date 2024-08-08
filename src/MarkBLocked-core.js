@@ -2,217 +2,12 @@
 /// <reference path="./window/MarkBLocked.d.ts" />
 /* global mw, OO */
 //<nowiki>
-module.exports = /** @class */ (function() {
-// var MarkBLocked = /** @class */ (function() {
-
-	/** @readonly */
-	var defaultOptionKey = 'userjs-markblocked-config';
+module.exports = class MarkBLocked {
 
 	/**
-	 * @param {boolean} [readOnlyPost]
+	 * @type {Record<string, Lang>}
 	 */
-	function getApiOptions(readOnlyPost) {
-		var ret = {
-			ajax: {
-				headers: {
-					'Api-User-Agent': 'MarkBLocked-core (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
-				}
-			}
-		};
-		if (readOnlyPost) {
-			/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
-			ret.ajax.headers['Promise-Non-Write-API-Action'] = true;
-		}
-		return ret;
-	}
-
-	/**
-	 * @typedef {object} UserOptions
-	 * @property {boolean} localips
-	 * @property {boolean} globalusers
-	 * @property {boolean} globalips
-	 */
-	/**
-	 * @typedef {object} ConstructorConfig
-	 * @property {UserOptions} [defaultOptions] Configured default option values. (Default: all `false`).
-	 * @property {string} [optionKey] The key of `mw.user.options`, defaulted to `userjs-markblocked-config`.
-	 * @property {boolean} [globalize] If `true`, save the options as global preferences.
-	 * @property {Object.<string, Lang>} [i18n] A language object to merge to {@link MarkBLocked.i18n}. Using this config makes
-	 * it possible to configure the default interface messages and add a new interface language (for the latter, a value needs
-	 * to be passed to the {@link lang} parameter.)
-	 * @property {string} [lang] The code of the language to use in the interface messages, defaulted to `en`.
-	 * @property {string[]} [contribsCA] Special page aliases for Contributions and CentralAuth in the local language (no need
-	 * to pass `Contributions`, `Contribs`, `CentralAuth`, `CA`, and  `GlobalAccount`). If not provided, aliases are fetched from
-	 * the API.
-	 * @property {string[]} [groupsAHL] Local user groups with the `apihighlimits` user right, defaulted to `['sysop', 'bot']`.
-	 */
-	/**
-	 * Initialize the properties of the `MarkBLocked` class. This is only to be called by `MarkBLocked.init`.
-	 * @param {ConstructorConfig} [config]
-	 * @constructor
-	 * @requires mediawiki.api
-	 * @requires mediawiki.user
-	 */
-	function MarkBLocked(config) {
-
-		var cfg = config || {};
-
-		/**
-		 * @type {mw.Api}
-		 */
-		this.api = new mw.Api(getApiOptions());
-		/**
-		 * @type {mw.Api}
-		 */
-		this.readApi = new mw.Api(getApiOptions(true));
-
-		// Warn if the config has any invalid property
-		var validKeys = ['defaultOptions', 'optionKey', 'globalize', 'i18n', 'lang', 'contribsCA', 'groupsAHL'];
-		var invalidKeys = Object.keys(cfg).reduce(/** @param {string[]} acc */ function(acc, key) {
-			if (validKeys.indexOf(key) === -1 && acc.indexOf(key) === -1) {
-				acc.push(key);
-			}
-			return acc;
-		}, []);
-		if (invalidKeys.length) {
-			console.error('MarkBLocked: Detected invalid constructor options: ' + invalidKeys.join(', '));
-		}
-
-		// User options
-		var defaultOptions = cfg.defaultOptions || {
-			localips: false,
-			globalusers: false,
-			globalips: false
-		};
-		/**
-		 * The key of `mw.user.options`.
-		 * @readonly
-		 */
-		this.optionKey = cfg.optionKey || defaultOptionKey;
-		var /** @type {string} */ optionsStr = mw.user.options.get(this.optionKey) || '{}';
-		var /** @type {UserOptions} */ options;
-		try {
-			options = JSON.parse(optionsStr);
-		}
-		catch(err) {
-			console.error(err);
-			options = defaultOptions;
-		}
-		/** @type {UserOptions} */
-		this.options = $.extend(defaultOptions, options);
-		/** @type {boolean} */
-		this.globalize = !!cfg.globalize;
-		console.log('MarkBLocked globalization: ' + this.globalize);
-
-		// Language options
-		if (cfg.i18n) {
-			$.extend(MarkBLocked.i18n, cfg.i18n);
-		}
-		var langCode = 'en';
-		if (cfg.lang) {
-			if (Object.keys(MarkBLocked.i18n).indexOf(cfg.lang) !== -1) {
-				langCode = cfg.lang;
-			} else {
-				console.error('"' + cfg.lang  + '" is not available as the interface language of MarkBLocked.');
-			}
-		}
-		/** @type {Lang} */
-		this.msg = MarkBLocked.i18n[langCode];
-
-		// Regex to collect user links
-		var wgNamespaceIds = mw.config.get('wgNamespaceIds'); // {"special": -1, "user": 2, ...}
-		var /** @type {string[]} */ specialAliases = [];
-		var /** @type {string[]} */ userAliases = [];
-		for (var alias in wgNamespaceIds) {
-			var namespaceId = wgNamespaceIds[alias];
-			switch(namespaceId) {
-				case -1:
-					specialAliases.push(alias);
-					break;
-				case 2:
-				case 3:
-					userAliases.push(alias);
-					break;
-				default:
-			}
-		}
-		var rContribsCA = cfg.contribsCA && cfg.contribsCA.length ? '|' + cfg.contribsCA.join('|') : '';
-		rContribsCA = '(?:' + specialAliases.join('|') + '):(?:contrib(?:ution)?s|ca|centralauth|globalaccount' + rContribsCA + ')';
-		var rUser = '(?:' + userAliases.join('|') + '):';
-		/**
-		 * Regular expressions to collect user links.
-		 * @typedef {object} LinkRegex
-		 * @property {RegExp} article `/wiki/PAGENAME`: $1: PAGENAME
-		 * @property {RegExp} script `/w/index.php?title=PAGENAME`: $1: PAGENAME
-		 * @property {RegExp} contribsCA `^Special:(?:Contribs|CA)($|/)`
-		 * @property {RegExp} user `^(?:Special:.../|User:)(USERNAME|CIDR)`: $1: USERNAME or CIDR
-		 */
-		/** @type {LinkRegex} */
-		this.regex = {
-			article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
-			script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)'),
-			contribsCA: new RegExp('^' + rContribsCA + '($|/)', 'i'),
-			user: new RegExp('^(?:' + rContribsCA + '/|' + rUser + ')([^/#]+|[a-f\\d:\\.]+/\\d\\d)$', 'i')
-		};
-
-		// Validate apihighlimits
-		var groupsAHLLocal = cfg.groupsAHL || ['sysop', 'bot'];
-		var groupsAHLGlobal = [
-			'apihighlimits-requestor',
-			'founder',
-			'global-bot',
-			// 'global-sysop',
-			'staff',
-			'steward',
-			'sysadmin',
-			'wmf-researcher'
-		];
-		var groupsAHL = groupsAHLLocal.concat(groupsAHLGlobal);
-		// @ts-ignore
-		var hasAHL = mw.config.get('wgUserGroups', []).concat(mw.config.get('wgGlobalGroups', [])).some(function(group) {
-			return groupsAHL.indexOf(group) !== -1;
-		});
-		/**
-		 * The maximum number of batch parameter values for the API.
-		 * @type {500|50}
-		 */
-		this.apilimit = hasAHL ? 500 : 50;
-
-	}
-
-	/**
-	 * Abort all unfinished requests issued by the MarkBLocked class instance.
-	 * @returns {MarkBLocked}
-	 */
-	MarkBLocked.prototype.abort = function() {
-		this.api.abort();
-		this.readApi.abort();
-		return this;
-	};
-
-	/**
-	 * @typedef {object} Lang
-	 * @property {string} config-notify-notloaded A `mw.notify` message to show when failed to load the config interface.
-	 * @property {string} config-label-heading The heading text of the config interface.
-	 * @property {string} config-label-fieldset The fieldset legend's text of the config interface.
-	 * @property {string} config-label-localips Option label to mark up IPs in locally blocked IP ranges.
-	 * @property {string} config-label-globalusers Option label to mark up globally locked users.
-	 * @property {string} config-label-globalips Option label to mark up globally blocked IPs.
-	 * @property {string} config-label-save The text of the save button.
-	 * @property {string} config-label-saving The text of the save button when saving options.
-	 * @property {string} config-notify-savedone A `mw.notify` message to show when done with saving options.
-	 * @property {string} config-notify-savefailed A `mw.notify` message to show when failed to save options.
-	 * @property {string} portlet-text The text of the portlet link to the config page.
-	 * @property {string} toggle-title-enabled The title attribute of the RCW toggle button when MBL is enabled.
-	 * @property {string} toggle-title-disabled The title attribute of the RCW toggle button when MBL is temporarily disabled.
-	 * @property {string} toggle-notify-enabled A `mw.notify` message to show when MBL gets enabled on RCW.
-	 * @property {string} toggle-notify-disabled A `mw.notify` message to show when MBL gets disabled on RCW.
-	 */
-	/**
-	 * @type {Object.<string, Lang>}
-	 * @static
-	 */
-	MarkBLocked.i18n = {
+	static i18n = {
 		en: {
 			'config-label-heading': 'Configure MarkBLocked',
 			'config-label-fieldset': 'Markup settings',
@@ -250,69 +45,86 @@ module.exports = /** @class */ (function() {
 	};
 
 	/**
-	 * Get an interface message of MarkBLocked.
-	 * @param {keyof Lang} key
-	 * @returns {string}
+	 * @typedef {object} UserOptions
+	 * @property {boolean} localips
+	 * @property {boolean} globalusers
+	 * @property {boolean} globalips
 	 */
-	MarkBLocked.prototype.getMessage = function(key) {
-		return this.msg[key];
-	};
+	/**
+	 * @typedef {object} ConstructorConfig
+	 * @property {UserOptions} [defaultOptions] Configured default option values. (Default: all `false`).
+	 * @property {string} [optionKey] The key of `mw.user.options`, defaulted to `userjs-markblocked-config`.
+	 * @property {boolean} [globalize] If `true`, save the options into global preferences.
+	 * @property {Record<string, Lang>} [i18n] A language object to merge to {@link MarkBLocked.i18n}. Using this config makes
+	 * it possible to configure the default interface messages and add a new interface language (for the latter to work, the
+	 * {@link ConstructorConfig.lang|lang} config must also be configured.
+	 * @property {string} [lang] The code of the language for the interface messages, defaulted to `en`.
+	 * @property {string[]} [contribsCA] Special page aliases for Contributions and CentralAuth in the local language (no need
+	 * to pass `Contributions`, `Contribs`, `CentralAuth`, `CA`, and `GlobalAccount`). If not provided, aliases are fetched from
+	 * the API.
+	 * @property {string[]} [groupsAHL] Local user groups with the `apihighlimits` user right, defaulted to `['sysop', 'bot']`.
+	 */
 
 	/**
 	 * Initialize `MarkBLocked`.
 	 * @param {ConstructorConfig} [config]
 	 * @returns {JQueryPromise<MarkBLocked>}
-	 * @static
 	 */
-	MarkBLocked.init = function(config) {
+	static init(config) {
 
+		// Disallow a second run
 		if (window.MarkBLockedLoaded) {
-			mw.notify('Looks like MarkBLocked is loaded from multiple sources.', {type: 'error', autoHideSeconds: 'long'});
+			const err = 'Looks like MarkBLocked is loaded from multiple sources.';
+			mw.notify(err, {type: 'error', autoHideSeconds: 'long'});
+			throw new Error(err);
 		} else {
-			$.extend(window, {MarkBLockedLoaded: true});
+			window.MarkBLockedLoaded = true;
 		}
 
-		var cfg = config || {};
+		const cfg = config || {};
 
 		// Wait for dependent modules to get ready
-		var modules = [
+		const modules = [
 			'mediawiki.user',
 			'mediawiki.api',
 			'mediawiki.util',
 			'oojs-ui',
 			'oojs-ui.styles.icons-moderation',
 		];
-		var onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(markblockedconfig|mblc)$/i.test(mw.config.get('wgTitle'));
-		var isRCW = ['Recentchanges', 'Watchlist'].indexOf(mw.config.get('wgCanonicalSpecialPageName') || '') !== -1;
+		const onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(markblockedconfig|mblc)$/i.test(mw.config.get('wgTitle'));
+		const isRCW = ['Recentchanges', 'Watchlist'].indexOf(mw.config.get('wgCanonicalSpecialPageName') || '') !== -1;
 		if (!onConfig && !isRCW) {
 			modules.splice(3);
 		}
-		return mw.loader.using(modules).then(function() { // When ready
+		return mw.loader.using(modules).then(() => { // When ready
 
 			// For backwards compatibility, clear old config if any
-			var oldOptionKey = 'userjs-gmbl-preferences';
-			var /** @type {string?} */ oldCfgStr = mw.user.options.get(oldOptionKey);
-			var /** @type {JQueryPromise<void>} */ backwards;
-			if (oldCfgStr && (cfg.optionKey === void 0 || cfg.optionKey === defaultOptionKey) && !mw.user.options.get(defaultOptionKey)) {
-				var /** @type {Record<string, string?>} */ params = {};
-				params[oldOptionKey] = null;
-				params[defaultOptionKey] = oldCfgStr;
-				backwards = new mw.Api(getApiOptions()).saveOptions(params).then(function() {
-					mw.user.options.set(oldOptionKey, null);
-					mw.user.options.set(defaultOptionKey, oldCfgStr);
-				});
-			} else {
-				backwards = $.Deferred().resolve();
-			}
+			/** @type {JQueryPromise<void>} */
+			const backwards = (() => {
+				const oldOptionKey = 'userjs-gmbl-preferences';
+				/** @type {string?} */
+				const oldCfgStr = mw.user.options.get(oldOptionKey);
+				if (oldCfgStr && (cfg.optionKey === void 0 || cfg.optionKey === this.defaultOptionKey) && !mw.user.options.get(this.defaultOptionKey)) {
+					const options = {
+						[oldOptionKey]: null,
+						[this.defaultOptionKey]: oldCfgStr
+					};
+					return new mw.Api(this.getApiOptions()).saveOptions(options).then(() => {
+						mw.user.options.set(options);
+					});
+				} else {
+					return $.Deferred().resolve();
+				}
+			})();
 
 			// Entry point
-			var /** @type {JQueryPromise<string[]?>} */ ccaDeferred =
+			const /** @type {JQueryPromise<string[]?>} */ ccaDeferred =
 				onConfig ?
 				$.Deferred().resolve([]) :
 				cfg.contribsCA ?
 				$.Deferred().resolve(cfg.contribsCA) :
-				MarkBLocked.getContribsCA();
-			return $.when(ccaDeferred, backwards, $.ready).then(function(contribsCA) { // contribsCA and backwards are resolved, and the DOM is ready
+				this.getContribsCA();
+			return $.when(ccaDeferred, backwards, $.ready).then((contribsCA) => { // contribsCA and backwards are resolved, and the DOM is ready
 
 				if (contribsCA) {
 					cfg.contribsCA = contribsCA;
@@ -321,7 +133,7 @@ module.exports = /** @class */ (function() {
 					cfg.contribsCA = [];
 				}
 
-				var mbl = new MarkBLocked(cfg);
+				const mbl = new MarkBLocked(cfg);
 				if (onConfig) {
 					mbl.createConfigInterface();
 				} else {
@@ -332,11 +144,11 @@ module.exports = /** @class */ (function() {
 					/**
 					 * @type {NodeJS.Timeout=}
 					 */
-					var hookTimeout;
+					let hookTimeout;
 					/**
 					 * @param {JQuery<HTMLElement>} [$content] Fall back to `.mw-body-content`
 					 */
-					var markup = function($content) {
+					const markup = ($content) => {
 						hookTimeout = void 0; // Reset the value of `hookTimeout`
 						mbl.abort().markup($content || $('.mw-body-content'));
 					};
@@ -345,8 +157,8 @@ module.exports = /** @class */ (function() {
 					 * @param {JQuery<HTMLElement>} $content
 					 * @see https://doc.wikimedia.org/mediawiki-core/master/js/#!/api/mw.hook-event-wikipage_content
 					 */
-					var hookHandler = function($content) {
-						var isConnected = !!$(document).find($content).length;
+					const hookHandler = ($content) => {
+						const isConnected = !!$(document).find($content).length;
 						if (isConnected) {
 							// Ensure that $content is attached to the DOM. The same hook can be fired multiple times,
 							// but in some of them the hook is fired on an element detached (and removed) from the DOM.
@@ -366,7 +178,7 @@ module.exports = /** @class */ (function() {
 
 					// Add a toggle button on RCW
 					if (isRCW) {
-						createToggleButton(mbl, hookHandler);
+						mbl.createToggleButton(hookHandler);
 					}
 
 				}
@@ -376,116 +188,210 @@ module.exports = /** @class */ (function() {
 
 		});
 
-		/**
-		 * Create a button to enable/disable MarkBLocked (for Special:Recentchanges and Special:Watchlist, on which `markup`
-		 * is recursively called when the page content is updated.)
-		 * @param {MarkBLocked} mbl An instance of MarkBLocked.
-		 * @param {($content: JQuery<HTMLElement>) => void} hookHandler A function to (un)bind to the `wikipage.content` hook.
-		 */
-		function createToggleButton(mbl, hookHandler) {
+	}
 
-			// Create toggle button
-			var toggle = new OO.ui.ButtonWidget({
-				id: 'mbl-toggle',
-				label: 'MBL',
-				icon: 'unLock',
-				flags: 'progressive',
-				title: mbl.getMessage('toggle-title-enabled')
-			});
-			toggle.off('click').on('click', function() {
-				var disable = toggle.getFlags().indexOf('progressive') !== -1;
-				var icon, title, hookToggle, msg;
-				if (disable) {
-					icon = 'lock';
-					title = mbl.getMessage('toggle-title-disabled');
-					hookToggle = mw.hook('wikipage.content').remove;
-					msg = mbl.getMessage('toggle-notify-disabled');
-					$('.mbl-userlink').removeClass(function(_, className) { // Remove all mbl- classes from user links
-						return (className.match(/(^|\s)mbl-\S+/) || []).join(' ');
-					});
-				} else {
-					icon = 'unLock';
-					title = mbl.getMessage('toggle-title-enabled');
-					hookToggle = mw.hook('wikipage.content').add;
-					msg = mbl.getMessage('toggle-notify-enabled');
-					// Hook.add fires the `wikipage.content` hook, meaning that `markup` is automatically called and classes are reassigned
+	/** @readonly */
+	static defaultOptionKey = 'userjs-markblocked-config';
+
+	/**
+	 * @param {boolean} [readOnlyPost]
+	 */
+	static getApiOptions(readOnlyPost) {
+		const ret = {
+			ajax: {
+				headers: {
+					'Api-User-Agent': 'MarkBLocked-core (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
-				toggle
-					.setFlags({progressive: !disable, destructive: disable})
-					.setIcon(icon)
-					.setTitle(title);
-				hookToggle(hookHandler);
-				mw.notify(msg);
-			});
-			var $wrapper = $('<div>')
-				.prop('id', 'mbl-toggle-wrapper')
-				.append(toggle.$element);
-
-			// Append the toggle button
-			var spName = mw.config.get('wgCanonicalSpecialPageName');
-			var selector = '';
-			if (spName === 'Recentchanges') {
-				selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-rcTopSectionWidget-savedLinks';
-				$(selector).eq(0).before($wrapper);
-			} else if (spName === 'Watchlist') {
-				selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-watchlistTopSectionWidget-savedLinks';
-				$(selector).eq(0).before($wrapper);
-				$wrapper.css('margin-left', 'auto');
 			}
-
+		};
+		if (readOnlyPost) {
+			/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
+			ret.ajax.headers['Promise-Non-Write-API-Action'] = true;
 		}
-
-	};
+		return ret;
+	}
 
 	/**
 	 * Get special page aliases for `Contributions` and `CentralAuth`.
 	 * @returns {JQueryPromise<string[]?>}
 	 * @requires mediawiki.api
-	 * @static
 	 */
-	MarkBLocked.getContribsCA = function() {
-		return new mw.Api(getApiOptions()).get({
+	static getContribsCA() {
+		return new mw.Api(this.getApiOptions()).get({
 			action: 'query',
 			meta: 'siteinfo',
 			siprop: 'specialpagealiases',
 			formatversion: '2'
-		}).then(function(res) {
-			var resSpa = res && res.query && res.query.specialpagealiases;
+		}).then((res) => {
+			/** @type {{realname: string; aliases: string[];}[]=} */
+			const resSpa = res && res.query && res.query.specialpagealiases;
 			if (Array.isArray(resSpa)) {
-				return resSpa.reduce(
-					/**
-					 * @param {string[]} acc
-					 * @param {{realname: string; aliases: string[];}} obj
-					 * @returns {string[]}
-					 */
-					function(acc, obj) {
-						var /** @type {string[]} */ exclude = [];
-						switch(obj.realname) {
-							case 'Contributions':
-								exclude.push('Contributions', 'Contribs');
-								break;
-							case 'CentralAuth':
-								exclude.push('CentralAuth', 'CA', 'GlobalAccount');
-						}
-						if (exclude.length) {
-							obj.aliases.forEach(function(alias) {
-								if (exclude.indexOf(alias) === -1) {
-									acc.push(alias);
-								}
-							});
-						}
-						return acc;
-					},
-					[]
-				);
+				const defaults = ['Contributions', 'Contribs', 'CentralAuth', 'CA', 'GlobalAccount'];
+				return resSpa.reduce(/** @param {string[]} acc */ (acc, {realname, aliases}) => {
+					if (realname === 'Contributions' || realname === 'CentralAuth') {
+						acc = acc.concat(aliases.filter(el => defaults.indexOf(el) === -1));
+					}
+					return acc;
+				}, []);
 			} else {
 				return null;
 			}
-		}).catch(function(_, err) {
+		}).catch((_, err) => {
 			console.warn(err);
 			return null;
 		});
-	};
+	}
+
+	/**
+	 * Initialize the properties of the `MarkBLocked` class. This is only to be called by {@link MarkBLocked.init}.
+	 * @param {ConstructorConfig} [cfg]
+	 * @requires mediawiki.api
+	 * @requires mediawiki.user
+	 */
+	constructor(cfg = {}) {
+
+		/**
+		 * @type {mw.Api}
+		 */
+		this.api = new mw.Api(MarkBLocked.getApiOptions());
+		/**
+		 * @type {mw.Api}
+		 */
+		this.readApi = new mw.Api(MarkBLocked.getApiOptions(true));
+
+		// Show Warning if the config has any invalid property
+		const validKeys = ['defaultOptions', 'optionKey', 'globalize', 'i18n', 'lang', 'contribsCA', 'groupsAHL'];
+		const invalidKeys = Object.keys(cfg).reduce(/** @param {string[]} acc */ (acc, key) => {
+			if (validKeys.indexOf(key) === -1) {
+				acc.push(key);
+			}
+			return acc;
+		}, []);
+		if (invalidKeys.length) {
+			console.error('MarkBLocked: Detected invalid constructor options: ' + invalidKeys.join(', '));
+		}
+
+		// User options
+		/**
+		 * The key of `mw.user.options`.
+		 */
+		this.optionKey = cfg.optionKey || MarkBLocked.defaultOptionKey;
+		/**
+		 * @type {UserOptions}
+		 */
+		this.options = (() => {
+			const defaultOptions = cfg.defaultOptions || {
+				localips: false,
+				globalusers: false,
+				globalips: false
+			};
+			/** @type {string} */
+			const optionsStr = mw.user.options.get(this.optionKey) || '{}';
+			let /** @type {UserOptions} */ options;
+			try {
+				options = JSON.parse(optionsStr);
+			}
+			catch(err) {
+				console.error(err);
+				options = defaultOptions;
+			}
+			return Object.assign(defaultOptions, options);
+		})();
+		/**
+		 * @type {boolean}
+		 */
+		this.globalize = !!cfg.globalize;
+		console.log('MarkBLocked globalization: ' + this.globalize);
+
+		// Language options
+		if (typeof cfg.i18n === 'object' && !Array.isArray(cfg.i18n) && cfg.i18n !== null) {
+			Object.assign(MarkBLocked.i18n, cfg.i18n);
+		}
+		/**
+		 * @type {Lang}
+		 */
+		this.msg = (() => {
+			let langCode = 'en';
+			if (cfg.lang !== void 0) {
+				cfg.lang = String(cfg.lang);
+			}
+			if (cfg.lang) {
+				if (Object.keys(MarkBLocked.i18n).indexOf(cfg.lang) !== -1) {
+					langCode = cfg.lang;
+				} else {
+					console.error(`MarkBLocked does not have "${cfg.lang}" language support for its interface.`);
+				}
+			}
+			return MarkBLocked.i18n[langCode];
+		})();
+
+		/**
+		 * Regular expressions to collect user links.
+		 * @typedef {object} LinkRegex
+		 * @property {RegExp} article `/wiki/PAGENAME`: $1: PAGENAME
+		 * @property {RegExp} script `/w/index.php?title=PAGENAME`: $1: PAGENAME
+		 * @property {RegExp} contribsCA `^Special:(?:Contribs|CA)($|/)`
+		 * @property {RegExp} user `^(?:Special:.../|User:)(USERNAME|CIDR)`: $1: USERNAME or CIDR
+		 */
+		/**
+		 * @type {LinkRegex}
+		 */
+		this.regex = (() => {
+
+			const wgNamespaceIds = mw.config.get('wgNamespaceIds'); // {"special": -1, "user": 2, ...}
+			const /** @type {string[]} */ specialAliases = [];
+			const /** @type {string[]} */ userAliases = [];
+			for (const alias in wgNamespaceIds) {
+				const namespaceId = wgNamespaceIds[alias];
+				switch(namespaceId) {
+					case -1:
+						specialAliases.push(alias);
+						break;
+					case 2:
+					case 3:
+						userAliases.push(alias);
+				}
+			}
+
+			let rContribsCA = cfg.contribsCA && cfg.contribsCA.length ? '|' + cfg.contribsCA.join('|') : '';
+			rContribsCA = '(?:' + specialAliases.join('|') + '):(?:contrib(?:ution)?s|ca|centralauth|globalaccount' + rContribsCA + ')';
+			const rUser = '(?:' + userAliases.join('|') + '):';
+
+			return {
+				article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
+				script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)'),
+				contribsCA: new RegExp('^' + rContribsCA + '($|/)', 'i'),
+				user: new RegExp('^(?:' + rContribsCA + '/|' + rUser + ')([^/#]+|[a-f\\d:\\.]+/\\d\\d)$', 'i')
+			};
+
+		})();
+
+		/**
+		 * The maximum number of batch parameter values for the API.
+		 * @type {500|50}
+		 */
+		this.apilimit = (() => {
+
+			const groupsAHLLocal = cfg.groupsAHL || ['sysop', 'bot'];
+			const groupsAHLGlobal = [
+				'apihighlimits-requestor',
+				'founder',
+				'global-bot',
+				// 'global-sysop',
+				'staff',
+				'steward',
+				'sysadmin',
+				'wmf-researcher'
+			];
+			const groupsAHL = groupsAHLLocal.concat(groupsAHLGlobal);
+			// @ts-ignore
+			const hasAHL = mw.config.get('wgUserGroups', []).concat(mw.config.get('wgGlobalGroups', [])).some((group) => groupsAHL.indexOf(group) !== -1);
+
+			return hasAHL ? 500 : 50;
+
+		})();
+
+	}
 
 	/**
 	 * Replace the page content with the MarkBLocked config interface.
@@ -495,128 +401,142 @@ module.exports = /** @class */ (function() {
 	 * @requires mediawiki.api
 	 * @requires mediawiki.user
 	 */
-	MarkBLocked.prototype.createConfigInterface = function() {
+	createConfigInterface() {
 
 		document.title = 'MarkBLockedConfig - ' + mw.config.get('wgSiteName');
 
 		// Collect DOM elements
-		var $heading = $('.mw-first-heading');
-		var $body = $('.mw-body-content');
+		const $heading = $('.mw-first-heading');
+		const $body = $('.mw-body-content');
 		if (!$heading.length || !$body.length) {
 			mw.notify(this.getMessage('config-notify-notloaded'));
 			return;
 		}
 		$heading.text(this.getMessage('config-label-heading'));
 
-		// Config container
-		var $container = $('<div>').prop('id', 'mblc-container');
-		$body.empty().append($container);
-
 		// Transparent overlay of the container used to make elements in it unclickable
-		var $overlay = $('<div>').prop('id', 'mblc-container-overlay').hide();
-		$container.after($overlay);
-
-		// Option container fieldset
-		var fieldset = new OO.ui.FieldsetLayout({
-			id: 'mblc-optionfield',
-			label: this.getMessage('config-label-fieldset')
-		});
-		$container.append(fieldset.$element);
+		const $overlay = $('<div>');
 
 		// Options
-		var localIps = new OO.ui.CheckboxInputWidget({
+		const localIps = new OO.ui.CheckboxInputWidget({
 			selected: this.options.localips
 		});
-		var globalUsers = new OO.ui.CheckboxInputWidget({
+		const globalUsers = new OO.ui.CheckboxInputWidget({
 			selected: this.options.globalusers
 		});
-		var globalIps = new OO.ui.CheckboxInputWidget({
+		const globalIps = new OO.ui.CheckboxInputWidget({
 			selected: this.options.globalips
 		});
-		fieldset.addItems([
-			new OO.ui.FieldLayout(localIps, {
-				label: this.getMessage('config-label-localips'),
-				align: 'inline'
-			}),
-			new OO.ui.FieldLayout(globalUsers, {
-				label: this.getMessage('config-label-globalusers'),
-				align: 'inline'
-			}),
-			new OO.ui.FieldLayout(globalIps, {
-				label: this.getMessage('config-label-globalips'),
-				align: 'inline'
-			})
-		]);
+
+		// Option container fieldset
+		const fieldset = new OO.ui.FieldsetLayout({
+			id: 'mblc-optionfield',
+			label: this.getMessage('config-label-fieldset'),
+			items: [
+				new OO.ui.FieldLayout(localIps, {
+					label: this.getMessage('config-label-localips'),
+					align: 'inline'
+				}),
+				new OO.ui.FieldLayout(globalUsers, {
+					label: this.getMessage('config-label-globalusers'),
+					align: 'inline'
+				}),
+				new OO.ui.FieldLayout(globalIps, {
+					label: this.getMessage('config-label-globalips'),
+					align: 'inline'
+				})
+			]
+		});
 
 		// Save button
-		var saveButton = new OO.ui.ButtonWidget({
+		const saveButton = new OO.ui.ButtonWidget({
 			id: 'mblc-save',
 			label: this.getMessage('config-label-save'),
 			icon: 'bookmarkOutline',
 			flags: ['primary', 'progressive']
-		});
-		$container.append(saveButton.$element);
-		var _this = this;
-		saveButton.$element.off('click').on('click', function() {
+		}).off('click').on('click', () => {
 
 			$overlay.show();
 
 			// Change the save button's label
-			var $img = $('<img>')
-				.prop('src', '//upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif')
-				.css({
-					verticalAlign: 'middle',
-					height: '1em',
-					border: '0',
-					marginRight: '1em'
-				});
-			var $label = $('<span>').append($img);
-			var textNode = document.createTextNode(_this.getMessage('config-label-saving'));
-			$label.append(textNode);
-			saveButton.setIcon(null).setLabel($label);
+			saveButton.setIcon(null).setLabel(
+				$('<span>')
+					.append(
+						$('<img>')
+							.prop('src', '//upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif')
+							.css({
+								verticalAlign: 'middle',
+								height: '1em',
+								border: '0',
+								marginRight: '1em'
+							}),
+							document.createTextNode(this.getMessage('config-label-saving'))
+					)
+			);
 
 			// Get config
-			var /** @type {UserOptions} */ cfg = {
+			const /** @type {UserOptions} */ cfg = {
 				localips: localIps.isSelected(),
 				globalusers: globalUsers.isSelected(),
 				globalips: globalIps.isSelected()
 			};
-			var cfgStr = JSON.stringify(cfg);
+			const cfgStr = JSON.stringify(cfg);
 
 			// Save config
-			_this.api.postWithToken('csrf', {
-				action: _this.globalize ? 'globalpreferences' : 'options',
-				optionname: _this.optionKey,
+			this.api.postWithToken('csrf', {
+				action: this.globalize ? 'globalpreferences' : 'options',
+				optionname: this.optionKey,
 				optionvalue: cfgStr,
 				formatversion:'2'
-			}).then(function() {
-				mw.user.options.set(_this.optionKey, cfgStr);
+			}).then(() => {
+				mw.user.options.set(this.optionKey, cfgStr);
 				return null;
-			}).catch(/** @param {string} code */ function(code, err) {
+			}).catch(/** @param {string} code */ (code, err) => {
 				console.warn(err);
 				return code;
-			})
-			.then(/** @param {string?} err */ function(err) {
+			}).then(/** @param {string?} err */ (err) => {
 				if (err) {
-					mw.notify(_this.getMessage('config-notify-savefailed') + '(' + err + ')', {type: 'error'});
+					mw.notify(this.getMessage('config-notify-savefailed') + '(' + err + ')', {type: 'error'});
 				} else {
-					mw.notify(_this.getMessage('config-notify-savedone'), {type: 'success'});
+					mw.notify(this.getMessage('config-notify-savedone'), {type: 'success'});
 				}
-				saveButton.setIcon('bookmarkOutline').setLabel(_this.getMessage('config-label-save'));
+				saveButton.setIcon('bookmarkOutline').setLabel(this.getMessage('config-label-save'));
 				$overlay.hide();
 			});
 
 		});
 
-	};
+		// Construct the config body
+		$body.empty().append(
+			$('<div>')
+				.prop('id', 'mblc-container')
+				.append(
+					fieldset.$element,
+					saveButton.$element
+				),
+			$overlay
+				.prop('id', 'mblc-container-overlay')
+				.hide()
+		);
+
+	}
+
+	/**
+	 * Get an interface message of MarkBLocked.
+	 * @param {keyof Lang} key
+	 * @returns {string}
+	 */
+	getMessage(key) {
+		return this.msg[key];
+	}
 
 	/**
 	 * Create a portlet link to the config page.
 	 * @returns {void}
 	 * @requires mediawiki.util
 	 */
-	MarkBLocked.prototype.createPortletLink = function() {
-		var portlet = mw.util.addPortletLink(
+	createPortletLink() {
+		const portlet = mw.util.addPortletLink(
 			document.getElementById('p-tb') ? 'p-tb' : 'p-personal', // p-tb doesn't exist on minerva
 			mw.util.getUrl('Special:MarkBLockedConfig'),
 			this.getMessage('portlet-text'),
@@ -625,7 +545,74 @@ module.exports = /** @class */ (function() {
 		if (!portlet) {
 			console.error('Failed to create a portlet link for MarkBLocked.');
 		}
-	};
+	}
+
+	/**
+	 * Abort all unfinished requests issued by the MarkBLocked class instance.
+	 * @returns {MarkBLocked}
+	 */
+	abort() {
+		this.api.abort();
+		this.readApi.abort();
+		return this;
+	}
+
+	/**
+	 * Create a button to enable/disable MarkBLocked (for Special:Recentchanges and Special:Watchlist, on which `markup`
+	 * is recursively called when the page content is updated.)
+	 * @param {($content: JQuery<HTMLElement>) => void} hookHandler A function to (un)bind to the `wikipage.content` hook.
+	 */
+	createToggleButton(hookHandler) {
+
+		// Create toggle button
+		const toggle = new OO.ui.ButtonWidget({
+			id: 'mbl-toggle',
+			label: 'MBL',
+			icon: 'unLock',
+			flags: 'progressive',
+			title: this.getMessage('toggle-title-enabled')
+		}).off('click').on('click', () => {
+			const disable = toggle.getFlags().indexOf('progressive') !== -1;
+			let icon, title, hookToggle, msg;
+			if (disable) {
+				icon = 'lock';
+				title = this.getMessage('toggle-title-disabled');
+				hookToggle = mw.hook('wikipage.content').remove;
+				msg = this.getMessage('toggle-notify-disabled');
+				$('.mbl-userlink').removeClass((_, className) => { // Remove all mbl- classes from user links
+					return (className.match(/(^|\s)mbl-\S+/) || []).join(' ');
+				});
+			} else {
+				icon = 'unLock';
+				title = this.getMessage('toggle-title-enabled');
+				hookToggle = mw.hook('wikipage.content').add;
+				msg = this.getMessage('toggle-notify-enabled');
+				// Hook.add fires the `wikipage.content` hook, meaning that `markup` is automatically called and classes are reassigned
+			}
+			toggle
+				.setFlags({progressive: !disable, destructive: disable})
+				.setIcon(icon)
+				.setTitle(title);
+			hookToggle(hookHandler);
+			mw.notify(msg);
+		});
+		const $wrapper = $('<div>')
+			.prop('id', 'mbl-toggle-wrapper')
+			.append(toggle.$element);
+
+		// Append the toggle button
+		const spName = mw.config.get('wgCanonicalSpecialPageName');
+		let selector = '';
+		if (spName === 'Recentchanges') {
+			selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-rcTopSectionWidget-savedLinks';
+			$(selector).eq(0).before($wrapper);
+		} else if (spName === 'Watchlist') {
+			selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-watchlistTopSectionWidget-savedLinks';
+			$(selector).eq(0).before($wrapper);
+			$wrapper.css('margin-left', 'auto');
+		}
+
+	}
 
 	/**
 	 * Mark up user links.
@@ -634,11 +621,9 @@ module.exports = /** @class */ (function() {
 	 * @requires mediawiki.util
 	 * @requires mediawiki.api
 	 */
-	MarkBLocked.prototype.markup = function($content) {
+	markup($content) {
 
-		var _this = this;
-		var collected = this.collectLinks($content);
-		var userLinks = collected.userLinks;
+		const {userLinks, users, ips} = this.collectLinks($content);
 		if ($.isEmptyObject(userLinks)) {
 			console.log('MarkBLocked', {
 				$content: $content,
@@ -646,12 +631,9 @@ module.exports = /** @class */ (function() {
 			});
 			return;
 		}
-		var users = collected.users;
-		var ips = collected.ips;
-		var allUsers = users.concat(ips);
-		var options = this.options;
+		const allUsers = users.concat(ips);
 
-		this.markBlockedUsers(userLinks, allUsers).then(function(markedUsers) {
+		this.markBlockedUsers(userLinks, allUsers).then((markedUsers) => {
 
 			if (markedUsers === null) { // Aborted
 				return;
@@ -665,12 +647,10 @@ module.exports = /** @class */ (function() {
 			}
 
 			// Create a batch array for additional markups
-			var ipsThatMightBeBlocked = ips.filter(function(ip) {
-				return markedUsers.indexOf(ip) === -1;
-			});
-			var /** @type {BatchObject[]} */ batchArray = [];
-			if (options.localips && ipsThatMightBeBlocked.length) {
-				ipsThatMightBeBlocked.forEach(function(ip) {
+			const ipsThatMightBeBlocked = ips.filter((ip) => markedUsers.indexOf(ip) === -1);
+			const /** @type {BatchObject[]} */ batchArray = [];
+			if (this.options.localips && ipsThatMightBeBlocked.length) {
+				ipsThatMightBeBlocked.forEach((ip) => {
 					batchArray.push({
 						params: {
 							action: 'query',
@@ -679,18 +659,18 @@ module.exports = /** @class */ (function() {
 							bkprop: 'user|expiry|restrictions',
 							formatversion: '2'
 						},
-						callback: function(res) {
+						callback: (res) => {
 							// An IP may have multiple blocks
 							/** @type {ApiResponseQueryListBlocks[]} */
-							var resBlk = res && res.query && res.query.blocks || [];
-							var resObj = resBlk.reduce(/** @param {ApiResponseQueryListBlocks?} acc */ function(acc, obj, i) {
+							const resBlk = res && res.query && res.query.blocks || [];
+							const resObj = resBlk.reduce(/** @param {ApiResponseQueryListBlocks?} acc */ (acc, obj, i) => {
 								if (i === 0) {
 									acc = obj; // Just save the object in the first loop
 								} else {
 									// If the IP has multiple blocks, filter out the narrowest one CIDR-wise
-									var m;
-									var lastRange = acc && (m = acc.user.match(/\/(\d+)$/)) ? parseInt(m[1]) : 128;
-									var thisRange = (m = obj.user.match(/\/(\d+)$/)) !== null ? parseInt(m[1]) : 128;
+									let m;
+									const lastRange = acc && (m = acc.user.match(/\/(\d+)$/)) ? parseInt(m[1]) : 128;
+									const thisRange = (m = obj.user.match(/\/(\d+)$/)) !== null ? parseInt(m[1]) : 128;
 									if (thisRange > lastRange) { // e.g., /24 is narrower than /23
 										acc = obj; // Overwrite the previously substituted object
 									}
@@ -698,21 +678,21 @@ module.exports = /** @class */ (function() {
 								return acc;
 							}, null);
 							if (resObj) {
-								var partialBlk = resObj.restrictions && !Array.isArray(resObj.restrictions);
-								var clss;
+								const partialBlk = resObj.restrictions && !Array.isArray(resObj.restrictions);
+								let clss;
 								if (/^in/.test(resObj.expiry)) {
 									clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
 								} else {
 									clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
 								}
-								addClass(userLinks, ip, clss);
+								MarkBLocked.addClass(userLinks, ip, clss);
 							}
 						}
 					});
 				});
 			}
-			if (options.globalusers && users.length) {
-				users.forEach(function(user) {
+			if (this.options.globalusers && users.length) {
+				users.forEach((user) => {
 					batchArray.push({
 						params: {
 							action: 'query',
@@ -723,19 +703,19 @@ module.exports = /** @class */ (function() {
 							aguprop: 'lockinfo',
 							formatversion: '2'
 						},
-						callback: function(res) {
+						callback: (res) => {
 							/** @typedef {{locked?: string;}} ApiResponseQueryListGlobalallusers */
-							var /** @type {ApiResponseQueryListGlobalallusers[]=} */ resLck = res && res.query && res.query.globalallusers;
-							var /** @type {ApiResponseQueryListGlobalallusers=} */ resObj;
+							const /** @type {ApiResponseQueryListGlobalallusers[]=} */ resLck = res && res.query && res.query.globalallusers;
+							let /** @type {ApiResponseQueryListGlobalallusers=} */ resObj;
 							if (resLck && (resObj = resLck[0]) && resObj.locked === '') {
-								addClass(userLinks, user, 'mbl-globally-locked');
+								MarkBLocked.addClass(userLinks, user, 'mbl-globally-locked');
 							}
 						}
 					});
 				});
 			}
-			if (options.globalips && ips.length) {
-				ips.forEach(function(ip) {
+			if (this.options.globalips && ips.length) {
+				ips.forEach((ip) => {
 					batchArray.push({
 						params: {
 							action: 'query',
@@ -744,17 +724,17 @@ module.exports = /** @class */ (function() {
 							bgprop: 'address|expiry',
 							formatversion: '2'
 						},
-						callback: function(res) {
+						callback: (res) => {
 							/** @typedef {{address: string; expiry: string;}} ApiResponseQueryListGlobalblocks */
 							/** @type {ApiResponseQueryListGlobalblocks[]} */
-							var resGblk = res && res.query && res.query.globalblocks || [];
-							var resObj = resGblk.reduce(/** @param {ApiResponseQueryListGlobalblocks?} acc */ function(acc, obj, i) {
+							const resGblk = res && res.query && res.query.globalblocks || [];
+							const resObj = resGblk.reduce(/** @param {ApiResponseQueryListGlobalblocks?} acc */ (acc, obj, i) => {
 								if (i === 0) {
 									acc = obj;
 								} else {
-									var m;
-									var lastRange = acc && (m = acc.address.match(/\/(\d+)$/)) ? parseInt(m[1]) : 128;
-									var thisRange = (m = obj.address.match(/\/(\d+)$/)) !== null ? parseInt(m[1]) : 128;
+									let m;
+									const lastRange = acc && (m = acc.address.match(/\/(\d+)$/)) ? parseInt(m[1]) : 128;
+									const thisRange = (m = obj.address.match(/\/(\d+)$/)) !== null ? parseInt(m[1]) : 128;
 									if (thisRange > lastRange) {
 										acc = obj;
 									}
@@ -762,8 +742,8 @@ module.exports = /** @class */ (function() {
 								return acc;
 							}, null);
 							if (resObj) {
-								var clss = /^in/.test(resObj.expiry) ? 'mbl-globally-blocked-indef' : 'mbl-globally-blocked-temp';
-								addClass(userLinks, ip, clss);
+								const clss = /^in/.test(resObj.expiry) ? 'mbl-globally-blocked-indef' : 'mbl-globally-blocked-temp';
+								MarkBLocked.addClass(userLinks, ip, clss);
 							}
 						}
 					});
@@ -771,98 +751,100 @@ module.exports = /** @class */ (function() {
 			}
 
 			if (batchArray.length) {
-				_this.batchRequest(batchArray);
+				this.batchRequest(batchArray);
 			}
 
 		});
 
-	};
+	}
 
 	/**
 	 * Object that stores collected user links, keyed by usernames and valued by an array of anchors.
-	 * @typedef {Object.<string, HTMLAnchorElement[]>} UserLinks
+	 * @typedef {Record<string, HTMLAnchorElement[]>} UserLinks
+	 */
+	/**
+	 * @typedef {{userLinks: UserLinks; users: string[]; ips: string[];}} LinkObject
 	 */
 	/**
 	 * Collect user links to mark up.
 	 * @param {JQuery<HTMLElement>} $content
-	 * @returns {{userLinks: UserLinks; users: string[]; ips: string[];}}
+	 * @returns {LinkObject}
 	 * @requires mediawiki.util
 	 */
-	MarkBLocked.prototype.collectLinks = function($content) {
+	collectLinks($content) {
 
 		// Get all anchors in the content
-		var $anchors = $content.find('a');
-		var $pNamespaces = $('#p-associated-pages, #p-namespaces, .skin-monobook #ca-nstab-user, .skin-monobook #ca-talk');
+		let $anchors = $content.find('a');
+		const $pNamespaces = $('#p-associated-pages, #p-namespaces, .skin-monobook #ca-nstab-user, .skin-monobook #ca-talk');
 		if ($pNamespaces.length && !$content.find($pNamespaces).length && [2, 3].indexOf(mw.config.get('wgNamespaceNumber')) !== -1) {
 			$anchors = $anchors.add($pNamespaces.find('a'));
 		}
-		var $contribsTools = $('.mw-special-Contributions, .mw-special-DeletedContributions').find('#mw-content-subtitle');
+		const $contribsTools = $('.mw-special-Contributions, .mw-special-DeletedContributions').find('#mw-content-subtitle');
 		if ($contribsTools.length && !$content.find($contribsTools).length) {
 			$anchors = $anchors.add($contribsTools.find('a'));
 		}
 
-		// Set up variables
-		var _this = this;
-		var /** @type {string[]} */ users = [];
-		var /** @type {string[]} */ ips = [];
-		var ignoredClassesPr = /\b((mw|twg?)-rollback-|autocomment)/;
-		var /** @type {UserLinks} */ userLinks = {};
-
 		// Filter out user links
-		$anchors.each(function(_, a) {
+		/** @type {LinkObject} */
+		const ret = {
+			userLinks: Object.create(null),
+			users: [],
+			ips: []
+		};
+		return Array.from($anchors).reduce((acc, a) => {
 
 			// Ignore some anchors
-			var href = a.href;
-			var pr = a.parentElement;
+			const href = a.href;
+			const pr = a.parentElement;
 			if (
 				!href ||
 				href[0] === '#' ||
+				a.role === 'button' ||
+				$(a).is('.mbl-userlink, .ext-discussiontools-init-timestamplink') ||
+				pr && /\b((mw|twg?)-rollback-|autocomment)/.test(pr.className) ||
 				mw.util.getParamValue('action', href) && !mw.util.getParamValue('redlink', href) ||
 				mw.util.getParamValue('diff', href) ||
-				mw.util.getParamValue('oldid', href) ||
-				a.role === 'button' ||
-				a.classList.contains('ext-discussiontools-init-timestamplink') ||
-				pr && ignoredClassesPr.test(pr.className)
+				mw.util.getParamValue('oldid', href)
 			) {
-				return;
+				return acc;
 			}
 
 			// Get the associated pagetitle
-			var /** @type {RegExpExecArray?} */ m,
+			let /** @type {RegExpExecArray?} */ m,
 				/** @type {string} */ pagetitle;
-			if ((m = _this.regex.article.exec(href))) {
+			if ((m = this.regex.article.exec(href))) {
 				pagetitle = m[1];
-			} else if ((m = _this.regex.script.exec(href))) {
+			} else if ((m = this.regex.script.exec(href))) {
 				pagetitle = m[1];
 			} else {
-				return;
+				return acc;
 			}
 			pagetitle = decodeURIComponent(pagetitle).replace(/ /g, '_');
 
 			// Extract a username from the pagetitle
-			var tar, username;
-			if (_this.regex.contribsCA.test(pagetitle) && (tar = mw.util.getParamValue('target', href))) {
+			let tar, username;
+			if (this.regex.contribsCA.test(pagetitle) && (tar = mw.util.getParamValue('target', href))) {
 				// If the parsing title is one for a special page, check whether there's a valid &target= query parameter.
 				// This parameter's value is prioritized than the subpage name, if any, hence "Special:CA/Foo?target=Bar"
 				// shows CentralAuth for User:Bar, not User:Foo.
 				username = tar;
-			} else if ((m = _this.regex.user.exec(pagetitle))) {
+			} else if ((m = this.regex.user.exec(pagetitle))) {
 				// If the condition above isn't met, just parse out a username from the pagetitle
 				username = m[1];
 			} else {
-				return;
+				return acc;
 			}
-			username = username.replace(/_/g, ' ').trim();
-			var /** @type {string[]} */ arr;
+			username = username.replace(/_/g, ' ').replace(/@global$/, '').trim();
+			let /** @type {string[]} */ arr;
 			if (mw.util.isIPAddress(username, true)) {
 				username = mw.util.sanitizeIP(username) || username; // The right operand is never reached
-				arr = ips;
+				arr = acc.ips;
 			} else if (/[/@#<>[\]|{}:]|^(\d{1,3}\.){3}\d{1,3}$/.test(username)) {
 				// Ensure the username doesn't contain characters that can't be used for usernames (do this here or block status query might fail)
 				console.log('MarkBLocked: Unprocessable username: ' + username);
-				return;
+				return acc;
 			} else {
-				arr = users;
+				arr = acc.users;
 				if (!/^[\u10A0-\u10FF]/.test(username)) { // ucFirst, except for Georgean letters
 					username = username.charAt(0).toUpperCase() + username.slice(1);
 				}
@@ -872,21 +854,16 @@ module.exports = /** @class */ (function() {
 			}
 
 			a.classList.add('mbl-userlink');
-			if (userLinks[username]) {
-				userLinks[username].push(a);
+			if (acc.userLinks[username]) {
+				acc.userLinks[username].push(a);
 			} else {
-				userLinks[username] = [a];
+				acc.userLinks[username] = [a];
 			}
 
-		});
+			return acc;
+		}, ret);
 
-		return {
-			userLinks: userLinks,
-			users: users,
-			ips: ips
-		};
-
-	};
+	}
 
 	/**
 	 * @typedef {object} ApiResponseQueryListBlocks
@@ -901,67 +878,61 @@ module.exports = /** @class */ (function() {
 	 * @returns {JQueryPromise<string[]?>} Usernames whose links are marked up (`null` if aborted).
 	 * @requires mediawiki.api
 	 */
-	MarkBLocked.prototype.markBlockedUsers = function(userLinks, usersArr) {
+	markBlockedUsers(userLinks, usersArr) {
 
 		if (!usersArr.length) {
 			return $.Deferred().resolve([]);
-		} else {
-			usersArr = usersArr.slice(); // Deep copy
 		}
 
-		var api = this.readApi;
-		var /** @type {string[]} */ marked = [];
-		var aborted = false;
+		const /** @type {string[]} */ marked = [];
+		let aborted = false;
 		/**
 		 * @param {string[]} users
 		 * @returns {JQueryPromise<void>}
 		 */
-		var req = function(users) {
-			return api.post({ // This MUST be a POST request because the parameters can exceed the word count limit of URI
+		const req = (users) => {
+			return this.readApi.post({ // This MUST be a POST request because the parameters can exceed the word count limit of URI
 				action: 'query',
 				list: 'blocks',
 				bklimit: 'max',
 				bkusers: users.join('|'),
 				bkprop: 'user|expiry|restrictions',
 				formatversion: '2'
-			}).then(function(res){
-				var /** @type {ApiResponseQueryListBlocks[]=} */ resBlk = res && res.query && res.query.blocks;
+			}).then((res) =>{
+				const /** @type {ApiResponseQueryListBlocks[]=} */ resBlk = res && res.query && res.query.blocks;
 				if (resBlk) {
-					resBlk.forEach(function(obj) {
-						var partialBlk = obj.restrictions && !Array.isArray(obj.restrictions); // Boolean: True if partial block
-						var clss;
+					resBlk.forEach((obj) => {
+						const partialBlk = obj.restrictions && !Array.isArray(obj.restrictions); // Boolean: True if partial block
+						let clss;
 						if (/^in/.test(obj.expiry)) {
 							clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
 						} else {
 							clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
 						}
-						var markedUser = addClass(userLinks, obj.user, clss);
+						const markedUser = MarkBLocked.addClass(userLinks, obj.user, clss);
 						if (markedUser) {
 							marked.push(markedUser);
 						}
 					});
 				}
-				return void 0;
-			}).catch(function(_, err) {
+			}).catch((_, err) => {
 				if (err['exception'] === 'abort') {
 					aborted = true;
 				} else {
 					console.error(err);
 				}
-				return void 0;
 			});
 		};
 
 		// API calls
-		var /** @type {JQueryPromise<void>[]} */ deferreds = [];
+		const /** @type {JQueryPromise<void>[]} */ deferreds = [];
+		usersArr = usersArr.slice();
 		while (usersArr.length) {
 			deferreds.push(req(usersArr.splice(0, this.apilimit)));
 		}
-		return $.when.apply($, deferreds).then(function() {
-			return aborted ? null : marked;
-		});
+		return $.when(...deferreds).then(() => aborted ? null : marked);
 
-	};
+	}
 
 	/**
 	 * Add a class to all anchors associated with a certain username.
@@ -970,10 +941,10 @@ module.exports = /** @class */ (function() {
 	 * @param {string} className
 	 * @returns {string?} The username if any link is marked up, or else `null`.
 	 */
-	function addClass(userLinks, userName, className) {
-		var links = userLinks[userName]; // Get all links related to the user
+	static addClass(userLinks, userName, className) {
+		const links = userLinks[userName]; // Get all links related to the user
 		if (links) {
-			for (var i = 0; i < links.length; i++) {
+			for (let i = 0; i < links.length; i++) {
 				links[i].classList.add(className);
 			}
 			return userName;
@@ -984,7 +955,7 @@ module.exports = /** @class */ (function() {
 	}
 
 	/**
-	 * @typedef {Object.<string, any>} DynamicObject
+	 * @typedef {Record<string, any>} DynamicObject
 	 */
 	/**
 	 * @typedef {object} BatchObject
@@ -1002,11 +973,11 @@ module.exports = /** @class */ (function() {
 	 * @returns {JQueryPromise<void>}
 	 * @requires mediawiki.api
 	 */
-	MarkBLocked.prototype.batchRequest = function(batchArray) {
+	batchRequest(batchArray) {
 
 		// Unflatten the array of objects to an array of arrays of objects
-		var unflattened = batchArray.reduce(/** @param {BatchObject[][]} acc */ function(acc, obj) {
-			var len = acc.length - 1;
+		const unflattened = batchArray.reduce(/** @param {BatchObject[][]} acc */ (acc, obj) => {
+			const len = acc.length - 1;
 			if (Array.isArray(acc[len]) && acc[len].length < 1000) {
 				acc[len].push(obj);
 			} else {
@@ -1015,23 +986,21 @@ module.exports = /** @class */ (function() {
 			return acc;
 		}, [[]]);
 
-		var api = this.api;
-		var aborted = false;
+		let aborted = false;
 		/**
 		 * Send an API request.
 		 * @param {BatchObject} batchObj
 		 * @returns {JQueryPromise<void>}
 		 */
-		var req = function(batchObj) {
-			return api.get(batchObj.params)
+		const req = (batchObj) => {
+			return this.api.get(batchObj.params)
 				.then(batchObj.callback)
-				.catch(function(_, err) {
+				.catch((_, err) => {
 					if (err['exception'] === 'abort') {
 						aborted = true;
 					} else {
 						console.error(err);
 					}
-					return void 0;
 				});
 		};
 		/**
@@ -1039,28 +1008,18 @@ module.exports = /** @class */ (function() {
 		 * @param {number} index
 		 * @returns {JQueryPromise<void>}
 		 */
-		var batch = function(index) {
-			var batchElementArray = unflattened[index];
-			var /** @type {JQueryPromise<void>[]} */ deferreds = [];
-			batchElementArray.forEach(function(batchObj) {
-				deferreds.push(req(batchObj));
-			});
-			return $.when.apply($, deferreds).then(function() {
-				console.log('MarkBLocked batch count: ' + deferreds.length);
-				index++;
-				if (!aborted && unflattened[index]) {
+		const batch = (index) => {
+			return $.when(...unflattened[index].map(req)).then((...args) => {
+				console.log('MarkBLocked batch count: ' + args.length);
+				if (!aborted && unflattened[++index]) {
 					return batch(index);
-				} else {
-					return void 0;
 				}
 			});
 		};
 
 		return batch(0);
 
-	};
+	}
 
-	return MarkBLocked;
-
-})();
+};
 //</nowiki>
