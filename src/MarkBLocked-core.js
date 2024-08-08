@@ -8,8 +8,10 @@
  */
 const i18n = {
 	en: {
-		'config-label-heading': 'Configure MarkBLocked',
-		'config-label-fieldset': 'Markup settings',
+		'config-label-heading': 'MarkBLocked configurations',
+		'config-label-fsgeneral': 'General settings',
+		'config-label-genportlet': 'Generate a portlet link to the config page',
+		'config-label-fsmarkup': 'Markup settings',
 		'config-label-localips': 'Mark up IPs in locally blocked IP ranges',
 		'config-label-globalusers': 'Mark up globally locked users',
 		'config-label-globalips': 'Mark up globally blocked IPs',
@@ -18,7 +20,8 @@ const i18n = {
 		'config-notify-notloaded': 'Failed to load the interface.',
 		'config-notify-savedone': 'Sucessfully saved the settings.',
 		'config-notify-savefailed': 'Failed to save the settings. ',
-		'portlet-text': 'Configure MarkBLocked',
+		'portlet-text': 'MBL config',
+		'portlet-title': 'Open [[Special:MarkBLockedConfig]]',
 		'toggle-title-enabled': 'MarkBLocked is enabled. Click to disable it temporarily.',
 		'toggle-title-disabled': 'MarkBLocked is temporarily disabled. Click to enable it again.',
 		'toggle-notify-enabled': 'Enabled MarkBLocked.',
@@ -26,7 +29,9 @@ const i18n = {
 	},
 	ja: {
 		'config-label-heading': 'MarkBLockedの設定',
-		'config-label-fieldset': 'マークアップ設定',
+		'config-label-fsgeneral': '一般設定',
+		'config-label-genportlet': '設定ページへのポートレットリンクを生成',
+		'config-label-fsmarkup': 'マークアップ設定',
 		'config-label-localips': 'ブロックされたIPレンジに含まれるIPをマークアップ',
 		'config-label-globalusers': 'グローバルロックされた利用者をマークアップ',
 		'config-label-globalips': 'グローバルブロックされたIPをマークアップ',
@@ -36,6 +41,7 @@ const i18n = {
 		'config-notify-savedone': '設定の保存に成功しました。',
 		'config-notify-savefailed': '設定の保存に失敗しました。',
 		'portlet-text': 'MarkBLockedの設定',
+		'portlet-title': '[[特別:MarkBLockedConfig]]を開く',
 		'toggle-title-enabled': 'MarkBLockedが有効化されています。クリックすると一時的に無効化します。',
 		'toggle-title-disabled': 'MarkBLockedが一時的に無効化されています。クリックすると再有効化します。',
 		'toggle-notify-enabled': 'MarkBLockedを有効化しました。',
@@ -49,13 +55,15 @@ class MarkBLocked {
 
 	/**
 	 * @typedef {object} UserOptions
+	 * @property {boolean} genportlet
 	 * @property {boolean} localips
 	 * @property {boolean} globalusers
 	 * @property {boolean} globalips
 	 */
 	/**
 	 * @typedef {object} ConstructorConfig
-	 * @property {UserOptions} [defaultOptions] Configured default option values. (Default: all `false`).
+	 * @property {Partial<UserOptions>} [defaultOptions] Configured default option values, which will be merged into the
+	 * default config options (i.e. supports partial overrides).
 	 * @property {string} [optionKey] The key of `mw.user.options`, defaulted to `userjs-markblocked-config`.
 	 * @property {boolean} [globalize] If `true`, save the options into global preferences.
 	 * @property {Record<string, Lang>} [i18n] A language object to merge to {@link MarkBLocked.i18n}. Using this config makes
@@ -288,11 +296,12 @@ class MarkBLocked {
 		 * @type {UserOptions}
 		 */
 		this.options = (() => {
-			const defaultOptions = cfg.defaultOptions || {
+			const defaultOptions = Object.assign({
+				genportlet: true,
 				localips: false,
 				globalusers: false,
 				globalips: false
-			};
+			}, cfg.defaultOptions);
 			/** @type {string} */
 			const optionsStr = mw.user.options.get(this.optionKey) || '{}';
 			let /** @type {UserOptions} */ options;
@@ -425,7 +434,21 @@ class MarkBLocked {
 		// Transparent overlay of the container used to make elements in it unclickable
 		const $overlay = $('<div>');
 
-		// Options
+		// General options
+		const genportlet = new OO.ui.CheckboxInputWidget({
+			selected: this.options.genportlet
+		});
+		const fsGeneral = new OO.ui.FieldsetLayout({
+			label: this.getMessage('config-label-fsgeneral'),
+			items: [
+				new OO.ui.FieldLayout(genportlet, {
+					label: this.getMessage('config-label-genportlet'),
+					align: 'inline'
+				})
+			]
+		});
+
+		// Markup options
 		const localIps = new OO.ui.CheckboxInputWidget({
 			selected: this.options.localips
 		});
@@ -435,11 +458,8 @@ class MarkBLocked {
 		const globalIps = new OO.ui.CheckboxInputWidget({
 			selected: this.options.globalips
 		});
-
-		// Option container fieldset
-		const fieldset = new OO.ui.FieldsetLayout({
-			id: 'mblc-optionfield',
-			label: this.getMessage('config-label-fieldset'),
+		const fsMarkup = new OO.ui.FieldsetLayout({
+			label: this.getMessage('config-label-fsmarkup'),
 			items: [
 				new OO.ui.FieldLayout(localIps, {
 					label: this.getMessage('config-label-localips'),
@@ -484,6 +504,7 @@ class MarkBLocked {
 
 			// Get config
 			const /** @type {UserOptions} */ cfg = {
+				genportlet: genportlet.isSelected(),
 				localips: localIps.isSelected(),
 				globalusers: globalUsers.isSelected(),
 				globalips: globalIps.isSelected()
@@ -519,7 +540,12 @@ class MarkBLocked {
 			$('<div>')
 				.prop('id', 'mblc-container')
 				.append(
-					fieldset.$element,
+					$('<div>')
+						.prop('id', 'mblc-optionfield')
+						.append(
+							fsGeneral.$element,
+							fsMarkup.$element
+						),
 					saveButton.$element
 				),
 			$overlay
@@ -544,14 +570,17 @@ class MarkBLocked {
 	 * @requires mediawiki.util
 	 */
 	createPortletLink() {
-		const portlet = mw.util.addPortletLink(
-			document.getElementById('p-tb') ? 'p-tb' : 'p-personal', // p-tb doesn't exist on minerva
-			mw.util.getUrl('Special:MarkBLockedConfig'),
-			this.getMessage('portlet-text'),
-			'ca-mblc'
-		);
-		if (!portlet) {
-			console.error('Failed to create a portlet link for MarkBLocked.');
+		if (this.options.genportlet) {
+			const portlet = mw.util.addPortletLink(
+				document.getElementById('p-tb') ? 'p-tb' : 'p-personal', // p-tb doesn't exist on minerva
+				mw.util.getUrl('Special:MarkBLockedConfig'),
+				this.getMessage('portlet-text'),
+				'ca-mblc',
+				this.getMessage('portlet-title')
+			);
+			if (!portlet) {
+				console.error('Failed to create a portlet link for MarkBLocked.');
+			}
 		}
 	}
 
