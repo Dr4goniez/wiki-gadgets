@@ -261,11 +261,11 @@ module.exports = class MarkBLocked {
 		/**
 		 * @type {mw.Api}
 		 */
-		this.api = new mw.Api(MarkBLocked.getApiOptions({timeout: 60}));
+		this.api = new mw.Api(MarkBLocked.getApiOptions({timeout: 60*1000}));
 		/**
 		 * @type {mw.Api}
 		 */
-		this.readApi = new mw.Api(MarkBLocked.getApiOptions({timeout: 60, nonwritepost: true}));
+		this.readApi = new mw.Api(MarkBLocked.getApiOptions({timeout: 60*1000, nonwritepost: true}));
 
 		// Show Warning if the config has any invalid property
 		const validKeys = ['defaultOptions', 'optionKey', 'globalize', 'i18n', 'lang', 'contribsCA', 'groupsAHL'];
