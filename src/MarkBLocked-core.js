@@ -2,47 +2,50 @@
 /// <reference path="./window/MarkBLocked.d.ts" />
 /* global mw, OO */
 //<nowiki>
-module.exports = class MarkBLocked {
 
-	/**
-	 * @type {Record<string, Lang>}
-	 */
-	static i18n = {
-		en: {
-			'config-label-heading': 'Configure MarkBLocked',
-			'config-label-fieldset': 'Markup settings',
-			'config-label-localips': 'Mark up IPs in locally blocked IP ranges',
-			'config-label-globalusers': 'Mark up globally locked users',
-			'config-label-globalips': 'Mark up globally blocked IPs',
-			'config-label-save': 'Save settings',
-			'config-label-saving': 'Saving settings...',
-			'config-notify-notloaded': 'Failed to load the interface.',
-			'config-notify-savedone': 'Sucessfully saved the settings.',
-			'config-notify-savefailed': 'Failed to save the settings. ',
-			'portlet-text': 'Configure MarkBLocked',
-			'toggle-title-enabled': 'MarkBLocked is enabled. Click to disable it temporarily.',
-			'toggle-title-disabled': 'MarkBLocked is temporarily disabled. Click to enable it again.',
-			'toggle-notify-enabled': 'Enabled MarkBLocked.',
-			'toggle-notify-disabled': 'Temporarily disabled MarkBLocked.'
-		},
-		ja: {
-			'config-label-heading': 'MarkBLockedの設定',
-			'config-label-fieldset': 'マークアップ設定',
-			'config-label-localips': 'ブロックされたIPレンジに含まれるIPをマークアップ',
-			'config-label-globalusers': 'グローバルロックされた利用者をマークアップ',
-			'config-label-globalips': 'グローバルブロックされたIPをマークアップ',
-			'config-label-save': '設定を保存',
-			'config-label-saving': '設定を保存中...',
-			'config-notify-notloaded': 'インターフェースの読み込みに失敗しました。',
-			'config-notify-savedone': '設定の保存に成功しました。',
-			'config-notify-savefailed': '設定の保存に失敗しました。',
-			'portlet-text': 'MarkBLockedの設定',
-			'toggle-title-enabled': 'MarkBLockedが有効化されています。クリックすると一時的に無効化します。',
-			'toggle-title-disabled': 'MarkBLockedが一時的に無効化されています。クリックすると再有効化します。',
-			'toggle-notify-enabled': 'MarkBLockedを有効化しました。',
-			'toggle-notify-disabled': 'MarkBLockedを一時的に無効化しました。'
-		}
-	};
+/**
+ * @type {Record<string, Lang>}
+ */
+const i18n = {
+	en: {
+		'config-label-heading': 'Configure MarkBLocked',
+		'config-label-fieldset': 'Markup settings',
+		'config-label-localips': 'Mark up IPs in locally blocked IP ranges',
+		'config-label-globalusers': 'Mark up globally locked users',
+		'config-label-globalips': 'Mark up globally blocked IPs',
+		'config-label-save': 'Save settings',
+		'config-label-saving': 'Saving settings...',
+		'config-notify-notloaded': 'Failed to load the interface.',
+		'config-notify-savedone': 'Sucessfully saved the settings.',
+		'config-notify-savefailed': 'Failed to save the settings. ',
+		'portlet-text': 'Configure MarkBLocked',
+		'toggle-title-enabled': 'MarkBLocked is enabled. Click to disable it temporarily.',
+		'toggle-title-disabled': 'MarkBLocked is temporarily disabled. Click to enable it again.',
+		'toggle-notify-enabled': 'Enabled MarkBLocked.',
+		'toggle-notify-disabled': 'Temporarily disabled MarkBLocked.'
+	},
+	ja: {
+		'config-label-heading': 'MarkBLockedの設定',
+		'config-label-fieldset': 'マークアップ設定',
+		'config-label-localips': 'ブロックされたIPレンジに含まれるIPをマークアップ',
+		'config-label-globalusers': 'グローバルロックされた利用者をマークアップ',
+		'config-label-globalips': 'グローバルブロックされたIPをマークアップ',
+		'config-label-save': '設定を保存',
+		'config-label-saving': '設定を保存中...',
+		'config-notify-notloaded': 'インターフェースの読み込みに失敗しました。',
+		'config-notify-savedone': '設定の保存に成功しました。',
+		'config-notify-savefailed': '設定の保存に失敗しました。',
+		'portlet-text': 'MarkBLockedの設定',
+		'toggle-title-enabled': 'MarkBLockedが有効化されています。クリックすると一時的に無効化します。',
+		'toggle-title-disabled': 'MarkBLockedが一時的に無効化されています。クリックすると再有効化します。',
+		'toggle-notify-enabled': 'MarkBLockedを有効化しました。',
+		'toggle-notify-disabled': 'MarkBLockedを一時的に無効化しました。'
+	}
+};
+
+const defaultOptionKey = 'userjs-markblocked-config';
+
+class MarkBLocked {
 
 	/**
 	 * @typedef {object} UserOptions
@@ -104,10 +107,10 @@ module.exports = class MarkBLocked {
 				const oldOptionKey = 'userjs-gmbl-preferences';
 				/** @type {string?} */
 				const oldCfgStr = mw.user.options.get(oldOptionKey);
-				if (oldCfgStr && (cfg.optionKey === void 0 || cfg.optionKey === this.defaultOptionKey) && !mw.user.options.get(this.defaultOptionKey)) {
+				if (oldCfgStr && (cfg.optionKey === void 0 || cfg.optionKey === defaultOptionKey) && !mw.user.options.get(defaultOptionKey)) {
 					const options = {
 						[oldOptionKey]: null,
-						[this.defaultOptionKey]: oldCfgStr
+						[defaultOptionKey]: oldCfgStr
 					};
 					return new mw.Api(this.getApiOptions()).saveOptions(options).then(() => {
 						mw.user.options.set(options);
@@ -189,9 +192,6 @@ module.exports = class MarkBLocked {
 		});
 
 	}
-
-	/** @readonly */
-	static defaultOptionKey = 'userjs-markblocked-config';
 
 	/**
 	 * @typedef {object} ApiOptions
@@ -283,7 +283,7 @@ module.exports = class MarkBLocked {
 		/**
 		 * The key of `mw.user.options`.
 		 */
-		this.optionKey = cfg.optionKey || MarkBLocked.defaultOptionKey;
+		this.optionKey = cfg.optionKey || defaultOptionKey;
 		/**
 		 * @type {UserOptions}
 		 */
@@ -313,7 +313,7 @@ module.exports = class MarkBLocked {
 
 		// Language options
 		if (typeof cfg.i18n === 'object' && !Array.isArray(cfg.i18n) && cfg.i18n !== null) {
-			Object.assign(MarkBLocked.i18n, cfg.i18n);
+			Object.assign(i18n, cfg.i18n);
 		}
 		/**
 		 * @type {Lang}
@@ -324,13 +324,13 @@ module.exports = class MarkBLocked {
 				cfg.lang = String(cfg.lang);
 			}
 			if (cfg.lang) {
-				if (Object.keys(MarkBLocked.i18n).indexOf(cfg.lang) !== -1) {
+				if (Object.keys(i18n).indexOf(cfg.lang) !== -1) {
 					langCode = cfg.lang;
 				} else {
 					console.error(`MarkBLocked does not have "${cfg.lang}" language support for its interface.`);
 				}
 			}
-			return MarkBLocked.i18n[langCode];
+			return i18n[langCode];
 		})();
 
 		/**
@@ -923,8 +923,8 @@ module.exports = class MarkBLocked {
 						}
 					});
 				}
-			}).catch((_, err) => {
-				if (err['exception'] === 'abort') {
+			}).catch(/** @param {object} err */ (_, err) => {
+				if (err.exception === 'abort') {
 					aborted = true;
 				} else {
 					console.error(err);
@@ -1003,8 +1003,8 @@ module.exports = class MarkBLocked {
 		const req = (batchObj) => {
 			return this.api.get(batchObj.params)
 				.then(batchObj.callback)
-				.catch((_, err) => {
-					if (err['exception'] === 'abort') {
+				.catch(/** @param {object} err */ (_, err) => {
+					if (err.exception === 'abort') {
 						aborted = true;
 					} else {
 						console.error(err);
@@ -1029,5 +1029,7 @@ module.exports = class MarkBLocked {
 
 	}
 
-};
+}
+
+module.exports = MarkBLocked;
 //</nowiki>
