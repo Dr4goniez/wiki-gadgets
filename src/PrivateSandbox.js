@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.19
+	@version 1.0.20
 
 \**************************************************************************************************/
 
@@ -371,36 +371,31 @@ const i18n = {
 		'title-preview-disabled': 'プレビュータブを使用するにはプロファイルを作成してください。'
 	}
 };
+/**
+ * @type {PrivateSandboxMessage}
+ */
+const messages = (() => {
+	cfg.lang = String(cfg.lang);
+	const lang = cfg.lang || mw.config.get('wgUserLanguage').replace(/-.*$/, '');
+	if (cfg.lang && !i18n[cfg.lang]) {
+		mw.notify(
+			$(`<div>Sorry, PrivateSandbox does not currently have <code>${cfg.lang}</code> language support for its interface.</div>`),
+			{type: 'error', autoHideSeconds: 'long'}
+		);
+	}
+	return i18n[lang] || i18n.en;
+})();
+/**
+ * Get an interface message.
+ * @param {keyof PrivateSandboxMessage} key
+ * @returns {string}
+ */
+const getMessage = (key) => messages[key];
 
 /**
  * The PrivateSandbox class.
  */
 class PrivateSandbox {
-
-	/**
-	 * @type {PrivateSandboxMessage}
-	 */
-	static messages = (() => {
-		cfg.lang = String(cfg.lang);
-		const lang = cfg.lang || mw.config.get('wgUserLanguage').replace(/-.*$/, '');
-		if (cfg.lang && !i18n[cfg.lang]) {
-			mw.notify(
-				$(`<div>Sorry, PrivateSandbox does not currently have <code>${cfg.lang}</code> language support for its interface.</div>`),
-				{type: 'error', autoHideSeconds: 'long'}
-			);
-		}
-		return i18n[lang] || i18n.en;
-	})();
-
-	/**
-	 * Get an interface message.
-	 * @param {keyof PrivateSandboxMessage} key
-	 * @returns {string}
-	 * @static
-	 */
-	static getMessage(key) {
-		return PrivateSandbox.messages[key];
-	}
 
 	/**
 	 * Initialize PrivateSandbox.
@@ -504,7 +499,7 @@ class PrivateSandbox {
 
 			// Show a "now loading" overlay
 			const sco = new ScreenOverlay({
-				text: PrivateSandbox.getMessage('message-load-interface'),
+				text: getMessage('message-load-interface'),
 				autoStart: true
 			});
 
@@ -538,7 +533,7 @@ class PrivateSandbox {
 			const $content = $('.mw-body-content');
 			if (!$heading.length || !$content.length) {
 				sco.toggle(false);
-				mw.notify(PrivateSandbox.getMessage('message-load-failed'), {type: 'error', autoHide: false});
+				mw.notify(getMessage('message-load-failed'), {type: 'error', autoHide: false});
 				return;
 			}
 			$heading.text(scriptName);
@@ -726,7 +721,7 @@ class PrivateSandbox {
 		this.$overlay = $('<div>');
 
 		const prfFieldset = new OO.ui.FieldsetLayout({
-			label: PrivateSandbox.getMessage('label-profiles'),
+			label: getMessage('label-profiles'),
 			id: 'pvtsand-profiles-fieldset'
 		});
 
@@ -747,17 +742,17 @@ class PrivateSandbox {
 		 */
 		this.prfInput = new OO.ui.TextInputWidget({
 			id: 'pvtsand-profiles-input',
-			placeholder: PrivateSandbox.getMessage('label-profiles-edit-placeholder'),
+			placeholder: getMessage('label-profiles-edit-placeholder'),
 			validate: (v) => {
 				let title = '';
 				let needWarning = false;
 				if (!v) {
-					title = PrivateSandbox.getMessage('title-profiles-empty');
+					title = getMessage('title-profiles-empty');
 				} else if (/[^a-zA-Z0-9_-]/.test(v)) {
-					title = PrivateSandbox.getMessage('title-profiles-invalidchars');
+					title = getMessage('title-profiles-invalidchars');
 					needWarning = true;
 				} else if (this.mwString.byteLength(v) > 255) {
-					title = PrivateSandbox.getMessage('title-profiles-toomanychars');
+					title = getMessage('title-profiles-toomanychars');
 					needWarning = true;
 				}
 				this.prfInput.setTitle(title);
@@ -768,13 +763,13 @@ class PrivateSandbox {
 
 		prfFieldset.addItems([
 			new OO.ui.FieldLayout(this.prfDropdown, {
-				label: PrivateSandbox.getMessage('label-profiles-select'),
+				label: getMessage('label-profiles-select'),
 				align: 'top'
 			}),
 			new OO.ui.FieldLayout(this.prfInput, {
-				label: PrivateSandbox.getMessage('label-profiles-edit'),
+				label: getMessage('label-profiles-edit'),
 				align: 'top',
-				help: new OO.ui.HtmlSnippet(`<span id="pvtsand-profiles-input-warning">${PrivateSandbox.getMessage('label-profiles-edit-help')}</span>`),
+				help: new OO.ui.HtmlSnippet(`<span id="pvtsand-profiles-input-warning">${getMessage('label-profiles-edit-help')}</span>`),
 				helpInline: true
 			})
 		]);
@@ -784,7 +779,7 @@ class PrivateSandbox {
 		 * @type {OO.ui.ButtonWidget}
 		 */
 		this.btnCreate = new OO.ui.ButtonWidget({
-			label: PrivateSandbox.getMessage('label-profiles-button-create'),
+			label: getMessage('label-profiles-button-create'),
 			flags: 'progressive',
 			icon: 'add'
 		}).off('click').on('click', () => {
@@ -796,7 +791,7 @@ class PrivateSandbox {
 		 * @type {OO.ui.ButtonWidget}
 		 */
 		this.btnRename = new OO.ui.ButtonWidget({
-			label: PrivateSandbox.getMessage('label-profiles-button-rename'),
+			label: getMessage('label-profiles-button-rename'),
 			icon: 'edit'
 		}).off('click').on('click', () => {
 			this.modifyProfile('rename');
@@ -807,7 +802,7 @@ class PrivateSandbox {
 		 * @type {OO.ui.ButtonWidget}
 		 */
 		this.btnDelete = new OO.ui.ButtonWidget({
-			label: PrivateSandbox.getMessage('label-profiles-button-delete'),
+			label: getMessage('label-profiles-button-delete'),
 			flags: 'destructive',
 			icon: 'trash'
 		}).off('click').on('click', () => {
@@ -833,8 +828,8 @@ class PrivateSandbox {
 		 * @type {OO.ui.ButtonWidget}
 		 */
 		this.btnSave = new OO.ui.ButtonWidget({
-			label: PrivateSandbox.getMessage('label-profiles-save'),
-			title: PrivateSandbox.getMessage('title-profiles-save'),
+			label: getMessage('label-profiles-save'),
+			title: getMessage('title-profiles-save'),
 			flags: ['progressive', 'primary'],
 			icon: 'check'
 		}).off('click').on('click', () => {
@@ -846,8 +841,8 @@ class PrivateSandbox {
 		 * @type {OO.ui.ButtonWidget}
 		 */
 		this.btnSaveAll = new OO.ui.ButtonWidget({
-			label: PrivateSandbox.getMessage('label-profiles-saveall'),
-			title: PrivateSandbox.getMessage('title-profiles-saveall'),
+			label: getMessage('label-profiles-saveall'),
+			title: getMessage('title-profiles-saveall'),
 			flags: 'progressive',
 			icon: 'checkAll'
 		}).off('click').on('click', () => {
@@ -859,8 +854,8 @@ class PrivateSandbox {
 		 * @type {OO.ui.ButtonWidget}
 		 */
 		this.btnListUnsaved = new OO.ui.ButtonWidget({
-			label: PrivateSandbox.getMessage('label-profiles-listunsaved'),
-			title: PrivateSandbox.getMessage('title-profiles-listunsaved'),
+			label: getMessage('label-profiles-listunsaved'),
+			title: getMessage('title-profiles-listunsaved'),
 			icon: 'listBullet'
 		}).off('click').on('click', () => {
 			// When clicked, show a list of unsaved profiles on a dialog
@@ -874,13 +869,13 @@ class PrivateSandbox {
 						$.map(this.getUnsavedProfiles(), (prof) => {
 							if (this.deletedProfiles.indexOf(prof) !== -1) {
 								// If this unsaved profile has been deleted, add " (deleted)"
-								prof += ` (${PrivateSandbox.getMessage('label-dialog-listunsaved-deleteditem')})`;
+								prof += ` (${getMessage('label-dialog-listunsaved-deleteditem')})`;
 							}
 							return $('<li>').text(prof);
 						})
 					),
 				{
-					title: PrivateSandbox.getMessage('title-dialog-listunsaved'),
+					title: getMessage('title-dialog-listunsaved'),
 					size: 'medium'
 				}
 			);
@@ -891,8 +886,8 @@ class PrivateSandbox {
 		 * @type {OO.ui.ButtonWidget}
 		 */
 		this.btnDeleteData = new OO.ui.ButtonWidget({
-			label: PrivateSandbox.getMessage('label-deletedata'),
-			title: PrivateSandbox.getMessage('title-deletedata'),
+			label: getMessage('label-deletedata'),
+			title: getMessage('title-deletedata'),
 			icon: 'trash',
 			flags: ['destructive', 'primary']
 		}).off('click').on('click', () => {
@@ -923,7 +918,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.19 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.20 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -943,15 +938,15 @@ class PrivateSandbox {
 		 */
 		const btnPreview = new OO.ui.ButtonWidget({
 			framed: false,
-			label: PrivateSandbox.getMessage('label-preview'),
-			title: PrivateSandbox.getMessage(cfg.expandPreview ? 'title-preview-collapse' : 'title-preview-expand'),
+			label: getMessage('label-preview'),
+			title: getMessage(cfg.expandPreview ? 'title-preview-collapse' : 'title-preview-expand'),
 			icon: 'article'
 		}).off('click').on('click', () => {
 			const show = !this.$previewContent.is(':visible');
 			this.$previewContent.toggle(show);
 			btnPreview
 				.setFlags({progressive: show})
-				.setTitle(PrivateSandbox.getMessage(show ? 'title-preview-collapse' : 'title-preview-expand'));
+				.setTitle(getMessage(show ? 'title-preview-collapse' : 'title-preview-expand'));
 			if (show) {
 				this.preview(this.getEditorValue());
 			}
@@ -979,7 +974,7 @@ class PrivateSandbox {
 									this.btnDelete.$element
 								),
 							new OO.ui.LabelWidget({
-								label: PrivateSandbox.getMessage('label-profiles-save-help'),
+								label: getMessage('label-profiles-save-help'),
 								classes: ['oo-ui-inline-help']
 							}).$element
 						),
@@ -990,7 +985,7 @@ class PrivateSandbox {
 							$editorOverlay
 								.prop({
 									id: 'pvtsand-editor-overlay',
-									title: PrivateSandbox.getMessage('title-editor-disabled')
+									title: getMessage('title-editor-disabled')
 								})
 								.addClass('pvtsand-overlay'),
 							this.$editor
@@ -1016,7 +1011,7 @@ class PrivateSandbox {
 							$previewOverlay
 								.prop({
 									id: 'pvtsand-preview-overlay',
-									title: PrivateSandbox.getMessage('title-preview-disabled')
+									title: getMessage('title-preview-disabled')
 								})
 								.addClass('pvtsand-overlay'),
 							$('<div>')
@@ -1165,7 +1160,7 @@ class PrivateSandbox {
 		window.onbeforeunload = (e) => {
 			if (this.getUnsavedProfiles().length) {
 				e.preventDefault();
-				e.returnValue = PrivateSandbox.getMessage('message-unload'); // Ignored on most modern browsers
+				e.returnValue = getMessage('message-unload'); // Ignored on most modern browsers
 			}
 		};
 
@@ -1210,7 +1205,7 @@ class PrivateSandbox {
 		if (mw.user.options.get(optionKey) !== '') {
 			PrivateSandbox.saveOptions({[optionKey]: ''}).then(() => {
 				this.sco.toggle(false, 800).then(() => {
-					OO.ui.alert(PrivateSandbox.getMessage(this.processed ? 'message-load-updated' : 'message-load-welcome'), {
+					OO.ui.alert(getMessage(this.processed ? 'message-load-updated' : 'message-load-welcome'), {
 						title: 'Welcome!',
 						size: 'medium'
 					});
@@ -1409,7 +1404,7 @@ class PrivateSandbox {
 
 		// Change interface contents
 		this.prfDropdown.getMenu().addItems([new OO.ui.MenuOptionWidget({label: name, data: name})]).selectItemByLabel(name);
-		mw.notify(mw.format(PrivateSandbox.getMessage('message-profiles-create-done'), name), {type: 'success'});
+		mw.notify(mw.format(getMessage('message-profiles-create-done'), name), {type: 'success'});
 
 	}
 
@@ -1422,7 +1417,7 @@ class PrivateSandbox {
 	renameProfile(name) {
 		const oldName = this.getSelectedProfile();
 		if (oldName) {
-			OO.ui.confirm(mw.format(PrivateSandbox.getMessage('message-profiles-rename-confirm'), oldName, name), {
+			OO.ui.confirm(mw.format(getMessage('message-profiles-rename-confirm'), oldName, name), {
 				size: 'medium'
 			}).then((confirmed) => {
 				if (confirmed) {
@@ -1451,7 +1446,7 @@ class PrivateSandbox {
 					const /** @type {OO.ui.MenuOptionWidget} */ oldItem = menu.getItemFromLabel(oldName);
 					index = menu.getItemIndex(oldItem);
 					menu.addItems([new OO.ui.MenuOptionWidget({label: name, data: name})], index + 1).selectItemByLabel(name).removeItems([oldItem]);
-					mw.notify(mw.format(PrivateSandbox.getMessage('message-profiles-rename-done'), oldName, name), {type: 'success'});
+					mw.notify(mw.format(getMessage('message-profiles-rename-done'), oldName, name), {type: 'success'});
 
 				}
 			});
@@ -1467,7 +1462,7 @@ class PrivateSandbox {
 	 * @private
 	 */
 	deleteProfile(name) {
-		OO.ui.confirm(mw.format(PrivateSandbox.getMessage('message-profiles-delete-confirm'), name), {
+		OO.ui.confirm(mw.format(getMessage('message-profiles-delete-confirm'), name), {
 			size: 'medium'
 		}).then((confirmed) => {
 			if (confirmed) {
@@ -1496,7 +1491,7 @@ class PrivateSandbox {
 					throw new Error('There is no option labelled as "' + name + '".');
 				}
 
-				mw.notify(mw.format(PrivateSandbox.getMessage('message-profiles-delete-done'), name), {type: 'success'});
+				mw.notify(mw.format(getMessage('message-profiles-delete-done'), name), {type: 'success'});
 
 			}
 		});
@@ -1558,20 +1553,20 @@ class PrivateSandbox {
 	 * @returns {void}
 	 */
 	deleteData() {
-		OO.ui.confirm(PrivateSandbox.getMessage('message-deletedata-confirm'), {
+		OO.ui.confirm(getMessage('message-deletedata-confirm'), {
 			size: 'medium'
 		}).then((confirmed) => {
 			if (confirmed) {
 
 				// Show a "now deleting" message
-				this.sco.text(PrivateSandbox.getMessage('message-deletedata-doing'), true).toggle(true);
+				this.sco.text(getMessage('message-deletedata-doing'), true).toggle(true);
 
 				// Fetch the up-to-date user options from the API
 				PrivateSandbox.fetchOptions().then((fetchedOptions) => {
 
 					if (!fetchedOptions) {
 						this.sco.toggle(false, 800).then(() => {
-							mw.notify(PrivateSandbox.getMessage('message-predeletedata-failed'), {type: 'error', autoHideSeconds: 'long'});
+							mw.notify(getMessage('message-predeletedata-failed'), {type: 'error', autoHideSeconds: 'long'});
 						});
 						return;
 					}
@@ -1588,10 +1583,10 @@ class PrivateSandbox {
 					// Delete data
 					PrivateSandbox.saveOptions(options).then((success) => {
 						if (success) {
-							this.sco.text(PrivateSandbox.getMessage('message-deletedata-done'), false);
+							this.sco.text(getMessage('message-deletedata-done'), false);
 						} else {
 							this.sco.toggle(false, 800).then(() => {
-								mw.notify(PrivateSandbox.getMessage('message-deletedata-failed'), {type: 'error'});
+								mw.notify(getMessage('message-deletedata-failed'), {type: 'error'});
 							});
 						}
 					});
@@ -1620,7 +1615,7 @@ class PrivateSandbox {
 	saveProfiles(name) {
 
 		// Show a "now saving" message
-		this.sco.text(PrivateSandbox.getMessage('message-save-doing'), true).toggle(true);
+		this.sco.text(getMessage('message-save-doing'), true).toggle(true);
 
 		// Fetch the newest profiles from the API
 		PrivateSandbox.fetchOptions().then((fetchedOptions) => {
@@ -1628,7 +1623,7 @@ class PrivateSandbox {
 			// Exit if the fetching failed
 			if (!fetchedOptions) {
 				this.sco.toggle(false, 500).then(() => {
-					mw.notify(PrivateSandbox.getMessage('message-presave-failed'), {type: 'error', autoHideSeconds: 'long'});
+					mw.notify(getMessage('message-presave-failed'), {type: 'error', autoHideSeconds: 'long'});
 				});
 				return;
 			}
@@ -1640,16 +1635,16 @@ class PrivateSandbox {
 				const oldValue = key in this.savedProfiles && this.savedProfiles[key].join('');
 				if (typeof oldValue === 'string') {
 					if (value !== oldValue) { // Profile has been modified elsewhere
-						acc[key] = PrivateSandbox.getMessage('message-conflict-modified');
+						acc[key] = getMessage('message-conflict-modified');
 					}
 				} else { // Profile has been created elsewhere
-					acc[key] = PrivateSandbox.getMessage('message-conflict-created');
+					acc[key] = getMessage('message-conflict-created');
 				}
 				return acc;
 			}, Object.create(null));
 			Object.keys(this.savedProfiles).forEach((key) => {
 				if (newestProfiles[key] === void 0) { // Profile has been deleted elsewhere
-					conflicts[key] = PrivateSandbox.getMessage('message-conflict-deleted');
+					conflicts[key] = getMessage('message-conflict-deleted');
 				}
 			});
 
@@ -1661,15 +1656,15 @@ class PrivateSandbox {
 					this.sco.$overlay.css('z-index', 0); // Show the confirmation window on top
 					return OO.ui.confirm(
 						$('<div style="text-align: justify;">').append(
-							PrivateSandbox.getMessage('message-conflict-alert1'),
+							getMessage('message-conflict-alert1'),
 							$('<ul style="max-height: 5em; overflow-y: auto;">').append(
 								Object.keys(conflicts).map((prof) => $('<li>').text(`"${prof}": ${conflicts[prof]}`))
 							),
-							PrivateSandbox.getMessage('message-conflict-alert2')
+							getMessage('message-conflict-alert2')
 						),
 						{
 							size: 'large',
-							title: PrivateSandbox.getMessage('title-conflict')
+							title: getMessage('title-conflict')
 						}
 					).then((confirmed) => {
 						this.sco.$overlay.css('z-index', ''); // Reset to the default
@@ -1721,7 +1716,7 @@ class PrivateSandbox {
 					let notifyResult;
 					if (success) {
 
-						notifyResult = () => mw.notify(PrivateSandbox.getMessage('message-save-done'), {type: 'success'});
+						notifyResult = () => mw.notify(getMessage('message-save-done'), {type: 'success'});
 						mw.user.options.set(options);
 
 						// Update saved profiles
@@ -1760,7 +1755,7 @@ class PrivateSandbox {
 						mw.hook('pvtsand.content').fire(this.getEditorValue());
 
 					} else {
-						notifyResult = () => mw.notify(PrivateSandbox.getMessage('message-save-failed'), {type: 'error'});
+						notifyResult = () => mw.notify(getMessage('message-save-failed'), {type: 'error'});
 					}
 
 					if (confirmed) {
@@ -1867,8 +1862,8 @@ class PrivateSandbox {
 			} else {
 				return null;
 			}
-		}).catch(function(_, err) {
-			if (err['exception'] === 'abort') {
+		}).catch(/** @param {object} err */ function(_, err) {
+			if (err.exception === 'abort') {
 				return '';
 			} else {
 				console.error(err);
@@ -1883,7 +1878,7 @@ class PrivateSandbox {
 			} else {
 				this.$previewContent.empty().append(
 					$('<span>')
-						.text(PrivateSandbox.getMessage('message-preview-failed'))
+						.text(getMessage('message-preview-failed'))
 						.css('color', 'red')
 				);
 			}
