@@ -729,11 +729,11 @@ module.exports = class MarkBLocked {
 							action: 'query',
 							list: 'globalblocks',
 							bgip: ip,
-							bgprop: 'address|expiry',
+							bgprop: 'target|expiry',
 							formatversion: '2'
 						},
 						callback: (res) => {
-							/** @typedef {{address: string; expiry: string;}} ApiResponseQueryListGlobalblocks */
+							/** @typedef {{target: string; expiry: string;}} ApiResponseQueryListGlobalblocks */
 							/** @type {ApiResponseQueryListGlobalblocks[]} */
 							const resGblk = res && res.query && res.query.globalblocks || [];
 							const resObj = resGblk.reduce(/** @param {ApiResponseQueryListGlobalblocks?} acc */ (acc, obj, i) => {
@@ -741,8 +741,8 @@ module.exports = class MarkBLocked {
 									acc = obj;
 								} else {
 									let m;
-									const lastRange = acc && (m = acc.address.match(/\/(\d+)$/)) ? parseInt(m[1]) : 128;
-									const thisRange = (m = obj.address.match(/\/(\d+)$/)) !== null ? parseInt(m[1]) : 128;
+									const lastRange = acc && (m = acc.target.match(/\/(\d+)$/)) ? parseInt(m[1]) : 128;
+									const thisRange = (m = obj.target.match(/\/(\d+)$/)) !== null ? parseInt(m[1]) : 128;
 									if (thisRange > lastRange) {
 										acc = obj;
 									}
