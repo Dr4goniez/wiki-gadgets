@@ -194,9 +194,14 @@ module.exports = class MarkBLocked {
 	static defaultOptionKey = 'userjs-markblocked-config';
 
 	/**
-	 * @param {boolean} [readOnlyPost]
+	 * @typedef {object} ApiOptions
+	 * @property {number} [timeout]
+	 * @property {boolean} [nonwritepost] Whether the instance is used only to read data though it issues POST requests
 	 */
-	static getApiOptions(readOnlyPost) {
+	/**
+	 * @param {ApiOptions} [options]
+	 */
+	static getApiOptions(options = {}) {
 		const ret = {
 			ajax: {
 				headers: {
@@ -204,7 +209,10 @@ module.exports = class MarkBLocked {
 				}
 			}
 		};
-		if (readOnlyPost) {
+		if (typeof options.timeout === 'number') {
+			ret.ajax.timeout = options.timeout;
+		}
+		if (options.nonwritepost) {
 			/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 			ret.ajax.headers['Promise-Non-Write-API-Action'] = true;
 		}
@@ -253,11 +261,11 @@ module.exports = class MarkBLocked {
 		/**
 		 * @type {mw.Api}
 		 */
-		this.api = new mw.Api(MarkBLocked.getApiOptions());
+		this.api = new mw.Api(MarkBLocked.getApiOptions({timeout: 60}));
 		/**
 		 * @type {mw.Api}
 		 */
-		this.readApi = new mw.Api(MarkBLocked.getApiOptions(true));
+		this.readApi = new mw.Api(MarkBLocked.getApiOptions({timeout: 60, nonwritepost: true}));
 
 		// Show Warning if the config has any invalid property
 		const validKeys = ['defaultOptions', 'optionKey', 'globalize', 'i18n', 'lang', 'contribsCA', 'groupsAHL'];
