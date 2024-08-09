@@ -837,7 +837,7 @@ class MarkBLocked {
 				!href ||
 				href[0] === '#' ||
 				a.role === 'button' ||
-				$(a).is('.mbl-userlink, .ext-discussiontools-init-timestamplink') ||
+				$(a).is('.ext-discussiontools-init-timestamplink') ||
 				pr && /\b((mw|twg?)-rollback-|autocomment)/.test(pr.className) ||
 				mw.util.getParamValue('action', href) && !mw.util.getParamValue('redlink', href) ||
 				mw.util.getParamValue('diff', href) ||
