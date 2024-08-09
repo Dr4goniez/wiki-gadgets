@@ -828,6 +828,7 @@ class MarkBLocked {
 			users: [],
 			ips: []
 		};
+		const prIgnore = /(^|\s)(twg?-rollback-\S+|autocomment)($|\s)/;
 		return Array.from($anchors).reduce((acc, a) => {
 
 			// Ignore some anchors
@@ -835,10 +836,10 @@ class MarkBLocked {
 			const pr = a.parentElement;
 			if (
 				!href ||
-				href[0] === '#' ||
+				(a.getAttribute('href') || '')[0] === '#' ||
 				a.role === 'button' ||
-				$(a).is('.ext-discussiontools-init-timestamplink') ||
-				pr && /\b((mw|twg?)-rollback-|autocomment)/.test(pr.className) ||
+				a.classList.contains('.ext-discussiontools-init-timestamplink') ||
+				pr && prIgnore.test(pr.className) ||
 				mw.util.getParamValue('action', href) && !mw.util.getParamValue('redlink', href) ||
 				mw.util.getParamValue('diff', href) ||
 				mw.util.getParamValue('oldid', href)
