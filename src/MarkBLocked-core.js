@@ -448,23 +448,38 @@ class MarkBLocked {
 				g_rangeblocks.setDisabled(false);
 			}
 		});
+		/**
+		 * @param {keyof Lang} key
+		 * @param {boolean} [empty]
+		 * @returns {JQuery<HTMLSpanElement>}
+		 */
+		const getExclMessage = (key, empty = false) => {
+			return $('<span>').append(
+				$('<b>')
+					.addClass('mblc-exclamation')
+					.text(empty ? '' : '!'),
+				this.getMessage(key)
+			);
+		};
 		const fsMarkup = new OO.ui.FieldsetLayout({
 			label: this.getMessage('config-label-fsmarkup'),
+			help:this.getMessage('config-help-resources'),
+			helpInline: true,
 			items: [
 				new OO.ui.FieldLayout(rangeblocks, {
-					label: this.getMessage('config-label-rangeblocks'),
+					label: getExclMessage('config-label-rangeblocks'),
 					align: 'inline'
 				}),
 				new OO.ui.FieldLayout(g_locks, {
-					label: this.getMessage('config-label-g_locks'),
+					label: getExclMessage('config-label-g_locks'),
 					align: 'inline'
 				}),
 				new OO.ui.FieldLayout(g_blocks, {
-					label: this.getMessage('config-label-g_blocks'),
+					label: getExclMessage('config-label-g_blocks', true),
 					align: 'inline'
 				}),
 				new OO.ui.FieldLayout(g_rangeblocks, {
-					label: this.getMessage('config-label-g_rangeblocks'),
+					label: getExclMessage('config-label-g_rangeblocks'),
 					align: 'inline',
 					help: this.getMessage('config-help-g_rangeblocks'),
 					helpInline: true
@@ -1123,6 +1138,7 @@ MarkBLocked.i18n = {
 		'config-label-fsgeneral': 'General settings',
 		'config-label-genportlet': 'Generate a portlet link to the config page',
 		'config-label-fsmarkup': 'Markup settings',
+		'config-help-resources': 'Features with an exclamation mark may consume server resources.',
 		'config-label-rangeblocks': 'Mark up IPs in locally blocked IP ranges',
 		'config-label-g_locks': 'Mark up globally locked users',
 		'config-label-g_blocks': 'Mark up globally blocked users and IPs',
@@ -1145,6 +1161,7 @@ MarkBLocked.i18n = {
 		'config-label-fsgeneral': '一般設定',
 		'config-label-genportlet': '設定ページへのポートレットリンクを生成',
 		'config-label-fsmarkup': 'マークアップ設定',
+		'config-help-resources': '感嘆符のある機能はサーバーリソースを消費します。',
 		'config-label-rangeblocks': 'ブロックされたIPレンジに含まれるIPをマークアップ',
 		'config-label-g_locks': 'グローバルロックされた利用者をマークアップ',
 		'config-label-g_blocks': 'グローバルブロックされた利用者およびIPをマークアップ',

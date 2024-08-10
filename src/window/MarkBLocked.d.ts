@@ -4,6 +4,7 @@ interface Lang {
 	'config-label-fsgeneral': string;
 	'config-label-genportlet': string;
 	'config-label-fsmarkup': string;
+	'config-help-resources': string;
 	'config-label-rangeblocks': string;
 	'config-label-g_locks': string;
 	'config-label-g_blocks': string;
