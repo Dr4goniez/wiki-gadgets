@@ -22,3 +22,28 @@ interface Lang {
 interface Window {
 	MarkBLockedLoaded?: boolean;
 }
+
+interface ApiResponse {
+	query?: ApiResponseQuery;
+}
+
+interface ApiResponseQuery {
+	blocks?: ApiResponseQueryListBlocks[];
+	globalallusers?: ApiResponseQueryListGlobalallusers[];
+	globalblocks?: ApiResponseQueryListGlobalblocks[];
+}
+
+interface ApiResponseQueryListBlocks {
+	restrictions?: []|object;
+	expiry: string;
+	user: string;
+}
+
+interface ApiResponseQueryListGlobalallusers {
+	locked?: string;
+}
+
+interface ApiResponseQueryListGlobalblocks {
+	target: string;
+	expiry: string;
+}

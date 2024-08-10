@@ -706,7 +706,6 @@ class MarkBLocked {
 						},
 						callback: (res) => {
 							// An IP may have multiple blocks
-							/** @type {ApiResponseQueryListBlocks[]} */
 							const resBlk = res && res.query && res.query.blocks || [];
 							const resObj = resBlk.reduce(/** @param {ApiResponseQueryListBlocks?} acc */ (acc, obj, i) => {
 								if (i === 0) {
@@ -749,10 +748,8 @@ class MarkBLocked {
 							formatversion: '2'
 						},
 						callback: (res) => {
-							/** @typedef {{locked?: string;}} ApiResponseQueryListGlobalallusers */
-							const /** @type {ApiResponseQueryListGlobalallusers[]=} */ resLck = res && res.query && res.query.globalallusers;
-							let /** @type {ApiResponseQueryListGlobalallusers=} */ resObj;
-							if (resLck && (resObj = resLck[0]) && resObj.locked === '') {
+							const resLck = res && res.query && res.query.globalallusers;
+							if (resLck && resLck[0] && resLck[0].locked === '') {
 								MarkBLocked.addClass(userLinks, user, 'mbl-globally-locked');
 							}
 						}
@@ -770,8 +767,6 @@ class MarkBLocked {
 							formatversion: '2'
 						},
 						callback: (res) => {
-							/** @typedef {{target: string; expiry: string;}} ApiResponseQueryListGlobalblocks */
-							/** @type {ApiResponseQueryListGlobalblocks[]} */
 							const resGblk = res && res.query && res.query.globalblocks || [];
 							const resObj = resGblk.reduce(/** @param {ApiResponseQueryListGlobalblocks?} acc */ (acc, obj, i) => {
 								if (i === 0) {
@@ -912,12 +907,6 @@ class MarkBLocked {
 	}
 
 	/**
-	 * @typedef {object} ApiResponseQueryListBlocks
-	 * @property {[]|{}} [restrictions]
-	 * @property {string} expiry
-	 * @property {string} user
-	 */
-	/**
 	 * Mark up locally blocked registered users and single IPs (this can't detect single IPs included in blocked IP ranges)
 	 * @param {UserLinks} userLinks
 	 * @param {string[]} usersArr
@@ -944,8 +933,8 @@ class MarkBLocked {
 				bkusers: users.join('|'),
 				bkprop: 'user|expiry|restrictions',
 				formatversion: '2'
-			}).then((res) =>{
-				const /** @type {ApiResponseQueryListBlocks[]=} */ resBlk = res && res.query && res.query.blocks;
+			}).then(/** @param {ApiResponse} res */ (res) =>{
+				const resBlk = res && res.query && res.query.blocks;
 				if (resBlk) {
 					resBlk.forEach((obj) => {
 						const partialBlk = obj.restrictions && !Array.isArray(obj.restrictions); // Boolean: True if partial block
@@ -1001,12 +990,9 @@ class MarkBLocked {
 	}
 
 	/**
-	 * @typedef {Record<string, any>} DynamicObject
-	 */
-	/**
 	 * @typedef {object} BatchObject
-	 * @property {DynamicObject} params
-	 * @property {(res?: DynamicObject) => void} callback
+	 * @property {Record<string, any>} params
+	 * @property {(res?: ApiResponse) => void} callback
 	 */
 	/**
 	 * Send batched API requests.
