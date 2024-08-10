@@ -18,7 +18,7 @@ const i18n = {
 		'config-label-save': 'Save settings',
 		'config-label-saving': 'Saving settings...',
 		'config-notify-notloaded': 'Failed to load the interface.',
-		'config-notify-savedone': 'Sucessfully saved the settings.',
+		'config-notify-savedone': 'Successfully saved the settings.',
 		'config-notify-savefailed': 'Failed to save the settings. ',
 		'portlet-text': 'MBL config',
 		'portlet-title': 'Open [[Special:MarkBLockedConfig]]',
@@ -684,10 +684,18 @@ class MarkBLocked {
 			}
 
 			// Create a batch array for additional markups
-			const ipsThatMightBeBlocked = ips.filter((ip) => markedUsers.indexOf(ip) === -1);
-			const /** @type {BatchObject[]} */ batchArray = [];
-			if (this.options.localips && ipsThatMightBeBlocked.length) {
-				ipsThatMightBeBlocked.forEach((ip) => {
+			/** @type {BatchObject[]} */
+			const batchArray = [];
+			/**
+			 * An array of IP addresses that are not blocked in themselves. Using this array, we will check
+			 * for range blocks affecting the IPs. IPs can have multiple blocks in theory, but we filter
+			 * out those that are CIDR-wise not narrowest. This means that blocked IPs' user links will
+			 * never be assigned more than one CSS class each, among `mbl-blocked-indef`, `mbl-blocked-temp`,
+			 * and `mbl-blocked-partial`.
+			 */
+			const remainingIps = ips.filter((ip) => markedUsers.indexOf(ip) === -1);
+			if (this.options.localips && remainingIps.length) {
+				remainingIps.forEach((ip) => {
 					batchArray.push({
 						params: {
 							action: 'query',
