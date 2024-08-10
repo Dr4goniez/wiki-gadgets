@@ -2,59 +2,8 @@
 /// <reference path="./window/MarkBLocked.d.ts" />
 /* global mw, OO */
 //<nowiki>
-
-/**
- * @type {Record<string, Lang>}
- */
-const i18n = {
-	en: {
-		'config-label-heading': 'MarkBLocked configurations',
-		'config-label-fsgeneral': 'General settings',
-		'config-label-genportlet': 'Generate a portlet link to the config page',
-		'config-label-fsmarkup': 'Markup settings',
-		'config-label-rangeblocks': 'Mark up IPs in locally blocked IP ranges',
-		'config-label-g_locks': 'Mark up globally locked users',
-		'config-label-g_blocks': 'Mark up globally blocked users and IPs',
-		'config-label-g_rangeblocks': 'Mark up IPs in globally blocked IP ranges',
-		'config-help-g_rangeblocks': 'This option can be configured only when markup for global blocks is enabled.',
-		'config-label-save': 'Save settings',
-		'config-label-saving': 'Saving settings...',
-		'config-notify-notloaded': 'Failed to load the interface.',
-		'config-notify-savedone': 'Successfully saved the settings.',
-		'config-notify-savefailed': 'Failed to save the settings. ',
-		'portlet-text': 'MBL config',
-		'portlet-title': 'Open [[Special:MarkBLockedConfig]]',
-		'toggle-title-enabled': 'MarkBLocked is enabled. Click to disable it temporarily.',
-		'toggle-title-disabled': 'MarkBLocked is temporarily disabled. Click to enable it again.',
-		'toggle-notify-enabled': 'Enabled MarkBLocked.',
-		'toggle-notify-disabled': 'Temporarily disabled MarkBLocked.'
-	},
-	ja: {
-		'config-label-heading': 'MarkBLockedの設定',
-		'config-label-fsgeneral': '一般設定',
-		'config-label-genportlet': '設定ページへのポートレットリンクを生成',
-		'config-label-fsmarkup': 'マークアップ設定',
-		'config-label-rangeblocks': 'ブロックされたIPレンジに含まれるIPをマークアップ',
-		'config-label-g_locks': 'グローバルロックされた利用者をマークアップ',
-		'config-label-g_blocks': 'グローバルブロックされた利用者およびIPをマークアップ',
-		'config-label-g_rangeblocks': 'グローバルブロックされたIPレンジに含まれるIPをマークアップ',
-		'config-help-g_rangeblocks': 'この設定はグローバルブロックのマークアップが有効化されている場合のみ変更可能です。',
-		'config-label-save': '設定を保存',
-		'config-label-saving': '設定を保存中...',
-		'config-notify-notloaded': 'インターフェースの読み込みに失敗しました。',
-		'config-notify-savedone': '設定の保存に成功しました。',
-		'config-notify-savefailed': '設定の保存に失敗しました。',
-		'portlet-text': 'MarkBLockedの設定',
-		'portlet-title': '[[特別:MarkBLockedConfig]]を開く',
-		'toggle-title-enabled': 'MarkBLockedが有効化されています。クリックすると一時的に無効化します。',
-		'toggle-title-disabled': 'MarkBLockedが一時的に無効化されています。クリックすると再有効化します。',
-		'toggle-notify-enabled': 'MarkBLockedを有効化しました。',
-		'toggle-notify-disabled': 'MarkBLockedを一時的に無効化しました。'
-	}
-};
-
-const defaultOptionKey = 'userjs-markblocked-config';
-
+// const MarkBLocked = (() => {
+module.exports = (() => {
 class MarkBLocked {
 
 	/**
@@ -120,10 +69,14 @@ class MarkBLocked {
 				const oldOptionKey = 'userjs-gmbl-preferences';
 				/** @type {string?} */
 				const oldCfgStr = mw.user.options.get(oldOptionKey);
-				if (oldCfgStr && (cfg.optionKey === void 0 || cfg.optionKey === defaultOptionKey) && !mw.user.options.get(defaultOptionKey)) {
+				if (
+					oldCfgStr &&
+					(cfg.optionKey === void 0 || cfg.optionKey === MarkBLocked.defaultOptionKey) &&
+					!mw.user.options.get(MarkBLocked.defaultOptionKey)
+				) {
 					const options = {
 						[oldOptionKey]: null,
-						[defaultOptionKey]: oldCfgStr
+						[MarkBLocked.defaultOptionKey]: oldCfgStr
 					};
 					return new mw.Api(this.getApiOptions()).saveOptions(options).then(() => {
 						mw.user.options.set(options);
@@ -296,7 +249,7 @@ class MarkBLocked {
 		/**
 		 * The key of `mw.user.options`.
 		 */
-		this.optionKey = cfg.optionKey || defaultOptionKey;
+		this.optionKey = cfg.optionKey || MarkBLocked.defaultOptionKey;
 		/**
 		 * @type {UserOptions}
 		 */
@@ -348,7 +301,7 @@ class MarkBLocked {
 
 		// Language options
 		if (typeof cfg.i18n === 'object' && !Array.isArray(cfg.i18n) && cfg.i18n !== null) {
-			Object.assign(i18n, cfg.i18n);
+			Object.assign(MarkBLocked.i18n, cfg.i18n);
 		}
 		/**
 		 * @type {Lang}
@@ -359,13 +312,13 @@ class MarkBLocked {
 				cfg.lang = String(cfg.lang);
 			}
 			if (cfg.lang) {
-				if (Object.keys(i18n).indexOf(cfg.lang) !== -1) {
+				if (Object.keys(MarkBLocked.i18n).indexOf(cfg.lang) !== -1) {
 					langCode = cfg.lang;
 				} else {
 					console.error(`MarkBLocked does not have "${cfg.lang}" language support for its interface.`);
 				}
 			}
-			return i18n[langCode];
+			return MarkBLocked.i18n[langCode];
 		})();
 
 		/**
@@ -1161,5 +1114,58 @@ class MarkBLocked {
 
 }
 
-module.exports = MarkBLocked;
+/**
+ * @type {Record<string, Lang>}
+ */
+MarkBLocked.i18n = {
+	en: {
+		'config-label-heading': 'MarkBLocked configurations',
+		'config-label-fsgeneral': 'General settings',
+		'config-label-genportlet': 'Generate a portlet link to the config page',
+		'config-label-fsmarkup': 'Markup settings',
+		'config-label-rangeblocks': 'Mark up IPs in locally blocked IP ranges',
+		'config-label-g_locks': 'Mark up globally locked users',
+		'config-label-g_blocks': 'Mark up globally blocked users and IPs',
+		'config-label-g_rangeblocks': 'Mark up IPs in globally blocked IP ranges',
+		'config-help-g_rangeblocks': 'This option can be configured only when markup for global blocks is enabled.',
+		'config-label-save': 'Save settings',
+		'config-label-saving': 'Saving settings...',
+		'config-notify-notloaded': 'Failed to load the interface.',
+		'config-notify-savedone': 'Successfully saved the settings.',
+		'config-notify-savefailed': 'Failed to save the settings. ',
+		'portlet-text': 'MBL config',
+		'portlet-title': 'Open [[Special:MarkBLockedConfig]]',
+		'toggle-title-enabled': 'MarkBLocked is enabled. Click to disable it temporarily.',
+		'toggle-title-disabled': 'MarkBLocked is temporarily disabled. Click to enable it again.',
+		'toggle-notify-enabled': 'Enabled MarkBLocked.',
+		'toggle-notify-disabled': 'Temporarily disabled MarkBLocked.'
+	},
+	ja: {
+		'config-label-heading': 'MarkBLockedの設定',
+		'config-label-fsgeneral': '一般設定',
+		'config-label-genportlet': '設定ページへのポートレットリンクを生成',
+		'config-label-fsmarkup': 'マークアップ設定',
+		'config-label-rangeblocks': 'ブロックされたIPレンジに含まれるIPをマークアップ',
+		'config-label-g_locks': 'グローバルロックされた利用者をマークアップ',
+		'config-label-g_blocks': 'グローバルブロックされた利用者およびIPをマークアップ',
+		'config-label-g_rangeblocks': 'グローバルブロックされたIPレンジに含まれるIPをマークアップ',
+		'config-help-g_rangeblocks': 'この設定はグローバルブロックのマークアップが有効化されている場合のみ変更可能です。',
+		'config-label-save': '設定を保存',
+		'config-label-saving': '設定を保存中...',
+		'config-notify-notloaded': 'インターフェースの読み込みに失敗しました。',
+		'config-notify-savedone': '設定の保存に成功しました。',
+		'config-notify-savefailed': '設定の保存に失敗しました。',
+		'portlet-text': 'MarkBLockedの設定',
+		'portlet-title': '[[特別:MarkBLockedConfig]]を開く',
+		'toggle-title-enabled': 'MarkBLockedが有効化されています。クリックすると一時的に無効化します。',
+		'toggle-title-disabled': 'MarkBLockedが一時的に無効化されています。クリックすると再有効化します。',
+		'toggle-notify-enabled': 'MarkBLockedを有効化しました。',
+		'toggle-notify-disabled': 'MarkBLockedを一時的に無効化しました。'
+	}
+};
+
+MarkBLocked.defaultOptionKey = 'userjs-markblocked-config';
+
+return MarkBLocked;
+})();
 //</nowiki>
