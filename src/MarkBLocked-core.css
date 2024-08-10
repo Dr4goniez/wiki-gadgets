@@ -35,7 +35,7 @@
 	text-decoration: line-through;
 }
 .mbl-blocked-partial {
-	text-decoration: underline wavy;
+	text-decoration: underline dotted;
 }
 
 /**
