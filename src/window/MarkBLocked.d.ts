@@ -20,6 +20,15 @@ interface Lang {
 	'toggle-title-disabled': string;
 	'toggle-notify-enabled': string;
 	'toggle-notify-disabled': string;
+	'title-domain-local': string;
+	'title-domain-global': string;
+	'title-expiry-indefinite': string;
+	/** `$1`: Expiration timestamp */
+	'title-expiry-temporary': string;
+	/** `$1`: Domain, `$2`: Expiry, `$3`: Blocking admin, `$4`: Reason */
+	'title-blocked': string;
+	/** `$1`: CIDR range, `$2`: Domain, `$3`: Expiry, `$4`: Blocking admin, `$5`: Reason */
+	'title-rangeblocked': string;
 }
 
 interface Window {
@@ -43,9 +52,11 @@ interface ApiResponseQuerySpecialpagealiases {
 }
 
 interface ApiResponseQueryListBlocks {
-	restrictions?: []|object;
-	expiry: string;
 	user: string;
+	by: string;
+	expiry: string;
+	reason: string;
+	restrictions?: []|object;
 }
 
 interface ApiResponseQueryListGlobalallusers {
@@ -54,5 +65,7 @@ interface ApiResponseQueryListGlobalallusers {
 
 interface ApiResponseQueryListGlobalblocks {
 	target: string;
+	by: string;
 	expiry: string;
+	reason: string;
 }

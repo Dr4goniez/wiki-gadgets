@@ -723,7 +723,7 @@ class MarkBLocked {
 							action: 'query',
 							list: 'blocks',
 							bkip: ip,
-							bkprop: 'user|expiry|restrictions',
+							bkprop: 'user|by|expiry|reason|restrictions',
 							formatversion: '2'
 						},
 						callback: (res) => {
@@ -744,14 +744,21 @@ class MarkBLocked {
 								return acc;
 							}, null);
 							if (resObj) {
-								const partialBlk = resObj.restrictions && !Array.isArray(resObj.restrictions);
+								const {user, by, expiry, reason, restrictions} = resObj;
+								const partialBlk = restrictions && !Array.isArray(restrictions);
 								let clss;
-								if (/^in/.test(resObj.expiry)) {
+								const range = (user.match(/\/(\d+)$/) || ['', '??'])[1];
+								// `$1`: CIDR range, `$2`: Domain, `$3`: Expiry, `$4`: Blocking admin, `$5`: Reason
+								const titleVars = [range, this.getMessage('title-domain-local'), '', by, reason];
+								if (/^in/.test(expiry)) {
 									clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
+									titleVars[2] = this.getMessage('title-expiry-indefinite');
 								} else {
 									clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
+									titleVars[2] = this.getMessage('title-expiry-temporary').replace('$1', expiry);
 								}
-								MarkBLocked.addClass(userLinks, ip, clss);
+								const tooltip = mw.format(this.getMessage('title-rangeblocked'), ...titleVars);
+								MarkBLocked.addClass(userLinks, ip, clss, tooltip);
 							}
 						}
 					});
@@ -772,7 +779,7 @@ class MarkBLocked {
 						callback: (res) => {
 							const resLck = res && res.query && res.query.globalallusers;
 							if (resLck && resLck[0] && resLck[0].locked === '') {
-								MarkBLocked.addClass(userLinks, user, 'mbl-globally-locked');
+								MarkBLocked.addClass(userLinks, user, 'mbl-globally-locked', '');
 							}
 						}
 					});
@@ -785,7 +792,7 @@ class MarkBLocked {
 							action: 'query',
 							list: 'globalblocks',
 							bgip: ip,
-							bgprop: 'target|expiry',
+							bgprop: 'target|by|expiry|reason',
 							formatversion: '2'
 						},
 						callback: (res) => {
@@ -804,8 +811,20 @@ class MarkBLocked {
 								return acc;
 							}, null);
 							if (resObj) {
-								const clss = /^in/.test(resObj.expiry) ? 'mbl-globally-blocked-indef' : 'mbl-globally-blocked-temp';
-								MarkBLocked.addClass(userLinks, ip, clss);
+								const {target, by, expiry, reason} = resObj;
+								let clss;
+								const range = (target.match(/\/(\d+)$/) || ['', '??'])[1];
+								// $1: CIDR range, $2: Domain, $3: Expiry, $4: Blocking admin, $5: Reason
+								const titleVars = [range, this.getMessage('title-domain-global'), '', by, reason];
+								if (/^in/.test(expiry)) {
+									clss = 'mbl-globally-blocked-indef';
+									titleVars[2] = this.getMessage('title-expiry-indefinite');
+								} else {
+									clss = 'mbl-globally-blocked-temp';
+									titleVars[2] = this.getMessage('title-expiry-temporary').replace('$1', expiry);
+								}
+								const tooltip = mw.format(this.getMessage('title-rangeblocked'), ...titleVars);
+								MarkBLocked.addClass(userLinks, ip, clss, tooltip);
 							}
 						}
 					});
@@ -980,19 +999,24 @@ class MarkBLocked {
 			list: 'blocks',
 			bklimit: 'max',
 			bkusers: users.join('|'),
-			bkprop: 'user|expiry|restrictions',
+			bkprop: 'user|by|expiry|reason|restrictions',
 			formatversion: '2'
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resBlk = res && res.query && res.query.blocks || [];
-			return resBlk.reduce(/** @param {string[]} acc */ (acc, obj) => {
-				const partialBlk = obj.restrictions && !Array.isArray(obj.restrictions); // Boolean: True if partial block
+			return resBlk.reduce(/** @param {string[]} acc */ (acc, {user, by, expiry, reason, restrictions}) => {
+				const partialBlk = restrictions && !Array.isArray(restrictions); // Boolean: True if partial block
 				let clss;
-				if (/^in/.test(obj.expiry)) {
+				// `$1`: Domain, `$2`: Expiry, `$3`: Blocking admin, `$4`: Reason
+				const titleVars = [this.getMessage('title-domain-local'), '', by, reason];
+				if (/^in/.test(expiry)) {
 					clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
+					titleVars[1] = this.getMessage('title-expiry-indefinite');
 				} else {
 					clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
+					titleVars[1] = this.getMessage('title-expiry-temporary').replace('$1', expiry);
 				}
-				const markedUser = MarkBLocked.addClass(userLinks, obj.user, clss);
+				const tooltip = mw.format(this.getMessage('title-blocked'), ...titleVars);
+				const markedUser = MarkBLocked.addClass(userLinks, user, clss, tooltip);
 				if (markedUser) {
 					acc.push(markedUser);
 				}
@@ -1019,13 +1043,23 @@ class MarkBLocked {
 			action: 'query',
 			list: 'globalblocks',
 			bgtargets: users.join('|'),
-			bgprop: 'target|expiry',
+			bgprop: 'target|by|expiry|reason',
 			formatversion: '2'
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resGblk = res && res.query && res.query.globalblocks || [];
-			return resGblk.reduce(/** @param {string[]} acc */ (acc, obj) => {
-				const clss = /^in/.test(obj.expiry) ? 'mbl-globally-blocked-indef' : 'mbl-globally-blocked-temp';
-				const markedUser = MarkBLocked.addClass(userLinks, obj.target, clss);
+			return resGblk.reduce(/** @param {string[]} acc */ (acc, {target, by, expiry, reason}) => {
+				let clss;
+				// `$1`: Domain, `$2`: Expiry, `$3`: Blocking admin, `$4`: Reason
+				const titleVars = [this.getMessage('title-domain-global'), '', by, reason];
+				if (/^in/.test(expiry)) {
+					clss = 'mbl-globally-blocked-indef';
+					titleVars[1] = this.getMessage('title-expiry-indefinite');
+				} else {
+					clss = 'mbl-globally-blocked-temp';
+					titleVars[1] = this.getMessage('title-expiry-temporary').replace('$1', expiry);
+				}
+				const tooltip = mw.format(this.getMessage('title-blocked'), ...titleVars);
+				const markedUser = MarkBLocked.addClass(userLinks, target, clss, tooltip);
 				if (markedUser) {
 					acc.push(markedUser);
 				}
@@ -1046,13 +1080,17 @@ class MarkBLocked {
 	 * @param {UserLinks} userLinks
 	 * @param {string} userName
 	 * @param {string} className
+	 * @param {string} tooltip
 	 * @returns {string?} The username if any link is marked up, or else `null`.
 	 */
-	static addClass(userLinks, userName, className) {
+	static addClass(userLinks, userName, className, tooltip) {
 		const links = userLinks[userName]; // Get all links related to the user
 		if (links) {
 			for (let i = 0; i < links.length; i++) {
 				links[i].classList.add(className);
+				if (tooltip) {
+					links[i].title += '\n' + tooltip;
+				}
 			}
 			return userName;
 		} else {
@@ -1152,7 +1190,13 @@ MarkBLocked.i18n = {
 		'toggle-title-enabled': 'MarkBLocked is enabled. Click to disable it temporarily.',
 		'toggle-title-disabled': 'MarkBLocked is temporarily disabled. Click to enable it again.',
 		'toggle-notify-enabled': 'Enabled MarkBLocked.',
-		'toggle-notify-disabled': 'Temporarily disabled MarkBLocked.'
+		'toggle-notify-disabled': 'Temporarily disabled MarkBLocked.',
+		'title-domain-local': 'locally',
+		'title-domain-global': 'globally',
+		'title-expiry-indefinite': 'indefinitely',
+		'title-expiry-temporary': 'until $1',
+		'title-blocked': 'Blocked $1 $2 by $3: $4',
+		'title-rangeblocked': '/$1 range-blocked $2 $3 by $4: $5',
 	},
 	ja: {
 		'config-label-heading': 'MarkBLockedの設定',
@@ -1175,7 +1219,13 @@ MarkBLocked.i18n = {
 		'toggle-title-enabled': 'MarkBLockedが有効化されています。クリックすると一時的に無効化します。',
 		'toggle-title-disabled': 'MarkBLockedが一時的に無効化されています。クリックすると再有効化します。',
 		'toggle-notify-enabled': 'MarkBLockedを有効化しました。',
-		'toggle-notify-disabled': 'MarkBLockedを一時的に無効化しました。'
+		'toggle-notify-disabled': 'MarkBLockedを一時的に無効化しました。',
+		'title-domain-local': 'ローカル',
+		'title-domain-global': 'グローバル',
+		'title-expiry-indefinite': '無期限',
+		'title-expiry-temporary': '$1まで',
+		'title-blocked': '$3により$2$1ブロック中: $4',
+		'title-rangeblocked': '$4により/$1で$3$2レンジブロック中: $5'
 	}
 };
 
