@@ -196,8 +196,7 @@ class MarkBLocked {
 			meta: 'siteinfo',
 			siprop: 'specialpagealiases',
 			formatversion: '2'
-		}).then((res) => {
-			/** @type {{realname: string; aliases: string[];}[]=} */
+		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resSpa = res && res.query && res.query.specialpagealiases;
 			if (Array.isArray(resSpa)) {
 				const defaults = ['Contributions', 'Contribs', 'CentralAuth', 'CA', 'GlobalAccount'];
@@ -280,8 +279,7 @@ class MarkBLocked {
 					options.g_rangeblocks = options.globalips;
 					delete options.globalips;
 				}
-			}
-			catch(err) {
+			} catch(err) {
 				console.error(err);
 				options = defaultOptions;
 			}
@@ -463,7 +461,7 @@ class MarkBLocked {
 		};
 		const fsMarkup = new OO.ui.FieldsetLayout({
 			label: this.getMessage('config-label-fsmarkup'),
-			help:this.getMessage('config-help-resources'),
+			help: this.getMessage('config-help-resources'),
 			helpInline: true,
 			items: [
 				new OO.ui.FieldLayout(rangeblocks, {
@@ -735,7 +733,7 @@ class MarkBLocked {
 								if (i === 0) {
 									acc = obj; // Just save the object in the first loop
 								} else {
-									// If the IP has multiple blocks, filter out the narrowest one CIDR-wise
+									// If the IP has multiple blocks, find the narrowest one CIDR-wise
 									let m;
 									const lastRange = acc && (m = acc.user.match(/\/(\d+)$/)) ? parseInt(m[1]) : 128;
 									const thisRange = (m = obj.user.match(/\/(\d+)$/)) !== null ? parseInt(m[1]) : 128;
@@ -848,7 +846,7 @@ class MarkBLocked {
 			$anchors = $anchors.add($contribsTools.find('a'));
 		}
 
-		// Filter out user links
+		// Find user links
 		/** @type {LinkObject} */
 		const ret = {
 			userLinks: Object.create(null),
@@ -984,7 +982,7 @@ class MarkBLocked {
 			bkusers: users.join('|'),
 			bkprop: 'user|expiry|restrictions',
 			formatversion: '2'
-		}).then(/** @param {ApiResponse} res */ (res) =>{
+		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resBlk = res && res.query && res.query.blocks || [];
 			return resBlk.reduce(/** @param {string[]} acc */ (acc, obj) => {
 				const partialBlk = obj.restrictions && !Array.isArray(obj.restrictions); // Boolean: True if partial block
@@ -1023,7 +1021,7 @@ class MarkBLocked {
 			bgtargets: users.join('|'),
 			bgprop: 'target|expiry',
 			formatversion: '2'
-		}).then(/** @param {ApiResponse} res */ (res) =>{
+		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resGblk = res && res.query && res.query.globalblocks || [];
 			return resGblk.reduce(/** @param {string[]} acc */ (acc, obj) => {
 				const clss = /^in/.test(obj.expiry) ? 'mbl-globally-blocked-indef' : 'mbl-globally-blocked-temp';
@@ -1147,7 +1145,7 @@ MarkBLocked.i18n = {
 		'config-label-save': 'Save settings',
 		'config-label-saving': 'Saving settings...',
 		'config-notify-notloaded': 'Failed to load the interface.',
-		'config-notify-savedone': 'Successfully saved the settings.',
+		'config-notify-savedone': 'Settings have been saved successfully.',
 		'config-notify-savefailed': 'Failed to save the settings. ',
 		'portlet-text': 'MBL config',
 		'portlet-title': 'Open [[Special:MarkBLockedConfig]]',
@@ -1161,7 +1159,7 @@ MarkBLocked.i18n = {
 		'config-label-fsgeneral': '一般設定',
 		'config-label-genportlet': '設定ページへのポートレットリンクを生成',
 		'config-label-fsmarkup': 'マークアップ設定',
-		'config-help-resources': '感嘆符のある機能はサーバーリソースを消費します。',
+		'config-help-resources': '感嘆符の付いた機能はサーバーリソースを消費します。',
 		'config-label-rangeblocks': 'ブロックされたIPレンジに含まれるIPをマークアップ',
 		'config-label-g_locks': 'グローバルロックされた利用者をマークアップ',
 		'config-label-g_blocks': 'グローバルブロックされた利用者およびIPをマークアップ',

@@ -31,9 +31,15 @@ interface ApiResponse {
 }
 
 interface ApiResponseQuery {
+	specialpagealiases?: ApiResponseQuerySpecialpagealiases[];
 	blocks?: ApiResponseQueryListBlocks[];
 	globalallusers?: ApiResponseQueryListGlobalallusers[];
 	globalblocks?: ApiResponseQueryListGlobalblocks[];
+}
+
+interface ApiResponseQuerySpecialpagealiases {
+	realname: string;
+	aliases: string[];
 }
 
 interface ApiResponseQueryListBlocks {
