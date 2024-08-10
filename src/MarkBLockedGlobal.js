@@ -8,7 +8,8 @@
 				const MarkBLocked = req(moduleName);
 				MarkBLocked.init({
 					defaultOptions: {
-						globalusers: true
+						g_locks: true,
+						g_blocks: true
 					},
 					optionKey: 'userjs-markblockedglobal-config',
 					globalize: true

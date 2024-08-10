@@ -5,7 +5,8 @@ mw.loader.getScript('http://127.0.0.1:5500/src/MarkBLocked-core.js').then(() => 
 	// @ts-ignore
 	MarkBLocked.init({
 		defaultOptions: {
-			globalusers: true
+			g_locks: true,
+			g_blocks: true
 		},
 		optionKey: 'userjs-markblockedglobal-config',
 		globalize: true

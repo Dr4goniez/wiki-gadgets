@@ -12,9 +12,11 @@ const i18n = {
 		'config-label-fsgeneral': 'General settings',
 		'config-label-genportlet': 'Generate a portlet link to the config page',
 		'config-label-fsmarkup': 'Markup settings',
-		'config-label-localips': 'Mark up IPs in locally blocked IP ranges',
-		'config-label-globalusers': 'Mark up globally locked users',
-		'config-label-globalips': 'Mark up globally blocked IPs',
+		'config-label-rangeblocks': 'Mark up IPs in locally blocked IP ranges',
+		'config-label-g_locks': 'Mark up globally locked users',
+		'config-label-g_blocks': 'Mark up globally blocked users and IPs',
+		'config-label-g_rangeblocks': 'Mark up IPs in globally blocked IP ranges',
+		'config-help-g_rangeblocks': 'This option can be configured only when markup for global blocks is enabled.',
 		'config-label-save': 'Save settings',
 		'config-label-saving': 'Saving settings...',
 		'config-notify-notloaded': 'Failed to load the interface.',
@@ -32,9 +34,11 @@ const i18n = {
 		'config-label-fsgeneral': '一般設定',
 		'config-label-genportlet': '設定ページへのポートレットリンクを生成',
 		'config-label-fsmarkup': 'マークアップ設定',
-		'config-label-localips': 'ブロックされたIPレンジに含まれるIPをマークアップ',
-		'config-label-globalusers': 'グローバルロックされた利用者をマークアップ',
-		'config-label-globalips': 'グローバルブロックされたIPをマークアップ',
+		'config-label-rangeblocks': 'ブロックされたIPレンジに含まれるIPをマークアップ',
+		'config-label-g_locks': 'グローバルロックされた利用者をマークアップ',
+		'config-label-g_blocks': 'グローバルブロックされた利用者およびIPをマークアップ',
+		'config-label-g_rangeblocks': 'グローバルブロックされたIPレンジに含まれるIPをマークアップ',
+		'config-help-g_rangeblocks': 'この設定はグローバルブロックのマークアップが有効化されている場合のみ変更可能です。',
 		'config-label-save': '設定を保存',
 		'config-label-saving': '設定を保存中...',
 		'config-notify-notloaded': 'インターフェースの読み込みに失敗しました。',
@@ -56,9 +60,10 @@ class MarkBLocked {
 	/**
 	 * @typedef {object} UserOptions
 	 * @property {boolean} genportlet
-	 * @property {boolean} localips
-	 * @property {boolean} globalusers
-	 * @property {boolean} globalips
+	 * @property {boolean} rangeblocks
+	 * @property {boolean} g_locks
+	 * @property {boolean} g_blocks
+	 * @property {boolean} g_rangeblocks
 	 */
 	/**
 	 * @typedef {object} ConstructorConfig
@@ -298,21 +303,42 @@ class MarkBLocked {
 		this.options = (() => {
 			const defaultOptions = Object.assign({
 				genportlet: true,
-				localips: false,
-				globalusers: false,
-				globalips: false
+				rangeblocks: false,
+				g_locks: false,
+				g_blocks: false,
+				g_rangeblocks: false
 			}, cfg.defaultOptions);
 			/** @type {string} */
 			const optionsStr = mw.user.options.get(this.optionKey) || '{}';
-			let /** @type {UserOptions} */ options;
+			/** @type {Record<string, boolean>} */
+			let options;
 			try {
 				options = JSON.parse(optionsStr);
+				// For backwards compatibility
+				if (options.localips) {
+					options.rangeblocks = options.localips;
+					delete options.localips;
+				}
+				if (options.globalusers) {
+					options.g_locks = options.globalusers;
+					delete options.globalusers;
+				}
+				if (options.globalips) {
+					options.g_rangeblocks = options.globalips;
+					delete options.globalips;
+				}
 			}
 			catch(err) {
 				console.error(err);
 				options = defaultOptions;
 			}
-			return Object.assign(defaultOptions, options);
+			/** @type {UserOptions} */
+			const ret = Object.assign(defaultOptions, options);
+			if (ret.g_rangeblocks) {
+				// g_blocks must be enabled when g_rangeblocks is enabled
+				ret.g_blocks = true;
+			}
+			return ret;
 		})();
 		/**
 		 * @type {boolean}
@@ -449,29 +475,46 @@ class MarkBLocked {
 		});
 
 		// Markup options
-		const localIps = new OO.ui.CheckboxInputWidget({
-			selected: this.options.localips
+		const rangeblocks = new OO.ui.CheckboxInputWidget({
+			selected: this.options.rangeblocks
 		});
-		const globalUsers = new OO.ui.CheckboxInputWidget({
-			selected: this.options.globalusers
+		const g_locks = new OO.ui.CheckboxInputWidget({
+			selected: this.options.g_locks
 		});
-		const globalIps = new OO.ui.CheckboxInputWidget({
-			selected: this.options.globalips
+		const g_blocks = new OO.ui.CheckboxInputWidget({
+			selected: this.options.g_blocks
+		});
+		const g_rangeblocks = new OO.ui.CheckboxInputWidget({
+			selected: this.options.g_rangeblocks,
+			disabled: !g_blocks.isSelected()
+		});
+		g_blocks.off('change').on('change', () => {
+			if (!g_blocks.isSelected()) {
+				g_rangeblocks.setSelected(false).setDisabled(true);
+			} else {
+				g_rangeblocks.setDisabled(false);
+			}
 		});
 		const fsMarkup = new OO.ui.FieldsetLayout({
 			label: this.getMessage('config-label-fsmarkup'),
 			items: [
-				new OO.ui.FieldLayout(localIps, {
-					label: this.getMessage('config-label-localips'),
+				new OO.ui.FieldLayout(rangeblocks, {
+					label: this.getMessage('config-label-rangeblocks'),
 					align: 'inline'
 				}),
-				new OO.ui.FieldLayout(globalUsers, {
-					label: this.getMessage('config-label-globalusers'),
+				new OO.ui.FieldLayout(g_locks, {
+					label: this.getMessage('config-label-g_locks'),
 					align: 'inline'
 				}),
-				new OO.ui.FieldLayout(globalIps, {
-					label: this.getMessage('config-label-globalips'),
+				new OO.ui.FieldLayout(g_blocks, {
+					label: this.getMessage('config-label-g_blocks'),
 					align: 'inline'
+				}),
+				new OO.ui.FieldLayout(g_rangeblocks, {
+					label: this.getMessage('config-label-g_rangeblocks'),
+					align: 'inline',
+					help: this.getMessage('config-help-g_rangeblocks'),
+					helpInline: true
 				})
 			]
 		});
@@ -505,9 +548,10 @@ class MarkBLocked {
 			// Get config
 			const /** @type {UserOptions} */ cfg = {
 				genportlet: genportlet.isSelected(),
-				localips: localIps.isSelected(),
-				globalusers: globalUsers.isSelected(),
-				globalips: globalIps.isSelected()
+				rangeblocks: rangeblocks.isSelected(),
+				g_locks: g_locks.isSelected(),
+				g_blocks: g_blocks.isSelected(),
+				g_rangeblocks: g_rangeblocks.isSelected()
 			};
 			const cfgStr = JSON.stringify(cfg);
 
@@ -660,23 +704,35 @@ class MarkBLocked {
 	 */
 	markup($content) {
 
+		if (!this.options.g_blocks && this.options.g_rangeblocks) {
+			throw new Error('g_rangeblocks is unexpectedly turned on when g_blocks is turned off.');
+		}
+
+		// Collect user links
 		const {userLinks, users, ips} = this.collectLinks($content);
 		if ($.isEmptyObject(userLinks)) {
 			console.log('MarkBLocked', {
-				$content: $content,
+				$content,
 				links: 0
 			});
 			return;
 		}
 		const allUsers = users.concat(ips);
 
-		this.markBlockedUsers(userLinks, allUsers).then((markedUsers) => {
+		// Start markup
+		$.when(
+			this.bulkMarkup('local', userLinks, allUsers),
+			this.bulkMarkup('global', userLinks, this.options.g_blocks ? allUsers : [])
+		).then((markedUsers, g_markedUsers) => {
 
-			if (markedUsers === null) { // Aborted
+			if (markedUsers === null && g_markedUsers === null) { // Aborted
 				return;
+			} else if (markedUsers === null || g_markedUsers === null) {
+				// bulkMarkup uses the same mw.Api instance, so the code is never supposed to reach this block
+				throw new Error('Unexpected abortion');
 			} else {
 				console.log('MarkBLocked', {
-					$content: $content,
+					$content,
 					links: $('.mbl-userlink').length,
 					user_registered: users.length,
 					user_anonymous: ips.length
@@ -693,8 +749,8 @@ class MarkBLocked {
 			 * never be assigned more than one CSS class each, among `mbl-blocked-indef`, `mbl-blocked-temp`,
 			 * and `mbl-blocked-partial`.
 			 */
-			const remainingIps = ips.filter((ip) => markedUsers.indexOf(ip) === -1);
-			if (this.options.localips && remainingIps.length) {
+			let remainingIps;
+			if (this.options.rangeblocks && (remainingIps = ips.filter((ip) => markedUsers.indexOf(ip) === -1)).length) {
 				remainingIps.forEach((ip) => {
 					batchArray.push({
 						params: {
@@ -735,7 +791,7 @@ class MarkBLocked {
 					});
 				});
 			}
-			if (this.options.globalusers && users.length) {
+			if (this.options.g_locks && users.length) {
 				users.forEach((user) => {
 					batchArray.push({
 						params: {
@@ -756,8 +812,8 @@ class MarkBLocked {
 					});
 				});
 			}
-			if (this.options.globalips && ips.length) {
-				ips.forEach((ip) => {
+			if (this.options.g_rangeblocks && (remainingIps = ips.filter((ip) => g_markedUsers.indexOf(ip) === -1)).length) {
+				remainingIps.forEach((ip) => {
 					batchArray.push({
 						params: {
 							action: 'query',
@@ -907,66 +963,116 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Mark up locally blocked registered users and single IPs (this can't detect single IPs included in blocked IP ranges)
+	 * Mark up registered users and single IPs locally or globally blocked in bulk. This method does not
+	 * deal with indirect range blocks.
+	 * @param {"local"|"global"} domain
 	 * @param {UserLinks} userLinks
 	 * @param {string[]} usersArr
-	 * @returns {JQueryPromise<string[]?>} Usernames whose links are marked up (`null` if aborted).
+	 * @returns {JQueryPromise<string[]?>} Usernames whose links are marked up, or `null` if aborted
 	 * @requires mediawiki.api
 	 */
-	markBlockedUsers(userLinks, usersArr) {
+	bulkMarkup(domain, userLinks, usersArr) {
 
 		if (!usersArr.length) {
 			return $.Deferred().resolve([]);
 		}
-
-		const /** @type {string[]} */ marked = [];
-		let aborted = false;
-		/**
-		 * @param {string[]} users
-		 * @returns {JQueryPromise<void>}
-		 */
-		const req = (users) => {
-			return this.readApi.post({ // This MUST be a POST request because the parameters can exceed the word count limit of URI
-				action: 'query',
-				list: 'blocks',
-				bklimit: 'max',
-				bkusers: users.join('|'),
-				bkprop: 'user|expiry|restrictions',
-				formatversion: '2'
-			}).then(/** @param {ApiResponse} res */ (res) =>{
-				const resBlk = res && res.query && res.query.blocks;
-				if (resBlk) {
-					resBlk.forEach((obj) => {
-						const partialBlk = obj.restrictions && !Array.isArray(obj.restrictions); // Boolean: True if partial block
-						let clss;
-						if (/^in/.test(obj.expiry)) {
-							clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
-						} else {
-							clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
-						}
-						const markedUser = MarkBLocked.addClass(userLinks, obj.user, clss);
-						if (markedUser) {
-							marked.push(markedUser);
-						}
-					});
-				}
-			}).catch(/** @param {object} err */ (_, err) => {
-				if (err.exception === 'abort') {
-					aborted = true;
-				} else {
-					console.error(err);
-				}
-			});
-		};
+		usersArr = usersArr.slice();
 
 		// API calls
-		const /** @type {JQueryPromise<void>[]} */ deferreds = [];
-		usersArr = usersArr.slice();
+		const /** @type {JQueryPromise<string[]?>[]} */ deferreds = [];
 		while (usersArr.length) {
-			deferreds.push(req(usersArr.splice(0, this.apilimit)));
+			if (domain === 'local') {
+				deferreds.push(this.bulkMarkupLocal(userLinks, usersArr.splice(0, this.apilimit)));
+			} else {
+				deferreds.push(this.bulkMarkupGlobal(userLinks, usersArr.splice(0, this.apilimit)));
+			}
 		}
-		return $.when(...deferreds).then(() => aborted ? null : marked);
+		return $.when(...deferreds).then((...args) => {
+			const ret = [];
+			for (let i = 0; i < args.length; i++) {
+				const marked = args[i];
+				if (marked !== null) {
+					ret.push(...marked);
+				} else {
+					return null;
+				}
+			}
+			return ret;
+		});
 
+	}
+
+	/**
+	 * @param {UserLinks} userLinks
+	 * @param {string[]} users
+	 * @returns {JQueryPromise<string[]?>} An array of marked users' names or `null` if aborted
+	 * @private
+	 */
+	bulkMarkupLocal(userLinks, users) {
+		return this.readApi.post({ // This MUST be a POST request because the parameters can exceed the word count limit of URI
+			action: 'query',
+			list: 'blocks',
+			bklimit: 'max',
+			bkusers: users.join('|'),
+			bkprop: 'user|expiry|restrictions',
+			formatversion: '2'
+		}).then(/** @param {ApiResponse} res */ (res) =>{
+			const resBlk = res && res.query && res.query.blocks || [];
+			return resBlk.reduce(/** @param {string[]} acc */ (acc, obj) => {
+				const partialBlk = obj.restrictions && !Array.isArray(obj.restrictions); // Boolean: True if partial block
+				let clss;
+				if (/^in/.test(obj.expiry)) {
+					clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
+				} else {
+					clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
+				}
+				const markedUser = MarkBLocked.addClass(userLinks, obj.user, clss);
+				if (markedUser) {
+					acc.push(markedUser);
+				}
+				return acc;
+			}, []);
+		}).catch(/** @param {object} err */ (_, err) => {
+			if (err.exception === 'abort') {
+				return null;
+			} else {
+				console.error(err);
+				return [];
+			}
+		});
+	}
+
+	/**
+	 * @param {UserLinks} userLinks
+	 * @param {string[]} users
+	 * @returns {JQueryPromise<string[]?>} An array of marked users' names or `null` if aborted
+	 * @private
+	 */
+	bulkMarkupGlobal(userLinks, users) {
+		return this.readApi.post({
+			action: 'query',
+			list: 'globalblocks',
+			bgtargets: users.join('|'),
+			bgprop: 'target|expiry',
+			formatversion: '2'
+		}).then(/** @param {ApiResponse} res */ (res) =>{
+			const resGblk = res && res.query && res.query.globalblocks || [];
+			return resGblk.reduce(/** @param {string[]} acc */ (acc, obj) => {
+				const clss = /^in/.test(obj.expiry) ? 'mbl-globally-blocked-indef' : 'mbl-globally-blocked-temp';
+				const markedUser = MarkBLocked.addClass(userLinks, obj.target, clss);
+				if (markedUser) {
+					acc.push(markedUser);
+				}
+				return acc;
+			}, []);
+		}).catch(/** @param {object} err */ (_, err) => {
+			if (err.exception === 'abort') {
+				return null;
+			} else {
+				console.error(err);
+				return [];
+			}
+		});
 	}
 
 	/**

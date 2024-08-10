@@ -4,9 +4,11 @@ interface Lang {
 	'config-label-fsgeneral': string;
 	'config-label-genportlet': string;
 	'config-label-fsmarkup': string;
-	'config-label-localips': string;
-	'config-label-globalusers': string;
-	'config-label-globalips': string;
+	'config-label-rangeblocks': string;
+	'config-label-g_locks': string;
+	'config-label-g_blocks': string;
+	'config-label-g_rangeblocks': string;
+	'config-help-g_rangeblocks': string;
 	'config-label-save': string;
 	'config-label-saving': string;
 	'config-notify-savedone': string;
