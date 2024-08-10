@@ -1,19 +1,3 @@
-/* -----------------------------------------------------------------------------------
-	Relevant classes				Block status					Applied styles
-	.mbl-blocked-temp				Temporarily blocked locally		07ST
-	.mbl-blocked-indef				Indefinitely blocked locally	04ST
-	.mbl-blocked-partial			Partially blocked locally		DU
-	.mbl-globally-locked			Locked globally					04RU
-	.mbl-globally-blocked-indef		Temporarily blocked globally	04RU
-	.mbl-globally-blocked-temp		Indefinitely blocked globally	07RU
-	Abbreviations
-	04 - opacity 0.4
-	07 - opacity 0.7
-	ST - strike through
-	DU - dot under
-	RU - red under
--------------------------------------------------------------------------------------- */
-
 /* Config */
 #mblc-container {
 	position: relative;
@@ -37,87 +21,51 @@
 
 /* General */
 .mbl-userlink {
-	opacity: 0.85;
+	opacity: 1;
 }
-/* DU */
-.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp) {
-	text-decoration: underline dotted;
+
+/**
+ * Classes for locally blocked users. These classes are mutually exclusive.
+ */
+.mbl-blocked-indef {
+	opacity: 0.6;
+	text-decoration: line-through double;
 }
-/* 04ST */
-.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp)
-{
-	opacity: 0.4;
+.mbl-blocked-temp {
 	text-decoration: line-through;
 }
-/* 07ST */
-.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp)
-{
-	opacity: 0.7;
-	text-decoration: line-through;
+.mbl-blocked-partial {
+	text-decoration: underline wavy;
 }
-/* 04RU */
-.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial).mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp)
-{
-	opacity: 0.4;
-	border-bottom: dashed medium red;
+
+/**
+ * Classes for globally (b)locked users. The classes for global block can
+ * overlap with the class for global lock.
+ */
+.mbl-globally-locked {
+	opacity: 0.6;
+	border-bottom: red double;
 }
-/* 07RU */
-.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
-{
-	opacity: 0.7;
-	border-bottom: dashed medium red;
+.mbl-globally-blocked-indef:not(.mbl-globally-locked) {
+	opacity: 0.6;
+	border-bottom: 2px red dashed;
 }
-/* 04STRU */
-.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
-.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-.mbl-userlink.mbl-blocked-temp.mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
-.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial).mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef.mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
-.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial).mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp,
-.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-.mbl-userlink:not(.mbl-blocked-temp).mbl-blocked-indef:not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
-{
-	opacity: 0.4;
-	text-decoration: line-through;
-	border-bottom: dashed medium red;
+.mbl-globally-blocked-temp:not(.mbl-globally-locked) {
+	border-bottom: 2px red dashed;
 }
-/* 07STRU */
-.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp,
-.mbl-userlink.mbl-blocked-temp:not(.mbl-blocked-indef):not(.mbl-blocked-partial):not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
-{
-	opacity: 0.7;
-	text-decoration: line-through;
-	border-bottom: dashed medium red;
+
+/* Increase opacity on dark mode for better readability */
+@media screen {
+	html.skin-theme-clientpref-night .mbl-blocked-indef,
+	html.skin-theme-clientpref-night .mbl-globally-locked,
+	html.skin-theme-clientpref-night .mbl-globally-blocked-indef:not(.mbl-globally-locked) {
+		opacity: 0.8;
+	}
 }
-/* 04DURU */
-.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial.mbl-globally-locked:not(.mbl-globally-blocked-indef):not(.mbl-globally-blocked-temp),
-.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef:not(.mbl-globally-blocked-temp),
-.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked).mbl-globally-blocked-indef.mbl-globally-blocked-temp
-{
-	opacity: 0.4;
-	text-decoration: underline dotted;
-	border-bottom: dashed medium red;
-}
-/* 07DURU */
-.mbl-userlink:not(.mbl-blocked-temp):not(.mbl-blocked-indef).mbl-blocked-partial:not(.mbl-globally-locked):not(.mbl-globally-blocked-indef).mbl-globally-blocked-temp
-{
-	opacity: 0.7;
-	text-decoration: underline dotted;
-	border-bottom: dashed medium red;
+@media screen and (prefers-color-scheme: dark) {
+	html.skin-theme-clientpref-os .mbl-blocked-indef,
+	html.skin-theme-clientpref-os .mbl-globally-locked,
+	html.skin-theme-clientpref-os .mbl-globally-blocked-indef:not(.mbl-globally-locked) {
+		opacity: 0.8;
+	}
 }
