@@ -838,7 +838,7 @@ class MarkBLocked {
 				!href ||
 				(a.getAttribute('href') || '')[0] === '#' ||
 				a.role === 'button' ||
-				a.classList.contains('.ext-discussiontools-init-timestamplink') ||
+				a.classList.contains('ext-discussiontools-init-timestamplink') ||
 				pr && prIgnore.test(pr.className) ||
 				mw.util.getParamValue('action', href) && !mw.util.getParamValue('redlink', href) ||
 				mw.util.getParamValue('diff', href) ||
