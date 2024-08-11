@@ -8,6 +8,7 @@ interface Lang {
 	'config-label-rangeblocks': string;
 	'config-label-g_locks': string;
 	'config-label-g_blocks': string;
+	'config-help-g_blocks': string;
 	'config-label-g_rangeblocks': string;
 	'config-help-g_rangeblocks': string;
 	'config-label-save': string;
