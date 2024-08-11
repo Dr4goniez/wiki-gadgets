@@ -35,13 +35,19 @@
  */
 .mbl-blocked-indef {
 	opacity: 0.6;
-	text-decoration: line-through double;
+	text-decoration: line-through;
+	/**
+	 * Below might not be supported by the user's browser, hence defined separately.
+	 * This ensures that the user link is at least struck through.
+	 */
+	text-decoration-style: double;
 }
 .mbl-blocked-temp {
 	text-decoration: line-through;
 }
 .mbl-blocked-partial {
-	text-decoration: underline dotted;
+	text-decoration: underline;
+	text-decoration-style: dotted;
 }
 
 /**
