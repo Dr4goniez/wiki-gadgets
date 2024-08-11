@@ -52,6 +52,7 @@ class MarkBLocked {
 		const modules = [
 			'mediawiki.user',
 			'mediawiki.api',
+			'mediawiki.ForeignApi',
 			'mediawiki.util',
 			'oojs-ui',
 			'oojs-ui.styles.icons-moderation',
@@ -165,6 +166,16 @@ class MarkBLocked {
 	 * @property {boolean} [nonwritepost] Whether the instance is used only to read data though it issues POST requests
 	 */
 	/**
+	 * Get API options to initialize a `mw.Api` instance.
+	 *
+	 * This method adds a User-Agent header and sets the default query parameters of:
+	 * ```
+	 * {
+	 * 	action: 'query',
+	 * 	format: 'json',
+	 * 	formatversion: '2'
+	 * }
+	 * ```
 	 * @param {ApiOptions} [options]
 	 */
 	static getApiOptions(options = {}) {
@@ -173,6 +184,11 @@ class MarkBLocked {
 				headers: {
 					'Api-User-Agent': 'MarkBLocked-core (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
+			},
+			parameters: {
+				action: 'query',
+				format: 'json',
+				formatversion: '2'
 			}
 		};
 		if (typeof options.timeout === 'number') {
@@ -189,13 +205,12 @@ class MarkBLocked {
 	 * Get special page aliases for `Contributions` and `CentralAuth`.
 	 * @returns {JQueryPromise<string[]?>}
 	 * @requires mediawiki.api
+	 * @requires mediawiki.ForeignApi
 	 */
 	static getContribsCA() {
 		return new mw.Api(this.getApiOptions()).get({
-			action: 'query',
 			meta: 'siteinfo',
-			siprop: 'specialpagealiases',
-			formatversion: '2'
+			siprop: 'specialpagealiases'
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resSpa = res && res.query && res.query.specialpagealiases;
 			if (Array.isArray(resSpa)) {
@@ -219,6 +234,7 @@ class MarkBLocked {
 	 * Initialize the properties of the `MarkBLocked` class. This is only to be called by {@link MarkBLocked.init}.
 	 * @param {ConstructorConfig} [cfg]
 	 * @requires mediawiki.api
+	 * @requires mediawiki.ForeignApi
 	 * @requires mediawiki.user
 	 */
 	constructor(cfg = {}) {
@@ -231,6 +247,12 @@ class MarkBLocked {
 		 * @type {mw.Api}
 		 */
 		this.readApi = new mw.Api(MarkBLocked.getApiOptions({timeout: 60*1000, nonwritepost: true}));
+		/**
+		 * @type {mw.Api}
+		 */
+		this.metaApi = mw.config.get('wgWikiID') === 'metawiki' ?
+			this.api :
+			new mw.ForeignApi('https://meta.wikimedia.org/w/api.php', MarkBLocked.getApiOptions({timeout: 60*1000}));
 
 		// Show Warning if the config has any invalid property
 		const validKeys = ['defaultOptions', 'optionKey', 'globalize', 'i18n', 'lang', 'contribsCA', 'groupsAHL'];
@@ -525,8 +547,7 @@ class MarkBLocked {
 			this.api.postWithToken('csrf', {
 				action: this.globalize ? 'globalpreferences' : 'options',
 				optionname: this.optionKey,
-				optionvalue: cfgStr,
-				formatversion:'2'
+				optionvalue: cfgStr
 			}).then(() => {
 				mw.user.options.set(this.optionKey, cfgStr);
 				return null;
@@ -667,6 +688,7 @@ class MarkBLocked {
 	 * @returns {void}
 	 * @requires mediawiki.util
 	 * @requires mediawiki.api
+	 * @requires mediawiki.ForeignApi
 	 */
 	markup($content) {
 
@@ -719,12 +741,11 @@ class MarkBLocked {
 			if (this.options.rangeblocks && (remainingIps = ips.filter((ip) => markedUsers.indexOf(ip) === -1)).length) {
 				remainingIps.forEach((ip) => {
 					batchArray.push({
+						username: ip,
 						params: {
-							action: 'query',
 							list: 'blocks',
 							bkip: ip,
-							bkprop: 'user|by|expiry|reason|restrictions',
-							formatversion: '2'
+							bkprop: 'user|by|expiry|reason|restrictions'
 						},
 						callback: (res) => {
 							// An IP may have multiple blocks
@@ -748,7 +769,7 @@ class MarkBLocked {
 								const partialBlk = restrictions && !Array.isArray(restrictions);
 								let clss;
 								const range = (user.match(/\/(\d+)$/) || ['', '??'])[1];
-								// `$1`: CIDR range, `$2`: Domain, `$3`: Expiry, `$4`: Blocking admin, `$5`: Reason
+								// $1: CIDR range, $2: Domain, $3: Expiry, $4: Blocking admin, $5: Reason
 								const titleVars = [range, this.getMessage('title-domain-local'), '', by, reason];
 								if (/^in/.test(expiry)) {
 									clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
@@ -767,19 +788,55 @@ class MarkBLocked {
 			if (this.options.g_locks && users.length) {
 				users.forEach((user) => {
 					batchArray.push({
+						username: user,
+						api: this.metaApi,
 						params: {
-							action: 'query',
-							list: 'globalallusers',
+							list: 'globalallusers|logevents',
 							agulimit: 1,
 							agufrom: user,
 							aguto: user,
 							aguprop: 'lockinfo',
-							formatversion: '2'
+							leaction: 'globalauth/setstatus',
+							leprop: 'user|timestamp|comment|details',
+							letitle: `User:${user}@global`
 						},
 						callback: (res) => {
-							const resLck = res && res.query && res.query.globalallusers;
-							if (resLck && resLck[0] && resLck[0].locked === '') {
-								MarkBLocked.addClass(userLinks, user, 'mbl-globally-locked', '');
+							if (res && res.query) {
+								const resLck = res.query.globalallusers;
+								if (resLck && resLck[0] && resLck[0].locked === '') {
+									const resLgev = res.query.logevents;
+									// $1: Locking steward, $2: "Since" timestamp, $3: Reason
+									// Note: logs can be revdeled or suppressed occasionally
+									const titleVars = ['??', '??','??'];
+									if (resLgev && resLgev.length) {
+										for (const {params, user, timestamp, comment} of resLgev) {
+											if (
+												// If any of the following properties is missing, the query may have failed
+												!params || !params.added || !params.removed ||
+												// Should never be able to find "locked" in the "removed" array before we find
+												// one in the "added" array. In this case, some log entries may be hidden.
+												params.removed.indexOf('locked') !== -1
+											) {
+												break;
+											}
+											if (params.added.indexOf('locked') === -1) {
+												continue;
+											}
+											if (user) {
+												titleVars[0] = user;
+											}
+											if (timestamp) {
+												titleVars[1] = timestamp;
+											}
+											if (comment) {
+												titleVars[2] = comment;
+											}
+											break;
+										}
+									}
+									const tooltip = mw.format(this.getMessage('title-locked'), ...titleVars);
+									MarkBLocked.addClass(userLinks, user, 'mbl-globally-locked', tooltip);
+								}
 							}
 						}
 					});
@@ -788,12 +845,11 @@ class MarkBLocked {
 			if (this.options.g_rangeblocks && (remainingIps = ips.filter((ip) => g_markedUsers.indexOf(ip) === -1)).length) {
 				remainingIps.forEach((ip) => {
 					batchArray.push({
+						username: ip,
 						params: {
-							action: 'query',
 							list: 'globalblocks',
 							bgip: ip,
-							bgprop: 'target|by|expiry|reason',
-							formatversion: '2'
+							bgprop: 'target|by|expiry|reason'
 						},
 						callback: (res) => {
 							const resGblk = res && res.query && res.query.globalblocks || [];
@@ -995,18 +1051,16 @@ class MarkBLocked {
 	 */
 	bulkMarkupLocal(userLinks, users) {
 		return this.readApi.post({ // This MUST be a POST request because the parameters can exceed the word count limit of URI
-			action: 'query',
 			list: 'blocks',
 			bklimit: 'max',
 			bkusers: users.join('|'),
-			bkprop: 'user|by|expiry|reason|restrictions',
-			formatversion: '2'
+			bkprop: 'user|by|expiry|reason|restrictions'
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resBlk = res && res.query && res.query.blocks || [];
 			return resBlk.reduce(/** @param {string[]} acc */ (acc, {user, by, expiry, reason, restrictions}) => {
 				const partialBlk = restrictions && !Array.isArray(restrictions); // Boolean: True if partial block
 				let clss;
-				// `$1`: Domain, `$2`: Expiry, `$3`: Blocking admin, `$4`: Reason
+				// $1: Domain, $2: Expiry, $3: Blocking admin, $4: Reason
 				const titleVars = [this.getMessage('title-domain-local'), '', by, reason];
 				if (/^in/.test(expiry)) {
 					clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
@@ -1040,16 +1094,14 @@ class MarkBLocked {
 	 */
 	bulkMarkupGlobal(userLinks, users) {
 		return this.readApi.post({
-			action: 'query',
 			list: 'globalblocks',
 			bgtargets: users.join('|'),
-			bgprop: 'target|by|expiry|reason',
-			formatversion: '2'
+			bgprop: 'target|by|expiry|reason'
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resGblk = res && res.query && res.query.globalblocks || [];
 			return resGblk.reduce(/** @param {string[]} acc */ (acc, {target, by, expiry, reason}) => {
 				let clss;
-				// `$1`: Domain, `$2`: Expiry, `$3`: Blocking admin, `$4`: Reason
+				// $1: Domain, $2: Expiry, $3: Blocking admin, $4: Reason
 				const titleVars = [this.getMessage('title-domain-global'), '', by, reason];
 				if (/^in/.test(expiry)) {
 					clss = 'mbl-globally-blocked-indef';
@@ -1101,6 +1153,8 @@ class MarkBLocked {
 
 	/**
 	 * @typedef {object} BatchObject
+	 * @property {string} username
+	 * @property {mw.Api} [api]
 	 * @property {Record<string, any>} params
 	 * @property {(res?: ApiResponse) => void} callback
 	 */
@@ -1135,13 +1189,13 @@ class MarkBLocked {
 		 * @returns {JQueryPromise<void>}
 		 */
 		const req = (batchObj) => {
-			return this.api.get(batchObj.params)
+			return (batchObj.api || this.api).get(batchObj.params)
 				.then(batchObj.callback)
 				.catch(/** @param {object} err */ (_, err) => {
 					if (err.exception === 'abort') {
 						aborted = true;
 					} else {
-						console.error(err);
+						console.error(batchObj.username, err);
 					}
 				});
 		};
@@ -1197,6 +1251,7 @@ MarkBLocked.i18n = {
 		'title-expiry-temporary': 'until $1',
 		'title-blocked': 'Blocked $1 $2 by $3: $4',
 		'title-rangeblocked': '/$1 range-blocked $2 $3 by $4: $5',
+		'title-locked': 'Locked globally by $1 since $2: $3'
 	},
 	ja: {
 		'config-label-heading': 'MarkBLockedの設定',
@@ -1225,7 +1280,8 @@ MarkBLocked.i18n = {
 		'title-expiry-indefinite': '無期限',
 		'title-expiry-temporary': '$1まで',
 		'title-blocked': '$3により$2$1ブロック中: $4',
-		'title-rangeblocked': '$4により/$1で$3$2レンジブロック中: $5'
+		'title-rangeblocked': '$4により/$1で$3$2レンジブロック中: $5',
+		'title-locked': '$1により$2からグローバルロック中: $3'
 	}
 };
 

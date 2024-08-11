@@ -29,6 +29,8 @@ interface Lang {
 	'title-blocked': string;
 	/** `$1`: CIDR range, `$2`: Domain, `$3`: Expiry, `$4`: Blocking admin, `$5`: Reason */
 	'title-rangeblocked': string;
+	/** `$1`: Locking steward, `$2`: "Since" timestamp, `$3`: Reason */
+	'title-locked': string;
 }
 
 interface Window {
@@ -44,6 +46,7 @@ interface ApiResponseQuery {
 	blocks?: ApiResponseQueryListBlocks[];
 	globalallusers?: ApiResponseQueryListGlobalallusers[];
 	globalblocks?: ApiResponseQueryListGlobalblocks[];
+	logevents?: ApiResponseQueryListLogevents[];
 }
 
 interface ApiResponseQuerySpecialpagealiases {
@@ -68,4 +71,18 @@ interface ApiResponseQueryListGlobalblocks {
 	by: string;
 	expiry: string;
 	reason: string;
+}
+
+interface ApiResponseQueryListLogevents {
+	/**
+	 * Note: This is basically of type `Record<string, any>`. Keys and values for this property are radically different
+	 * depending on what kind of logevent we fetch.
+	 */
+	params?: {
+		added?: string[];
+		removed?: string[];
+	};
+	user?: string;
+	timestamp?: string;
+	comment?: string;
 }
