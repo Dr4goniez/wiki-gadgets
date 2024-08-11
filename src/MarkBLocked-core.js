@@ -364,7 +364,7 @@ class MarkBLocked {
 				cfg.lang = String(cfg.lang);
 			}
 			if (cfg.lang) {
-				if (Object.keys(MarkBLocked.i18n).indexOf(cfg.lang) !== -1) {
+				if (cfg.lang in MarkBLocked.i18n) {
 					langCode = cfg.lang;
 				} else {
 					console.error(`MarkBLocked does not have "${cfg.lang}" language support for its interface.`);
@@ -811,8 +811,8 @@ class MarkBLocked {
 								const partialBlk = restrictions && !Array.isArray(restrictions);
 								let clss;
 								const range = (user.match(/\/(\d+)$/) || ['', '??'])[1];
-								// $1: CIDR range, $2: Domain, $3: Expiry, $4: Blocking admin, $5: Reason
-								const titleVars = [range, this.getMessage('title-domain-local'), '', by, reason];
+								// $1: Domain, $2: CIDR range, $3: Expiry, $4: Blocking admin, $5: Reason
+								const titleVars = [this.getMessage('title-domain-local'), range, '', by, reason];
 								if (/^in/.test(expiry)) {
 									clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
 									titleVars[2] = this.getMessage('title-expiry-indefinite');
@@ -870,8 +870,8 @@ class MarkBLocked {
 											if (timestamp) {
 												titleVars[1] = timestamp;
 											}
-											if (comment) {
-												titleVars[2] = comment;
+											if (typeof comment === 'string') {
+												titleVars[2] = comment || '""';
 											}
 											break;
 										}
@@ -912,8 +912,8 @@ class MarkBLocked {
 								const {target, by, expiry, reason} = resObj;
 								let clss;
 								const range = (target.match(/\/(\d+)$/) || ['', '??'])[1];
-								// $1: CIDR range, $2: Domain, $3: Expiry, $4: Blocking admin, $5: Reason
-								const titleVars = [range, this.getMessage('title-domain-global'), '', by, reason];
+								// $1: Domain, $2: CIDR range, $3: Expiry, $4: Blocking admin, $5: Reason
+								const titleVars = [this.getMessage('title-domain-global'), range, '', by, reason];
 								if (/^in/.test(expiry)) {
 									clss = 'mbl-globally-blocked-indef';
 									titleVars[2] = this.getMessage('title-expiry-indefinite');
@@ -1288,13 +1288,13 @@ MarkBLocked.i18n = {
 		'toggle-title-disabled': 'MarkBLocked is temporarily disabled. Click to enable it again.',
 		'toggle-notify-enabled': 'Enabled MarkBLocked.',
 		'toggle-notify-disabled': 'Temporarily disabled MarkBLocked.',
-		'title-domain-local': 'locally',
-		'title-domain-global': 'globally',
+		'title-domain-local': 'Locally',
+		'title-domain-global': 'Globally',
 		'title-expiry-indefinite': 'indefinitely',
 		'title-expiry-temporary': 'until $1',
-		'title-blocked': 'Blocked $1 $2 by $3: $4',
-		'title-rangeblocked': '/$1 range-blocked $2 $3 by $4: $5',
-		'title-locked': 'Locked globally by $1 since $2: $3'
+		'title-blocked': '$1 blocked $2 by $3: $4',
+		'title-rangeblocked': '$1 range-blocked in /$2 $3 by $4: $5',
+		'title-locked': 'Globally locked by $1 since $2: $3'
 	},
 	ja: {
 		'config-label-heading': 'MarkBLockedの設定',
@@ -1324,7 +1324,7 @@ MarkBLocked.i18n = {
 		'title-expiry-indefinite': '無期限',
 		'title-expiry-temporary': '$1まで',
 		'title-blocked': '$3により$2$1ブロック中: $4',
-		'title-rangeblocked': '$4により/$1で$3$2レンジブロック中: $5',
+		'title-rangeblocked': '$4により/$2で$3$1レンジブロック中: $5',
 		'title-locked': '$1により$2からグローバルロック中: $3'
 	}
 };

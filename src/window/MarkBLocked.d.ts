@@ -28,7 +28,7 @@ interface Lang {
 	'title-expiry-temporary': string;
 	/** `$1`: Domain, `$2`: Expiry, `$3`: Blocking admin, `$4`: Reason */
 	'title-blocked': string;
-	/** `$1`: CIDR range, `$2`: Domain, `$3`: Expiry, `$4`: Blocking admin, `$5`: Reason */
+	/** `$1`: Domain, `$2`: CIDR range, `$3`: Expiry, `$4`: Blocking admin, `$5`: Reason */
 	'title-rangeblocked': string;
 	/** `$1`: Locking steward, `$2`: "Since" timestamp, `$3`: Reason */
 	'title-locked': string;
