@@ -274,7 +274,17 @@ class MarkBLocked {
 		 */
 		this.metaApi = mw.config.get('wgWikiID') === 'metawiki' ?
 			this.api :
-			new mw.ForeignApi('https://meta.wikimedia.org/w/api.php', MarkBLocked.getApiOptions({timeout: 60*1000}));
+			new mw.ForeignApi(
+				'https://meta.wikimedia.org/w/api.php',
+				/**
+				 * On mobile devices, cross-origin requests may fail becase of a "badtoken" error related to
+				 * `centralauthtoken`. This never happened with the `{anonymous: true}` option for `mw.ForeignApi`,
+				 * hence included.
+				 * @see https://doc.wikimedia.org/mediawiki-core/1.32.0/js/#!/api/mw.ForeignApi-method-constructor
+				 * We will only need to send GET requests to fetch data, so this shouldn't be problematic.
+				 */
+				Object.assign(MarkBLocked.getApiOptions({timeout: 60*1000}), {anonymous: true})
+			);
 
 		// Show Warning if the config has any invalid property
 		const validKeys = ['defaultOptions', 'optionKey', 'globalize', 'i18n', 'lang', 'contribsCA', 'groupsAHL'];
