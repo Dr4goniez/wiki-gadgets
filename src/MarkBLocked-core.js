@@ -1,3 +1,25 @@
+/**
+ * MarkBLocked-core
+ * @author [[User:Dragoniez]]
+ * @version 3.0.0
+ *
+ * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css Style sheet
+ * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js Loader module
+ *
+ * Information:
+ * @see https://ja.wikipedia.org/wiki/Help:MarkBLocked About the jawiki gadget
+ *
+ * Global user script that uses this module:
+ * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal.js
+ * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal English help page
+ * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal/ja Japanese help page
+ *
+ * You can import this gadget to your (WMF) wiki by preparing a loader module for it.
+ * See the coding of the loader module above and `ConstructorConfig` below.
+ *
+ * You can also find helper type definitions on:
+ * @link https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/MarkBLocked.d.ts
+ */
 // @ts-check
 /// <reference path="./window/MarkBLocked.d.ts" />
 /* global mw, OO */
@@ -182,7 +204,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.0.0 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
