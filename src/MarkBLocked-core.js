@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.0.1
+ * @version 3.1.0
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js Loader module
@@ -76,13 +76,14 @@ class MarkBLocked {
 			'mediawiki.api',
 			'mediawiki.ForeignApi',
 			'mediawiki.util',
+			'jquery.ui',
 			'oojs-ui',
 			'oojs-ui.styles.icons-moderation',
 		];
 		const onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(markblockedconfig|mblc)$/i.test(mw.config.get('wgTitle'));
 		const isRCW = ['Recentchanges', 'Watchlist'].indexOf(mw.config.get('wgCanonicalSpecialPageName') || '') !== -1;
 		if (!onConfig && !isRCW) {
-			modules.splice(3);
+			modules.splice(5);
 		}
 		return mw.loader.using(modules).then(() => { // When ready
 
@@ -1181,16 +1182,59 @@ class MarkBLocked {
 	static addClass(userLinks, userName, className, tooltip) {
 		const links = userLinks[userName]; // Get all links related to the user
 		if (links) {
+			tooltip = this.truncateWikilinks(tooltip);
 			for (let i = 0; i < links.length; i++) {
 				links[i].classList.add(className);
-				if (tooltip) {
-					links[i].title += '\n' + tooltip;
-				}
+				this.addTooltip(links[i], tooltip);
 			}
 			return userName;
 		} else {
 			console.error('MarkBLocked: There\'s no link for User:' + userName);
 			return null;
+		}
+	}
+
+	/**
+	 * Truncate [[wikilink]]s in a string by extracting their display texts.
+	 * @param {string} str
+	 * @returns {string}
+	 */
+	static truncateWikilinks(str) {
+		const regex = /\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g;
+		let ret = str;
+		let m;
+		while ((m = regex.exec(str))) {
+			ret = ret.replace(m[0], m[2] || m[1]);
+		}
+		return ret;
+	}
+
+	/**
+	 * Add a tooltip to a user link.
+	 * @param {HTMLAnchorElement} anchor
+	 * @param {string} text
+	 */
+	static addTooltip(anchor, text) {
+		if (typeof anchor.dataset.mblTooltip === 'string') {
+			anchor.dataset.mblTooltip += '\n' + text;
+		} else {
+			$(anchor)
+				.attr('data-mbl-tooltip', text)
+				.tooltip({
+					tooltipClass: 'mbl-tooltip',
+					content: /** @this {HTMLAnchorElement} */ function() {
+						const tt = this.dataset.mblTooltip;
+						if (tt) {
+							return $('<ul>').append(
+								tt.split('\n').map((line) => $('<li>').text(line))
+							);
+						}
+					},
+					position: {
+						my: 'left bottom',
+						at: 'left top'
+					}
+				});
 		}
 	}
 
