@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.1.0
+ * @version 3.1.1
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js Loader module
@@ -205,7 +205,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.0.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.1.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -1182,7 +1182,7 @@ class MarkBLocked {
 	static addClass(userLinks, userName, className, tooltip) {
 		const links = userLinks[userName]; // Get all links related to the user
 		if (links) {
-			tooltip = this.truncateWikilinks(tooltip);
+			tooltip = this.truncateWikilinks(tooltip).trim().replace(/\n/g, ' ');
 			for (let i = 0; i < links.length; i++) {
 				links[i].classList.add(className);
 				this.addTooltip(links[i], tooltip);
