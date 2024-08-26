@@ -7,3 +7,4 @@ src/MarkAdmins.js
 src/SectLinkExtender.js
 src/Weba.js
 src/ConfirmLogout.js
+src/WatchAll.js
