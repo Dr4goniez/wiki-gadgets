@@ -304,6 +304,25 @@ class SelectiveRollbackBase {
 	}
 
 	/**
+	 * Get the language option value. This is a shorthand method that should only be used when
+	 * the parent class cannot access its instance (e.g. before initialization).
+	 * @returns {string}
+	 * @protected
+	 */
+	static getLang() {
+		/** @type {string?} */
+		const userCfgStr = mw.user.options.get(this.optionKey);
+		const src = window.selectiveRollbackConfig;
+		if (typeof userCfgStr === 'string') {
+			return JSON.parse(userCfgStr).lang;
+		} else if (typeof src === 'object' && src !== null && typeof src.lang === 'string' && Object.keys(i18n).indexOf(src.lang) !== -1) {
+			return src.lang;
+		} else {
+			return 'en';
+		}
+	}
+
+	/**
 	 * The key for `mw.user.options`.
 	 * @returns {string}
 	 * @protected
@@ -360,7 +379,7 @@ class SelectiveRollbackBase {
 
 				switch (key) {
 					case 'lang':
-						if (typeof val === 'string' && ['ja', 'en', 'zh', 'es', 'ro', 'vi'].indexOf(val) !== -1) {
+						if (typeof val === 'string' && Object.keys(i18n).indexOf(val) !== -1) {
 							acc[key] = val;
 						}
 						break;
@@ -444,22 +463,256 @@ class SelectiveRollbackBase {
 
 }
 
+/**
+ * Class that creates a table where each row contains a checkbox, a key input, and a value input.
+ * Above the table are utility buttons that can be used to change the checked state of the checkbox
+ * in each row at once, and below it are buttons to add/remove rows.
+ */
+class MultiInputTable {
+
+	/**
+	 * Initialize a MultiInputTable instance.
+	 * @param {number} maxWidth The outerWidth of `#src-option-language-dropdown`.
+	 * @param {string|JQuery<HTMLElement>} [help] Optional help text displayed above the add/remove buttons.
+	 */
+	constructor(maxWidth, help) {
+
+		MultiInputTable.createStyleTag();
+
+		/**
+		 * @type {MultiInputTableRow[]}
+		 * @private
+		 * @readonly
+		 */
+		this.rows = [];
+
+		/**
+		 * @type {JQuery<HTMLDivElement>}
+		 */
+		const $content = $('<div>');
+
+		/**
+		 * The wrapper widget that constitutes the body of the MultiInputTable.
+		 * @type {OO.ui.Widget}
+		 * @readonly
+		 */
+		this.widget = new OO.ui.Widget({$content});
+
+		/**
+		 * @type {JQuery<HTMLTableElement>}
+		 * @private
+		 * @readonly
+		 */
+		this.$table = $('<table>');
+
+		// Utility buttons to (un)select table rows at once
+		const btnLabel = /** @type {string} */(mw.messages.get('checkbox-select')).replace('$1', '');
+		const btnAll = MultiInputTable.generateSelectButton('checkbox-all', () => {
+			this.rows.forEach(({checkbox}) => checkbox.setSelected(true));
+		});
+		const btnNone = MultiInputTable.generateSelectButton('checkbox-none', () => {
+			this.rows.forEach(({checkbox}) => checkbox.setSelected(false));
+		});
+		const btnInvert = MultiInputTable.generateSelectButton('checkbox-invert', () => {
+			this.rows.forEach(({checkbox}) => checkbox.setSelected(!checkbox.isSelected()));
+		});
+		const sep = /** @type {string} */(mw.messages.get('comma-separator'));
+
+		// Help text wrapper
+		const $help = $('<span>');
+		if (help instanceof jQuery) {
+			$help.append(help);
+		} else if (typeof help === 'string') {
+			$help.prop('innerHTML', help);
+			console.log($help.prop('innerHTML'));
+		}
+		/**
+		 * @type {OO.ui.LabelWidget}
+		 * @private
+		 * @readonly
+		 */
+		this.help = new OO.ui.LabelWidget({
+			classes: ['oo-ui-inline-help'],
+			$element: $('<div>'),
+			label: $help
+		});
+
+		// Buttons to add/remove a table row
+		const addButton = new OO.ui.ButtonWidget({
+			label: 'Add',
+			flags: ['progressive']
+		}).off('click').on('click', () => {
+			this.addRow();
+		});
+		const removeButton = new OO.ui.ButtonWidget({
+			label: 'Remove',
+			flags: ['destructive']
+		}).off('click').on('click', () => {
+			for (let i = this.rows.length - 1; i >= 0; i--) {
+				const {checkbox} = this.rows[i];
+				if (checkbox.isSelected()) {
+					this.removeRow(i);
+				}
+			}
+		});
+
+		// Construct the content (in the widget)
+		$content
+			.addClass('src-multiinputtable-container')
+			.append(
+				$('<div>')
+					.addClass('src-multiinputtable-utilbutton-container')
+					.append(
+						btnLabel,
+						btnAll,
+						sep,
+						btnNone,
+						sep,
+						btnInvert
+					),
+				$('<div>')
+					.addClass('src-multiinputtable-table-container')
+					.css('max-width', maxWidth)
+					.append(
+						this.$table
+							.addClass('src-multiinputtable-table')
+					),
+				this.help.$element
+					.addClass('src-multiinputtable-help')
+					.css('max-width', maxWidth)
+					.toggle(!!this.rows.length),
+				$('<div>')
+					.addClass('src-multiinputtable-button-container')
+					.append(
+						addButton.$element,
+						removeButton.$element
+					)
+			);
+
+	}
+
+	/**
+	 * Create a style tag for MultiInputTable in the document head.
+	 * @returns {void}
+	 * @requires document
+	 * @private
+	 */
+	static createStyleTag() {
+		const id = 'src-styles-multiinputtable';
+		if (document.getElementById(id)) {
+			return;
+		}
+		const style = document.createElement('style');
+		style.id = id;
+		style.textContent =
+			'.src-multiinputtable-container > div {' +
+				'margin-bottom: 0.2em;' +
+			'}' +
+			'.src-multiinputtable-table > tr > td:first-child {' +
+				'padding-right: 0.5em;' +
+			'}' +
+			'.src-multiinputtable-table > tr > td:not(:first-child) {' +
+				'width: 100%;' +
+			'}' +
+			'.src-multiinputtable-table > tr > td:not(:first-child) > div {' +
+				'margin-bottom: 0.2em;' +
+			'}';
+		document.head.appendChild(style);
+	}
+
+	/**
+	 * Create an anchor button.
+	 * @param {string} msgKey
+	 * @param {() => void} callback Click event callback
+	 * @returns {JQuery<HTMLAnchorElement>}
+	 */
+	static generateSelectButton(msgKey, callback) {
+		/** @type {JQuery<HTMLAnchorElement>} */
+		const $a = $('<a>');
+		return $a
+			.prop('role', 'button')
+			.text(/** @type {string} */(mw.messages.get(msgKey)))
+			.off('click').on('click', callback);
+	}
+
+	/**
+	 * Add a new table row.
+	 * @param {string} [key]
+	 * @param {string} [value]
+	 * @public
+	 */
+	addRow(key, value) {
+		// ### TODO ###
+		// Auto-assign a key here
+		/** @type {JQuery<HTMLTableRowElement>} */
+		const $row = $('<tr>');
+		const checkbox = new OO.ui.CheckboxInputWidget();
+		const keyInput = new OO.ui.TextInputWidget({
+			label: 'Key',
+			value: key
+		});
+		const valueInput = new OO.ui.TextInputWidget({
+			label: 'Value',
+			value
+		});
+		this.$table.append(
+			$row.append(
+				$('<td>').append(checkbox.$element),
+				$('<td>').append(keyInput.$element, valueInput.$element)
+			)
+		);
+		this.rows.push({$row, checkbox, keyInput, valueInput});
+		this.help.$element.show();
+	}
+
+	/**
+	 * Remove a table row at an index.
+	 * @param {number} index
+	 * @returns {MultiInputTable}
+	 * @private
+	 */
+	removeRow(index) {
+		this.rows[index].$row.remove();
+		this.rows.splice(index, 1);
+		this.help.$element.toggle(!!this.rows.length);
+		return this;
+	}
+
+}
+
+/**
+ * Class that constructs the Selective Rollback config interface.
+ */
 class SelectiveRollbackConfig extends SelectiveRollbackBase {
 
+	/**
+	 * Load dependent modules and construct the Selective Rollback config interface.
+	 * @returns {void}
+	 * @public
+	 */
 	static init() {
 		const modules = [
 			'mediawiki.user',
 			'mediawiki.api',
 			'oojs-ui'
 		];
-		$.when(mw.loader.using(modules), $.ready).then(() => {
-			new SelectiveRollbackConfig();
+		mw.loader.using(modules).then(() => {
+			const msg = new mw.Api().loadMessagesIfMissing(
+				['checkbox-select', 'checkbox-all', 'checkbox-none', 'checkbox-invert', 'comma-separator'],
+				{amlang: this.getLang()}
+			);
+			$.when(msg, $.ready).then(() => {
+				new SelectiveRollbackConfig();
+			});
 		});
 	}
 
 	/**
 	 * @requires document
 	 * @requires mediawiki.user
+	 * @requires mediawiki.api
+	 * @requires oojs-ui
+	 * @private
 	 */
 	constructor() {
 
@@ -478,8 +731,93 @@ class SelectiveRollbackConfig extends SelectiveRollbackBase {
 		}
 		$heading.text(pageName);
 
+		// Language option
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.lang = new OO.ui.DropdownWidget({
+			id: 'src-option-language-dropdown',
+			menu: {
+				items: (() => {
+					const items = Object.keys(i18n).map((key) => new OO.ui.MenuOptionWidget({data: key, label: key}));
+					// Insert the default option at index 0
+					items.unshift(new OO.ui.MenuOptionWidget({data: '', label: '(as in user preferences)'}));
+					return items;
+				})(),
+			},
+		});
+		this.lang.getMenu().selectItemByData(this.cfg.lang); // Select the language specified in the config
+
+		const langField = new OO.ui.FieldsetLayout({
+			id: 'src-option-language',
+			label: 'Language'
+		}).addItems([
+			new OO.ui.FieldLayout(this.lang),
+		]);
+
+		// Temporarily append the language field as the immediate child of $content
+		// This makes it possible to retrieve the width of the dropdown widget
+		$content.empty().append(langField.$element);
+		const maxWidth = /** @type {number} */(this.lang.$element.outerWidth());
+
+		// Custom summary options
+		/**
+		 * @type {MultiInputTable}
+		 * @readonly
+		 * @private
+		 */
+		this.summaries = new MultiInputTable(maxWidth,
+			'The keys are the iconic names of the values shown in the dropdown if the "Show keys" option is enabled.'
+		);
+		Object.keys(this.cfg.editSummaries).forEach((key) => {
+			this.summaries.addRow(key, this.cfg.editSummaries[key]);
+		});
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.showKeys = new OO.ui.CheckboxInputWidget({
+			selected: this.cfg.showKeys
+		});
+
+		const summaryField = new OO.ui.FieldsetLayout({
+			id: 'src-option-summaries',
+			label: 'Custom summaries',
+			help: new OO.ui.HtmlSnippet(
+				'Variables:<br>' +
+				'<code>$0</code>: The default rollback summary on the wiki<br>' +
+				'<code>$1</code>: Name of the user who made the last edit before the user whose edits are to be rolled back<br>' +
+				'<code>$2</code>: Name of the user whose edits are to be rolled back<br>' +
+				"<code>$3</code>: The revision number of $1's edit<br>" +
+				"<code>$4</code>: The timestamp of $1's edit<br>" +
+				"<code>$5</code>: The revision number of $2's edit<br>" +
+				"<code>$6</code>: The timestamp of $2's edit<br>" +
+				'<code>$7</code>: The number of revisions to revert'
+			)
+		}).addItems([
+			this.summaries.widget,
+			new OO.ui.FieldLayout(this.showKeys, {
+				label: 'Show the summary keys instead of their values in the dropdown',
+				align: 'inline'
+			})
+		]);
+
 		// Construct the config interface
-		$content.empty().append();
+		$content.append(
+			$('<div>')
+				.prop('id', 'src-container')
+				.append(
+					$('<div>')
+						.prop('id', 'src-optionfield')
+						.append(
+							langField.$element, // Moved from the temporary position
+							summaryField.$element,
+						)
+				)
+		);
 
 	}
 
@@ -487,39 +825,75 @@ class SelectiveRollbackConfig extends SelectiveRollbackBase {
 	 * Create a style tag for Selective Rollback config in the document head.
 	 * @returns {void}
 	 * @requires document
+	 * @private
 	 */
 	static createStyleTag() {
-		const id = 'src-styles';
+		const id = 'src-styles-main';
 		if (document.getElementById(id)) {
 			return;
 		}
 		const style = document.createElement('style');
 		style.id = id;
 		style.textContent =
-			'';
+			'#src-optionfield {' +
+				'padding: 1em;' +
+				'margin: 0;' +
+				'border: 1px solid var(--border-color-subtle, #c8ccd1);' +
+			'}';
 		document.head.appendChild(style);
 	}
 
-}
+	// getOptions() {
 
-class SelectiveRollback extends SelectiveRollbackBase {
+	// }
 
-	static init() {
-
+	/**
+	 * Get the selected language code.
+	 * @returns {string}
+	 * @private
+	 */
+	getLang() {
+		const item = /** @type {OO.ui.OptionWidget} */ (this.lang.getMenu().findSelectedItem());
+		return /** @type {string} */ (item.getData());
 	}
 
-	constructor() {
-		super();
+	// /**
+	//  * @returns {Record<string, string>?}
+	//  * @private
+	//  */
+	// getSummaries() {
+
+	// }
+
+	/**
+	 * Get the checked state of the "Show keys" config checkbox.
+	 * @returns {boolean}
+	 * @private
+	 */
+	getShowKeys() {
+		return this.showKeys.isSelected();
 	}
 
 }
+
+// class SelectiveRollback extends SelectiveRollbackBase {
+
+// 	static init() {
+
+// 	}
+
+// 	constructor() {
+// 		super();
+// 	}
+
+// }
 
 // Entry point
 const onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(SelectiveRollbackConfig|SRC)$/i.test(mw.config.get('wgTitle'));
 if (onConfig) {
 	SelectiveRollbackConfig.init();
 } else {
-	SelectiveRollback.init();
+	// SelectiveRollback.init();
 }
 
 })();

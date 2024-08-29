@@ -85,3 +85,10 @@ interface Messages {
 	// v5.0.0
 	'config-load-failed': string;
 }
+
+interface MultiInputTableRow {
+	$row: JQuery<HTMLTableRowElement>;
+	checkbox: OO.ui.CheckboxInputWidget;
+	keyInput: OO.ui.TextInputWidget;
+	valueInput: OO.ui.TextInputWidget;
+}
