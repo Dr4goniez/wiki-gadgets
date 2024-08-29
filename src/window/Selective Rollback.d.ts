@@ -1,19 +1,23 @@
 interface Window {
-	selectiveRollbackConfig?: Partial<SelectiveRollbackConfig>;
+	selectiveRollbackConfig?: Partial<SelectiveRollbackOptions>;
 }
 
-interface SelectiveRollbackConfig {
+type Languages = 'ja'|'en'|'zh'|'es'|'ro'|'vi';
+
+interface SelectiveRollbackOptions {
 	lang: string;
 	editSummaries: Record<string, string>;
 	showKeys: boolean;
 	specialExpressions: Record<string, string>;
 	markBot: boolean;
 	watchPage: boolean;
-	watchExpiry: 'indefinite'|'infinite'|'infinity'|'never'|'1 week'|'1 month'|'3 months'|'6 months'|'1 year';
+	watchExpiry: SRWatchExpiry;
 	confirm: SRConfirm;
 	mobileConfirm: SRConfirm;
 	checkboxLabelColor: string;
 }
+
+type SRWatchExpiry = 'indefinite'|'infinite'|'infinity'|'never'|'1 week'|'1 month'|'3 months'|'6 months'|'1 year';
 
 type SRConfirm = 'always'|'never'|'RCW'|'nonRCW';
 
@@ -78,4 +82,6 @@ interface Messages {
 	'rbstatus-notify-success': string;
 	/** Internal text ("Failure") for a mw.notify message that shows how many rollbacks failed. */
 	'rbstatus-notify-failure': string;
+	// v5.0.0
+	'config-load-failed': string;
 }
