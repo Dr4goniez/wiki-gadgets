@@ -314,7 +314,7 @@ class SelectiveRollbackBase {
 		const userCfgStr = mw.user.options.get(this.optionKey);
 		const src = window.selectiveRollbackConfig;
 		if (typeof userCfgStr === 'string') {
-			return JSON.parse(userCfgStr).lang;
+			return JSON.parse(userCfgStr).lang || 'en';
 		} else if (typeof src === 'object' && src !== null && typeof src.lang === 'string' && Object.keys(i18n).indexOf(src.lang) !== -1) {
 			return src.lang;
 		} else {
@@ -467,6 +467,13 @@ class SelectiveRollbackBase {
  * Class that creates a table where each row contains a checkbox, a key input, and a value input.
  * Above the table are utility buttons that can be used to change the checked state of the checkbox
  * in each row at once, and below it are buttons to add/remove rows.
+ * @requires
+ * The following messages to be ready:
+ * * `checkbox-select`
+ * * `checkbox-all`
+ * * `checkbox-none`
+ * * `checkbox-invert`
+ * * `comma-separator`
  */
 class MultiInputTable {
 
@@ -506,7 +513,7 @@ class MultiInputTable {
 		this.$table = $('<table>');
 
 		// Utility buttons to (un)select table rows at once
-		const btnLabel = /** @type {string} */(mw.messages.get('checkbox-select')).replace('$1', '');
+		const btnLabel = /** @type {string} */ (mw.messages.get('checkbox-select')).replace('$1', '');
 		const btnAll = MultiInputTable.generateSelectButton('checkbox-all', () => {
 			this.rows.forEach(({checkbox}) => checkbox.setSelected(true));
 		});
@@ -516,7 +523,7 @@ class MultiInputTable {
 		const btnInvert = MultiInputTable.generateSelectButton('checkbox-invert', () => {
 			this.rows.forEach(({checkbox}) => checkbox.setSelected(!checkbox.isSelected()));
 		});
-		const sep = /** @type {string} */(mw.messages.get('comma-separator'));
+		const sep = /** @type {string} */ (mw.messages.get('comma-separator'));
 
 		// Help text wrapper
 		const $help = $('<span>');
@@ -631,19 +638,51 @@ class MultiInputTable {
 		const $a = $('<a>');
 		return $a
 			.prop('role', 'button')
-			.text(/** @type {string} */(mw.messages.get(msgKey)))
+			.text(/** @type {string} */ (mw.messages.get(msgKey)))
 			.off('click').on('click', callback);
+	}
+
+	/**
+	 * Clean up a string.
+	 * @param {string} str
+	 * @returns {string}
+	 * @private
+	 */
+	static clean(str) {
+		return str.replace(rUnicodeBidi, '').trim().replace(/\n/g, ' ');
 	}
 
 	/**
 	 * Add a new table row.
 	 * @param {string} [key]
 	 * @param {string} [value]
+	 * @returns {MultiInputTable}
 	 * @public
 	 */
 	addRow(key, value) {
-		// ### TODO ###
-		// Auto-assign a key here
+
+		// Auto-assign a key if none is provided
+		if (typeof key !== 'string') {
+			let len = this.rows.length; // Defaults to the number of the existing rows + 1
+			this.rows.forEach(({keyInput}, i) => { // Loop existing rows
+				const k = keyInput.getValue();
+				const kClean = MultiInputTable.clean(k);
+				if (!kClean) {
+					// Fill in the key input with row index if practically blank
+					keyInput.setValue(i.toString());
+				} else if (k !== kClean) {
+					// Tidy up the existing key
+					keyInput.setValue(kClean);
+				}
+				if (len.toString() === kClean) {
+					// If the auto-generated numeral key is in use, increment it to make it different
+					len += 0.1;
+				}
+			});
+			key = len.toString();
+		}
+
+		// Generate a new row
 		/** @type {JQuery<HTMLTableRowElement>} */
 		const $row = $('<tr>');
 		const checkbox = new OO.ui.CheckboxInputWidget();
@@ -663,6 +702,9 @@ class MultiInputTable {
 		);
 		this.rows.push({$row, checkbox, keyInput, valueInput});
 		this.help.$element.show();
+
+		return this;
+
 	}
 
 	/**
@@ -678,6 +720,49 @@ class MultiInputTable {
 		return this;
 	}
 
+	/**
+	 * Get rows as an object.
+	 * @returns {Record<string, string>?} `null` if there is an input box with an invalid value.
+	 * @public
+	 */
+	getRows() {
+
+		/** @type {OO.ui.TextInputWidget[]} */
+		const unprocessable = [];
+		/** @type {number[]} */
+		const deleteIdx = [];
+		const ret = this.rows.reduce(/** @param {Record<string, string>} acc */ (acc, {keyInput, valueInput}, i) => {
+			const key = MultiInputTable.clean(keyInput.getValue());
+			const value = MultiInputTable.clean(valueInput.getValue());
+			keyInput.setValue(key);
+			valueInput.setValue(value);
+			if (!key && !value) {
+				deleteIdx.push(i);
+			} else if (!key) {
+				keyInput.setValidityFlag(false);
+				unprocessable.push(keyInput);
+			} else if (!value) {
+				deleteIdx.push(i);
+			} else if (key in acc) {
+				// Duplicate key
+				keyInput.setValidityFlag(false);
+				unprocessable.push(keyInput);
+			} else {
+				acc[key] = value;
+			}
+			return acc;
+		}, Object.create(null));
+
+		if (unprocessable.length) {
+			unprocessable[0].focus();
+			return null;
+		} else if (deleteIdx.length) {
+			deleteIdx.reverse().forEach(this.removeRow);
+		}
+		return ret;
+
+	}
+
 }
 
 /**
@@ -691,19 +776,24 @@ class SelectiveRollbackConfig extends SelectiveRollbackBase {
 	 * @public
 	 */
 	static init() {
-		const modules = [
+		const modules = mw.loader.using([ // Start loading modules
 			'mediawiki.user',
-			'mediawiki.api',
 			'oojs-ui'
-		];
-		mw.loader.using(modules).then(() => {
+		]);
+		mw.loader.using('mediawiki.api').then(() => {
+
+			// As soon as mediawiki.api gets ready, fetch required messages
 			const msg = new mw.Api().loadMessagesIfMissing(
 				['checkbox-select', 'checkbox-all', 'checkbox-none', 'checkbox-invert', 'comma-separator'],
 				{amlang: this.getLang()}
 			);
-			$.when(msg, $.ready).then(() => {
+
+			// When other modules, the messages, and the DOM are ready
+			$.when(modules, msg, $.ready).then(() => {
+				// Construct the Selective Rollback config interface
 				new SelectiveRollbackConfig();
 			});
+
 		});
 	}
 
@@ -754,13 +844,13 @@ class SelectiveRollbackConfig extends SelectiveRollbackBase {
 			id: 'src-option-language',
 			label: 'Language'
 		}).addItems([
-			new OO.ui.FieldLayout(this.lang),
+			new OO.ui.FieldLayout(this.lang)
 		]);
 
 		// Temporarily append the language field as the immediate child of $content
 		// This makes it possible to retrieve the width of the dropdown widget
 		$content.empty().append(langField.$element);
-		const maxWidth = /** @type {number} */(this.lang.$element.outerWidth());
+		const maxWidth = /** @type {number} */ (this.lang.$element.outerWidth());
 
 		// Custom summary options
 		/**
@@ -774,6 +864,7 @@ class SelectiveRollbackConfig extends SelectiveRollbackBase {
 		Object.keys(this.cfg.editSummaries).forEach((key) => {
 			this.summaries.addRow(key, this.cfg.editSummaries[key]);
 		});
+
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
@@ -805,6 +896,87 @@ class SelectiveRollbackConfig extends SelectiveRollbackBase {
 			})
 		]);
 
+		// Special expression options
+		/**
+		 * @type {MultiInputTable}
+		 * @readonly
+		 * @private
+		 */
+		this.specialExpressions = new MultiInputTable(maxWidth);
+		Object.keys(this.cfg.specialExpressions).forEach((key) => {
+			this.specialExpressions.addRow(key, this.cfg.specialExpressions[key]);
+		});
+
+		const seField = new OO.ui.FieldsetLayout({
+			id: 'src-option-specialexpressions',
+			label: 'Special expressions'
+		}).addItems([
+			this.specialExpressions.widget
+		]);
+
+		// Mark bot option
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.markBot = new OO.ui.CheckboxInputWidget({
+			selected: this.cfg.markBot
+		});
+
+		const markBotField = new OO.ui.FieldsetLayout({
+			id: 'src-option-markbot',
+			label: 'Mark bot'
+		}).addItems([
+			new OO.ui.FieldLayout(this.markBot, {
+				label: 'Mark rollbacks as bot edits',
+				align: 'inline'
+			})
+		]);
+
+		// Watchlist option
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.watchPage = new OO.ui.CheckboxInputWidget({
+			selected: this.cfg.watchPage
+		});
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.watchExpiry = new OO.ui.DropdownWidget({
+			menu: {
+				items: [
+					new OO.ui.MenuOptionWidget({data: 'indefinite', label: this.getMessage('watchlist-expiry-indefinite')}),
+					new OO.ui.MenuOptionWidget({data: '1 week', label: this.getMessage('watchlist-expiry-1week')}),
+					new OO.ui.MenuOptionWidget({data: '1 month', label: this.getMessage('watchlist-expiry-1month')}),
+					new OO.ui.MenuOptionWidget({data: '3 months', label: this.getMessage('watchlist-expiry-3months')}),
+					new OO.ui.MenuOptionWidget({data: '6 months', label: this.getMessage('watchlist-expiry-6months')}),
+					new OO.ui.MenuOptionWidget({data: '1 year', label: this.getMessage('watchlist-expiry-1year')}),
+					// new OO.ui.MenuOptionWidget({data: '3 years', label: this.getMessage('watchlist-expiry-3years')}), // phab:T336142
+				]
+			}
+		});
+		this.watchExpiry.getMenu().selectItemByData(this.cfg.watchExpiry);
+
+		const watchlistField = new OO.ui.FieldsetLayout({
+			id: 'src-option-watchlist',
+			label: 'Watchlist'
+		}).addItems([
+			new OO.ui.FieldLayout(this.watchPage, {
+				label: 'Add the reverting pages to watchlist',
+				align: 'inline'
+			}),
+			new OO.ui.FieldLayout(this.watchExpiry, {
+				label: 'Expiration',
+				align: 'top'
+			}),
+		]);
+
 		// Construct the config interface
 		$content.append(
 			$('<div>')
@@ -815,6 +987,9 @@ class SelectiveRollbackConfig extends SelectiveRollbackBase {
 						.append(
 							langField.$element, // Moved from the temporary position
 							summaryField.$element,
+							seField.$element,
+							markBotField.$element,
+							watchlistField.$element,
 						)
 				)
 		);
