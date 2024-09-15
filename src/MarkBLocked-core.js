@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.1.1
+ * @version 3.1.2
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js Loader module
@@ -205,7 +205,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.1.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.1.2 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -853,17 +853,43 @@ class MarkBLocked {
 									// Note: logs can be revdeled or suppressed occasionally
 									const titleVars = ['??', '??','??'];
 									if (resLgev && resLgev.length) {
+										/**
+										 * The `params` property is an object with either the `added` and `removed` keys, or
+										 * the `0` and `1` numeral keys (in the case of an old log entry):
+										 * ```
+										 * "params": {
+										 *		"added": [
+										 *			"locked"
+										 *		],
+										 *		"removed": []
+										 *	}
+										 * ```
+										 * ```
+										 * "params": {
+										 *		"0": "locked",
+										 *		"1": "(none)"
+										 *	}
+										 * ```
+										 */
 										for (const {params, user, timestamp, comment} of resLgev) {
-											if (
-												// If any of the following properties is missing, the query may have failed
-												!params || !params.added || !params.removed ||
-												// Should never be able to find "locked" in the "removed" array before we find
-												// one in the "added" array. In this case, some log entries may be hidden.
-												params.removed.indexOf('locked') !== -1
-											) {
+											if (!params) {
+												// If the "params" property is missing, can't fetch the details of the lock
 												break;
-											}
-											if (params.added.indexOf('locked') === -1) {
+											} else if (
+												// If "params" has an "added" array and a "removed" array, the former should
+												// contain "locked" and the latter shouldn't
+												(
+													params.added && params.removed && (
+														params.added.indexOf('locked') === -1 ||
+														params.removed.indexOf('locked') !== -1
+													)
+												) ||
+												// In the case of an old log entry, the numeral keys should have fixed values
+												(
+													params['0'] && params['0'] !== 'locked' ||
+													params['1'] && params['1'] !== '(none)'
+												)
+											) {
 												continue;
 											}
 											if (user) {
