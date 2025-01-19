@@ -2,11 +2,11 @@
  * ShortPagesForDeletion
  * Visualize which pages are AfD-ed or SD-ed on [[Special:Shortpages]].
  *
- * @version 1.0.0
+ * @version 1.0.1
  * @author Dragoniez
 \************************************************************************/
 /* global mw */
-//</nowiki>
+//<nowiki>
 (() => {
 //***********************************************************************
 
@@ -28,13 +28,11 @@ function init() {
 	/** @type {JQuery<HTMLOListElement>} */
 	const $ol = $('ol.special');
 	if (!$ol.length) {
-		console.log('1');
 		return;
 	}
 
 	const pages = getTitles($ol);
 	if (!pages.length) {
-		console.log('2');
 		return;
 	}
 
@@ -44,7 +42,6 @@ function init() {
 	).then((afd, sd) => {
 
 		if (!afd.length && !sd.length) {
-			console.log('3');
 			return;
 		}
 
