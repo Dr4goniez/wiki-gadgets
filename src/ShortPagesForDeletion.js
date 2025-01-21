@@ -2,7 +2,7 @@
  * ShortPagesForDeletion
  * Visualize which pages are AfD-ed or SD-ed on [[Special:Shortpages]].
  *
- * @version 1.0.2
+ * @version 1.0.3
  * @author Dragoniez
 \************************************************************************/
 /* global mw */
@@ -77,7 +77,7 @@ function getTitles($ol) {
 		const href = $li.children('bdi').children('a').attr('href');
 		let m;
 		if (href && (m = articleRegex.exec(href))) {
-			const title = decodeURIComponent(m[1]);
+			const title = decodeURIComponent(m[1]).replace(/_/g, ' ');
 			acc.push({$li, title});
 		}
 		return acc;
