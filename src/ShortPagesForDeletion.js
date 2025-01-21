@@ -2,7 +2,7 @@
  * ShortPagesForDeletion
  * Visualize which pages are AfD-ed or SD-ed on [[Special:Shortpages]].
  *
- * @version 1.0.1
+ * @version 1.0.2
  * @author Dragoniez
 \************************************************************************/
 /* global mw */
@@ -107,7 +107,10 @@ function getCatMembers(cat, cont = {}) {
 			ret.push(...resCm.map((obj) => obj.title));
 		}
 		if (res && res.continue) {
-			return getCatMembers(cat, res.continue);
+			return getCatMembers(cat, res.continue).then((result) => {
+				ret.push(...result);
+				return ret;
+			});
 		} else {
 			return ret;
 		}
