@@ -48,12 +48,18 @@ const apilimit = rights.AHL ? 500 : 50;
 /** @type {mw.Api} */
 let api;
 function init() {
-	$.when(
-		mw.loader.using(['mediawiki.api', 'jquery.makeCollapsible', 'oojs-ui', 'oojs-ui.styles.icons-movement']),
-		$.ready
-	).then(() => {
 
-		// Set up mw.Api instance
+	// Start loading modules but mediawiki.api in the background
+	const deferreds = mw.loader.using([
+		'jquery.makeCollapsible',
+		'oojs-ui',
+		'oojs-ui.styles.icons-movement'
+	]);
+
+	// Load mediawiki.api and the DOM
+	$.when(mw.loader.using('mediawiki.api'), $.ready).then(() => {
+
+		// Set up a mw.Api instance
 		api = new mw.Api({
 				ajax: {
 				headers: {
@@ -74,12 +80,27 @@ function init() {
 			return;
 		}
 
-		// Set up a style tag and the collapsible MRD fieldset
-		createStyleTag();
-		const fieldset = createFieldset($contribsList);
+		// Finish loading other modules and also fetch interface messages
+		$.when(
+			deferreds,
+			api.loadMessagesIfMissing([
+				'revdelete-hide-text',
+				'revdelete-hide-comment',
+				'revdelete-hide-user',
+				'revdelete-otherreason',
+				'revdelete-reason-dropdown',
+				'revdelete-reasonotherlist',
+			])
+		).then(() => {
 
-		const mrd = new MassRevisionDelete(fieldset, $contribsList);
-		mrd.initializeReasonDropdowns();
+			// Set up a style tag and the collapsible MRD fieldset
+			createStyleTag();
+			const fieldset = createFieldset($contribsList);
+
+			// Initialize MassRevisionDelete
+			new MassRevisionDelete(fieldset, $contribsList);
+
+		});
 
 	});
 }
@@ -224,20 +245,19 @@ class MassRevisionDelete {
 		 * @type {Revision[]}
 		 */
 		this.list = Array.from($contribsList.children('li')).map((li) => new Revision(li));
-		console.log(this.list);
 
 		/**
 		 * @type {VisibilityLevel}
 		 */
-		this.vlContent = new VisibilityLevel(fieldset, '版の本文');
+		this.vlContent = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-text') || '??');
 		/**
 		 * @type {VisibilityLevel}
 		 */
-		this.vlComment = new VisibilityLevel(fieldset, '編集の要約');
+		this.vlComment = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-comment') || '??');
 		/**
 		 * @type {VisibilityLevel}
 		 */
-		this.vlUser = new VisibilityLevel(fieldset, '投稿者の利用者名/IPアドレス');
+		this.vlUser = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-user') || '??');
 		/**
 		 * @type {OO.ui.DropdownInputWidget}
 		 */
@@ -250,7 +270,7 @@ class MassRevisionDelete {
 		 * @type {OO.ui.TextInputWidget}
 		 */
 		this.reasonC = new OO.ui.TextInputWidget({
-			placeholder: '他の、または追加の理由'
+			placeholder: (mw.messages.get('revdelete-otherreason') || '').replace(/[:：]$/, '')
 		});
 		const btnSelectAll = new OO.ui.ButtonWidget({
 			label: '全選択'
@@ -274,7 +294,7 @@ class MassRevisionDelete {
 			});
 		});
 		this.btnExecute = new OO.ui.ButtonWidget({
-			label: '選択された版に適用',
+			label: '実行',
 			flags: ['primary', 'progressive']
 		});
 
@@ -291,26 +311,27 @@ class MassRevisionDelete {
 			new OO.ui.FieldLayout(this.btnExecute)
 		]);
 
+		MassRevisionDelete.initializeReasonDropdowns(this.reason1, this.reason2);
+
 	}
 
 	/**
 	 * Fetch the delete-reason dropdown options and add them to the MRD's reason dropdowns.
+	 * @param {OO.ui.DropdownInputWidget} reason1
+	 * @param {OO.ui.DropdownInputWidget} reason2
+	 * @private
 	 * @returns {void}
 	 */
-	initializeReasonDropdowns() {
-		const interfaceName = 'revdelete-reason-dropdown';
+	static initializeReasonDropdowns(reason1, reason2) {
+
+		const reasons = mw.messages.get('revdelete-reason-dropdown');
 		/** @type {{optgroup?:string; data?: string; label?: string;}[]} */
 		const options = [{
 			data: '',
-			label: 'その他の理由'
+			label: mw.messages.get('revdelete-reasonotherlist') || 'その他の理由'
 		}];
-		getMessages([interfaceName]).then((res) => {
 
-			const reasons = res[interfaceName];
-			if (typeof reasons !== 'string') {
-				throw new Error();
-			}
-
+		if (typeof reasons === 'string') {
 			const regex = /(\*+)([^*]+)/g;
 			let m;
 			while ((m = regex.exec(reasons))) {
@@ -326,17 +347,15 @@ class MassRevisionDelete {
 					});
 				}
 			}
+		}
 
-			if (options.length < 2) {
-				throw new Error();
-			}
-
-		}).catch(() => {
+		if (options.length < 2) {
 			mw.notify('MassRevisionDelete: 削除理由の取得に失敗しました。', {type: 'error'});
-		}).then(() => {
-			this.reason1.setOptions(options);
-			this.reason2.setOptions(options);
-		});
+		}
+
+		reason1.setOptions(options);
+		reason2.setOptions(options);
+
 	}
 
 }
@@ -541,20 +560,6 @@ Revision.class = {
 	deleted: 'history-deleted',
 	suppressed: 'mw-history-suppressed'
 };
-
-/**
- * Get interface messages.
- * @param {string[]} namesArr
- * @returns {JQueryPromise<Record<string, string>>} name-message pairs
- */
-function getMessages(namesArr) {
-	return api.getMessages(namesArr)
-		.then((res) => res || {})
-		.catch((_, err) => {
-			console.error(err);
-			return {};
-		});
-}
 
 /**
  * @typedef {'doing'|'done'|'failed'} IconType
