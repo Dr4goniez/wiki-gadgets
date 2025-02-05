@@ -11,6 +11,7 @@
 
 \*********************************************************************************************/
 // @ts-check
+/// <reference path="./window/MassRevisionDelete3.d.ts" />
 /* global mw, OO */
 (() => {
 //*********************************************************************************************
@@ -90,6 +91,8 @@ function init() {
 				'revdelete-otherreason',
 				'revdelete-reason-dropdown',
 				'revdelete-reasonotherlist',
+				'rev-deleted-user-contribs',
+				'revdelete-hide-restricted',
 			])
 		).then(() => {
 
@@ -108,10 +111,10 @@ function init() {
 function createStyleTag() {
 	const style = document.createElement('style');
 	style.textContent =
-		'.mrd-wrapper .oo-ui-fieldLayout-header {' +
+		'.mrd-fieldLayout-boldheader .oo-ui-fieldLayout-header > label {' +
 			'font-weight: bold;' +
 		'}' +
-		'.mrd-horizontal > * {' + // Class to align block-level widgets horizontally
+		'.mrd-horizontal-radios > label {' + // Class to align block-level RadioOption widgets horizontally
 			'display: inline-block;' +
 			'margin-right: 1em;' +
 		'}' +
@@ -131,7 +134,7 @@ function createStyleTag() {
 }
 
 /**
- * Create a collapsible fieldset layout used as the MRD form.
+ * Create a collapsible fieldset layout used as the wrapper of the MRD form.
  * @param {JQuery<HTMLUListElement>} $contribsList
  * @returns {OO.ui.FieldsetLayout}
  */
@@ -195,22 +198,23 @@ class VisibilityLevel {
 		});
 		const optShow = new OO.ui.RadioOptionWidget({
 			data: 'show',
-			label: '可視化'
+			label: '閲覧可'
 		});
 		const optHide = new OO.ui.RadioOptionWidget({
 			data: 'hide',
-			label: '不可視化'
+			label: '閲覧不可'
 		});
 
 		/** @type {OO.ui.RadioSelectWidget} */
 		this.radioSelect = new OO.ui.RadioSelectWidget({
-			classes: ['mrd-horizontal'],
+			classes: ['mrd-horizontal-radios'],
 			items: [optNochange, optShow, optHide]
 		});
 		this.radioSelect.selectItem(optNochange);
 
 		fieldset.addItems([
 			new OO.ui.FieldLayout(this.radioSelect, {
+				classes: ['mrd-fieldLayout-boldheader'],
 				label: labelText,
 				align: 'top'
 			})
@@ -220,7 +224,7 @@ class VisibilityLevel {
 
 	/**
 	 * Get the data of the selected radio.
-	 * @returns {'nochange'|'show'|'hide'}
+	 * @returns {RevdelLevel}
 	 */
 	getData() {
 		const selectedRadio = this.radioSelect.findSelectedItem();
@@ -231,12 +235,22 @@ class VisibilityLevel {
 		return selectedRadio.getData();
 	}
 
+	/**
+	 * Set the 'disabled' state of the RadioSelect widget.
+	 * @param {boolean} disable
+	 * @returns {VisibilityLevel}
+	 */
+	setDisabled(disable) {
+		this.radioSelect.setDisabled(disable);
+		return this;
+	}
+
 }
 
 class MassRevisionDelete {
 
 	/**
-	 * @param {OO.ui.FieldsetLayout} fieldset
+	 * @param {OO.ui.FieldsetLayout} fieldset The wrapper FieldsetLayout widget to which to append form fields
 	 * @param {JQuery<HTMLUListElement>} $contribsList
 	 */
 	constructor(fieldset, $contribsList) {
@@ -245,7 +259,6 @@ class MassRevisionDelete {
 		 * @type {Revision[]}
 		 */
 		this.list = Array.from($contribsList.children('li')).map((li) => new Revision(li));
-
 		/**
 		 * @type {VisibilityLevel}
 		 */
@@ -258,6 +271,10 @@ class MassRevisionDelete {
 		 * @type {VisibilityLevel}
 		 */
 		this.vlUser = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-user') || '??');
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 */
+		this.vlSuppress = new OO.ui.CheckboxInputWidget();
 		/**
 		 * @type {OO.ui.DropdownInputWidget}
 		 */
@@ -272,33 +289,100 @@ class MassRevisionDelete {
 		this.reasonC = new OO.ui.TextInputWidget({
 			placeholder: (mw.messages.get('revdelete-otherreason') || '').replace(/[:：]$/, '')
 		});
-		const btnSelectAll = new OO.ui.ButtonWidget({
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 */
+		this.btnSelectAll = new OO.ui.ButtonWidget({
 			label: '全選択'
 		}).off('click').on('click', () => {
-			this.list.forEach((Rev) => {
-				Rev.toggleSelection(true);
+			this.list.forEach((rev) => {
+				rev.toggleSelection(true);
 			});
 		});
-		const btnUnselectAll = new OO.ui.ButtonWidget({
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 */
+		this.btnUnselectAll = new OO.ui.ButtonWidget({
 			label: '全選択解除'
 		}).off('click').on('click', () => {
-			this.list.forEach((Rev) => {
-				Rev.toggleSelection(false);
+			this.list.forEach((rev) => {
+				rev.toggleSelection(false);
 			});
 		});
-		const btnInvertSelection = new OO.ui.ButtonWidget({
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 */
+		this.btnInvertSelection = new OO.ui.ButtonWidget({
 			label: '選択反転'
 		}).off('click').on('click', () => {
 			this.list.forEach((rev) => {
 				rev.toggleSelection(!rev.isSelected());
 			});
 		});
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 */
+		this.btnSelectAllDeleted = new OO.ui.ButtonWidget({
+			label: '削除済み版全選択'
+		}).off('click').on('click', () => {
+			this.list.forEach((rev) => {
+				if (rev.hasDeletedItem()) {
+					rev.toggleSelection(true);
+				}
+			});
+		});
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 */
+		this.btnUnselectAllDeleted = new OO.ui.ButtonWidget({
+			label: '削除済み版全選択解除'
+		}).off('click').on('click', () => {
+			this.list.forEach((rev) => {
+				if (rev.hasDeletedItem()) {
+					rev.toggleSelection(false);
+				}
+			});
+		});
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 */
+		this.btnSelectAllUndeleted = new OO.ui.ButtonWidget({
+			label: '未削除版全選択'
+		}).off('click').on('click', () => {
+			this.list.forEach((rev) => {
+				if (!rev.hasDeletedItem()) {
+					rev.toggleSelection(true);
+				}
+			});
+		});
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 */
+		this.btnUnselectAllUndeleted = new OO.ui.ButtonWidget({
+			label: '未削除版全選択解除'
+		}).off('click').on('click', () => {
+			this.list.forEach((rev) => {
+				if (!rev.hasDeletedItem()) {
+					rev.toggleSelection(false);
+				}
+			});
+		});
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 */
 		this.btnExecute = new OO.ui.ButtonWidget({
 			label: '実行',
 			flags: ['primary', 'progressive']
+		}).off('click').on('click', () => {
+			this.execute();
 		});
 
-		fieldset.addItems([
+		// Add the widgets to the fieldset
+		const items = [
+			new OO.ui.FieldLayout(this.vlSuppress, {
+				label: mw.messages.get('revdelete-hide-restricted') || '一般利用者に加え管理者からもデータを隠す',
+				align: 'inline'
+			}),
 			new OO.ui.FieldLayout(this.reason1, {
 				label: '理由',
 				align: 'top'
@@ -306,23 +390,29 @@ class MassRevisionDelete {
 			new OO.ui.FieldLayout(this.reason2),
 			new OO.ui.FieldLayout(this.reasonC),
 			new OO.ui.FieldLayout(new OO.ui.ButtonGroupWidget({
-				items: [btnSelectAll, btnUnselectAll, btnInvertSelection]
+				items: [this.btnSelectAll, this.btnUnselectAll, this.btnInvertSelection]
+			})),
+			new OO.ui.FieldLayout(new OO.ui.ButtonGroupWidget({
+				items: [this.btnSelectAllDeleted, this.btnUnselectAllDeleted, this.btnSelectAllUndeleted, this.btnUnselectAllUndeleted]
 			})),
 			new OO.ui.FieldLayout(this.btnExecute)
-		]);
+		];
+		if (!rights.suppress) {
+			items.shift();
+		}
+		fieldset.addItems(items);
 
-		MassRevisionDelete.initializeReasonDropdowns(this.reason1, this.reason2);
+		MassRevisionDelete.initializeReasonDropdowns([this.reason1, this.reason2]);
 
 	}
 
 	/**
 	 * Fetch the delete-reason dropdown options and add them to the MRD's reason dropdowns.
-	 * @param {OO.ui.DropdownInputWidget} reason1
-	 * @param {OO.ui.DropdownInputWidget} reason2
-	 * @private
+	 * @param {OO.ui.DropdownInputWidget[]} dropdowns
 	 * @returns {void}
+	 * @private
 	 */
-	static initializeReasonDropdowns(reason1, reason2) {
+	static initializeReasonDropdowns(dropdowns) {
 
 		const reasons = mw.messages.get('revdelete-reason-dropdown');
 		/** @type {{optgroup?:string; data?: string; label?: string;}[]} */
@@ -353,9 +443,202 @@ class MassRevisionDelete {
 			mw.notify('MassRevisionDelete: 削除理由の取得に失敗しました。', {type: 'error'});
 		}
 
-		reason1.setOptions(options);
-		reason2.setOptions(options);
+		dropdowns.forEach((dd) => {
+			dd.setOptions(options);
+		});
 
+	}
+
+	/**
+	 * Set the 'disabled' states of all the widgets in the MRD form.
+	 * @param {boolean} disable
+	 * @returns {MassRevisionDelete}
+	 */
+	setDisabled(disable) {
+		[
+			this.btnExecute,
+			this.vlContent,
+			this.vlComment,
+			this.vlUser,
+			this.vlSuppress,
+			this.reason1,
+			this.reason2,
+			this.reasonC,
+			this.btnSelectAll,
+			this.btnUnselectAll,
+			this.btnInvertSelection,
+			this.btnSelectAllDeleted,
+			this.btnUnselectAllDeleted,
+			this.btnSelectAllUndeleted,
+			this.btnUnselectAllUndeleted
+		]
+		.forEach((widget) => {
+			widget.setDisabled(disable);
+		});
+		return this;
+	}
+
+	/**
+	 * @param {RevdelTarget} target
+	 * @returns {RevdelLevel}
+	 */
+	getSelectedVisibilityLevel(target) {
+		switch (target) {
+			case 'content':
+				return this.vlContent.getData();
+			case 'comment':
+				return this.vlComment.getData();
+			case 'user':
+				return this.vlUser.getData();
+			default:
+				throw new Error();
+		}
+	}
+
+	/**
+	 * Prepare for revision deletion.
+	 * @returns {JQueryPromise<PreparationObject|false>}
+	 */
+	prepare() {
+
+		// Create an object keyed by pagenames and each valued by an array of revision IDs
+		let revisionCount = 0;
+		const revisions = this.list.reduce(/** @param {Record<string, string[]>} acc */ (acc, rev) => {
+			if (rev.isSelected()) {
+				const pagename = rev.getPagename();
+				if (!acc[pagename]) {
+					acc[pagename] = [];
+				}
+				acc[pagename].push(rev.getRevid());
+				revisionCount++;
+			}
+			return acc;
+		}, Object.create(null));
+		if (revisionCount === 0) {
+			return mw.notify('版指定削除の対象版が選択されていません。', {type: 'error'}).then(() => false);
+		}
+
+		// Get visibility levels
+		/**
+		 * @type {Record<RevdelTarget, JQuery<HTMLElement>>}
+		 */
+		const conf = Object.create(null);
+		const vis = {
+			hide: [],
+			show: []
+		};
+		/**
+		 * @type {RevdelTarget[]}
+		 */
+		const targets = ['content', 'comment', 'user'];
+		targets.forEach((target) => {
+			const level = this.getSelectedVisibilityLevel(target);
+			conf[target] = levelToConfirmationMessage(level); // Will be used later to confirm the revision deletion
+			if (vis[level]) { // Ignore "nochange"
+				vis[level].push(target);
+			}
+		});
+		if (!vis.hide.length && !vis.show.length) {
+			return mw.notify('版指定削除の対象項目が選択されていません。', {type: 'error'}).then(() => false);
+		}
+		const suppress =
+			!rights.suppress ?
+			'nochange' :
+			this.vlSuppress.isSelected() ?
+			'yes' :
+			'no';
+
+		// Get reason
+		const reason = [this.reason1.getValue(), this.reason2.getValue(), this.reasonC.getValue().trim()].filter(el => el).join(': ');
+		return (() => {
+			if (reason) {
+				return $.Deferred().resolve(true);
+			} else {
+				return OO.ui.confirm('版指定削除の理由が指定されていません。このまま実行しますか？');
+			}
+		})()
+		// @ts-ignore
+		.then(/** @param {boolean} confirmed */ (confirmed) => {
+
+			if (!confirmed) {
+				return false;
+			}
+
+			const $confirm = $('<div>').append(
+				`計${revisionCount}版の閲覧レベルを変更します。`,
+				$('<ul>').append(
+					$('<li>').append(
+						mw.messages.get('revdelete-hide-text') || '??',
+						' (',
+						conf.content,
+						')'
+					),
+					$('<li>').append(
+						mw.messages.get('revdelete-hide-comment') || '??',
+						' (',
+						conf.comment,
+						')'
+					),
+					$('<li>').append(
+						mw.messages.get('revdelete-hide-user') || '??',
+						' (',
+						conf.user,
+						')'
+					),
+				),
+				'よろしいですか？'
+			);
+			return OO.ui.confirm($confirm, {size: 'medium'});
+
+		}).then((confirmed) => {
+
+			if (!confirmed) {
+				return false;
+			}
+
+			return {
+				revisions,
+				defaultParams: {
+					action: 'revisiondelete',
+					type: 'revision',
+					reason: reason,
+					hide: vis.hide.join('|'),
+					show: vis.show.join('|'),
+					suppress,
+					tags: mw.config.get('wgDBname') === 'testwiki' ? 'testtag' : 'MassRevisionDelete|DevScript',
+					formatversion: '2'
+				}
+			};
+
+		});
+
+		/**
+		 * @param {RevdelLevel} level
+		 * @returns {JQuery<HTMLElement>}
+		 */
+		function levelToConfirmationMessage(level) {
+			const $b = $('<b>');
+			switch (level) {
+				case 'nochange':
+					return $b.text('変更なし');
+				case 'show':
+					return $b.text('閲覧可').addClass('mrd-green');
+				case 'hide':
+					return $b.text('閲覧不可').addClass('mrd-red');
+			}
+		}
+
+	}
+
+	/**
+	 * Perform mass revision deletion.
+	 * @private
+	 */
+	execute() {
+		this.setDisabled(true).prepare().then((prep) => {
+			console.log(prep);
+
+		});
 	}
 
 }
@@ -411,40 +694,103 @@ class Revision {
 		);
 
 		/**
+		 * A <span> tag in which there's an <a> tag. The wrapper is a <strong> tag on a suppressor's view
+		 * if the editing user is hidden for this revision.
+		 */
+		const $revdelLink = $li.children('.mw-revdelundel-link');
+		/**
+		 * @type {boolean} Whether the current user can change the visibility of this revision
+		 */
+		this.changeable = !!$revdelLink.children('a').length;
+		if (!this.changeable) {
+			this.$checkbox.prop('disabled', true);
+		}
+		$revdelLink.off('click').on('click', (e) => { // Use the link to Special:RevisionDelete as a button
+			if (!e.shiftKey && !e.ctrlKey) {
+				e.preventDefault();
+				this.toggleSelection(!this.isSelected());
+			}
+		});
+
+		/**
+		 * @type {Record<'content'|'comment'|'user', boolean?>} `null` if suppressed
+		 */
+		this.currentVisibility = {
+			content: true,
+			comment: true,
+			user: true
+		};
+
+		/**
 		 * The date link. See {@link toggleContentVisibility} for all its HTML structures.
-		 * @type {JQuery<HTMLElement>} Usually an `<a>` tag, or a `<span>` tag when revdel-ed, or an empty jQuery object
-		 * when suppressed and the user doesn't have the suppressor rights.
+		 *
+		 * @type {JQuery<HTMLElement>} Usually an `<a>` tag, or a `<span>` tag when revdel-ed.
 		 */
 		this.$date = (() => {
-			const $a = $li.find('a.mw-changeslist-date');
-			const $pr = $a.parent('span.' + Revision.class.deleted);
-			if ($pr.length) {
-				return $pr;
-			} else {
-				return $a;
+			const $link = $li.find('.mw-changeslist-date').eq(0);
+			if ($link.hasClass(Revision.class.suppressed) && $link.hasClass(Revision.class.deleted)) {
+				this.currentVisibility.content = null;
+			} else if ($link.hasClass(Revision.class.deleted)) {
+				this.currentVisibility.content = false;
 			}
+			return $link;
 		})();
 
 		/**
 		 * Then `<span>` tag for summary. See {@link toggleCommentVisibility} for all its HTML structures.
-		 *
-		 * The tag is entirely missing on [[Special:DeletedContributions]] if the revision has no edit summary.
-		 * In this case, we create one here.
-		 *
 		 * @type {JQuery<HTMLSpanElement>}
 		 */
 		this.$comment = $li.children('.comment');
-		if (!this.$comment.length) {
-			this.$comment = $('<span>');
-			const clss = ['comment', 'comment--without-parentheses'];
-			if (isDeletedContribs) {
-				clss.pop();
-			}
-			$pageLink.after(
-				this.$comment.addClass(clss.join(' '))
-			);
+		if (this.$comment.hasClass(Revision.class.suppressed) && this.$comment.hasClass(Revision.class.deleted)) {
+			this.currentVisibility.comment = null;
+		} else if (this.$comment.hasClass(Revision.class.deleted)) {
+			this.currentVisibility.comment = false;
 		}
 
+		/**
+		 * Comment in an HTML format
+		 * @type {string?}
+		 */
+		this.parsedComment = null;
+
+		const msgUserHidden = mw.messages.get('rev-deleted-user-contribs') || '[利用者名またはIPアドレスは除去されました - この編集は投稿記録で非表示にされています]';
+		/**
+		 * The \<strong> tag shown if the user name has been hidden.
+		 * @type {JQuery<HTMLElement>}
+		 */
+		this.$userhidden = $li.children('strong').filter((_, el) => $(el).text() === msgUserHidden);
+		if (this.$userhidden.length) {
+			if ($revdelLink.prop('nodeName') === 'STRONG') {
+				this.currentVisibility.user = null;
+			} else {
+				this.currentVisibility.user = false;
+			}
+		} else {
+			// The tag doesn't exist if the username isn't revdel-ed; create one in this case
+			this.$userhidden = $('<strong>')
+				.text(msgUserHidden)
+				.css('margin-right', '0.5em')
+				.hide()
+				.insertAfter(this.$comment);
+		}
+		this.$userhidden.addClass('mrd-userhidden');
+
+	}
+
+	/**
+	 * Get the ID number of the revision.
+	 * @returns {string}
+	 */
+	getRevid() {
+		return this.revid;
+	}
+
+	/**
+	 * Get the pagename of the revision.
+	 * @returns {string}
+	 */
+	getPagename() {
+		return this.pagename;
 	}
 
 	/**
@@ -487,12 +833,15 @@ class Revision {
 	}
 
 	/**
-	 * Toggle the checked state of the checkbox.
+	 * Toggle the checked state of the checkbox. Do nothing if the checkbox is disabled (which means that
+	 * the current user does not have the rights to change the visibility of this revision).
 	 * @param {boolean} check
 	 * @returns {Revision}
 	 */
 	toggleSelection(check) {
-		this.$checkbox.prop('checked', check);
+		if (this.changeable) {
+			this.$checkbox.prop('checked', check);
+		}
 		return this;
 	}
 
@@ -505,19 +854,29 @@ class Revision {
 	}
 
 	/**
+	 * Check if the revision has a deleted item.
+	 * @returns {boolean}
+	 */
+	hasDeletedItem() {
+		return Object.keys(this.currentVisibility).some((target) => !this.currentVisibility[target]);
+	}
+
+	/**
 	 * Toggle the revdel status of a date link.
+	 * ```html
+	 * <!-- In both cases below, the <bdi> tag is missing on [[Special:DeletedContributions]] -->
+	 * <!-- Normal date link -->
+	 * <bdi>
+	 * 	<a class="mw-changeslist-date">2023-01-01T00:00:00</a>
+	 * </bdi>
+	 * <!-- Deleted date link -->
+	 * <span class="history-deleted mw-changeslist-date"><!-- Has an additional class if suppressed -->
+	 * 	<!-- Empty on a non-suppressor's view if suppressed -->
+	 * 	<bdi>
+	 * 		<a class="mw-changeslist-date">2023-01-01T00:00:00</a>
+	 * 	</bdi>
+	 * </span>
 	 * ```
-	 *  // Normal date link
-	 *  <a class="mw-changeslist-date">2023-01-01T00:00:00</a>
-	 *  // Deleted date link
-	 *  <span class="history-deleted">
-	 *      <a class="mw-changeslist-date">2023-01-01T00:00:00</a>
-	 *  </span>
-	 *  // Suppressed date link (non-suppressor view; this function should never face this pattern)
-	 *  <span class="history-deleted mw-history-suppressed mw-changeslist-date"></span>
-	 * ```
-	 * Concerning the third pattern, a revision with any field suppressed can only be revision-deleted by suppressors.
-	 * This means that undeletable revisions should never be forwarded to the API in the first place.
 	 */
 	toggleContentVisibility() {
 
@@ -525,28 +884,35 @@ class Revision {
 
 	/**
 	 * Toggle the revdel status of a comment (edit summary).
+	 * ```html
+	 * <!-- The comment--without-parentheses class is omitted in all of the following -->
+	 * <!-- Normal comment -->
+	 * <span class="comment">COMMENT</span>
+	 * <!-- Normal comment (empty) -->
+	 * <span class="comment mw-comment-none">No edit summary</span><!-- Has text but invisible -->
+	 * <!-- Deleted comment -->
+	 * <!-- [[Special:Contributions]] -->
+	 * <span class="history-deleted comment"><!-- Has an additional class if suppressed -->
+	 * 	<span class="comment">(edit summary removed)</span>
+	 * </span>
+	 * <!-- [[Special:DeletedContributions]] -->
+	 * <span class="history-deleted comment"><!-- Has an additional class if suppressed -->
+	 * 	<!-- Empty if there's no edit summary -->
+	 * 	<span class="comment">COMMENT</span>
+	 * </span>
 	 * ```
-	 *  // On [[Special:Contributions]]
-	 *  // Normal comment
-	 *  <span class="comment comment--without-parentheses">Some comment</span>
-	 *  // Deleted comment
-	 *  <span class="history-deleted comment">
-	 *      <span class="comment">(edit summary removed)</span>
-	 *  </span>
-	 *  // On [[Special:DeletedContributions]]
-	 *  // Normal comment (same as the topmost one)
-	 *  <span class="comment comment--without-parentheses">Some comment</span>
-	 *  // Deleted comment
-	 *  <span class="history-deleted comment">
-	 *      <span class="comment comment--without-parentheses">Some comment</span>
-	 *  </span>
-	 * ```
-	 * Note that when the comment is an empty string, there IS a span tag for comment with the 'mw-comment-none' class added
-	 * to pattern #1 on [[Special:Contributions]], but the tag is entirely missing on [[Special:DeletedContributions]]. This
-	 * script internally creates a comment element in createForm() if missing, so there's no problem.
 	 */
 	toggleCommentVisibility() {
 
+	}
+
+	/**
+	 * @param {boolean} show
+	 * @returns {Revision}
+	 */
+	toggleUserVisibility(show) {
+		this.$userhidden.toggle(!show);
+		return this;
 	}
 
 }
