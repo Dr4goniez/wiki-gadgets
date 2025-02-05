@@ -129,6 +129,10 @@ function createStyleTag() {
 		'}' +
 		'.mrd-red {' +
 			'color: mediumvioletred;' +
+		'}' +
+		'.mrd-disabledlink {' +
+			'pointer-events: none;' +
+			'color: unset;' +
 		'}';
 	document.head.appendChild(style);
 }
@@ -450,7 +454,8 @@ class MassRevisionDelete {
 	}
 
 	/**
-	 * Set the 'disabled' states of all the widgets in the MRD form.
+	 * Set the 'disabled' states of all the widgets in the MRD form, all the revdel links in the special page,
+	 * and all revisions' checkboxes.
 	 * @param {boolean} disable
 	 * @returns {MassRevisionDelete}
 	 */
@@ -470,7 +475,8 @@ class MassRevisionDelete {
 			this.btnSelectAllDeleted,
 			this.btnUnselectAllDeleted,
 			this.btnSelectAllUndeleted,
-			this.btnUnselectAllUndeleted
+			this.btnUnselectAllUndeleted,
+			...this.list
 		]
 		.forEach((widget) => {
 			widget.setDisabled(disable);
@@ -636,7 +642,14 @@ class MassRevisionDelete {
 	 */
 	execute() {
 		this.setDisabled(true).prepare().then((prep) => {
-			console.log(prep);
+
+			if (!prep) {
+				this.setDisabled(false);
+				return;
+			}
+
+			const {revisions, defaultParams} = prep;
+
 
 		});
 	}
@@ -696,21 +709,27 @@ class Revision {
 		/**
 		 * A <span> tag in which there's an <a> tag. The wrapper is a <strong> tag on a suppressor's view
 		 * if the editing user is hidden for this revision.
+		 * @type {JQuery<HTMLElement>}
 		 */
-		const $revdelLink = $li.children('.mw-revdelundel-link');
+		this.$revdelLink = $li.children('.mw-revdelundel-link');
 		/**
-		 * @type {boolean} Whether the current user can change the visibility of this revision
+		 * Whether the current user can change the visibility of this revision.
+		 * @type {boolean}
 		 */
-		this.changeable = !!$revdelLink.children('a').length;
-		if (!this.changeable) {
+		this.changeable = !!this.$revdelLink.children('a').length;
+		if (this.changeable) {
+			// Use the revdel link as a button to toggle the checkbox only when the link has an <a> tag in it
+			this.$revdelLink.off('click').on('click', (e) => {
+				if (this.$revdelLink.hasClass('mrd-disabledlink')) {
+					e.preventDefault();
+				} else if (!e.shiftKey && !e.ctrlKey) {
+					e.preventDefault();
+					this.toggleSelection(!this.isSelected());
+				}
+			});
+		} else {
 			this.$checkbox.prop('disabled', true);
 		}
-		$revdelLink.off('click').on('click', (e) => { // Use the link to Special:RevisionDelete as a button
-			if (!e.shiftKey && !e.ctrlKey) {
-				e.preventDefault();
-				this.toggleSelection(!this.isSelected());
-			}
-		});
 
 		/**
 		 * @type {Record<'content'|'comment'|'user', boolean?>} `null` if suppressed
@@ -760,7 +779,7 @@ class Revision {
 		 */
 		this.$userhidden = $li.children('strong').filter((_, el) => $(el).text() === msgUserHidden);
 		if (this.$userhidden.length) {
-			if ($revdelLink.prop('nodeName') === 'STRONG') {
+			if (this.$revdelLink.prop('nodeName') === 'STRONG') {
 				this.currentVisibility.user = null;
 			} else {
 				this.currentVisibility.user = false;
@@ -859,6 +878,22 @@ class Revision {
 	 */
 	hasDeletedItem() {
 		return Object.keys(this.currentVisibility).some((target) => !this.currentVisibility[target]);
+	}
+
+	/**
+	 * Change the disabled states of the checkbox and the revdel link.
+	 * @param {boolean} disable
+	 * @returns {Revision}
+	 */
+	setDisabled(disable) {
+		if (this.changeable) {
+			// If the revision is revdel-wise not changeable, the checkbox is initially disabled and the revdel
+			// link doesn't contain an <a> tag and is not clickable. Becase of this, we only look at changeable
+			// revisions, and this also prevents checkboxes that should always be disabled from being enabled back.
+			this.$checkbox.prop('disabled', disable);
+			this.$revdelLink.toggleClass('mrd-disabledlink', disable);
+		}
+		return this;
 	}
 
 	/**
