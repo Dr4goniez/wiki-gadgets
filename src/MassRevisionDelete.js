@@ -1,1015 +1,1671 @@
-/*********************************************************************************************\
+/***************************************************************************\
 
-    MassRevisionDelete
+	MassRevisionDelete
 
-    Create an interface to delete multiple revisions at one fell swoop when the script
-    user visits a user's contributions page.
+	Add an interface to delete multiple revisions in one fell swoop to
+	[[Special:Contributions]] and [[Special:DeletedContributions]].
 
-    @link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
-    @author [[User:Dragoniez]]
+	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
+	@author [[User:Dragoniez]]
+	@version 3.0.0
 
-\*********************************************************************************************/
-//<nowiki>
-
-(function() { // Container IIFE
-
-// ************************************** INITIALIZATION **************************************
-
-/**
- * When true, the result of action=revisiondelete is fabricated when the revdel execution button is hit,
- * meaning that the user can test all the functionalities of this script but actual revision deletion
- * isn't performed.
- * @readonly
- */
-var debuggingMode = false;
-
-/** @readonly */
-var MRD = 'MassRevisionDelete';
-
-// Use script only on [[Special:Contributions]] and [[Special:DeletedContributions]]
-var spPageName = mw.config.get('wgCanonicalSpecialPageName');
-var isDeletedContribs = spPageName === 'DeletedContributions' ? true : spPageName === 'Contributions' ? false : null;
-if (isDeletedContribs === null) return;
-
-// Use script only when the current user has the 'deleterevision' user right
-var userRights = {
-	deleterevision: ['sysop', 'eliminator', 'suppress', 'global-sysop', 'staff', 'steward', 'sysadmin'],
-	suppressrevision: ['suppress', 'staff'],
-	apihighlimits: ['sysop', 'apihighlimits-requestor', 'global-sysop', 'staff', 'steward', 'sysadmin', 'wmf-researcher']
-};
-var canRevDel = false;
-var canOversight = false;
-var hasApiHighLimits = false;
-// @ts-ignore
-mw.config.get('wgUserGroups').concat(mw.config.get('wgGlobalGroups')).some(function(group) {
-	if (!canRevDel) {
-		canRevDel = userRights.deleterevision.indexOf(group) !== -1;
-	}
-	if (!canOversight) {
-		canOversight = userRights.suppressrevision.indexOf(group) !== -1;
-	}
-	if (!hasApiHighLimits) { // Bots excluded
-		hasApiHighLimits = userRights.apihighlimits.indexOf(group) !== -1;
-	}
-	return canRevDel && canOversight && hasApiHighLimits; // Get out of the loop when all entries have become true
-});
-if (!canRevDel) return;
+\***************************************************************************/
+// @ts-check
+/// <reference path="./window/MassRevisionDelete3.d.ts" />
+/* global mw, OO */
+(() => {
+//*********************************************************************************************
 
 /**
- * The maximum number of revisions that can be handled by one API request
- * @readonly
+ * If `true`, no actual API requests will be sent.
  */
-var apilimit = hasApiHighLimits ? 500 : 50;
-
-/** @type {mw.Api} @readonly */
-var api;
-
-/** @readonly */
-var classSuppressed = 'mw-history-suppressed';
-/** @readonly */
-var classDeleted = 'history-deleted';
-
+const debuggingMode = false;
 /**
- * Interface messages.
- * @readonly
+ * Whether to consider the user a suppressor for debugging. If the user isn't actually a suppressor
+ * and the contribution list contains suppressed revisions, this won't work.
  */
-var msg = {
-	'rev-deleted-comment': '(edit summary removed)',
-	'rev-deleted-user-contribs': '[username or IP address removed - edit hidden from contributions]',
-	'rev-delundel': 'change visibility',
-	/** This message should be hidden on the DOM by '.mw-comment-none'. */
-	'changeslist-nocomment': 'No edit summary'
-};
-/** @readonly */
-var msgNames = Object.keys(msg);
+const feignSuppressor = false;
 
-// Load dependent modules and create form
-mw.loader.using('mediawiki.api', function() {
-	api = new mw.Api();
-	$.when(
-		getMessages(msgNames), // Get local interface messages
-		mw.loader.using('jquery.ui'),
-		$.ready
-	).then(function(res) {
-		msgNames.forEach(function(name) {
-			if (res[name]) msg[name] = res[name]; // Set local interface messages
-		});
-		createForm();
-	});
-});
-
-// ************************************** MAIN FUNCTIONS **************************************
-
-/**
- * Get interface messages.
- * @param {string[]} namesArr
- * @returns {JQueryPromise<Object.<string, string>>} name-message pairs
- */
-function getMessages(namesArr) {
-	return api.getMessages(namesArr)
-		.then(function(res) {
-			return res || {};
-		}).catch(function(code, err) {
-			console.error(MRD, err);
-			return {};
-		});
+// Run the script only on [[Special:Contributions]] and [[Special:DeletedContributions]]
+/** @type {boolean} */
+let isDeletedContribs;
+switch (mw.config.get('wgCanonicalSpecialPageName')) {
+	case 'Contributions':
+		isDeletedContribs = false;
+		break;
+	case 'DeletedContributions':
+		isDeletedContribs = true;
+		break;
+	default:
+		return;
 }
 
-/** Create the MassRevisionDelete interface. */
-function createForm() {
+// Run the script only when the current user has the 'deleterevision' user right
+const rights = (() => {
+	// @ts-ignore
+	const userGroups = (mw.config.get('wgUserGroups') || []).concat(mw.config.get('wgGlobalGroups', []));
+	const revdel = userGroups.some((group) => ['sysop', 'eliminator', 'suppress'].indexOf(group) !== -1);
+	const suppress = userGroups.indexOf('suppress') !== -1;
+	const AHL = userGroups.some((group) => ['sysop', 'apihighlimits-requestor'].indexOf(group) !== -1);
+	return {revdel, suppress, AHL};
+})();
+if (!rights.revdel) {
+	return;
+}
+if (feignSuppressor) {
+	rights.suppress = true;
+}
+const apilimit = rights.AHL ? 500 : 50;
 
-	/** @type {JQuery<HTMLUListElement>} */
-	var $contribsList = $('ul.mw-contributions-list');
-	if (!$contribsList.length) return;
+//*********************************************************************************************
 
-	// Counter of revisions that are to be (un)deleted (will be appended to the DOM later)
-	var checkedCounter = document.createElement('span');
-	checkedCounter.style.display = 'block';
-	checkedCounter.style.marginTop = '0.5em';
-	checkedCounter.textContent = '選択済み版数: ';
-	var checkedCounterNum = document.createElement('span');
-	checkedCounterNum.textContent = '0';
-	checkedCounter.appendChild(checkedCounterNum);
+/** @type {mw.Api} */
+let api;
+function init() {
 
-	// Add checkboxes etc. to the contribs list and create a reference object
-	var listHasHiddenField = false;
-	var revdelLinkFontSize = $('.mw-revdelundel-link:first').css('font-size');
-	/** @type {string[]} */
-	var revidsNoComment = [];
+	// Start loading modules but mediawiki.api in the background
+	const deferreds = mw.loader.using([
+		'jquery.makeCollapsible',
+		'oojs-ui',
+		'oojs-ui.styles.icons-movement'
+	]);
 
-	/** @type {RevisionList} */
-	var revisionList = Array.prototype.reduce.call($contribsList.children('li'), // Create object out of all contribs list items
+	// Load mediawiki.api and the DOM
+	$.when(mw.loader.using('mediawiki.api'), $.ready).then(() => {
 
-		/**
-		 * @param {RevisionList} acc
-		 * @param {HTMLLIElement} listitem
-		 */
-		function(acc, listitem) {
-
-			var $listitem = $(listitem);
-			var clss = isDeletedContribs ? '.mw-changeslist-title' : '.mw-contributions-title';
-			var $title = $listitem.children(clss).eq(0);
-			var title = $title.text();
-			var revid = listitem.dataset.mwRevid;
-
-			// Get the 'change visibility' link and create its disabled alternant
-			/** @type {HTMLSpanElement|null} */
-			var revdelLink = listitem.querySelector('.mw-revdelundel-link');
-			var revdelLinkDisabled = document.createElement('span');
-			revdelLinkDisabled.classList.add('mrd-revdelundel-link');
-			revdelLinkDisabled.style.display = 'none';
-			revdelLinkDisabled.style.fontSize = revdelLinkFontSize;
-			revdelLinkDisabled.textContent = '(' + msg['rev-delundel'] + ')';
-			listitem.prepend(revdelLinkDisabled);
-
-			// Checkbox
-			var checkbox = document.createElement('input');
-			checkbox.type = 'checkbox';
-			checkbox.classList.add('mrd-revdel-target');
-			checkbox.style.marginRight = '0.5em';
-			checkbox.addEventListener('change', function() { // Update counter when the box is (un)checked
-				// @ts-ignore
-				var num = parseInt(checkedCounterNum.textContent);
-				checkedCounterNum.textContent = (this.checked ? ++num : --num).toString();
-			});
-			listitem.prepend(checkbox);
-
-			// A span tag to show the progress of revdel execution
-			var progress = document.createElement('span');
-			progress.style.cssText = 'display: none; margin-right: 0.5em;';
-			progress.classList.add('mrd-progress');
-			listitem.prepend(progress);
-
-			/**
-			 * PermaLink with a date text. See toggleContentVisibility() for all possible HTML structures.
-			 * @type {HTMLSpanElement|HTMLAnchorElement|null}
-			 */
-			var date = (function() {
-				/** @type {HTMLAnchorElement|null} */
-				var dateAnchor = listitem.querySelector('a.mw-changeslist-date');
-				var pr;
-				if (dateAnchor && (pr = dateAnchor.parentElement) && pr.tagName === 'SPAN' && pr.classList.contains(classDeleted)) {
-					return pr; // span
-				} else {
-					return dateAnchor; // a or null
+		// Set up a mw.Api instance
+		api = new mw.Api({
+				ajax: {
+				headers: {
+					'Api-User-Agent': 'MassRevisionDelete/3.0.0 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
-			})();
-
-			/**
-			 * Comment (missing on [[Special:DeletedContributions]] if the revision has no edit summary; create a tag in this case).
-			 * See toggleCommentVisibility() for all possible HTML structures.
-			 * @type {HTMLSpanElement|null}
-			 */
-			var comment = listitem.querySelector('.comment');
-			if (!comment) {
-				comment = document.createElement('span');
-				comment.classList.add('comment');
-				if (!isDeletedContribs) comment.classList.add('comment--without-parentheses');
-				$title.after(comment);
+			},
+			parameters: {
+				action: 'query',
+				format: 'json',
+				formatversion: '2'
 			}
-
-			// Comment in an HTML format
-			var parsedcomment;
-			if (!comment.classList.contains(classDeleted) && !comment.classList.contains(classSuppressed) || // On Contributions and not deleted
-				// On DeletedContributions, parsed comment can be fetched even when deleted (unless oversighted in non-OS view)
-				isDeletedContribs && (canOversight ? true : !comment.classList.contains(classSuppressed)) 
-			) {
-				parsedcomment = comment.innerHTML;
-			} else {
-				parsedcomment = '';
-				if (revid && revidsNoComment.indexOf(revid) === -1) {
-					// Register revid for a later API request (fetch parsed comment from the API)
-					revidsNoComment.push(revid);
-				}
-			}
-
-			// 'Username hidden' warning (create one if there isn't any)
-			var $userhidden = $listitem.children('strong').filter(function() { return $(this).text() === msg['rev-deleted-user-contribs']; });
-			var userhidden = (function() {
-				/** @type {HTMLElement} */
-				var strong;
-				if ($userhidden.length) {
-					strong = $userhidden[0];
-				} else {
-					strong = document.createElement('strong');
-					strong.style.cssText = 'display: none; margin-right: 0.5em;';
-					strong.textContent = msg['rev-deleted-user-contribs'];
-					if (comment.nextElementSibling) { // Insert after the comment tag
-						listitem.insertBefore(strong, comment.nextElementSibling);
-					} else {
-						listitem.appendChild(strong);
-					}
-				}
-				strong.classList.add('mrd-userhidden');
-				return strong;
-			})();
-
-			var hasDeletedField = !!listitem.querySelector('.' + classDeleted);
-			var hasOversightedField = !!listitem.querySelector('.' + classSuppressed);
-			if (!listHasHiddenField) listHasHiddenField = hasDeletedField || hasOversightedField;
-
-			if (hasOversightedField && !canOversight) {
-
-				// Can't perform revdel if any item of the revision is oversighted and the current user isn't an oversighter
-				checkbox.disabled = true;
-
-			} else if (revdelLink && revid) {
-
-				// Labelify the 'change visibility' link for the checkbox
-				revdelLink.addEventListener('click', function(e) {
-					if (!e.shiftKey && !e.ctrlKey) {
-						e.preventDefault();
-						checkbox.checked = !checkbox.checked;
-						checkbox.dispatchEvent(new Event('change')); // Update counter
-					}
-				});
-
-				// Add object (only if the current user can (un)delete this revision)
-				acc[revid] = {
-					progress: progress,
-					checkbox: checkbox,
-					label: revdelLink,
-					pseudolabel: revdelLinkDisabled,
-					date: date,
-					title: title,
-					comment: comment,
-					parsedcomment: parsedcomment,
-					userhidden: userhidden,
-					revdeled: hasDeletedField || hasOversightedField,
-					suppressed: hasOversightedField,
-					current: !!listitem.querySelector('.mw-uctop')
-				};
-
-			}
-
-			return acc;
-
-		},
-	Object.create(null));
-	if (!Object.keys(revisionList).length) return; // Exit if all the revisions are inaccessible for revdel
-
-	// Get revdel'd edit summaries and overwrite the revisionList object
-	getParsedComment(revidsNoComment).then(function(obj) {
-		Object.keys(obj).forEach(function(revid) {
-			revisionList[revid].parsedcomment = obj[revid];
 		});
-	});
 
-	// Create a style tag
-	var style = document.createElement('style');
+		// Get the contributions list
+		/** @type {JQuery<HTMLUListElement>} */
+		const $contribsList = $('ul.mw-contributions-list');
+		if (!$contribsList.length || !$contribsList.children('li').length) {
+			return;
+		}
+
+		// Finish loading other modules and also fetch interface messages
+		$.when(
+			deferreds,
+			api.loadMessagesIfMissing([
+				'revdelete-hide-text',
+				'revdelete-hide-comment',
+				'revdelete-hide-user',
+				'revdelete-otherreason',
+				'revdelete-reason-dropdown',
+				'revdelete-reasonotherlist',
+				'rev-deleted-user-contribs',
+				'revdelete-hide-restricted',
+				'rev-deleted-comment',
+				'changeslist-nocomment',
+				'empty-username'
+			])
+		).then(() => {
+
+			// Set up a style tag and the collapsible MRD fieldset
+			createStyleTag();
+			const fieldset = createFieldset($contribsList);
+
+			// Initialize MassRevisionDelete
+			new MassRevisionDelete(fieldset, $contribsList).init();
+
+		});
+
+	});
+}
+
+function createStyleTag() {
+	const style = document.createElement('style');
 	style.textContent =
-		// General
-		'#mrd-form legend {' +
+		'.mrd-fieldLayout-boldheader .oo-ui-fieldLayout-header > label {' +
 			'font-weight: bold;' +
 		'}' +
-		'#mrd-form select,' +
-		'#mrd-form input {' +
-			'box-sizing: border-box;' +
+		'.mrd-horizontal-radios > label {' + // Class to align block-level RadioOption widgets horizontally
+			'display: inline-block;' +
+			'margin-right: 1em;' +
 		'}' +
-		'#mrd-form,' +
-		'#mrd-form fieldset {' +
-			'border-color: #a2a9b1;' +
-		'}' +
-		// Right margin for buttons
-		'#mrd-buttons > div > input:not(first-child) {' +
+		'.mrd-progress:not(:empty) {' +
 			'margin-right: 0.5em;' +
+		'}' +
+		'#mrd-revision-selector > span,' +
+		'#mrd-revision-selector > select {' +
+			'margin-right: 0.5em;' +
+		'}' +
+		'.mrd-checkbox {' +
+			'margin-right: 0.5em;' +
+		'}' +
+		'.mrd-green {' +
+			'color: mediumseagreen;' +
+		'}' +
+		'.mrd-red {' +
+			'color: mediumvioletred;' +
+		'}' +
+		'.mrd-disabledlink {' +
+			'pointer-events: none;' +
+			'color: unset;' +
+		'}' +
+		'.mrd-revdelundel-link-userhidden {' +
+			'font-weight: bold;' +
 		'}';
 	document.head.appendChild(style);
+}
 
-	// The form
-	var revdelForm = document.createElement('fieldset');
-	revdelForm.id = 'mrd-form';
-	revdelForm.style.cssText = 'font-size: 95%; margin: 0.5em 0;';
-	revdelForm.innerHTML = '<legend>一括版指定削除</legend>';
+/**
+ * Create a collapsible fieldset layout used as the wrapper of the MRD form.
+ * @param {JQuery<HTMLUListElement>} $contribsList
+ * @returns {OO.ui.FieldsetLayout}
+ */
+function createFieldset($contribsList) {
 
-	// Show/hide toggle
-	var formToggle = document.createElement('input');
-	formToggle.id = 'mrd-form-toggle';
-	formToggle.type = 'button';
-	formToggle.value = 'フォームを表示';
-	revdelForm.appendChild(formToggle);
-
-	// Form body
-	var formBody = document.createElement('div');
-	formBody.id = 'mrd-form-body';
-	formBody.style.display = 'none';
-	revdelForm.appendChild(formBody);
-
-	var reasonFetched = false;
-	var $formBody = $(formBody);
-	formToggle.addEventListener('click', function() { // Toggle show/hide of the form when the button is hit
-		this.value = $formBody.is(':visible') ? 'フォームを表示' : 'フォームを隠す';
-		$formBody.slideToggle();
-		if (reasonFetched) { // Adjust the width of custom reason input to that of the reason dropdowns when the form is expanded for the first time
-			reasonFetched = false;
-			reasonC.style.width = reason1.offsetWidth + 'px'; // reasonC: variable defined below
-		}
+	// Create a collapsible fieldset layout
+	/**
+	 * See also:
+	 * @link https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/core/+/refs/heads/master/includes/htmlform/CollapsibleFieldsetLayout.php
+	 */
+	const wrapper = new OO.ui.PanelLayout({
+		classes: ['mrd-wrapper'],
+		expanded: false,
+		framed: true,
+		padded: true
 	});
 
-	// Visibility level field
-	var levelField = document.createElement('fieldset');
-	levelField.id = 'mrd-levels';
-	levelField.style.margin = '0';
-	levelField.innerHTML = '<legend>閲覧レベル</legend>';
-	formBody.appendChild(levelField);
+	const fieldset = new OO.ui.FieldsetLayout({
+		classes: ['mw-collapsibleFieldsetLayout', 'mw-collapsible', 'mw-collapsed'],
+		label: '一括版指定削除',
+		icon: 'expand'
+	});
+	fieldset.$element
+		.appendTo(wrapper.$element)
+		// header
+		.children('legend')
+			.attr('role', 'button')
+			.addClass('mw-collapsible-toggle')
+			// Change the icon when the fieldset is expanded/collapsed
+			.off('click').on('click', () => {
+				fieldset.setIcon(fieldset.$element.hasClass('mw-collapsed') ? 'collapse' : 'expand');
+			})
+			// Remove the default space between the icon and the header text
+			.children('.oo-ui-labelElement-label')
+				.css('padding-left', 0)
+				.parent()
+		// content
+		.next('div')
+			.addClass('mw-collapsible-content');
 
-	var levelsTable = document.createElement('table');
-	levelsTable.id = 'mrd-levels-revdel';
-	levelField.appendChild(levelsTable);
-	var levelsTableBody = document.createElement('tbody');
-	levelsTable.appendChild(levelsTableBody);
+	const $target = document.querySelector('.mw-pager-navigation-bar') ? $('.mw-pager-navigation-bar').eq(0) : $contribsList.eq(0);
+	$target.before(wrapper.$element);
+	fieldset.$element.makeCollapsible();
 
-	var visLevelCount = 0;
+	return fieldset;
+
+}
+
+class VisibilityLevel {
+
 	/**
-	 * @class
-	 * @constructor
-	 * @param {HTMLTableSectionElement} tbody
+	 * Append a horizontal radio options for revdel visibility levels.
+	 * @param {OO.ui.FieldsetLayout} fieldset
 	 * @param {string} labelText
-	 * @param {{nochangeLabel?: string; showLabel?: string; hideLabel?: string;}} [options]
+	 * @param {{show?: string; hide?: string; visible?: boolean;}} [options]
+	 * Optional object to specify the "show" and "hide" radio labels, and the visibility of the widget (`true` by default).
 	 */
-	var VisLevel = function(tbody, labelText, options) {
+	constructor(fieldset, labelText, options = {visible: true}) {
 
-		options = options || {};
-		var labelRow = document.createElement('tr');
-		tbody.appendChild(labelRow);
-		/** @type {HTMLTableRowElement} */
-		this.labelRow = labelRow;
-		var label = document.createElement('td');
-		label.style.fontWeight = 'bold';
-		label.colSpan = 3;
-		label.textContent = labelText;
-		labelRow.appendChild(label);
+		// Create radio options
+		const optNochange = new OO.ui.RadioOptionWidget({
+			data: 'nochange',
+			label: '変更なし'
+		});
+		const optShow = new OO.ui.RadioOptionWidget({
+			data: 'show',
+			label: options.show || '閲覧可'
+		});
+		const optHide = new OO.ui.RadioOptionWidget({
+			data: 'hide',
+			label: options.hide || '閲覧不可'
+		});
 
-		var radioRow = document.createElement('tr');
-		tbody.appendChild(radioRow);
-		/** @type {HTMLTableRowElement} */
-		this.radioRow = radioRow;
+		/** @type {OO.ui.RadioSelectWidget} */
+		this.radioSelect = new OO.ui.RadioSelectWidget({
+			classes: ['mrd-horizontal-radios'],
+			items: [optNochange, optShow, optHide]
+		});
+		this.radioSelect.selectItem(optNochange);
 
-		var nochange = document.createElement('td');
-		radioRow.appendChild(nochange);
-		var nochangeRadio = document.createElement('input');
-		nochangeRadio.type = 'radio';
-		nochangeRadio.style.marginRight = '0.5em';
-		var nochangeId = 'mp-levels-nochange-' + (++visLevelCount);
-		nochangeRadio.id = nochangeId;
-		var levelName = 'level' + visLevelCount;
-		nochangeRadio.name = levelName;
-		nochangeRadio.checked = true;
-		nochange.appendChild(nochangeRadio);
-		var nochangeLabel = document.createElement('label');
-		nochangeLabel.textContent = options.nochangeLabel || '変更しない';
-		nochangeLabel.htmlFor = nochangeId;
-		nochange.appendChild(nochangeLabel);
-		/** @type {HTMLInputElement} */
-		this.nochangeRadio = nochangeRadio;
+		const fieldLayout = new OO.ui.FieldLayout(this.radioSelect, {
+			classes: ['mrd-fieldLayout-boldheader'],
+			label: labelText,
+			align: 'top'
+		});
+		if (!options.visible) {
+			fieldLayout.toggle(false);
+		}
 
-		var show = document.createElement('td');
-		radioRow.appendChild(show);
-		var showRadio = document.createElement('input');
-		showRadio.type = 'radio';
-		showRadio.style.marginLeft = '1em';
-		showRadio.style.marginRight = '0.5em';
-		var showId = 'mp-levels-show-' + visLevelCount;
-		showRadio.id = showId;
-		showRadio.name = levelName;
-		show.appendChild(showRadio);
-		var showLabel = document.createElement('label');
-		showLabel.textContent = options.showLabel || '閲覧可能';
-		showLabel.htmlFor = showId;
-		show.appendChild(showLabel);
-		/** @type {HTMLInputElement} */
-		this.showRadio = showRadio;
+		fieldset.addItems([fieldLayout]);
 
-		var hide = document.createElement('td');
-		radioRow.appendChild(hide);
-		var hideRadio = document.createElement('input');
-		hideRadio.type = 'radio';
-		hideRadio.style.marginLeft = '1em';
-		hideRadio.style.marginRight = '0.5em';
-		var hideId = 'mp-levels-hide-' + visLevelCount;
-		hideRadio.id = hideId;
-		hideRadio.name = levelName;
-		hide.appendChild(hideRadio);
-		var hideLabel = document.createElement('label');
-		hideLabel.textContent = options.hideLabel || '隠す';
-		hideLabel.htmlFor = hideId;
-		hide.appendChild(hideLabel);
-		/** @type {HTMLInputElement} */
-		this.hideRadio = hideRadio;
-
-	};
+	}
 
 	/**
-	 * Get the value of the checked radio.
-	 * @returns {VisStates}
-	 * @method
-	 * @typedef {"nochange"|"show"|"hide"} VisStates
+	 * Get the data of the selected radio.
+	 * @returns {RevdelLevel}
 	 */
-	VisLevel.prototype.val = function() {
-		return this.nochangeRadio.checked ? 'nochange' : this.showRadio.checked ? 'show' : 'hide';
-	};
+	getData() {
+		const selectedRadio = this.radioSelect.findSelectedItem();
+		if (!selectedRadio || Array.isArray(selectedRadio)) {
+			const err = 'VisibilityLevel.getData encountered an unexpected type: ' + (!selectedRadio ? 'null' : 'array');
+			console.error(err);
+			throw new TypeError(err);
+		}
+		return /** @type {RevdelLevel} */ (selectedRadio.getData());
+	}
 
 	/**
-	 * Hide the table rows created by the constructor.
-	 * @returns {void}
-	 * @method
+	 * Set the 'disabled' state of the RadioSelect widget.
+	 * @param {boolean} disable
+	 * @returns {VisibilityLevel}
 	 */
-	VisLevel.prototype.hide = function() {
-		this.labelRow.style.display = 'none';
-		this.radioRow.style.display = 'none';
-	};
+	setDisabled(disable) {
+		this.radioSelect.setDisabled(disable);
+		return this;
+	}
 
-	var visLevelContent = new VisLevel(levelsTableBody, '版の本文');
-	var visLevelComment = new VisLevel(levelsTableBody, '編集の要約');
-	var visLevelUser = new VisLevel(levelsTableBody, '投稿者の利用者名/IPアドレス');
-	var visLevelOversight = new VisLevel(levelsTableBody, 'オーバーサイト', {showLabel: '適用しない', hideLabel: '適用する'});
-	if (!canOversight) visLevelOversight.hide();
+}
 
-	// Reason field
-	var reasonField = document.createElement('fieldset');
-	reasonField.id = 'mrd-deletereason';
-	reasonField.style.margin = '0';
-	reasonField.innerHTML = '<legend>理由</legend>';
-	formBody.appendChild(reasonField);
+class MassRevisionDelete {
 
-	var reason1 = createLabeledDropdown(reasonField, 'mrd-deletereason-1', '理由1');
-	var reason2 = createLabeledDropdown(reasonField, 'mrd-deletereason-2', '理由2', {appendBr: true});
-	var reasonC = createLabeledTextbox(reasonField, 'mrd-deletereason-C', '', {appendBr: true});
-	reasonC.placeholder = '非定型理由 (自由記述)';
+	/**
+	 * @param {OO.ui.FieldsetLayout} fieldset The wrapper FieldsetLayout widget to which to append form fields
+	 * @param {JQuery<HTMLUListElement>} $contribsList
+	 */
+	constructor(fieldset, $contribsList) {
 
-	// Button field
-	var buttonField = document.createElement('div');
-	buttonField.id = 'mrd-buttons';
-	buttonField.style.cssText = 'margin-top: 0.5em;';
-	formBody.appendChild(buttonField);
-
-	var buttonsPrimary = document.createElement('div');
-	buttonsPrimary.id = 'mrd-buttons-primary';
-	buttonField.appendChild(buttonsPrimary);
-
-	var buttonCheckAll = createButton(buttonsPrimary, 'mrd-checkall', '全選択');
-	buttonCheckAll.addEventListener('click', function() {
-		var cnt = 0;
-		Object.keys(revisionList).forEach(function(revid) {
-			var obj = revisionList[revid];
-			obj.checkbox.checked = true;
-			cnt++;
+		/**
+		 * @type {Revision[]}
+		 */
+		this.list = Array.from($contribsList.children('li')).map((li) => new Revision(li));
+		/**
+		 * @type {JQueryPromise}
+		 */
+		this.initPromise = $.Deferred();
+		/**
+		 * @type {VisibilityLevel}
+		 */
+		this.vlContent = new VisibilityLevel(fieldset, getMessage('revdelete-hide-text'));
+		/**
+		 * @type {VisibilityLevel}
+		 */
+		this.vlComment = new VisibilityLevel(fieldset, getMessage('revdelete-hide-comment'));
+		/**
+		 * @type {VisibilityLevel}
+		 */
+		this.vlUser = new VisibilityLevel(fieldset, getMessage('revdelete-hide-user'));
+		/**
+		 * @type {VisibilityLevel}
+		 */
+		this.vlSuppress = new VisibilityLevel(fieldset, getMessage('revdelete-hide-restricted'), {
+			show: '適用しない',
+			hide: '適用する',
+			visible: rights.suppress
 		});
-		checkedCounterNum.textContent = cnt.toString();
-	});
-	var buttonUncheckAll = createButton(buttonsPrimary, 'mrd-uncheckall', '全選択解除');
-	buttonUncheckAll.addEventListener('click', function() {
-		Object.keys(revisionList).forEach(function(revid) {
-			var obj = revisionList[revid];
-			obj.checkbox.checked = false;
+		/**
+		 * @type {OO.ui.DropdownInputWidget}
+		 */
+		this.reason1 = new OO.ui.DropdownInputWidget();
+		/**
+		 * @type {OO.ui.DropdownInputWidget}
+		 */
+		this.reason2 = new OO.ui.DropdownInputWidget();
+		/**
+		 * @type {OO.ui.TextInputWidget}
+		 */
+		this.reasonC = new OO.ui.TextInputWidget({
+			placeholder: (getMessage('revdelete-otherreason')).replace(/[:：]$/, '')
 		});
-		checkedCounterNum.textContent = '0';
-	});
-	var buttonInvert = createButton(buttonsPrimary, 'mrd-invert', '選択反転');
-	buttonInvert.addEventListener('click', function() {
-		var cnt = 0;
-		Object.keys(revisionList).forEach(function(revid) {
-			var obj = revisionList[revid];
-			obj.checkbox.checked = !obj.checkbox.checked;
-			if (obj.checkbox.checked) cnt++;
-		});
-		checkedCounterNum.textContent = cnt.toString();
-	});
-
-	var buttonsSecondary = document.createElement('div');
-	buttonsSecondary.id = 'mrd-buttons-secondary';
-	buttonsSecondary.style.cssText = 'margin-top: 0.5em;';
-	buttonField.appendChild(buttonsSecondary);
-	if (!listHasHiddenField) buttonsSecondary.style.display = 'none';
-
-	var buttonCheckAllDeleted = createButton(buttonsSecondary, 'mrd-checkall-deleted', '削除済み版全選択');
-	buttonCheckAllDeleted.addEventListener('click', function() {
-		var cnt = 0;
-		Object.keys(revisionList).forEach(function(revid) {
-			var obj = revisionList[revid];
-			if (obj.revdeled) obj.checkbox.checked = true;
-			if (obj.checkbox.checked) cnt++;
-		});
-		checkedCounterNum.textContent = cnt.toString();
-	});
-	var buttonUncheckAllDeleted = createButton(buttonsSecondary, 'mrd-uncheckall-deleted', '削除済み版全選択解除');
-	buttonUncheckAllDeleted.addEventListener('click', function() {
-		var cnt = 0;
-		Object.keys(revisionList).forEach(function(revid) {
-			var obj = revisionList[revid];
-			if (obj.revdeled) obj.checkbox.checked = false;
-			if (obj.checkbox.checked) cnt++;
-		});
-		checkedCounterNum.textContent = cnt.toString();
-	});
-	var buttonCheckAllNotDeleted = createButton(buttonsSecondary, 'mrd-checkall-notdeleted', '未削除版全選択');
-	buttonCheckAllNotDeleted.addEventListener('click', function() {
-		var cnt = 0;
-		Object.keys(revisionList).forEach(function(revid) {
-			var obj = revisionList[revid];
-			if (!obj.revdeled) obj.checkbox.checked = true;
-			if (obj.checkbox.checked) cnt++;
-		});
-		checkedCounterNum.textContent = cnt.toString();
-	});
-	var buttonUncheckAllNotDeleted = createButton(buttonsSecondary, 'mrd-uncheckall-notdeleted', '未削除版全選択解除');
-	buttonUncheckAllNotDeleted.addEventListener('click', function() {
-		var cnt = 0;
-		Object.keys(revisionList).forEach(function(revid) {
-			var obj = revisionList[revid];
-			if (!obj.revdeled) obj.checkbox.checked = false;
-			if (obj.checkbox.checked) cnt++;
-		});
-		checkedCounterNum.textContent = cnt.toString();
-	});
-
-	formBody.appendChild(checkedCounter);
-
-	// Execute button
-	var buttonRevDel = createButton(formBody, 'mrd-revdel', '実行');
-	buttonRevDel.style.cssText = 'margin-top: 0.5em;';
-
-	var revdelProgress = document.createElement('span');
-	revdelProgress.id = 'mrd-revdel-progress';
-	revdelProgress.style.cssText = 'display: inline; margin-left: 0.5em;';
-	formBody.appendChild(revdelProgress);
-
-	var processMsgTimeout;
-	buttonRevDel.addEventListener('click', function() {
-
-		// Get target items to (un)delete
-		/** @type {{raw: string[]; show: string[]; hide: string[]; suppress: "no"|"nochange"|"yes";}} */
-		var targets = {
-			raw: ['content', 'comment', 'user'],
-			show: [],
-			hide: [],
-			// @ts-ignore
-			suppress: {show: 'no', hide: 'yes', nochange: 'nochange'}[visLevelOversight.val()]
-		};
-		[visLevelContent, visLevelComment, visLevelUser].forEach(function(visLevelObj, i) {
-			var val = visLevelObj.val();
-			if (targets[val]) { // 'show' and 'hide' only
-				targets[val].push(targets.raw[i]);
+		/**
+		 * Whether to accept a click on the execute button.
+		 * @type {boolean}
+		 */
+		this.acceptExecution = true;
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 */
+		this.btnExecute = new OO.ui.ButtonWidget({
+			label: '実行',
+			flags: ['primary', 'progressive']
+		}).off('click').on('click', () => {
+			if (this.acceptsExecution()) {
+				this.setExecutionAcceptability(false).execute();
+			} else {
+				console.warn('The new execution request was rejected.');
 			}
 		});
 
+		// Add the widgets to the fieldset
+		fieldset.addItems([
+			new OO.ui.FieldLayout(this.reason1, {
+				classes: ['mrd-fieldLayout-boldheader'],
+				label: '理由',
+				align: 'top'
+			}),
+			new OO.ui.FieldLayout(this.reason2).toggle(false), // Disabled ATM
+			new OO.ui.FieldLayout(this.reasonC),
+			new OO.ui.FieldLayout(this.btnExecute)
+		]);
+
+		MassRevisionDelete.initializeReasonDropdowns([this.reason1, this.reason2]);
+
 		/**
-		 * Object to store the revdel states of revisions before executing this procedure
-		 * @type {Prev} revid-object pairs
+		 * The container of the revision selector buttons.
+		 * @type {JQuery<HTMLDivElement>}
 		 */
-		var prev = {};
+		this.$btnContainer = MassRevisionDelete.createRevisionSelector($contribsList, this.list);
 
-		/** How many revisions are selected */
-		var totalCount = 0;
+	}
 
-		/** Whether the visibility status of at least one revision is to be changed */
-		var someRevInfoIsToBeChanged = false;
+	/**
+	 * Initialize the MassRevisionDelete instance by fetching missing parsed comments.
+	 */
+	init() {
 
-		// Get revids to (un)delete
-		/** @typedef {Object.<string, string[]>} Revids pagetitle-revids pairs */
-		/** @type {Revids} */
-		var revids = Object.keys(revisionList).reduce(/** @param {Revids} acc */ function(acc, revid) {
-			var obj = revisionList[revid];
-			if (obj.checkbox.checked) {
-				totalCount++;
-				if (acc[obj.title]) {
-					acc[obj.title].push(revid);
+		const revidsNoComment = this.list.reduce(/** @param {string[]} acc */ (acc, rev) => {
+			if (!rev.parsedCommentFetched) {
+				acc.push(rev.getRevid());
+			}
+			return acc;
+		}, []);
+		if (!revidsNoComment.length) {
+			this.initPromise = $.Deferred().resolve();
+			return;
+		}
+
+		/**
+		 * @param {string[]} revids
+		 * @returns {JQueryPromise<void>}
+		 */
+		const setParsedComments = (revids) => {
+			const params = (() => {
+				if (isDeletedContribs) {
+					return {
+						revids: revids.join('|'),
+						prop: 'deletedrevisions',
+						drvprop: 'ids|parsedcomment'
+					};
 				} else {
-					acc[obj.title] = [revid];
+					return {
+						revids: revids.join('|'),
+						prop: 'revisions',
+						rvprop: 'ids|parsedcomment'
+					};
 				}
-				var prevObj = {
-					suppressed: obj.suppressed,
-					texthidden: !obj.date ? false : obj.date.classList.contains(classDeleted), // obj.date is basically never null
-					commenthidden: obj.comment.classList.contains(classDeleted),
-					userhidden: obj.userhidden.style.display !== 'none',
-					current: obj.current
+			})();
+			// @ts-ignore
+			return api.post(params, {
+				ajax: {
+					headers: {
+						'Promise-Non-Write-API-Action': true
+					},
+					timeout: 0
+				}
+			// @ts-ignore
+			}).then(/** @param {ApiResponseQueryRevids} res */ (res) => {
+				const resPages = res && res.query && res.query.pages;
+				resPages.forEach(({revisions, deletedrevisions}) => {
+					const arr = revisions || deletedrevisions;
+					if (!arr) {
+						return;
+					}
+					arr.forEach(({revid, parsedcomment}) => {
+						const rev = this.list.find((r) => r.getRevid() === String(revid));
+						if (rev) {
+							rev.parsedComment = parsedcomment;
+							rev.parsedCommentFetched = true;
+						}
+					});
+				});
+			}).catch(console.error);
+		};
+
+		const deferreds = [];
+		while (revidsNoComment.length) {
+			deferreds.push(setParsedComments(revidsNoComment.splice(0, apilimit)));
+		}
+		this.initPromise = $.when(deferreds);
+
+	}
+
+	/**
+	 * Fetch the delete-reason dropdown options and add them to the MRD's reason dropdowns.
+	 * @param {OO.ui.DropdownInputWidget[]} dropdowns
+	 * @returns {void}
+	 * @private
+	 */
+	static initializeReasonDropdowns(dropdowns) {
+
+		const reasons = getMessage('revdelete-reason-dropdown');
+		/** @type {{optgroup?:string; data?: string; label?: string;}[]} */
+		const options = [{
+			data: '',
+			label: getMessage('revdelete-reasonotherlist')
+		}];
+
+		if (typeof reasons === 'string') {
+			const regex = /(\*+)([^*]+)/g;
+			let m;
+			while ((m = regex.exec(reasons))) {
+				const content = m[2].trim();
+				if (m[1].length === 1) {
+					options.push({
+						optgroup: content
+					});
+				} else {
+					options.push({
+						data: content,
+						label: content
+					});
+				}
+			}
+		}
+
+		if (options.length < 2) {
+			mw.notify('MassRevisionDelete: 削除理由の取得に失敗しました。', {type: 'error'});
+		}
+
+		dropdowns.forEach((dd) => {
+			dd.setOptions(options);
+		});
+
+	}
+
+	/**
+	 * Create revision selector buttons.
+	 * @param {JQuery<HTMLUListElement>} $contribsList
+	 * @param {MassRevisionDelete['list']} list
+	 * @returns {JQuery<HTMLDivElement>}
+	 * @private
+	 */
+	static createRevisionSelector($contribsList, list) {
+
+		/**
+		 * @type {JQuery<HTMLDivElement>}
+		 */
+		const $wrapper = $('<div>');
+		/**
+		 * @type {JQuery<HTMLSelectElement>}
+		 */
+		const $dropdown = $('<select>');
+		/**
+		 * @param {'select'|'unselect'|'invert'} type
+		 */
+		const clickEvent = (type) => {
+			if ($wrapper.hasClass('mrd-disabledlink')) {
+				return;
+			}
+			const target = /** @type {''|'deleted'|'undeleted'} */ ($dropdown.val());
+			list.forEach((rev) => {
+				if (!target || target === 'deleted' && rev.hasDeletedItem() || target === 'undeleted' && !rev.hasDeletedItem()) {
+					const selection =
+						type === 'select' ? true :
+						type === 'unselect' ? false :
+						!rev.isSelected();
+					rev.toggleSelection(selection);
+				}
+			});
+		};
+
+		$contribsList.eq(0).before(
+			$wrapper
+				.prop('id', 'mrd-revision-selector')
+				.append(
+					$('<span>')
+						.text('選択:'),
+					$dropdown
+						.attr('title', '選択ボタンの対象を制限します。')
+						.append(
+							new Option('(対象制限なし)', '', true, true),
+							new Option('削除済み版', 'deleted'),
+							new Option('未削除版', 'undeleted')
+						),
+					$('<a>')
+						.prop('role', 'button')
+						.text('全選択')
+						.off('click').on('click', () => {
+							clickEvent('select');
+						}),
+					'・',
+					$('<a>')
+						.prop('role', 'button')
+						.text('全選択解除')
+						.off('click').on('click', () => {
+							clickEvent('unselect');
+						}),
+					'・',
+					$('<a>')
+						.prop('role', 'button')
+						.text('選択反転')
+						.off('click').on('click', () => {
+							clickEvent('invert');
+						})
+				)
+		);
+
+		return $wrapper;
+
+	}
+
+	/**
+	 * Check if the Execute button currently accepts a click on it.
+	 * @returns {boolean}
+	 */
+	acceptsExecution() {
+		return this.acceptExecution;
+	}
+
+	/**
+	 * Set the state of whether the Execute button should accept a click on it.
+	 * @param {boolean} accept
+	 * @returns {MassRevisionDelete}
+	 */
+	setExecutionAcceptability(accept) {
+		this.acceptExecution = accept;
+		return this;
+	}
+
+	/**
+	 * Set the 'disabled' states of the execute button, the revision selector buttons,
+	 * and the checkboxes and revdel links of all revisions.
+	 * @param {boolean} disable
+	 * @param {('execute'|'selector'|'revisions')[]} [skip] Which target to skip.
+	 * @returns {MassRevisionDelete}
+	 */
+	setDisabled(disable, skip = []) {
+		if (skip.indexOf('execute') === -1) {
+			this.setExecuteButtonDisabled(disable);
+		}
+		if (skip.indexOf('selector') === -1) {
+			this.setSelectorButtonDisabled(disable);
+		}
+		if (skip.indexOf('revisions') === -1) {
+			this.setRevisionsDisabled(disable);
+		}
+		return this;
+	}
+
+	/**
+	 * Set the 'disabled' state of the execute button.
+	 * @param {boolean} disable If `false`, {@link acceptExecution} will be set back to `true`.
+	 * @returns {MassRevisionDelete}
+	 */
+	setExecuteButtonDisabled(disable) {
+		if (!disable) {
+			this.acceptExecution = true;
+		}
+		this.btnExecute.setDisabled(disable);
+		return this;
+	}
+
+	/**
+	 * Set the 'disabled' states of the revision selector buttons.
+	 * @param {boolean} disable
+	 * @returns {MassRevisionDelete}
+	 */
+	setSelectorButtonDisabled(disable) {
+		this.$btnContainer.toggleClass('mrd-disabledlink', disable);
+		return this;
+	}
+
+	/**
+	 * Set the 'disabled' states of the checkbox and the revdel link for each revision.
+	 * @param {boolean} disable
+	 * @returns {MassRevisionDelete}
+	 */
+	setRevisionsDisabled(disable) {
+		this.list.forEach((rev) => {
+			rev.setDisabled(disable);
+		});
+		return this;
+	}
+
+	/**
+	 * Get the selected visibility level of a revdel target.
+	 * @param {RevdelTarget} target
+	 * @returns {RevdelLevel}
+	 */
+	getSelectedVisibilityLevel(target) {
+		switch (target) {
+			case 'content':
+				return this.vlContent.getData();
+			case 'comment':
+				return this.vlComment.getData();
+			case 'user':
+				return this.vlUser.getData();
+			default: {
+				const err = `MassRevisionDelete.getSelectedVisibilityLevel encountered an unexpected target of "${target}".`;
+				console.error(err);
+				throw new Error(err);
+			}
+		}
+	}
+
+	/**
+	 * Prepare for revision deletion.
+	 * @returns {JQueryPromise<DefaultParams|false>}
+	 * @private
+	 */
+	prepare() {
+
+		// Get the number of revisions to delete
+		// We don't collect IDs here because we'll have to loop MassRevisionDelete.list later, before sending API requests
+		const revisionCount = this.list.filter((rev) => rev.isSelected()).length;
+		if (!revisionCount) {
+			return mw.notify('版指定削除の対象版が選択されていません。', {type: 'error'}).then(() => false);
+		}
+
+		// Get visibility levels
+		const vis = {
+			hide: [],
+			show: []
+		};
+		/**
+		 * An object valued by jQuery Objects, later used for the revdel confirmation popup.
+		 * @type {Record<RevdelTarget, JQuery<HTMLElement>>}
+		 */
+		const conf = Object.create(null);
+		Revision.targets.forEach((target) => {
+			const level = this.getSelectedVisibilityLevel(target);
+			conf[target] = levelToConfirmationMessage(level); // Will be used later to confirm the revision deletion
+			if (vis[level]) { // Ignore "nochange"
+				vis[level].push(target);
+			}
+		});
+		if (!vis.hide.length && !vis.show.length) {
+			return mw.notify('版指定削除の対象項目が選択されていません。', {type: 'error'}).then(() => false);
+		}
+		const suppress = (() => {
+			const level = this.vlSuppress.getData();
+			switch (level) {
+				case 'nochange':
+					return 'nochange';
+				case 'show':
+					return 'no';
+				case 'hide':
+					return 'yes';
+				default: {
+					const err = `MassRevisionDelete.vlSuppress.getData encountered an unexpected value of "${level}".`;
+					console.error(err);
+					throw new Error(err);
+				}
+			}
+		})();
+
+		// Get reason
+		const reason = [this.reason1.getValue(), this.reason2.getValue(), this.reasonC.getValue().trim()].filter(el => el).join(': ');
+		return (() => {
+			if (reason) {
+				return $.Deferred().resolve(true);
+			} else {
+				return OO.ui.confirm('版指定削除の理由が指定されていません。このまま実行しますか？', {size: 'medium'});
+			}
+		})()
+		// @ts-ignore
+		.then(/** @param {boolean} confirmed */ (confirmed) => {
+
+			if (!confirmed) {
+				return false;
+			}
+
+			const $confirm = $('<div>').append(
+				`計${revisionCount}版の閲覧レベルを変更します。`,
+				$('<ul>').append(
+					$('<li>').append(
+						getMessage('revdelete-hide-text'),
+						' (',
+						conf.content,
+						')'
+					),
+					$('<li>').append(
+						getMessage('revdelete-hide-comment'),
+						' (',
+						conf.comment,
+						')'
+					),
+					$('<li>').append(
+						getMessage('revdelete-hide-user'),
+						' (',
+						conf.user,
+						')'
+					),
+				),
+				'よろしいですか？'
+			);
+			return OO.ui.confirm($confirm, {size: 'medium'});
+
+		}).then((confirmed) => {
+
+			if (!confirmed) {
+				return false;
+			}
+
+			return {
+				action: 'revisiondelete',
+				type: 'revision',
+				reason: reason,
+				hide: vis.hide.join('|'),
+				show: vis.show.join('|'),
+				suppress,
+				tags: mw.config.get('wgDBname') === 'testwiki' ? 'testtag' : 'MassRevisionDelete|DevScript',
+				formatversion: '2'
+			};
+
+		});
+
+		/**
+		 * @param {RevdelLevel} level
+		 * @returns {JQuery<HTMLElement>}
+		 */
+		function levelToConfirmationMessage(level) {
+			const $b = $('<b>');
+			switch (level) {
+				case 'nochange':
+					return $b.text('変更なし');
+				case 'show':
+					return $b.text('閲覧可').addClass('mrd-green');
+				case 'hide':
+					return $b.text('閲覧不可').addClass('mrd-red');
+			}
+		}
+
+	}
+
+	/**
+	 * Perform mass revision deletion.
+	 */
+	execute() {
+		this.prepare().then((defaultParams) => {
+
+			if (!defaultParams) {
+				this.setExecutionAcceptability(true);
+				return;
+			} else {
+				this.setDisabled(true);
+				mw.notify('版指定削除を実行しています...');
+			}
+
+			/**
+			 * An object keyed by pagenames and each valued by an array of revision IDs.
+			 * @type {Record<string, string[]>}
+			 */
+			const revisions = Object.create(null);
+			/**
+			 * An object keyed by revision IDs and each valued by a Revision instance.
+			 */
+			const instances = this.list.reduce(/** @param {Record<string, Revision>} acc */ (acc, rev) => {
+				if (rev.isSelected()) {
+
+					const revid = rev.getRevid();
+					const pagename = rev.getPagename();
+
+					// Create the "instances" object
+					acc[revid] = rev;
+
+					// Create the "revisions" object
+					if (!revisions[pagename]) {
+						revisions[pagename] = [];
+					}
+					revisions[pagename].push(revid);
+
+					// Show a sninner icon to visualize that revision deletion is in progress
+					rev.setProgress('doing');
+
+				}
+				return acc;
+			}, Object.create(null));
+
+			// Send API requests (per page)
+			/**
+			 * @type {ReturnType<MassRevisionDelete['revdel']>[]}
+			 */
+			const deferreds = [];
+			Object.keys(revisions).forEach((pagename) => {
+				const ids = revisions[pagename].slice();
+				while (ids.length) {
+					const params = {
+						target: pagename,
+						ids: ids.splice(0, apilimit).join('|'),
+						...defaultParams
+					};
+					deferreds.push(debuggingMode ? this.testRevdel(params) : this.revdel(params));
+				}
+			});
+
+			// Wait until the deletions finish
+			// Also wait for initPromise to resolve, to ensure that parsed comments have been fetched
+			$.when(...deferreds, this.initPromise).then((...res) => {
+
+				res.pop();
+				// Convert the array of result objects to one object
+				/** @type {Record<string, ApiResultRevisionDelete>} */
+				const result = res.reduce((obj, item) => Object.assign(obj, item), Object.create(null));
+
+				// Update the progress
+				let requireHookCall = false;
+				/** @type {Revision[]} */
+				const failedRevs = [];
+				const allRevs = Object.keys(instances) // Younger revids first, older revids last
+					.reverse() // Sort in descending order to process revision <li>s in a top-down manner
+					.reduce(/** @param {Revision[]} acc */ (acc, revid) => {
+						const rev = instances[revid];
+						if (result[revid]) {
+							if (typeof result[revid].code === 'string') {
+								rev.setProgress('failed', result[revid].code);
+								failedRevs.push(rev);
+							} else {
+								const h = rev.setProgress('done').setNewVisibility(result[revid], defaultParams.suppress);
+								requireHookCall = requireHookCall || h;
+							}
+						} else {
+							rev.setProgress('failed', 'unknown error');
+							failedRevs.push(rev);
+						}
+						acc.push(rev);
+						return acc;
+					}, []);
+				if (requireHookCall) {
+					mw.hook('wikipage.content').fire($('.mw-body-content'));
+				}
+
+				// Show a post-execution notification
+				if (!failedRevs.length) { // All succeeded
+					this.setDisabled(false);
+					mw.notify(
+						$('<span>').prop('innerHTML',
+							`<b>計${allRevs.length}版</b>の版指定削除を実行しました。`
+						),
+						{type: 'success'}
+					);
+					setTimeout(() => {
+						allRevs.forEach((rev) => rev.setProgress(null));
+					}, 3000);
+
+				} else { // Some failed
+
+					this.setDisabled(false, ['execute']);
+
+					// Create elements for mw.notify
+
+					// Error navigation buttons (prev/next)
+					const btnUp = new OO.ui.ButtonWidget({
+						icon: 'arrowUp',
+						title: '前のエラーへ'
+					});
+					const btnDown = new OO.ui.ButtonWidget({
+						icon: 'arrowDown',
+						title: '次のエラーへ'
+					});
+					const buttons = new OO.ui.ButtonGroupWidget({
+						items: [btnUp, btnDown]
+					});
+					buttons.$element.css('display', 'inline-flex');
+
+					// Error index dropdown
+					const indexDropdown = new OO.ui.DropdownWidget({
+						menu: {
+							items: failedRevs.map((_, i) => new OO.ui.MenuOptionWidget({data: i, label: String(i + 1)}))
+						}
+					});
+					indexDropdown.getMenu().on('select', (selectedItem) => {
+						if (!selectedItem || Array.isArray(selectedItem)) {
+							return;
+						}
+						const index = /** @type {number} */ (selectedItem.getData());
+						failedRevs[index].scrollIntoView(); // Scroll to <li> with the corresponding index
+					});
+					indexDropdown.$element.css('display', 'inline-flex');
+
+					// Set up the buttons' events
+					btnUp.off('click').on('click', () => {
+						const menu = indexDropdown.getMenu();
+						const selectedItem = /** @type {OO.ui.OptionWidget?} */ (menu.findSelectedItem());
+						let index = selectedItem ? /** @type {number} */ (selectedItem.getData()) - 1 : failedRevs.length - 1;
+						if (index < 0) {
+							index = failedRevs.length - 1;
+						}
+						// Deselect once and select the new option
+						// This is because we want to trigger the "select" event even when the selected option won't change
+						menu.selectItem().selectItemByData(index);
+					});
+					btnDown.off('click').on('click', () => {
+						const menu = indexDropdown.getMenu();
+						const selectedItem = /** @type {OO.ui.OptionWidget?} */ (menu.findSelectedItem());
+						let index = selectedItem ? /** @type {number} */ (selectedItem.getData()) + 1 : 0;
+						if (index === failedRevs.length) {
+							index = 0;
+						}
+						menu.selectItem().selectItemByData(index);
+					});
+
+					mw.notify(
+						$('<div>')
+							.append(
+								$('<p>').prop('innerHTML',
+									`<b>計${allRevs.length}版</b>の版指定削除を実行しました。` +
+									`うち<b class="mrd-red">${failedRevs.length}版の削除に失敗</b>しました。`
+								),
+								$('<p>').text('クリックしてこの通知を閉じると、結果をクリアし実行ボタンを再有効化します。'),
+								$('<p>').text('エラーを閲覧：'),
+								$('<div>')
+									.append(
+										buttons.$element,
+										indexDropdown.$element
+									)
+									.css({
+										display: 'flex',
+										marginTop: '0.8em'
+									}),
+							)
+							.css('text-align', 'justify'),
+						{type: 'warn', autoHide: false}
+					).then((notif) => {
+						// Detect when the notification is closed using a custom event
+						notif.$notification.off('mrd-notif-close').on('mrd-notif-close', () => {
+							allRevs.forEach((rev) => rev.setProgress(null));
+							this.setExecuteButtonDisabled(false);
+						});
+					});
+
+				}
+
+			});
+
+		});
+	}
+
+	/**
+	 * @typedef {import('ts-xor').XOR<ApiResultRevisionDeleteSuccess, ApiResultRevisionDeleteFailure>} ApiResultRevisionDelete
+	 */
+	/**
+	 * Perform revision deletion.
+	 * @param {ApiParamsActionRevisionDelete} params
+	 * @returns {JQueryPromise<Record<string, ApiResultRevisionDelete>>}
+	 */
+	revdel(params) {
+
+		// @ts-ignore
+		return api.postWithToken('csrf', params)
+		// @ts-ignore
+		.then(/** @param {ApiResponseActionRevisionDelete} res */ (res) => {
+
+			const resItems = res && res.revisiondelete && res.revisiondelete.items;
+			if (!resItems || !resItems.length) {
+				return createErrorObject('unknown error');
+			}
+
+			return resItems.reduce(/** @param {Record<string, ApiResultRevisionDelete>} acc */ (acc, obj) => {
+				if (obj.errors && obj.errors.length) {
+					const err = obj.errors.reduce(/** @param {string[]} codeArr */ (codeArr, {code}) => {
+						if (codeArr.indexOf(code) === -1) {
+							codeArr.push(code);
+						}
+						return codeArr;
+					}, []);
+					acc[obj.id] = {
+						code: err.join(', ')
+					};
+				} else {
+					acc[obj.id] = {
+						content: !obj.texthidden,
+						comment: !obj.commenthidden,
+						user: !obj.userhidden
+					};
+				}
+				return acc;
+			}, Object.create(null));
+
+		})
+		.catch(/** @param {string} code */ (code, err) => {
+			console.log(err);
+			return createErrorObject(code);
+		});
+
+		/**
+		 * @param {string} code
+		 * @returns {Record<string, ApiResultRevisionDeleteFailure>}
+		 */
+		function createErrorObject(code) {
+			return params.ids.split('|').reduce(/** @param {Record<string, ApiResultRevisionDeleteFailure>} acc */ (acc, revid) => {
+				acc[revid] = {code};
+				return acc;
+			}, Object.create(null));
+		}
+
+	}
+
+	/**
+	 * Perform experimental revision deletion.
+	 * @param {ApiParamsActionRevisionDelete} params
+	 * @returns {JQueryPromise<Record<string, ApiResultRevisionDelete>>}
+	 */
+	testRevdel(params) {
+		const def = $.Deferred();
+		const vis = Revision.targets.reduce(/** @param {Record<RevdelTarget, RevdelLevel>} acc */ (acc, target) => {
+			if (params.hide.indexOf(target) === -1 && params.show.indexOf(target) === -1) {
+				acc[target] = 'nochange';
+			} else if (params.hide.indexOf(target) === -1) {
+				acc[target] = 'show';
+			} else {
+				acc[target] = 'hide';
+			}
+			return acc;
+		}, Object.create(null));
+		const ret = params.ids.split('|').reduce(/** @param {Record<string, ApiResultRevisionDelete>} acc */ (acc, revid) => {
+			/** @type {Revision=} */
+			let rev;
+			if (Math.random() > 0.1 && (rev = this.list.find((r) => r.getRevid() === revid))) {
+				acc[revid] = Object.create(null);
+				for (const target of Revision.targets) {
+					switch (vis[target]) {
+						case 'show':
+							acc[revid][target] = true;
+							break;
+						case 'hide':
+							acc[revid][target] = false;
+							break;
+						case 'nochange':
+							acc[revid][target] = !!rev.currentVisibility[target];
+							break;
+						default: {
+							const err = `Encountered an unexpected value: ${vis[target]}.`;
+							console.error(err);
+							throw new Error(err);
+						}
+					}
+				}
+			} else {
+				acc[revid] = {
+					code: 'fabricated error'
 				};
-				prev[revid] = prevObj;
-				if (!someRevInfoIsToBeChanged) {
-					someRevInfoIsToBeChanged = targets[prevObj.texthidden ? 'show' : 'hide'].indexOf('content') !== -1 ||
-												targets[prevObj.commenthidden ? 'show' : 'hide'].indexOf('comment') !== -1 ||
-												targets[prevObj.userhidden ? 'show' : 'hide'].indexOf('user') !== -1 ||
-												targets.suppress === 'yes' && !prevObj.suppressed ||
-												targets.suppress === 'no' && prevObj.suppressed;
+			}
+			return acc;
+		}, Object.create(null));
+		setTimeout(() => def.resolve(ret), 1000);
+		return def.promise();
+	}
+
+}
+
+// Custom event for when mw.notification is closed
+$.event.special['mrd-notif-close'] = {
+	remove: (o) => {
+		if (o.handler) {
+			// @ts-ignore
+			o.handler();
+		}
+	}
+};
+
+class Revision {
+
+	/**
+	 * @param {HTMLLIElement} li
+	 */
+	constructor(li) {
+
+		/**
+		 * @type {JQuery<HTMLLIElement>}
+		 */
+		this.$li = $(li);
+
+		/**
+		 * The ID number of this revision.
+		 * @type {string}
+		 */
+		this.revid = this.$li.data('mw-revid').toString();
+
+		/**
+		 * The prefixed page name associated with this revision.
+		 * @type {string}
+		 */
+		this.pagename = (() => {
+			const $pageLink = this.$li.find('.mw-contributions-title');
+			const href = $pageLink.attr('href');
+			let m;
+			if (href && (m = Revision.regex.article.exec(href) || Revision.regex.script.exec(href))) {
+				return decodeURIComponent(m[1]).replace(/_/g, ' ');
+			} else {
+				const err = 'The page link does not have a well-formed href.';
+				console.error(err, $pageLink);
+				throw new Error(err);
+			}
+		})();
+
+		/**
+		 * A span tag used to show the progress of revdel execution. This tag will contain an image or an error code.
+		 * @type {JQuery<HTMLInputElement>}
+		 */
+		this.$progress = $('<span>');
+
+		/**
+		 * @type {JQuery<HTMLInputElement>}
+		 */
+		this.$checkbox = $('<input>');
+
+		this.$li.prepend(
+			this.$progress
+				.addClass('mrd-progress'),
+			this.$checkbox
+				.prop('type', 'checkbox')
+				.addClass('mrd-checkbox')
+		);
+
+		/**
+		 * A <span> tag in which there's an <a> tag.
+		 * @type {JQuery<HTMLSpanElement>}
+		 */
+		this.$revdelLink = this.$li.children('.mw-revdelundel-link');
+		// The wrapper is a <strong> tag on a suppressor's view if the editor's name is suppressed
+		const isUserSuppressed = this.$revdelLink.prop('nodeName') === 'STRONG';
+		if (isUserSuppressed) {
+			// Replace <strong> with <span> because it's challenging to do this when we change the revdel
+			// status of "userhidden"
+			const $wrapper = $('<span>').addClass('mw-revdelundel-link mrd-revdelundel-link-userhidden');
+			this.$revdelLink.before($wrapper); // Insert the new wrapper before the revdel link
+			$wrapper.append(this.$revdelLink.children()); // Move the inner elements into the new wrapper
+			this.$revdelLink.remove(); // Remove the old wrapper from the DOM
+			this.$revdelLink = $wrapper;
+		}
+		/**
+		 * Whether the current user can change the visibility of this revision.
+		 * @type {boolean}
+		 */
+		this.changeable = !!this.$revdelLink.children('a').length;
+		if (this.changeable) {
+			// Use the revdel link as a button to toggle the checkbox only when the link has an <a> tag in it
+			this.$revdelLink.off('click').on('click', (e) => {
+				if (this.$revdelLink.hasClass('mrd-disabledlink')) {
+					e.preventDefault();
+				} else if (!e.shiftKey && !e.ctrlKey) {
+					e.preventDefault();
+					this.toggleSelection(!this.isSelected());
+				}
+			});
+		} else {
+			this.$checkbox.prop('disabled', true);
+		}
+
+		/**
+		 * An object keyed by revdel targets and each valued by its current visibility level.
+		 * (`true` if visible, `false` if not, or `null` if suppressed)
+		 * @type {Record<'content'|'comment'|'user', boolean?>}
+		 */
+		this.currentVisibility = {
+			content: true,
+			comment: true,
+			user: true
+		};
+
+		/**
+		 * The date link. See {@link toggleContentVisibility} for all its HTML structures.
+		 *
+		 * @type {JQuery<HTMLElement>} Usually an `<a>` tag, or a `<span>` tag when revdel-ed.
+		 */
+		this.$date = (() => {
+			let $link = this.$li.find('.mw-changeslist-date').eq(0);
+			if ($link.parent('span').hasClass(Revision.class.deleted)) {
+				// On DC, the wrapper <span> doesn't have the "mw-changeslist-date" class
+				$link = $link.parent('span');
+			}
+			if ($link.hasClass(Revision.class.suppressed) && $link.hasClass(Revision.class.deleted)) {
+				this.currentVisibility.content = null;
+			} else if ($link.hasClass(Revision.class.deleted)) {
+				this.currentVisibility.content = false;
+			}
+			if ($link.prop('nodeName') !== 'SPAN' && $link.parent().prop('nodeName') === 'BDI') {
+				$link = $link.parent(); // Substitute with the <bdi> tag
+			}
+			return $link;
+		})();
+
+		/**
+		 * Then `<span>` tag for summary. See {@link toggleCommentVisibility} for all its HTML structures.
+		 * @type {JQuery<HTMLSpanElement>}
+		 */
+		this.$comment = this.$li.children('.comment');
+		if (this.$comment.hasClass(Revision.class.suppressed) && this.$comment.hasClass(Revision.class.deleted)) {
+			this.currentVisibility.comment = null;
+		} else if (this.$comment.hasClass(Revision.class.deleted)) {
+			this.currentVisibility.comment = false;
+		}
+
+		/**
+		 * Comment in an HTML format.
+		 * @type {string}
+		 */
+		this.parsedComment = '';
+		/**
+		 * @type {boolean}
+		 */
+		this.parsedCommentFetched = true;
+		if (this.$comment.hasClass(Revision.class.deleted)) {
+			if (isDeletedContribs) {
+				this.parsedComment = this.$comment.children('comment').html();
+			} else {
+				this.parsedCommentFetched = false;
+			}
+		} else if (this.$comment.hasClass('mw-comment-none')) {
+			// Do nothing because the parsed comment will be an empty string
+		} else {
+			this.parsedComment = this.$comment.html();
+		}
+
+		const msgUserHidden = getMessage('rev-deleted-user-contribs');
+		/**
+		 * The \<strong> tag shown if the user name has been hidden.
+		 * @type {JQuery<HTMLElement>}
+		 */
+		this.$userhidden = this.$li.children('strong').filter((_, el) => $(el).text() === msgUserHidden);
+		if (this.$userhidden.length) {
+			if (isUserSuppressed) {
+				this.currentVisibility.user = null;
+			} else {
+				this.currentVisibility.user = false;
+			}
+		} else {
+			// The tag doesn't exist if the username isn't revdel-ed; create one in this case
+			this.$userhidden = $('<strong>')
+				.text(msgUserHidden)
+				.css('margin', '0 0.5em')
+				.hide()
+				.insertAfter(this.$comment);
+		}
+		this.$userhidden.addClass('mrd-userhidden');
+
+	}
+
+	/**
+	 * Scroll to the revision and make it flash.
+	 * @returns {Revision}
+	 */
+	scrollIntoView() {
+		this.$li[0].scrollIntoView();
+		this.$li.css('background-color', 'var(background-color-error-subtle--active,#ffc8bd)');
+		setTimeout(() => {
+			this.$li.animate({backgroundColor: ''}, 500, function() {
+				$(this).css('background-color', '');
+			});
+		}, 500);
+		return this;
+	}
+
+	/**
+	 * Get the ID number of the revision.
+	 * @returns {string}
+	 */
+	getRevid() {
+		return this.revid;
+	}
+
+	/**
+	 * Get the pagename of the revision.
+	 * @returns {string}
+	 */
+	getPagename() {
+		return this.pagename;
+	}
+
+	/**
+	 * Set an icon and a text on its right in the progress tag.
+	 * @param {IconType?} icon The symbolic name of the icon to set, or `null` for no icon.
+	 * @param {string} [message] An optional message to display to the right of the icon.
+	 * @returns {Revision}
+	 */
+	setProgress(icon, message) {
+
+		this.$progress.empty();
+
+		let cls = '';
+		switch (icon) {
+			case 'doing':
+				this.$progress.append(getIcon(icon));
+				break;
+			case 'done':
+				cls = 'mrd-green';
+				this.$progress.append(getIcon(icon));
+				break;
+			case 'failed':
+				cls = 'mrd-red';
+				this.$progress.append(getIcon(icon));
+				break;
+			default:
+		}
+
+		if (typeof message === 'string') {
+			this.$progress.append(
+				$('<span>')
+					.text(message)
+					.addClass(cls)
+					.css('margin-left', '0.5em')
+			);
+		}
+
+		return this;
+
+	}
+
+	/**
+	 * Given the new visibility levels and the suppression setting, update the {@link currentVisibility} property
+	 * and the DOM appearances of revdel targets.
+	 * @param {Record<RevdelTarget, boolean>} newVis
+	 * @param {DefaultParams['suppress']} suppress
+	 * @returns {boolean} Whether mw.hook will need to be called
+	 */
+	setNewVisibility(newVis, suppress) {
+
+		// Update the current visibility levels
+		const oldVisibility = {...this.currentVisibility};
+		this.currentVisibility = Revision.targets.reduce((acc, target) => {
+			if (newVis[target]) {
+				acc[target] = true;
+			} else { // newVis[target] === false or null
+				switch (suppress) {
+					case 'nochange':
+						acc[target] = this.currentVisibility[target] === null ? null : false;
+						break;
+					case 'yes':
+						acc[target] = null;
+						break;
+					case 'no':
+						acc[target] = false;
+						break;
+					default: {
+						const err = `Revision.setNewVisibility encountered an unexpected value of ${suppress}.`;
+						console.error(err);
+						throw new TypeError(err);
+					}
 				}
 			}
 			return acc;
 		}, Object.create(null));
-		if (!totalCount) { // No checked box is checked (= no revision selected)
-			return alert('版指定削除の対象版が指定されていません');
-		}
-		if (!someRevInfoIsToBeChanged) { // There'll be no change in revision item visibility
-			return alert('指定された新しい閲覧レベルが、選択された版の現在の閲覧レベルと全て同一です (処理を行っても閲覧レベルが変化しません)');
-		}
 
-		// Get reason
-		var reason = [reason1.value, reason2.value, reasonC.value.trim()].filter(function(el) { return el; }).join(': ');
-		if (!reason && !confirm('版指定削除理由が指定されていません。このまま実行しますか？')) {
-			return; // No reason is provided and the user has chosen to stop the execution
-		}
+		// Update the DOM appearances of revdel targets and return
+		return this.toggleTargetVisibility(oldVisibility);
 
-		// Final confirm
-		/** @param {VisStates} revdelType */
-		var getRevdelType = function(revdelType) {
-			switch (revdelType) {
-				case 'nochange':
-					return ' (<b>変更なし</b>)';
-				case 'show':
-					return ' (<b style="color: mediumseagreen;">閲覧可</b>)';
-				case 'hide':
-					return ' (<b style="color: mediumvioletred;">閲覧不可</b>)';
-			}
-		};
-		/** @type {string[]} */
-		var confirmMsg = [];
-		confirmMsg.push('計' + totalCount + '版の閲覧レベルを変更します。');
-		confirmMsg.push('');
-		confirmMsg.push('・版の本文' + getRevdelType(visLevelContent.val()));
-		confirmMsg.push('・編集の要約' + getRevdelType(visLevelComment.val()));
-		confirmMsg.push('・投稿者の利用者名/IPアドレス' + getRevdelType(visLevelUser.val()));
-		confirmMsg.push('');
-		confirmMsg.push('よろしいですか？');
-
-		var self = this;
-		/** @type {JQuery<HTMLDivElement>} */
-		var $confirmDialog = $('<div><p>' + confirmMsg.join('<br>') + '</p></div>');
-		dConfirm($confirmDialog).then(function(confirmed) {
-
-			if (!confirmed) {
-				mw.notify('処理を中止しました。');
-				return;
-			}
-
-			// Final prep for revdel
-			self.disabled = true; // Make the execution button unclickable
-			Object.keys(revisionList).forEach(function(revid) {
-				var obj = revisionList[revid];
-				obj.checkbox.disabled = true; // Same for all the checkboxes
-				obj.label.style.display = 'none'; // And revdel links
-				obj.pseudolabel.style.display = 'inline'; // Temporarily show the pseudo-label
-				obj.progress.innerHTML = '';
-				if (obj.checkbox.checked) {
-					obj.progress.appendChild(getIcon('doing'));
-					obj.progress.style.display = 'inline';
-				}
-			});
-			clearTimeout(processMsgTimeout);
-			revdelProgress.innerHTML = '';
-			revdelProgress.appendChild(getIcon('doing'));
-			revdelProgress.appendChild(document.createTextNode(' 処理中'));
-
-			// Create parameters for action=revisiondelete
-			/** @type {ApiParamsRevisionDeleteFragment} */
-			var defaultParams = {
-				action: 'revisiondelete',
-				type: 'revision',
-				reason: reason,
-				show: targets.show.join('|'),
-				hide: targets.hide.join('|'),
-				suppress: targets.suppress,
-				tags: mw.config.get('wgDBname') === 'testwiki' ? 'testtag' : MRD + '|DevScript',
-				formatversion: '2'
-			};
-
-			// Send API requests (per page)
-			var deferreds = [];
-			var req = debuggingMode ? dev : revdel;
-			Object.keys(revids).forEach(function(pagetitle) {
-				var ids = revids[pagetitle].slice(); // Deep copy
-				while (ids.length) {
-					var params = $.extend({target: pagetitle, ids: ids.splice(0, apilimit).join('|')}, defaultParams);
-					deferreds.push(req(params, prev));
-				}
-			});
-
-			$.when.apply($, deferreds).then(function() { // When all done
-
-				// Merge the results to one object
-				/** @type {ApiResultRevisionDelete} */
-				var res = {};
-				var args = arguments;
-				for (var i = 0; i < args.length; i++) {
-					$.extend(res, args[i]);
-				}
-				console.log(MRD, res);
-
-				// Reflect the results to the DOM
-				var summaryShown = false;
-				var someRevisionDeleted = false;
-				var successCount = 0;
-				Object.keys(revisionList).forEach(function(revid) {
-
-					var revisionListObj = revisionList[revid];
-					revisionListObj.checkbox.disabled = false; // Get checkbox back to a clickable state
-					revisionListObj.label.style.display = 'inline'; // Show label
-					revisionListObj.pseudolabel.style.display = 'none'; // Hide pseudo-label
-
-					var resObj = res[revid];
-					if (resObj) { // Just in case ensure that the response object has this revid as a key
-						revisionListObj.progress.innerHTML = '';
-						if (resObj.errors) { // On failure
-							revisionListObj.progress.appendChild(getIcon('failed'));
-							var errMsg = document.createElement('span');
-							errMsg.style.color = 'mediumvioletred';
-							errMsg.textContent = ' (' + resObj.errors + ')';
-							revisionListObj.progress.appendChild(errMsg);
-						} else { // On success
-							successCount++;
-							if (!summaryShown && resObj.commenthidden === false) summaryShown = true;
-							revisionListObj.revdeled = resObj.texthidden || resObj.commenthidden || resObj.userhidden || resObj.suppressed;
-							revisionListObj.suppressed = resObj.suppressed;
-							revisionListObj.progress.appendChild(getIcon('done'));
-							// Update the DOM to display the show/hide results without reloading the page
-							revisionListObj.date = toggleContentVisibility(revisionListObj, resObj);
-							revisionListObj.comment = toggleCommentVisibility(revisionListObj, resObj);
-							toggleUsernameVisibility(revisionListObj, resObj);
-						}
-					}
-					if (!someRevisionDeleted && revisionListObj.revdeled) {
-						someRevisionDeleted = true;
-					}
-
-				});
-
-				// Trigger hook if edit summaries are replaced (event listners are gone; things like NavPopups won't work without this)
-				if (summaryShown) {
-					var content = document.querySelector('.mw-body-primary') ||
-									document.querySelector('.mw-body') ||
-									document.querySelector('#mw-content-text') ||
-									document.body;
-					mw.hook('wikipage.content').fire($(content));
-				}
-
-				// Show 'done' on the main form
-				self.disabled = false;
-				buttonsSecondary.style.display = someRevisionDeleted ? 'block' : 'none';
-				revdelProgress.innerHTML = '';
-				revdelProgress.appendChild(getIcon('done'));
-				revdelProgress.appendChild(document.createTextNode(' 処理が完了しました (' + successCount + '/' + totalCount + ')'));
-				processMsgTimeout = setTimeout(function() {
-					revdelProgress.innerHTML = '';
-				}, 10000);
-
-			});
-
-		});
-
-	});
-
-	// Append the form to the DOM
-	$contribsList.eq(0).before(revdelForm);
-
-	// Get revdel reason dropdown
-	getDeleteReasonDropdown().then(function(dropdown) {
-		if (!dropdown) return alert(MRD + '\n削除理由の取得に失敗しました。');
-		reasonFetched = true;
-		[reason1, reason2].forEach(function(el) {
-			el.innerHTML = dropdown.innerHTML;
-		});
-	});
-
-}
-
-/**
- * Get edit summaries in an HTML format from revision IDs.
- * Note: This function does not fetch parsed comments of the revisions of deleted pages (which is done by 'prop=deletedrevisions').
- * Such a functionality is just unneeded because on [[Special:DeletedContributions]], parsed comments are struck through but visible.
- * @param {string[]} revids
- * @returns {JQueryPromise<Object.<string, string>>}
- */
-function getParsedComment(revids) {
-
-	if (!revids.length) return $.Deferred().resolve({});
+	}
 
 	/**
-	 * @param {string[]} revidsArr
-	 * @returns {JQueryPromise<Object.<string, string>>}
+	 * Toggle the checked state of the checkbox. Do nothing if the checkbox is disabled (which means that
+	 * the current user does not have the rights to change the visibility of this revision).
+	 * @param {boolean} check
+	 * @returns {Revision}
 	 */
-	var query = function(revidsArr) {
-		return api.post({ // POST request just in case to prevent 404 (URL too long)
-			action: 'query',
-			revids: revidsArr.join('|'),
-			prop: 'revisions',
-			rvprop: 'ids|parsedcomment',
-			formatversion: '2'
-		}).then(function(res) {
-			var resPages;
-			if (res && res.query && (resPages = res.query.pages) && resPages.length) {
-				return resPages.reduce(/** @param {Object.<string, string>} acc */ function(acc, obj) {
-					(obj.revisions || []).forEach(function(revObj) {
-						var parsedcomment = revObj.parsedcomment;
-						if (typeof parsedcomment === 'string') {
-							var revid = revObj.revid.toString();
-							acc[revid] = parsedcomment;
-						}
-					});
-					return acc;
-				}, Object.create(null));
-			} else {
-				return {};
-			}
-		}).catch(function(code, err) {
-			console.log(MRD, err);
-			return {};
-		});
-	};
-
-	var deferreds = [];
-	revids = revids.slice();
-	while (revids.length) {
-		deferreds.push(query(revids.splice(0, apilimit)));
+	toggleSelection(check) {
+		if (this.changeable) {
+			this.$checkbox.prop('checked', check);
+		}
+		return this;
 	}
-	return $.when.apply($, deferreds).then(function() {
-		var args = arguments;
-		var ret = {};
-		for (var i = 0; i < args.length; i++) {
-			$.extend(ret, args[i]);
+
+	/**
+	 * Check if the checkbox is selected.
+	 * @returns {boolean}
+	 */
+	isSelected() {
+		return this.$checkbox.prop('checked');
+	}
+
+	/**
+	 * Check if the revision has a deleted item.
+	 * @returns {boolean}
+	 */
+	hasDeletedItem() {
+		return Object.keys(this.currentVisibility).some((target) => !this.currentVisibility[target]);
+	}
+
+	/**
+	 * Change the disabled states of the checkbox and the revdel link.
+	 * @param {boolean} disable
+	 * @returns {Revision}
+	 */
+	setDisabled(disable) {
+		if (this.changeable) {
+			// If the revision is revdel-wise not changeable, the checkbox is initially disabled and the revdel
+			// link doesn't contain an <a> tag and is not clickable. Becase of this, we only look at changeable
+			// revisions, and this also prevents checkboxes that should always be disabled from being enabled back.
+			this.$checkbox.prop('disabled', disable);
+			this.$revdelLink.toggleClass('mrd-disabledlink', disable);
+		}
+		return this;
+	}
+
+	/**
+	 * Toggle the revdel statuses of all the revdel targets.
+	 * @param {Revision['currentVisibility']} oldVis
+	 * @returns {boolean} Whether mw.hook will need to be called
+	 */
+	toggleTargetVisibility(oldVis) {
+		return this
+			.toggleContentVisibility(oldVis.content, this.currentVisibility.content)
+			.toggleUserVisibility(oldVis.user, this.currentVisibility.user)
+			.toggleCommentVisibility(oldVis.comment, this.currentVisibility.comment);
+	}
+
+	/**
+	 * Toggle the revdel status of the content.
+	 *
+	 * `[[Special:Contributions]]`
+	 * ```html
+	 * <!-- Normal date link -->
+	 * <bdi>
+	 * 	<a class="mw-changeslist-date">2023-01-01T00:00:00</a>
+	 * </bdi>
+	 * <!-- Deleted date link -->
+	 * <span class="history-deleted mw-changeslist-date"><!-- Has an additional class if suppressed -->
+	 * 	<!-- Empty on a non-suppressor's view if suppressed -->
+	 * 	<bdi>
+	 * 		<a class="mw-changeslist-date">2023-01-01T00:00:00</a>
+	 * 	</bdi>
+	 * </span>
+	 * ```
+	 * `[[Special:DeletedContributions]]`
+	 *
+	 * Summary: `<bdi>` tags missing, the `mw-changeslist-date` class missing from the wrapper when deleted
+	 * ```html
+	 * <!-- Normal date link -->
+	 * <a class="mw-changeslist-date">2023-01-01T00:00:00</a>
+	 * <!-- Deleted date link -->
+	 * <span class="history-deleted"><!-- Has an additional class if suppressed -->
+	 * 	<!-- Empty on a non-suppressor's view if suppressed -->
+	 * 	<a class="mw-changeslist-date">2023-01-01T00:00:00</a>
+	 * </span>
+	 * ```
+	 * @param {boolean?} oldVis
+	 * @param {boolean?} newVis
+	 * @returns {Revision}
+	 */
+	toggleContentVisibility(oldVis, newVis) {
+		if (oldVis === newVis) {
+			return this;
+		}
+		if (newVis) { // false/null -> true; wrapper is <span>
+
+			const $inner = this.$date.children().eq(0); // Get the inner element
+			this.$date.before($inner).remove(); // Move the inner element before the wrapper and remove the wrapper
+			this.$date = $inner; // Set the inner element as the date link
+
+		} else if (oldVis) { // true -> false/null; wrapper is <a> or <bdi>
+
+			const $wrapper = $('<span>')
+				.toggleClass('mw-changeslist-date', !isDeletedContribs)
+				.addClass(Revision.class.deleted)
+				.toggleClass(Revision.class.suppressed, newVis === null);
+			this.$date.before($wrapper); // Append the wrapper before the date link
+			$wrapper.append(this.$date); // Move the date link inside the wrapper
+			this.$date = $wrapper; // Set the wrapper as the date link
+
+		} else { // false -> null, null -> false
+
+			this.$date.toggleClass(Revision.class.suppressed, newVis === null);
+
+		}
+		return this;
+	}
+
+	/**
+	 * Toggle the revdel status of the comment (edit summary).
+	 *
+	 * `[[Special:Contributions]]`
+	 * ```html
+	 * <!-- Normal comment -->
+	 * <span class="comment comment--without-parentheses">COMMENT</span>
+	 * <!-- Normal comment (empty) -->
+	 * <span class="comment mw-comment-none">No edit summary</span><!-- Has text but invisible -->
+	 * <!-- Deleted comment -->
+	 * <span class="history-deleted comment"><!-- Has an additional class if suppressed -->
+	 * 	<span class="comment">(edit summary removed)</span>
+	 * </span>
+	 * ```
+	 * `[[Special:DeletedContributions]]`
+	 * ```html
+	 * <!-- Normal comment -->
+	 * <span class="comment comment--without-parentheses">COMMENT</span>
+	 * <!-- Normal comment (empty) -->
+	 * <span class="comment mw-comment-none">No edit summary</span><!-- Has text but invisible -->
+	 * <!-- Deleted comment -->
+	 * <span class="history-deleted comment"><!-- Has an additional class if suppressed -->
+	 * 	<!-- Empty if there's no edit summary -->
+	 * 	<span class="comment comment--without-parentheses">COMMENT</span>
+	 * </span>
+	 * <!-- Suppressed comment on a non-supressor's view (empty, non-empty) -->
+	 * <!-- This pattern is irrelevant to this method because the user can't change visibility -->
+	 * <span class="history-deleted mw-history-suppressed comment">
+	 * 	<span class="comment">(edit summary removed)</span>
+	 * </span>
+	 * ```
+	 * @param {boolean?} oldVis
+	 * @param {boolean?} newVis
+	 * @returns {boolean} Whether mw.hook will need to be called
+	 */
+	toggleCommentVisibility(oldVis, newVis) {
+		if (oldVis === newVis) {
+			return false;
+		}
+		let ret = true;
+		if (newVis) { // false/null -> true
+
+			const $inner =
+				this.$comment.children().length ? // The inner tag can be missing on DC
+				this.$comment.children().eq(0) : // On C, just get the inner tag
+				$('<span>').addClass('comment'); // On DC, create one
+			this.$comment.before($inner).remove(); // Move the inner tag before the wrapper and remove the wrapper
+			this.$comment = $inner;
+			if (this.parsedComment) {
+				this.$comment
+					.addClass('comment--without-parentheses')
+					.html(this.parsedComment);
+			} else {
+				this.$comment
+					.addClass('mw-comment-none')
+					.html(getMessage('changeslist-nocomment'));
+			}
+
+		} else if (oldVis) { // true -> false/null
+
+			const $wrapper = $('<span>')
+				.addClass('comment')
+				.addClass(Revision.class.deleted)
+				.toggleClass(Revision.class.suppressed, newVis === null);
+			this.$comment // This will be the inner content
+				.before($wrapper) // Insert the wrapper before the comment
+				.removeAttr('class').addClass('comment') // Remove all classes but "comment"
+				.toggleClass('comment--without-parentheses', isDeletedContribs);
+			$wrapper.append(this.$comment); // Move the comment into the wrapper
+			if (!isDeletedContribs) { // On C
+				this.$comment.html(getMessage('rev-deleted-comment'));
+			} else if (this.parsedComment) { // On DC and comment is non-empty
+				this.$comment.html(this.parsedComment);
+			} else {
+				$wrapper.empty();
+			}
+			this.$comment = $wrapper;
+
+		} else { // false -> null, null -> false
+
+			this.$comment.toggleClass(Revision.class.suppressed, newVis === null);
+			ret = false;
+
 		}
 		return ret;
-	});
-
-}
-
-/**
- * Create a dropdown with a label on its left. Default CSS for the dropdown: 'display: inline-block; width: 6ch;'
- * @param {HTMLElement} appendTo
- * @param {string} id
- * @param {string} labelText
- * @param {{labelCss?: string; dropdownCss?: string; appendBr?: boolean;}} [options]
- * @returns {HTMLSelectElement}
- */
-function createLabeledDropdown(appendTo, id, labelText, options) {
-
-	options = options || {};
-	if (options.appendBr) appendTo.appendChild(document.createElement('br'));
-
-	var label = document.createElement('label');
-	label.htmlFor = id;
-	label.textContent = labelText;
-	label.style.cssText = 'display: inline-block; width: 6ch;';
-	if (options.labelCss) parseAndApplyCssText(label, options.labelCss);
-	appendTo.appendChild(label);
-
-	var dropdown = document.createElement('select');
-	dropdown.id = id;
-	if (options.dropdownCss) dropdown.style.cssText = options.dropdownCss;
-	appendTo.appendChild(dropdown);
-
-	return dropdown;
-
-}
-
-/**
- * Create a textbox with a label on its left. Default CSS for the textbox: 'display: inline-block; width: 6ch;'
- * @param {HTMLElement} appendTo
- * @param {string} id
- * @param {string} labelText
- * @param {{labelCss?: string; textboxCss?: string; appendBr?: boolean;}} [options]
- * @returns {HTMLInputElement}
- */
-function createLabeledTextbox(appendTo, id, labelText, options) {
-
-	options = options || {};
-	if (options.appendBr) appendTo.appendChild(document.createElement('br'));
-
-	var label = document.createElement('label');
-	label.htmlFor = id;
-	label.textContent = labelText;
-	label.style.cssText = 'display: inline-block; width: 6ch;';
-	if (options.labelCss) parseAndApplyCssText(label, options.labelCss);
-	appendTo.appendChild(label);
-
-	var textbox = document.createElement('input');
-	textbox.type = 'text';
-	textbox.id = id;
-	if (options.textboxCss) textbox.style.cssText = options.textboxCss;
-	appendTo.appendChild(textbox);
-
-	return textbox;
-
-}
-
-/**
- * @param {HTMLElement} appendTo
- * @param {string} id
- * @param {string} label
- * @param {{buttonCss?: string;}} [options]
- * @returns {HTMLInputElement}
- */
-function createButton(appendTo, id, label, options) {
-	options = options || {};
-	var button = document.createElement('input');
-	button.type = 'button';
-	if (id) button.id = id;
-	button.value = label;
-	if (options.buttonCss) button.style.cssText = options.buttonCss;
-	appendTo.appendChild(button);
-	return button;
-}
-
-/**
- * Parse cssText ('property: value;') recursively and apply the styles to a given element.
- * @param {HTMLElement} element
- * @param {string} cssText
- */
-function parseAndApplyCssText(element, cssText) {
-	var regex = /(\S+?)\s*:\s*(\S+?)\s*;/g;
-	var m;
-	while ((m = regex.exec(cssText))) {
-		element.style[m[1]] = m[2];
 	}
-}
 
-/**
- * An alternative to window.confirm, by a dialog.
- * @param {JQuery<HTMLDivElement>} $dialog
- * @returns {JQueryPromise<boolean>}
- */
-function dConfirm($dialog) {
-	var def = $.Deferred();
-	var bool = false;
-	$dialog.prop('title', MRD + ' - Confirm');
-	$dialog.dialog({
-		resizable: false,
-		height: 'auto',
-		width: 'auto',
-		minWidth: 500,
-		modal: true,
-		position: {
-			my: 'center',
-			at: 'center',
-			of: window
-		},
-		buttons: [
-			{
-				text: 'はい',
-				click: function() {
-					bool = true;
-					$(this).dialog('close');
+	/**
+	 * Toggle the revdel status of the username.
+	 * @param {boolean?} oldVis
+	 * @param {boolean?} newVis
+	 * @returns {Revision}
+	 */
+	toggleUserVisibility(oldVis, newVis) {
+
+		if (oldVis === newVis) {
+			return this;
+		}
+		this.$userhidden.toggle(!newVis);
+		this.$revdelLink.toggleClass('mrd-revdelundel-link-userhidden', newVis === null);
+
+		// When the username is unhidden, remove "(no username available)" nodes if any
+		const msg = getMessage('empty-username');
+		if (newVis === true && msg) {
+			const childNodes = this.$li[0].childNodes;
+			for (let i = childNodes.length - 1; i >= 0; i--) {
+				const node = childNodes[i];
+				const text = node.textContent;
+				if (typeof text !== 'string') {
+					continue;
 				}
-			},
-			{
-				text: 'いいえ',
-				click: function() {
-					$(this).dialog('close');
+				if (text.indexOf(msg) !== -1) {
+					node.remove();
 				}
 			}
-		],
-		close: function() {
-			def.resolve(bool);
-			$dialog.dialog('destroy').remove();
 		}
-	});
-	return def.promise();
+
+		return this;
+	}
+
 }
 
+Revision.regex = {
+	article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
+	script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)')
+};
+
+Revision.class = {
+	deleted: 'history-deleted',
+	suppressed: 'mw-history-suppressed'
+};
+
+/**
+ * An array of revdel target names, used only for typing reasons.
+ * @type {RevdelTarget[]}
+ */
+Revision.targets = ['content', 'comment', 'user'];
+
+/**
+ * @typedef {'doing'|'done'|'failed'} IconType
+ */
 /**
  * Get a loading/check/cross image tag.
- * @param {"doing"|"done"|"failed"} iconType
+ * @param {IconType} iconType
  * @returns {HTMLImageElement}
  */
 function getIcon(iconType) {
-	var img = document.createElement('img');
+	const img = document.createElement('img');
 	switch (iconType) {
 		case 'doing':
 			img.src = '//upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif';
@@ -1025,427 +1681,36 @@ function getIcon(iconType) {
 }
 
 /**
- * @typedef ApiParamsRevisionDeleteFragment
- * @type {object}
- * @property {"revisiondelete"} action
- * @property {"archive"|"filearchive"|"logging"|"oldimage"|"revision"} type
- * @property {string} hide Values (separate with "|"): comment, content, user
- * @property {string} show Values (separate with "|"): comment, content, user
- * @property {"no"|"nochange"|"yes"} suppress Default: nochange
- * @property {string} reason
- * @property {string} tags
- * @property {"2"} formatversion
+ * Get an interface message.
+ * @param {MessageName} name
+ * @returns {string}
  */
-/**
- * @typedef ApiParamsRevisionDeleteRest
- * @type {object}
- * @property {string} target Pagetitle
- * @property {string} ids Pipe-separated revision IDs
- */
-/**
- * @typedef ApiParamsRevisionDelete
- * @type {ApiParamsRevisionDeleteFragment & ApiParamsRevisionDeleteRest}
- */
-/**
- * @typedef ApiResultRevisionDeleteItem
- * @type {object}
- * @property {boolean} suppressed
- * @property {boolean} texthidden
- * @property {boolean} commenthidden
- * @property {boolean} userhidden
- * @property {string} errors
- */
-/**
- * @typedef ApiResultRevisionDelete
- * @type {Object.<string, ApiResultRevisionDeleteItem>} revid-object pairs
- */
-/**
- * @typedef Prev
- * @type {Object.<string, {suppressed: boolean; texthidden: boolean; commenthidden: boolean; userhidden: boolean; current: boolean;}>} revid-object pairs
- */
-
-/**
- * Execute revision delete.
- * @param {ApiParamsRevisionDelete} params
- * @param {Prev} prev
- * @returns {JQueryPromise<ApiResultRevisionDelete>}
- */
-function revdel(params, prev) {
-
-	var revids = params.ids.split('|');
-	return api.postWithToken('csrf', params)
-		.then(function(res) {
-
-			var resItems;
-			if (res && res.revisiondelete && (resItems = res.revisiondelete.items) && resItems.length) {
-
-				return resItems.reduce(/** @param {ApiResultRevisionDelete} acc */ function(acc, obj) {
-
-					/** @type {string[]} */
-					var err = [];
-					var revid = obj.id.toString();
-					if (obj.errors) { // Get error codes if there's any
-						err = obj.errors.reduce(function(errAcc, errObj) {
-							if (errObj.type === 'error' && errAcc.indexOf(errObj.code) === -1) {
-								errAcc.push(errObj.code);
-							}
-							return errAcc;
-						}, err);
-					}
-					acc[revid] = {
-						suppressed: params.suppress === 'yes' || params.suppress === 'nochange' && prev[revid].suppressed,
-						texthidden: obj.texthidden,
-						commenthidden: obj.commenthidden,
-						userhidden: obj.userhidden,
-						errors: err.join(', ')
-					};
-					return acc;
-
-				}, Object.create(null));
-
-			} else {
-				return _createRevdelErrorObject(revids, 'unknown', prev);
-			}
-
-		}).catch(function(code, err) {
-			console.error(MRD, err);
-			return _createRevdelErrorObject(revids, code, prev);
-		});
-
-}
-
-/**
- * Create a return object for revdel() by assigning the same error code to all the passed revision IDs.
- * @param {string[]} revids
- * @param {string} code
- * @param {Prev} prev
- * @returns {ApiResultRevisionDelete}
- * @private
- */
-function _createRevdelErrorObject(revids, code, prev) {
-	return revids.reduce(/** @param {ApiResultRevisionDelete} acc */ function(acc, revid) {
-		acc[revid] = {
-			suppressed: prev[revid].suppressed,
-			texthidden: prev[revid].texthidden,
-			commenthidden: prev[revid].commenthidden,
-			userhidden: prev[revid].userhidden,
-			errors: code
-		};
-		return acc;
-	}, Object.create(null));
-}
-
-/**
- * Debugging alternant of revdel(). Return the same kind of object without executing revision (un)deletion.
- * @param {ApiParamsRevisionDelete} params
- * @param {Prev} prev
- * @returns {JQueryPromise<ApiResultRevisionDelete>}
- */
-function dev(params, prev) {
-
-	var def = $.Deferred();
-	var targets = {
-		show: params.show.split('|'),
-		hide: params.hide.split('|')
-	};
-
-	/** @type {ApiResultRevisionDelete} */
-	var ret = params.ids.split('|').reduce(/** @param {ApiResultRevisionDelete} acc */ function(acc, revid) {
-		if (targets.hide.indexOf('content') !== -1 && prev[revid].current) {
-			$.extend(acc, _createRevdelErrorObject([revid], 'revdelete-hide-current', prev));
-		} else {
-			acc[revid] = {
-				suppressed: params.suppress === 'yes' || params.suppress === 'nochange' && prev[revid].suppressed,
-				texthidden: targets.hide.indexOf('content') !== -1 ? true : targets.show.indexOf('content') !== -1 ? false : prev[revid].texthidden,
-				commenthidden: targets.hide.indexOf('comment') !== -1 ? true : targets.show.indexOf('comment') !== -1 ? false : prev[revid].commenthidden,
-				userhidden: targets.hide.indexOf('user') !== -1 ? true : targets.show.indexOf('user') !== -1 ? false : prev[revid].userhidden,
-				errors : ''
-			};
-		}
-		return acc;
-	}, Object.create(null));
-	setTimeout(function() {
-		def.resolve(ret);
-	}, 1000);
-
-	return def.promise();
-
-}
-
-/**
- * @typedef RevisionListItem
- * @type {object}
- * @property {HTMLSpanElement} progress Wrapper to show revdel progress by an icon
- * @property {HTMLInputElement} checkbox
- * @property {HTMLSpanElement} label The 'change visibility' link that works as the label of the checkbox
- * @property {HTMLSpanElement} pseudolabel An alternative 'change visibility' label that cannot be clicked
- * @property {HTMLSpanElement|HTMLAnchorElement|null} date PermaLink to revision with a date text
- * @property {string} title
- * @property {HTMLSpanElement} comment Edit summary wrapper
- * @property {string} parsedcomment Edit summary in an HTML format
- * @property {HTMLElement} userhidden A (hidden) \<strong> tag storing a warning message for revdel'd username
- * @property {boolean} revdeled Whether some item of the revision is deleted
- * @property {boolean} suppressed Whether some item of the revision is oversighted
- * @property {boolean} current Whether this is the current revision
- */
-/**
- * @typedef RevisionList
- * @type {Object.<string, RevisionListItem>} revid-object pairs
- */
-
-/**
- * Toggle the revdel status of a date link.
- * ```
- *  // Normal date link
- *  <a class="mw-changeslist-date">2023-01-01T00:00:00</a>
- *  // Deleted date link
- *  <span class="history-deleted">
- *      <a class="mw-changeslist-date">2023-01-01T00:00:00</a>
- *  </span>
- *  // Suppressed date link (non-suppressor view; this function should never face this pattern)
- *  <span class="history-deleted mw-history-suppressed mw-changeslist-date"></span>
- * ```
- * Concerning the third pattern, a revision with any field suppressed can only be revision-deleted by suppressors.
- * This means that undeletable revisions should never be forwarded to the API in the first place.
- * @param {RevisionListItem} reivisionListItem
- * @param {ApiResultRevisionDeleteItem} revdelResult
- * @return {HTMLSpanElement|HTMLAnchorElement|null} The input tag must be updated with this returned tag.
- */
-function toggleContentVisibility(reivisionListItem, revdelResult) {
-
-	var dateSpanchor = reivisionListItem.date;
-	if (dateSpanchor == null) return null;
-	var alreadyDeleted = dateSpanchor.tagName === 'SPAN';
-
-	if (revdelResult.texthidden) { // Deleted
-
-		if (alreadyDeleted) {
-
-			// #2 => #2
-			// The date link is already a span tag. This means that the content of this revision had already been hidden
-			// before the current revdel execution. We just need to modify the class list of the tag.
-			console.log(MRD, 'content1');
-			if (revdelResult.suppressed) {
-				dateSpanchor.classList.add(classSuppressed);
-			} else {
-				dateSpanchor.classList.remove(classSuppressed);
-			}
-			return dateSpanchor;
-
-		} else {
-
-			// #1 => #2
-			// The date link is a bare anchor tag (newly revision-deleted): wrap this tag with span.
-			console.log(MRD, 'content2');
-			var wrapper = document.createElement('span');
-			wrapper.classList.add(classDeleted);
-			if (revdelResult.suppressed) wrapper.classList.add(classSuppressed);
-			// @ts-ignore
-			dateSpanchor.parentElement.insertBefore(wrapper, dateSpanchor); // Insert the new span tag before the anchor
-			wrapper.appendChild(dateSpanchor); // Move the anchor into the span tag
-
-			// Final note: outerHTML strategies should be avoided because that would destroy event listners of the date link, if there's any.
-
-			return wrapper;
-
-		}
-
-	} else { // Undeleted
-
-		if (alreadyDeleted) {
-
-			// #2 => #1
-			// Deleted content has been undeleted: remove span wrapper.
-			console.log(MRD, 'content3');
-			/** @type {HTMLAnchorElement} */
-			// @ts-ignore This should never be null, as documented above
-			var a = dateSpanchor.querySelector('a.mw-changeslist-date');
-			// @ts-ignore
-			dateSpanchor.parentElement.insertBefore(a, dateSpanchor); // Move the anchor out of the span and make it the preceding sibling
-			dateSpanchor.remove(); // Remove wrapper span
-			return a;
-
-		} else {
-
-			// #1 => #1
-			// Content not hidden before and after the execution (no need to do anything).
-			console.log(MRD, 'content4');
-			return dateSpanchor;
-
-		}
-
+function getMessage(name) {
+	let ret = mw.messages.get(name);
+	if (ret === null) {
+		ret = {
+			'revdelete-hide-text': '版の本文',
+			'revdelete-hide-comment': '編集の要約',
+			'revdelete-hide-user': '投稿者の利用者名/IPアドレス',
+			'revdelete-otherreason': '他の、または追加の理由:',
+			'revdelete-reason-dropdown': '',
+			'revdelete-reasonotherlist': 'その他の理由',
+			'rev-deleted-user-contribs': '[利用者名またはIPアドレスは除去されました - この編集は投稿記録で非表示にされています]',
+			'revdelete-hide-restricted': '一般利用者に加え管理者からもデータを隠す',
+			'rev-deleted-comment': '(要約は除去されています)',
+			'changeslist-nocomment': '編集の要約なし',
+			'empty-username': ''
+		}[name];
 	}
-
-}
-
-/**
- * Toggle the revdel status of a comment (edit summary).
- * ```
- *  // On [[Special:Contributions]]
- *  // Normal comment
- *  <span class="comment comment--without-parentheses">Some comment</span>
- *  // Deleted comment
- *  <span class="history-deleted comment">
- *      <span class="comment">(edit summary removed)</span>
- *  </span>
- *  // On [[Special:DeletedContributions]]
- *  // Normal comment (same as #1)
- *  <span class="comment comment--without-parentheses">Some comment</span>
- *  // Deleted comment
- *  <span class="history-deleted comment">
- *      <span class="comment comment--without-parentheses">Some comment</span>
- *  </span>
- * ```
- * Note that when the comment is an empty string, there IS a span tag for comment with the 'mw-comment-none' class added
- * to pattern #1 on [[Special:Contributions]], but the tag is entirely missing on [[Special:DeletedContributions]]. This
- * script internally creates a comment element in createForm() if missing, so there's no problem.
- * @param {RevisionListItem} revisionListItem
- * @param {ApiResultRevisionDeleteItem} revdelResult
- * @returns {HTMLSpanElement}
- */
-function toggleCommentVisibility(revisionListItem, revdelResult) {
-
-	var commentSpan = revisionListItem.comment;
-	var parsedComment = revisionListItem.parsedcomment;
-	var alreadyDeleted = commentSpan.classList.contains(classDeleted) || commentSpan.classList.contains(classSuppressed);
-	var classComment = 'comment';
-	var classNoComment = 'mw-comment-none';
-	var classNoParentheses = 'comment--without-parentheses';
-	/** @type {HTMLSpanElement|null} */
-	var innerComment = commentSpan.querySelector('.' + classComment);
-
-	if (revdelResult.commenthidden) { // Deleted
-
-		if (alreadyDeleted) {
-
-			// #2/#4 => #2/#4 (class modification only)
-			console.log(MRD, 'comment1');
-			if (revdelResult.suppressed) {
-				commentSpan.classList.add(classSuppressed);
-			} else {
-				commentSpan.classList.remove(classSuppressed);
-			}
-			if (innerComment) {
-				if (isDeletedContribs) {
-					innerComment.classList.add(classNoParentheses);
-				} else {
-					innerComment.classList.remove(classNoParentheses);
-				}
-			}
-			return commentSpan;
-
-		} else {
-
-			// #1/#3 => #2/#4 (wrap with another span)
-			console.log(MRD, 'comment2');
-			if (isDeletedContribs) {
-				commentSpan.classList.add(classNoParentheses);
-			} else {
-				commentSpan.classList.remove(classNoParentheses);
-				commentSpan.innerHTML = msg['rev-deleted-comment'];
-			}
-			commentSpan.classList.remove(classNoComment); // When deleted, the inner span of #2/#4 should never have this class
-
-			var wrapper = document.createElement('span');
-			wrapper.classList.add(classComment);
-			wrapper.classList.add(classDeleted);
-			if (revdelResult.suppressed) wrapper.classList.add(classSuppressed);
-			// @ts-ignore
-			commentSpan.parentElement.insertBefore(wrapper, commentSpan); // Insert wrapper right before the comment span
-			wrapper.appendChild(commentSpan); // Move the comment span inside wrapper
-
-			return wrapper;
-
-		}
-
-	} else { // Undeleted
-
-		if (alreadyDeleted) {
-
-			// #2/#4 => #1/#3 (remove wrapper span)
-			console.log(MRD, 'comment3');
-			var inner;
-			if (innerComment) {
-				innerComment.innerHTML = parsedComment;
-				inner = innerComment;
-			} else {
-				inner = document.createElement('span');
-				inner.classList.add(classComment);
-				inner.innerHTML = parsedComment;
-			}
-			if (inner.innerHTML === '' || inner.innerHTML === msg['changeslist-nocomment']) { // in case the comment is an empty string
-				inner.classList.add(classNoComment);
-			} else {
-				inner.classList.add(classNoParentheses);
-			}
-			// @ts-ignore
-			commentSpan.parentElement.insertBefore(inner, commentSpan); // Move the inner span out of and immediately before wrapper
-			commentSpan.remove(); // Remove wrapper
-			return inner;
-
-		} else {
-
-			// #1/#3 => #1/#3 (do nothing)
-			console.log(MRD, 'comment4');
-			return commentSpan;
-
-		}
+	if (ret === void 0) {
+		throw new ReferenceError(`Message named ${name} is not found.`);
 	}
-
+	return ret;
 }
 
-/**
- * Toggle the revdel status of a username.
- * @param {RevisionListItem} revisionListItem
- * @param {ApiResultRevisionDeleteItem} revdelResult
- */
-function toggleUsernameVisibility(revisionListItem, revdelResult) {
-	revisionListItem.userhidden.style.display = revdelResult.userhidden ? 'inline' : 'none';
-}
+//*********************************************************************************************
 
-/**
- * Get a dropdown for revision-delete reasons. (Note: this function presumes that the interface is an HTMLUList equivalent
- * indented only by asterisks.
- * @returns {JQueryPromise<HTMLSelectElement|null>}
- */
-function getDeleteReasonDropdown() {
+init();
 
-	var interfaceName = 'revdelete-reason-dropdown';
-	return getMessages([interfaceName]).then(function(res) {
-
-		var reasons = res[interfaceName];
-		if (typeof reasons !== 'string') return null;
-
-		var wrapper = document.createElement('select');
-		wrapper.innerHTML =
-			'<optgroup label="その他の理由">' +
-				'<option value="">その他の理由</option>' +
-			'</optgroup>';
-
-		var regex = /(\*+)([^*]+)/g;
-		var m, optgroup;
-		while ((m = regex.exec(reasons))) {
-			if (m[1].length === 1) {
-				optgroup = document.createElement('optgroup');
-				optgroup.label = m[2].trim();
-				wrapper.appendChild(optgroup);
-			} else {
-				var opt = document.createElement('option');
-				opt.textContent = m[2].trim();
-				if (optgroup) {
-					optgroup.appendChild(opt);
-				} else {
-					wrapper.appendChild(opt);
-				}
-			}
-		}
-		return wrapper;
-
-	});
-
-}
-
-// ****************************************************************************
-
+//*********************************************************************************************
 })();
-//</nowiki>
