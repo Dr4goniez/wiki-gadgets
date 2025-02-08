@@ -1219,6 +1219,10 @@ class Revision {
 		 */
 		this.$date = (() => {
 			let $link = this.$li.find('.mw-changeslist-date').eq(0);
+			if ($link.parent('span').hasClass(Revision.class.deleted)) {
+				// On DC, the wrapper <span> doesn't have the "mw-changeslist-date" class
+				$link = $link.parent('span');
+			}
 			if ($link.hasClass(Revision.class.suppressed) && $link.hasClass(Revision.class.deleted)) {
 				this.currentVisibility.content = null;
 			} else if ($link.hasClass(Revision.class.deleted)) {
@@ -1455,8 +1459,9 @@ class Revision {
 
 	/**
 	 * Toggle the revdel status of the content.
+	 *
+	 * `[[Special:Contributions]]`
 	 * ```html
-	 * <!-- In both cases below, the <bdi> tag is missing on [[Special:DeletedContributions]] -->
 	 * <!-- Normal date link -->
 	 * <bdi>
 	 * 	<a class="mw-changeslist-date">2023-01-01T00:00:00</a>
@@ -1467,6 +1472,18 @@ class Revision {
 	 * 	<bdi>
 	 * 		<a class="mw-changeslist-date">2023-01-01T00:00:00</a>
 	 * 	</bdi>
+	 * </span>
+	 * ```
+	 * `[[Special:DeletedContributions]]`
+	 *
+	 * Summary: `<bdi>` tags missing, the `mw-changeslist-date` class missing from the wrapper when deleted
+	 * ```html
+	 * <!-- Normal date link -->
+	 * <a class="mw-changeslist-date">2023-01-01T00:00:00</a>
+	 * <!-- Deleted date link -->
+	 * <span class="history-deleted"><!-- Has an additional class if suppressed -->
+	 * 	<!-- Empty on a non-suppressor's view if suppressed -->
+	 * 	<a class="mw-changeslist-date">2023-01-01T00:00:00</a>
 	 * </span>
 	 * ```
 	 * @param {boolean?} oldVis
@@ -1486,7 +1503,7 @@ class Revision {
 		} else if (oldVis) { // true -> false/null; wrapper is <a> or <bdi>
 
 			const $wrapper = $('<span>')
-				.addClass('mw-changeslist-date')
+				.toggleClass('mw-changeslist-date', !isDeletedContribs)
 				.addClass(Revision.class.deleted)
 				.toggleClass(Revision.class.suppressed, newVis === null);
 			this.$date.before($wrapper); // Append the wrapper before the date link
