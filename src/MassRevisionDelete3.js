@@ -107,7 +107,8 @@ function init() {
 				'rev-deleted-user-contribs',
 				'revdelete-hide-restricted',
 				'rev-deleted-comment',
-				'changeslist-nocomment'
+				'changeslist-nocomment',
+				'empty-username'
 			])
 		).then(() => {
 
@@ -1594,11 +1595,29 @@ class Revision {
 	 * @returns {Revision}
 	 */
 	toggleUserVisibility(oldVis, newVis) {
+
 		if (oldVis === newVis) {
 			return this;
 		}
 		this.$userhidden.toggle(!newVis);
 		this.$revdelLink.toggleClass('mrd-revdelundel-link-userhidden', newVis === null);
+
+		// When the username is unhidden, remove "(no username available)" nodes if any
+		const msg = getMessage('empty-username');
+		if (newVis === true && msg) {
+			const childNodes = this.$li[0].childNodes;
+			for (let i = childNodes.length - 1; i >= 0; i--) {
+				const node = childNodes[i];
+				const text = node.textContent;
+				if (typeof text !== 'string') {
+					continue;
+				}
+				if (text.indexOf(msg) !== -1) {
+					node.remove();
+				}
+			}
+		}
+
 		return this;
 	}
 
@@ -1662,7 +1681,8 @@ function getMessage(name) {
 			'rev-deleted-user-contribs': '[利用者名またはIPアドレスは除去されました - この編集は投稿記録で非表示にされています]',
 			'revdelete-hide-restricted': '一般利用者に加え管理者からもデータを隠す',
 			'rev-deleted-comment': '(要約は除去されています)',
-			'changeslist-nocomment': '編集の要約なし'
+			'changeslist-nocomment': '編集の要約なし',
+			'empty-username': ''
 		}[name];
 	}
 	if (ret === void 0) {

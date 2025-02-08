@@ -71,7 +71,8 @@ type MessageName =
 	'rev-deleted-user-contribs'|
 	'revdelete-hide-restricted'|
 	'rev-deleted-comment'|
-	'changeslist-nocomment';
+	'changeslist-nocomment'|
+	'empty-username';
 
 interface ApiResponseQueryRevids {
 	query: {
