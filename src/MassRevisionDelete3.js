@@ -1,20 +1,22 @@
-/*********************************************************************************************\
+/***************************************************************************\
 
 	MassRevisionDelete
 
-	Create an interface to delete multiple revisions at one fell swoop when the script
-	user visits a user's contributions page.
+	Add an interface to delete multiple revisions in one fell swoop to
+	[[Special:Contributions]] and [[Special:DeletedContributions]].
 
 	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
 	@version 3.0.0
 
-\*********************************************************************************************/
+\***************************************************************************/
 // @ts-check
 /// <reference path="./window/MassRevisionDelete3.d.ts" />
 /* global mw, OO */
 (() => {
 //*********************************************************************************************
+
+const debuggingMode = true;
 
 // Run the script only on [[Special:Contributions]] and [[Special:DeletedContributions]]
 /** @type {boolean} */
@@ -121,6 +123,10 @@ function createStyleTag() {
 		'.mrd-progress:not(:empty) {' +
 			'margin-right: 0.5em;' +
 		'}' +
+		'#mrd-revision-selector > span,' +
+		'#mrd-revision-selector > select {' +
+			'margin-right: 0.5em;' +
+		'}' +
 		'.mrd-checkbox {' +
 			'margin-right: 0.5em;' +
 		'}' +
@@ -179,7 +185,8 @@ function createFieldset($contribsList) {
 		.next('div')
 			.addClass('mw-collapsible-content');
 
-	$contribsList.eq(0).before(wrapper.$element);
+	const $target = document.querySelector('.mw-pager-navigation-bar') ? $('.mw-pager-navigation-bar').eq(0) : $contribsList.eq(0);
+	$target.before(wrapper.$element);
 	fieldset.$element.makeCollapsible();
 
 	return fieldset;
@@ -192,8 +199,10 @@ class VisibilityLevel {
 	 * Append a horizontal radio options for revdel visibility levels.
 	 * @param {OO.ui.FieldsetLayout} fieldset
 	 * @param {string} labelText
+	 * @param {{show?: string; hide?: string; visible?: boolean;}} [options]
+	 * Optional object to specify the "show" and "hide" radio labels, and the visibility of the widget (`true` by default).
 	 */
-	constructor(fieldset, labelText) {
+	constructor(fieldset, labelText, options = {visible: true}) {
 
 		// Create radio options
 		const optNochange = new OO.ui.RadioOptionWidget({
@@ -202,11 +211,11 @@ class VisibilityLevel {
 		});
 		const optShow = new OO.ui.RadioOptionWidget({
 			data: 'show',
-			label: '閲覧可'
+			label: options.show || '閲覧可'
 		});
 		const optHide = new OO.ui.RadioOptionWidget({
 			data: 'hide',
-			label: '閲覧不可'
+			label: options.hide || '閲覧不可'
 		});
 
 		/** @type {OO.ui.RadioSelectWidget} */
@@ -216,13 +225,16 @@ class VisibilityLevel {
 		});
 		this.radioSelect.selectItem(optNochange);
 
-		fieldset.addItems([
-			new OO.ui.FieldLayout(this.radioSelect, {
-				classes: ['mrd-fieldLayout-boldheader'],
-				label: labelText,
-				align: 'top'
-			})
-		]);
+		const fieldLayout = new OO.ui.FieldLayout(this.radioSelect, {
+			classes: ['mrd-fieldLayout-boldheader'],
+			label: labelText,
+			align: 'top'
+		});
+		if (!options.visible) {
+			fieldLayout.toggle(false);
+		}
+
+		fieldset.addItems([fieldLayout]);
 
 	}
 
@@ -233,10 +245,11 @@ class VisibilityLevel {
 	getData() {
 		const selectedRadio = this.radioSelect.findSelectedItem();
 		if (!selectedRadio || Array.isArray(selectedRadio)) {
-			throw new TypeError();
+			const err = 'VisibilityLevel.getData encountered an unexpected type: ' + (!selectedRadio ? 'null' : 'array');
+			console.error(err);
+			throw new TypeError(err);
 		}
-		// @ts-ignore
-		return selectedRadio.getData();
+		return /** @type {RevdelLevel} */ (selectedRadio.getData());
 	}
 
 	/**
@@ -266,19 +279,23 @@ class MassRevisionDelete {
 		/**
 		 * @type {VisibilityLevel}
 		 */
-		this.vlContent = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-text') || '??');
+		this.vlContent = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-text') || '版の本文');
 		/**
 		 * @type {VisibilityLevel}
 		 */
-		this.vlComment = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-comment') || '??');
+		this.vlComment = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-comment') || '編集の要約');
 		/**
 		 * @type {VisibilityLevel}
 		 */
-		this.vlUser = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-user') || '??');
+		this.vlUser = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-user') || '投稿者の利用者名/IPアドレス');
 		/**
-		 * @type {OO.ui.CheckboxInputWidget}
+		 * @type {VisibilityLevel}
 		 */
-		this.vlSuppress = new OO.ui.CheckboxInputWidget();
+		this.vlSuppress = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-restricted') || '一般利用者に加え管理者からもデータを隠す', {
+			show: '適用しない',
+			hide: '適用する',
+			visible: rights.suppress
+		});
 		/**
 		 * @type {OO.ui.DropdownInputWidget}
 		 */
@@ -291,86 +308,13 @@ class MassRevisionDelete {
 		 * @type {OO.ui.TextInputWidget}
 		 */
 		this.reasonC = new OO.ui.TextInputWidget({
-			placeholder: (mw.messages.get('revdelete-otherreason') || '').replace(/[:：]$/, '')
+			placeholder: (mw.messages.get('revdelete-otherreason') || '他の、または追加の理由:').replace(/[:：]$/, '')
 		});
 		/**
-		 * @type {OO.ui.ButtonWidget}
+		 * Whether to accept a click on the execute button.
+		 * @type {boolean}
 		 */
-		this.btnSelectAll = new OO.ui.ButtonWidget({
-			label: '全選択'
-		}).off('click').on('click', () => {
-			this.list.forEach((rev) => {
-				rev.toggleSelection(true);
-			});
-		});
-		/**
-		 * @type {OO.ui.ButtonWidget}
-		 */
-		this.btnUnselectAll = new OO.ui.ButtonWidget({
-			label: '全選択解除'
-		}).off('click').on('click', () => {
-			this.list.forEach((rev) => {
-				rev.toggleSelection(false);
-			});
-		});
-		/**
-		 * @type {OO.ui.ButtonWidget}
-		 */
-		this.btnInvertSelection = new OO.ui.ButtonWidget({
-			label: '選択反転'
-		}).off('click').on('click', () => {
-			this.list.forEach((rev) => {
-				rev.toggleSelection(!rev.isSelected());
-			});
-		});
-		/**
-		 * @type {OO.ui.ButtonWidget}
-		 */
-		this.btnSelectAllDeleted = new OO.ui.ButtonWidget({
-			label: '削除済み版全選択'
-		}).off('click').on('click', () => {
-			this.list.forEach((rev) => {
-				if (rev.hasDeletedItem()) {
-					rev.toggleSelection(true);
-				}
-			});
-		});
-		/**
-		 * @type {OO.ui.ButtonWidget}
-		 */
-		this.btnUnselectAllDeleted = new OO.ui.ButtonWidget({
-			label: '削除済み版全選択解除'
-		}).off('click').on('click', () => {
-			this.list.forEach((rev) => {
-				if (rev.hasDeletedItem()) {
-					rev.toggleSelection(false);
-				}
-			});
-		});
-		/**
-		 * @type {OO.ui.ButtonWidget}
-		 */
-		this.btnSelectAllUndeleted = new OO.ui.ButtonWidget({
-			label: '未削除版全選択'
-		}).off('click').on('click', () => {
-			this.list.forEach((rev) => {
-				if (!rev.hasDeletedItem()) {
-					rev.toggleSelection(true);
-				}
-			});
-		});
-		/**
-		 * @type {OO.ui.ButtonWidget}
-		 */
-		this.btnUnselectAllUndeleted = new OO.ui.ButtonWidget({
-			label: '未削除版全選択解除'
-		}).off('click').on('click', () => {
-			this.list.forEach((rev) => {
-				if (!rev.hasDeletedItem()) {
-					rev.toggleSelection(false);
-				}
-			});
-		});
+		this.acceptExecution = true;
 		/**
 		 * @type {OO.ui.ButtonWidget}
 		 */
@@ -378,35 +322,32 @@ class MassRevisionDelete {
 			label: '実行',
 			flags: ['primary', 'progressive']
 		}).off('click').on('click', () => {
-			this.execute();
+			if (this.acceptsExecution()) {
+				this.setExecutionAcceptability(false).execute();
+			} else {
+				console.warn('The new execution request was rejected.');
+			}
 		});
 
 		// Add the widgets to the fieldset
-		const items = [
-			new OO.ui.FieldLayout(this.vlSuppress, {
-				label: mw.messages.get('revdelete-hide-restricted') || '一般利用者に加え管理者からもデータを隠す',
-				align: 'inline'
-			}),
+		fieldset.addItems([
 			new OO.ui.FieldLayout(this.reason1, {
+				classes: ['mrd-fieldLayout-boldheader'],
 				label: '理由',
 				align: 'top'
 			}),
-			new OO.ui.FieldLayout(this.reason2),
+			new OO.ui.FieldLayout(this.reason2).toggle(false), // Disabled ATM
 			new OO.ui.FieldLayout(this.reasonC),
-			new OO.ui.FieldLayout(new OO.ui.ButtonGroupWidget({
-				items: [this.btnSelectAll, this.btnUnselectAll, this.btnInvertSelection]
-			})),
-			new OO.ui.FieldLayout(new OO.ui.ButtonGroupWidget({
-				items: [this.btnSelectAllDeleted, this.btnUnselectAllDeleted, this.btnSelectAllUndeleted, this.btnUnselectAllUndeleted]
-			})),
 			new OO.ui.FieldLayout(this.btnExecute)
-		];
-		if (!rights.suppress) {
-			items.shift();
-		}
-		fieldset.addItems(items);
+		]);
 
 		MassRevisionDelete.initializeReasonDropdowns([this.reason1, this.reason2]);
+
+		/**
+		 * The container of the revision selector buttons.
+		 * @type {JQuery<HTMLDivElement>}
+		 */
+		this.$btnContainer = MassRevisionDelete.createRevisionSelector($contribsList, this.list);
 
 	}
 
@@ -454,37 +395,156 @@ class MassRevisionDelete {
 	}
 
 	/**
-	 * Set the 'disabled' states of all the widgets in the MRD form, all the revdel links in the special page,
-	 * and all revisions' checkboxes.
+	 * Create revision selector buttons.
+	 * @param {JQuery<HTMLUListElement>} $contribsList
+	 * @param {MassRevisionDelete['list']} list
+	 * @returns {JQuery<HTMLDivElement>}
+	 * @private
+	 */
+	static createRevisionSelector($contribsList, list) {
+
+		/**
+		 * @type {JQuery<HTMLDivElement>}
+		 */
+		const $wrapper = $('<div>');
+		/**
+		 * @type {JQuery<HTMLSelectElement>}
+		 */
+		const $dropdown = $('<select>');
+		/**
+		 * @param {'select'|'unselect'|'invert'} type
+		 */
+		const clickEvent = (type) => {
+			if ($wrapper.hasClass('mrd-disabledlink')) {
+				return;
+			}
+			const target = /** @type {''|'deleted'|'undeleted'} */ ($dropdown.val());
+			list.forEach((rev) => {
+				if (!target || target === 'deleted' && rev.hasDeletedItem() || target === 'undeleted' && !rev.hasDeletedItem()) {
+					const selection =
+						type === 'select' ? true :
+						type === 'unselect' ? false :
+						!rev.isSelected();
+					rev.toggleSelection(selection);
+				}
+			});
+		};
+
+		$contribsList.eq(0).before(
+			$wrapper
+				.prop('id', 'mrd-revision-selector')
+				.append(
+					$('<span>')
+						.text('選択:'),
+					$dropdown
+						.attr('title', '選択ボタンの対象を制限します。')
+						.append(
+							new Option('(対象制限なし)', '', true, true),
+							new Option('削除済み版', 'deleted'),
+							new Option('未削除版', 'undeleted')
+						),
+					$('<a>')
+						.prop('role', 'button')
+						.text('全選択')
+						.off('click').on('click', () => {
+							clickEvent('select');
+						}),
+					'・',
+					$('<a>')
+						.prop('role', 'button')
+						.text('全選択解除')
+						.off('click').on('click', () => {
+							clickEvent('unselect');
+						}),
+					'・',
+					$('<a>')
+						.prop('role', 'button')
+						.text('選択反転')
+						.off('click').on('click', () => {
+							clickEvent('invert');
+						})
+				)
+		);
+
+		return $wrapper;
+
+	}
+
+	/**
+	 * Check if the Execute button currently accepts a click on it.
+	 * @returns {boolean}
+	 */
+	acceptsExecution() {
+		return this.acceptExecution;
+	}
+
+	/**
+	 * Set the state of whether the Execute button should accept a click on it.
+	 * @param {boolean} accept
+	 * @returns {MassRevisionDelete}
+	 */
+	setExecutionAcceptability(accept) {
+		this.acceptExecution = accept;
+		return this;
+	}
+
+	/**
+	 * Set the 'disabled' states of the execute button, the revision selector buttons,
+	 * and the checkboxes and revdel links of all revisions.
+	 * @param {boolean} disable
+	 * @param {('execute'|'selector'|'revisions')[]} [skip] Which target to skip.
+	 * @returns {MassRevisionDelete}
+	 */
+	setDisabled(disable, skip = []) {
+		if (skip.indexOf('execute') === -1) {
+			this.setExecuteButtonDisabled(disable);
+		}
+		if (skip.indexOf('selector') === -1) {
+			this.setSelectorButtonDisabled(disable);
+		}
+		if (skip.indexOf('revisions') === -1) {
+			this.setRevisionsDisabled(disable);
+		}
+		return this;
+	}
+
+	/**
+	 * Set the 'disabled' state of the execute button.
+	 * @param {boolean} disable If `false`, {@link acceptExecution} will be set back to `true`.
+	 * @returns {MassRevisionDelete}
+	 */
+	setExecuteButtonDisabled(disable) {
+		if (!disable) {
+			this.acceptExecution = true;
+		}
+		this.btnExecute.setDisabled(disable);
+		return this;
+	}
+
+	/**
+	 * Set the 'disabled' states of the revision selector buttons.
 	 * @param {boolean} disable
 	 * @returns {MassRevisionDelete}
 	 */
-	setDisabled(disable) {
-		[
-			this.btnExecute,
-			this.vlContent,
-			this.vlComment,
-			this.vlUser,
-			this.vlSuppress,
-			this.reason1,
-			this.reason2,
-			this.reasonC,
-			this.btnSelectAll,
-			this.btnUnselectAll,
-			this.btnInvertSelection,
-			this.btnSelectAllDeleted,
-			this.btnUnselectAllDeleted,
-			this.btnSelectAllUndeleted,
-			this.btnUnselectAllUndeleted,
-			...this.list
-		]
-		.forEach((widget) => {
-			widget.setDisabled(disable);
+	setSelectorButtonDisabled(disable) {
+		this.$btnContainer.toggleClass('mrd-disabledlink', disable);
+		return this;
+	}
+
+	/**
+	 * Set the 'disabled' states of the checkbox and the revdel link for each revision.
+	 * @param {boolean} disable
+	 * @returns {MassRevisionDelete}
+	 */
+	setRevisionsDisabled(disable) {
+		this.list.forEach((rev) => {
+			rev.setDisabled(disable);
 		});
 		return this;
 	}
 
 	/**
+	 * Get the selected visibility level of a revdel target.
 	 * @param {RevdelTarget} target
 	 * @returns {RevdelLevel}
 	 */
@@ -496,48 +556,39 @@ class MassRevisionDelete {
 				return this.vlComment.getData();
 			case 'user':
 				return this.vlUser.getData();
-			default:
-				throw new Error();
+			default: {
+				const err = `MassRevisionDelete.getSelectedVisibilityLevel encountered an unexpected target of "${target}".`;
+				console.error(err);
+				throw new Error(err);
+			}
 		}
 	}
 
 	/**
 	 * Prepare for revision deletion.
-	 * @returns {JQueryPromise<PreparationObject|false>}
+	 * @returns {JQueryPromise<DefaultParams|false>}
+	 * @private
 	 */
 	prepare() {
 
-		// Create an object keyed by pagenames and each valued by an array of revision IDs
-		let revisionCount = 0;
-		const revisions = this.list.reduce(/** @param {Record<string, string[]>} acc */ (acc, rev) => {
-			if (rev.isSelected()) {
-				const pagename = rev.getPagename();
-				if (!acc[pagename]) {
-					acc[pagename] = [];
-				}
-				acc[pagename].push(rev.getRevid());
-				revisionCount++;
-			}
-			return acc;
-		}, Object.create(null));
-		if (revisionCount === 0) {
+		// Get the number of revisions to delete
+		// We don't collect IDs here because we'll have to loop MassRevisionDelete.list later, before sending API requests
+		const revisionCount = this.list.filter((rev) => rev.isSelected()).length;
+		if (!revisionCount) {
 			return mw.notify('版指定削除の対象版が選択されていません。', {type: 'error'}).then(() => false);
 		}
 
 		// Get visibility levels
-		/**
-		 * @type {Record<RevdelTarget, JQuery<HTMLElement>>}
-		 */
-		const conf = Object.create(null);
 		const vis = {
 			hide: [],
 			show: []
 		};
 		/**
-		 * @type {RevdelTarget[]}
+		 * An object valued by jQuery Objects, later used for the revdel confirmation popup.
+		 * @type {Record<RevdelTarget, JQuery<HTMLElement>>}
 		 */
-		const targets = ['content', 'comment', 'user'];
-		targets.forEach((target) => {
+		const conf = Object.create(null);
+		Revision.targets.forEach((target) => {
 			const level = this.getSelectedVisibilityLevel(target);
 			conf[target] = levelToConfirmationMessage(level); // Will be used later to confirm the revision deletion
 			if (vis[level]) { // Ignore "nochange"
@@ -547,12 +598,22 @@ class MassRevisionDelete {
 		if (!vis.hide.length && !vis.show.length) {
 			return mw.notify('版指定削除の対象項目が選択されていません。', {type: 'error'}).then(() => false);
 		}
-		const suppress =
-			!rights.suppress ?
-			'nochange' :
-			this.vlSuppress.isSelected() ?
-			'yes' :
-			'no';
+		const suppress = (() => {
+			const level = this.vlSuppress.getData();
+			switch (level) {
+				case 'nochange':
+					return 'nochange';
+				case 'show':
+					return 'no';
+				case 'hide':
+					return 'yes';
+				default: {
+					const err = `MassRevisionDelete.vlSuppress.getData encountered an unexpected value of "${level}".`;
+					console.error(err);
+					throw new Error(err);
+				}
+			}
+		})();
 
 		// Get reason
 		const reason = [this.reason1.getValue(), this.reason2.getValue(), this.reasonC.getValue().trim()].filter(el => el).join(': ');
@@ -560,7 +621,7 @@ class MassRevisionDelete {
 			if (reason) {
 				return $.Deferred().resolve(true);
 			} else {
-				return OO.ui.confirm('版指定削除の理由が指定されていません。このまま実行しますか？');
+				return OO.ui.confirm('版指定削除の理由が指定されていません。このまま実行しますか？', {size: 'medium'});
 			}
 		})()
 		// @ts-ignore
@@ -574,19 +635,19 @@ class MassRevisionDelete {
 				`計${revisionCount}版の閲覧レベルを変更します。`,
 				$('<ul>').append(
 					$('<li>').append(
-						mw.messages.get('revdelete-hide-text') || '??',
+						mw.messages.get('revdelete-hide-text') || '版の本文',
 						' (',
 						conf.content,
 						')'
 					),
 					$('<li>').append(
-						mw.messages.get('revdelete-hide-comment') || '??',
+						mw.messages.get('revdelete-hide-comment') || '編集の要約',
 						' (',
 						conf.comment,
 						')'
 					),
 					$('<li>').append(
-						mw.messages.get('revdelete-hide-user') || '??',
+						mw.messages.get('revdelete-hide-user') || '投稿者の利用者名/IPアドレス',
 						' (',
 						conf.user,
 						')'
@@ -603,17 +664,14 @@ class MassRevisionDelete {
 			}
 
 			return {
-				revisions,
-				defaultParams: {
-					action: 'revisiondelete',
-					type: 'revision',
-					reason: reason,
-					hide: vis.hide.join('|'),
-					show: vis.show.join('|'),
-					suppress,
-					tags: mw.config.get('wgDBname') === 'testwiki' ? 'testtag' : 'MassRevisionDelete|DevScript',
-					formatversion: '2'
-				}
+				action: 'revisiondelete',
+				type: 'revision',
+				reason: reason,
+				hide: vis.hide.join('|'),
+				show: vis.show.join('|'),
+				suppress,
+				tags: mw.config.get('wgDBname') === 'testwiki' ? 'testtag' : 'MassRevisionDelete|DevScript',
+				formatversion: '2'
 			};
 
 		});
@@ -638,23 +696,321 @@ class MassRevisionDelete {
 
 	/**
 	 * Perform mass revision deletion.
-	 * @private
 	 */
 	execute() {
-		this.setDisabled(true).prepare().then((prep) => {
+		this.prepare().then((defaultParams) => {
 
-			if (!prep) {
-				this.setDisabled(false);
+			if (!defaultParams) {
+				this.setExecutionAcceptability(true);
 				return;
+			} else {
+				this.setDisabled(true);
+				mw.notify('版指定削除を実行しています...');
 			}
 
-			const {revisions, defaultParams} = prep;
+			/**
+			 * An object keyed by pagenames and each valued by an array of revision IDs.
+			 * @type {Record<string, string[]>}
+			 */
+			const revisions = Object.create(null);
+			/**
+			 * An object keyed by revision IDs and each valued by a Revision instance.
+			 */
+			const instances = this.list.reduce(/** @param {Record<string, Revision>} acc */ (acc, rev) => {
+				if (rev.isSelected()) {
 
+					const revid = rev.getRevid();
+					const pagename = rev.getPagename();
+
+					// Create the "instances" object
+					acc[revid] = rev;
+
+					// Create the "revisions" object
+					if (!revisions[pagename]) {
+						revisions[pagename] = [];
+					}
+					revisions[pagename].push(revid);
+
+					// Show a sninner icon to visualize that revision deletion is in progress
+					rev.setProgress('doing');
+
+				}
+				return acc;
+			}, Object.create(null));
+
+			// Send API requests (per page)
+			/**
+			 * @type {ReturnType<MassRevisionDelete['revdel']>[]}
+			 */
+			const deferreds = [];
+			Object.keys(revisions).forEach((pagename) => {
+				const ids = revisions[pagename].slice();
+				while (ids.length) {
+					const params = {
+						target: pagename,
+						ids: ids.splice(0, apilimit).join('|'),
+						...defaultParams
+					};
+					deferreds.push(debuggingMode ? this.testRevdel(params) : this.revdel(params));
+				}
+			});
+
+			$.when(...deferreds).then((...res) => {
+
+				// Convert the array of result objects to one object
+				/** @type {Record<string, ApiResultRevisionDelete>} */
+				const result = res.reduce((obj, item) => Object.assign(obj, item), Object.create(null));
+
+				// Update the progress
+				/** @type {Revision[]} */
+				const failedRevs = [];
+				const allRevs = Object.keys(instances) // Younger revids first, older revids last
+					.reverse() // Sort in descending order to process revision <li>s in a top-down manner
+					.reduce(/** @param {Revision[]} acc */ (acc, revid) => {
+						const rev = instances[revid];
+						if (result[revid]) {
+							if (typeof result[revid].code === 'string') {
+								rev.setProgress('failed', result[revid].code);
+								failedRevs.push(rev);
+							} else {
+								rev.setProgress('done').setNewVisibility(result[revid], defaultParams.suppress);
+							}
+						} else {
+							rev.setProgress('failed', 'unknown error');
+							failedRevs.push(rev);
+						}
+						acc.push(rev);
+						return acc;
+					}, []);
+
+				// Show a post-execution notification
+				if (!failedRevs.length) { // All succeeded
+					this.setDisabled(false);
+					mw.notify(
+						$('<span>').prop('innerHTML',
+							`<b>計${allRevs.length}版</b>の版指定削除を実行しました。`
+						),
+						{type: 'success'}
+					);
+					setTimeout(() => {
+						allRevs.forEach((rev) => rev.setProgress(null));
+					}, 3000);
+
+				} else { // Some failed
+
+					this.setDisabled(false, ['execute']);
+
+					// Create elements for mw.notify
+
+					// Error navigation buttons (prev/next)
+					const btnUp = new OO.ui.ButtonWidget({
+						icon: 'arrowUp',
+						title: '前のエラーへ'
+					});
+					const btnDown = new OO.ui.ButtonWidget({
+						icon: 'arrowDown',
+						title: '次のエラーへ'
+					});
+					const buttons = new OO.ui.ButtonGroupWidget({
+						items: [btnUp, btnDown]
+					});
+					buttons.$element.css('display', 'inline-flex');
+
+					// Error index dropdown
+					const indexDropdown = new OO.ui.DropdownWidget({
+						menu: {
+							items: failedRevs.map((_, i) => new OO.ui.MenuOptionWidget({data: i, label: String(i + 1)}))
+						}
+					});
+					indexDropdown.getMenu().on('select', (selectedItem) => {
+						if (!selectedItem || Array.isArray(selectedItem)) {
+							return;
+						}
+						const index = /** @type {number} */ (selectedItem.getData());
+						failedRevs[index].scrollIntoView(); // Scroll to <li> with the corresponding index
+					});
+					indexDropdown.$element.css('display', 'inline-flex');
+
+					// Set up the buttons' events
+					btnUp.off('click').on('click', () => {
+						const menu = indexDropdown.getMenu();
+						const selectedItem = /** @type {OO.ui.OptionWidget?} */ (menu.findSelectedItem());
+						let index = selectedItem ? /** @type {number} */ (selectedItem.getData()) - 1 : failedRevs.length - 1;
+						if (index < 0) {
+							index = failedRevs.length - 1;
+						}
+						// Deselect once and select the new option
+						// This is because we want to trigger the "select" event even when the selected option won't change
+						menu.selectItem().selectItemByData(index);
+					});
+					btnDown.off('click').on('click', () => {
+						const menu = indexDropdown.getMenu();
+						const selectedItem = /** @type {OO.ui.OptionWidget?} */ (menu.findSelectedItem());
+						let index = selectedItem ? /** @type {number} */ (selectedItem.getData()) + 1 : 0;
+						if (index === failedRevs.length) {
+							index = 0;
+						}
+						menu.selectItem().selectItemByData(index);
+					});
+
+					mw.notify(
+						$('<div>')
+							.append(
+								$('<p>').prop('innerHTML',
+									`<b>計${allRevs.length}版</b>の版指定削除を実行しました。` +
+									`うち<b class="mrd-red">${failedRevs.length}版の削除に失敗</b>しました。`
+								),
+								$('<p>').text('クリックしてこの通知を閉じると、結果をクリアし実行ボタンを再有効化します。'),
+								$('<p>').text('エラーを閲覧：'),
+								$('<div>')
+									.append(
+										buttons.$element,
+										indexDropdown.$element
+									)
+									.css({
+										display: 'flex',
+										marginTop: '0.8em'
+									}),
+							)
+							.css('text-align', 'justify'),
+						{type: 'warn', autoHide: false}
+					).then((notif) => {
+						// Detect when the notification is closed using a custom event
+						notif.$notification.off('mrd-notif-close').on('mrd-notif-close', () => {
+							allRevs.forEach((rev) => rev.setProgress(null));
+							this.setExecuteButtonDisabled(false);
+						});
+					});
+
+				}
+
+			});
 
 		});
 	}
 
+	/**
+	 * @typedef {import('ts-xor').XOR<ApiResultRevisionDeleteSuccess, ApiResultRevisionDeleteFailure>} ApiResultRevisionDelete
+	 */
+	/**
+	 * Perform revision deletion.
+	 * @param {ApiParamsActionRevisionDelete} params
+	 * @returns {JQueryPromise<Record<string, ApiResultRevisionDelete>>}
+	 */
+	revdel(params) {
+
+		// @ts-ignore
+		return api.postWithToken('csrf', params)
+		// @ts-ignore
+		.then(/** @param {ApiResponseActionRevisionDelete} res */ (res) => {
+
+			const resItems = res && res.revisiondelete && res.revisiondelete.items;
+			if (!resItems || !resItems.length) {
+				return createErrorObject('unknown error');
+			}
+
+			return resItems.reduce(/** @param {Record<string, ApiResultRevisionDelete>} acc */ (acc, obj) => {
+				if (obj.errors && obj.errors.length) {
+					const err = obj.errors.reduce(/** @param {string[]} codeArr */ (codeArr, {code}) => {
+						if (codeArr.indexOf(code) === -1) {
+							codeArr.push(code);
+						}
+						return codeArr;
+					}, []);
+					acc[obj.id] = {
+						code: err.join(', ')
+					};
+				} else {
+					acc[obj.id] = {
+						content: !obj.texthidden,
+						comment: !obj.commenthidden,
+						user: !obj.userhidden
+					};
+				}
+				return acc;
+			}, Object.create(null));
+
+		})
+		.catch(/** @param {string} code */ (code, err) => {
+			console.log(err);
+			return createErrorObject(code);
+		});
+
+		/**
+		 * @param {string} code
+		 * @returns {Record<string, ApiResultRevisionDeleteFailure>}
+		 */
+		function createErrorObject(code) {
+			return params.ids.split('|').reduce(/** @param {Record<string, ApiResultRevisionDeleteFailure>} acc */ (acc, revid) => {
+				acc[revid] = {code};
+				return acc;
+			}, Object.create(null));
+		}
+
+	}
+
+	/**
+	 * Perform experimental revision deletion.
+	 * @param {ApiParamsActionRevisionDelete} params
+	 * @returns {JQueryPromise<Record<string, ApiResultRevisionDelete>>}
+	 */
+	testRevdel(params) {
+		const def = $.Deferred();
+		const vis = Revision.targets.reduce(/** @param {Record<RevdelTarget, RevdelLevel>} acc */ (acc, target) => {
+			if (params.hide.indexOf(target) === -1 && params.show.indexOf(target) === -1) {
+				acc[target] = 'nochange';
+			} else if (params.hide.indexOf(target) === -1) {
+				acc[target] = 'show';
+			} else {
+				acc[target] = 'hide';
+			}
+			return acc;
+		}, Object.create(null));
+		const ret = params.ids.split('|').reduce(/** @param {Record<string, ApiResultRevisionDelete>} acc */ (acc, revid) => {
+			/** @type {Revision=} */
+			let rev;
+			if (Math.random() > 0.1 && (rev = this.list.find((r) => r.getRevid() === revid))) {
+				acc[revid] = Object.create(null);
+				for (const target of Revision.targets) {
+					switch (vis[target]) {
+						case 'show':
+							acc[revid][target] = true;
+							break;
+						case 'hide':
+							acc[revid][target] = false;
+							break;
+						case 'nochange':
+							acc[revid][target] = !!rev.currentVisibility[target];
+							break;
+						default: {
+							const err = `Encountered an unexpected value: ${vis[target]}.`;
+							console.error(err);
+							throw new Error(err);
+						}
+					}
+				}
+			} else {
+				acc[revid] = {
+					code: 'fabricated error'
+				};
+			}
+			return acc;
+		}, Object.create(null));
+		setTimeout(() => def.resolve(ret), 1000);
+		return def.promise();
+	}
+
 }
+
+// Custom event for when mw.notification is closed
+$.event.special['mrd-notif-close'] = {
+	remove: (o) => {
+		if (o.handler) {
+			// @ts-ignore
+			o.handler();
+		}
+	}
+};
 
 class Revision {
 
@@ -663,27 +1019,31 @@ class Revision {
 	 */
 	constructor(li) {
 
-		const $li = $(li);
+		/**
+		 * @type {JQuery<HTMLLIElement>}
+		 */
+		this.$li = $(li);
 
 		/**
 		 * The ID number of this revision.
 		 * @type {string}
 		 */
-		this.revid = $li.data('mw-revid');
+		this.revid = this.$li.data('mw-revid').toString();
 
-		const $pageLink = $li.find(isDeletedContribs ? '.mw-changeslist-title' : '.mw-contributions-title');
 		/**
 		 * The prefixed page name associated with this revision.
 		 * @type {string}
 		 */
 		this.pagename = (() => {
+			const $pageLink = this.$li.find('.mw-contributions-title');
 			const href = $pageLink.attr('href');
 			let m;
 			if (href && (m = Revision.regex.article.exec(href) || Revision.regex.script.exec(href))) {
 				return decodeURIComponent(m[1]).replace(/_/g, ' ');
 			} else {
-				console.log($pageLink[0]);
-				throw new Error('The page link does not have a well-formed href.');
+				const err = 'The page link does not have a well-formed href.';
+				console.error(err, $pageLink);
+				throw new Error(err);
 			}
 		})();
 
@@ -698,7 +1058,7 @@ class Revision {
 		 */
 		this.$checkbox = $('<input>');
 
-		$li.prepend(
+		this.$li.prepend(
 			this.$progress
 				.addClass('mrd-progress'),
 			this.$checkbox
@@ -711,7 +1071,7 @@ class Revision {
 		 * if the editing user is hidden for this revision.
 		 * @type {JQuery<HTMLElement>}
 		 */
-		this.$revdelLink = $li.children('.mw-revdelundel-link');
+		this.$revdelLink = this.$li.children('.mw-revdelundel-link');
 		/**
 		 * Whether the current user can change the visibility of this revision.
 		 * @type {boolean}
@@ -732,7 +1092,9 @@ class Revision {
 		}
 
 		/**
-		 * @type {Record<'content'|'comment'|'user', boolean?>} `null` if suppressed
+		 * An object keyed by revdel targets and each valued by its current visibility level.
+		 * (`true` if visible, `false` if not, or `null` if suppressed)
+		 * @type {Record<'content'|'comment'|'user', boolean?>}
 		 */
 		this.currentVisibility = {
 			content: true,
@@ -746,7 +1108,7 @@ class Revision {
 		 * @type {JQuery<HTMLElement>} Usually an `<a>` tag, or a `<span>` tag when revdel-ed.
 		 */
 		this.$date = (() => {
-			const $link = $li.find('.mw-changeslist-date').eq(0);
+			const $link = this.$li.find('.mw-changeslist-date').eq(0);
 			if ($link.hasClass(Revision.class.suppressed) && $link.hasClass(Revision.class.deleted)) {
 				this.currentVisibility.content = null;
 			} else if ($link.hasClass(Revision.class.deleted)) {
@@ -759,7 +1121,7 @@ class Revision {
 		 * Then `<span>` tag for summary. See {@link toggleCommentVisibility} for all its HTML structures.
 		 * @type {JQuery<HTMLSpanElement>}
 		 */
-		this.$comment = $li.children('.comment');
+		this.$comment = this.$li.children('.comment');
 		if (this.$comment.hasClass(Revision.class.suppressed) && this.$comment.hasClass(Revision.class.deleted)) {
 			this.currentVisibility.comment = null;
 		} else if (this.$comment.hasClass(Revision.class.deleted)) {
@@ -777,7 +1139,7 @@ class Revision {
 		 * The \<strong> tag shown if the user name has been hidden.
 		 * @type {JQuery<HTMLElement>}
 		 */
-		this.$userhidden = $li.children('strong').filter((_, el) => $(el).text() === msgUserHidden);
+		this.$userhidden = this.$li.children('strong').filter((_, el) => $(el).text() === msgUserHidden);
 		if (this.$userhidden.length) {
 			if (this.$revdelLink.prop('nodeName') === 'STRONG') {
 				this.currentVisibility.user = null;
@@ -794,6 +1156,21 @@ class Revision {
 		}
 		this.$userhidden.addClass('mrd-userhidden');
 
+	}
+
+	/**
+	 * Scroll to the revision and make it flash.
+	 * @returns {Revision}
+	 */
+	scrollIntoView() {
+		this.$li[0].scrollIntoView();
+		this.$li.css('background-color', 'var(background-color-error-subtle--active,#ffc8bd)');
+		setTimeout(() => {
+			this.$li.animate({backgroundColor: ''}, 500, function() {
+				$(this).css('background-color', '');
+			});
+		}, 500);
+		return this;
 	}
 
 	/**
@@ -849,6 +1226,39 @@ class Revision {
 
 		return this;
 
+	}
+
+	/**
+	 * Given the new visibility levels and the suppression setting, update the {@link currentVisibility} property.
+	 * @param {Record<RevdelTarget, boolean>} newVis
+	 * @param {DefaultParams['suppress']} suppress
+	 * @returns {Revision}
+	 */
+	setNewVisibility(newVis, suppress) {
+		this.currentVisibility = Revision.targets.reduce((acc, target) => {
+			if (newVis[target]) {
+				acc[target] = true;
+			} else { // newVis[target] === false or null
+				switch (suppress) {
+					case 'nochange':
+						acc[target] = this.currentVisibility[target] === null ? null : false;
+						break;
+					case 'yes':
+						acc[target] = null;
+						break;
+					case 'no':
+						acc[target] = false;
+						break;
+					default: {
+						const err = `Revision.setNewVisibility encountered an unexpected value of ${suppress}.`;
+						console.error(err);
+						throw new TypeError(err);
+					}
+				}
+			}
+			return acc;
+		}, Object.create(null));
+		return this;
 	}
 
 	/**
@@ -961,6 +1371,12 @@ Revision.class = {
 	deleted: 'history-deleted',
 	suppressed: 'mw-history-suppressed'
 };
+
+/**
+ * An array of revdel target names, used only for typing reasons.
+ * @type {RevdelTarget[]}
+ */
+Revision.targets = ['content', 'comment', 'user'];
 
 /**
  * @typedef {'doing'|'done'|'failed'} IconType
