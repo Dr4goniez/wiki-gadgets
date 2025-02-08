@@ -16,7 +16,15 @@
 (() => {
 //*********************************************************************************************
 
-const debuggingMode = true;
+/**
+ * If `true`, no actual API requests will be sent.
+ */
+const debuggingMode = false;
+/**
+ * Whether to consider the user a suppressor for debugging. If the user isn't actually a suppressor
+ * and the contribution list contains suppressed revisions, this won't work.
+ */
+const feignSuppressor = false;
 
 // Run the script only on [[Special:Contributions]] and [[Special:DeletedContributions]]
 /** @type {boolean} */
@@ -43,6 +51,9 @@ const rights = (() => {
 })();
 if (!rights.revdel) {
 	return;
+}
+if (feignSuppressor) {
+	rights.suppress = true;
 }
 const apilimit = rights.AHL ? 500 : 50;
 
@@ -95,6 +106,8 @@ function init() {
 				'revdelete-reasonotherlist',
 				'rev-deleted-user-contribs',
 				'revdelete-hide-restricted',
+				'rev-deleted-comment',
+				'changeslist-nocomment'
 			])
 		).then(() => {
 
@@ -103,7 +116,7 @@ function init() {
 			const fieldset = createFieldset($contribsList);
 
 			// Initialize MassRevisionDelete
-			new MassRevisionDelete(fieldset, $contribsList);
+			new MassRevisionDelete(fieldset, $contribsList).init();
 
 		});
 
@@ -139,6 +152,9 @@ function createStyleTag() {
 		'.mrd-disabledlink {' +
 			'pointer-events: none;' +
 			'color: unset;' +
+		'}' +
+		'.mrd-revdelundel-link-userhidden {' +
+			'font-weight: bold;' +
 		'}';
 	document.head.appendChild(style);
 }
@@ -277,21 +293,25 @@ class MassRevisionDelete {
 		 */
 		this.list = Array.from($contribsList.children('li')).map((li) => new Revision(li));
 		/**
-		 * @type {VisibilityLevel}
+		 * @type {JQueryPromise}
 		 */
-		this.vlContent = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-text') || '版の本文');
+		this.initPromise = $.Deferred();
 		/**
 		 * @type {VisibilityLevel}
 		 */
-		this.vlComment = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-comment') || '編集の要約');
+		this.vlContent = new VisibilityLevel(fieldset, getMessage('revdelete-hide-text'));
 		/**
 		 * @type {VisibilityLevel}
 		 */
-		this.vlUser = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-user') || '投稿者の利用者名/IPアドレス');
+		this.vlComment = new VisibilityLevel(fieldset, getMessage('revdelete-hide-comment'));
 		/**
 		 * @type {VisibilityLevel}
 		 */
-		this.vlSuppress = new VisibilityLevel(fieldset, mw.messages.get('revdelete-hide-restricted') || '一般利用者に加え管理者からもデータを隠す', {
+		this.vlUser = new VisibilityLevel(fieldset, getMessage('revdelete-hide-user'));
+		/**
+		 * @type {VisibilityLevel}
+		 */
+		this.vlSuppress = new VisibilityLevel(fieldset, getMessage('revdelete-hide-restricted'), {
 			show: '適用しない',
 			hide: '適用する',
 			visible: rights.suppress
@@ -308,7 +328,7 @@ class MassRevisionDelete {
 		 * @type {OO.ui.TextInputWidget}
 		 */
 		this.reasonC = new OO.ui.TextInputWidget({
-			placeholder: (mw.messages.get('revdelete-otherreason') || '他の、または追加の理由:').replace(/[:：]$/, '')
+			placeholder: (getMessage('revdelete-otherreason')).replace(/[:：]$/, '')
 		});
 		/**
 		 * Whether to accept a click on the execute button.
@@ -352,6 +372,77 @@ class MassRevisionDelete {
 	}
 
 	/**
+	 * Initialize the MassRevisionDelete instance by fetching missing parsed comments.
+	 */
+	init() {
+
+		const revidsNoComment = this.list.reduce(/** @param {string[]} acc */ (acc, rev) => {
+			if (!rev.parsedCommentFetched) {
+				acc.push(rev.getRevid());
+			}
+			return acc;
+		}, []);
+		if (!revidsNoComment.length) {
+			this.initPromise = $.Deferred().resolve();
+			return;
+		}
+
+		/**
+		 * @param {string[]} revids
+		 * @returns {JQueryPromise<void>}
+		 */
+		const setParsedComments = (revids) => {
+			const params = (() => {
+				if (isDeletedContribs) {
+					return {
+						revids: revids.join('|'),
+						prop: 'deletedrevisions',
+						drvprop: 'ids|parsedcomment'
+					};
+				} else {
+					return {
+						revids: revids.join('|'),
+						prop: 'revisions',
+						rvprop: 'ids|parsedcomment'
+					};
+				}
+			})();
+			// @ts-ignore
+			return api.post(params, {
+				ajax: {
+					headers: {
+						'Promise-Non-Write-API-Action': true
+					},
+					timeout: 0
+				}
+			// @ts-ignore
+			}).then(/** @param {ApiResponseQueryRevids} res */ (res) => {
+				const resPages = res && res.query && res.query.pages;
+				resPages.forEach(({revisions, deletedrevisions}) => {
+					const arr = revisions || deletedrevisions;
+					if (!arr) {
+						return;
+					}
+					arr.forEach(({revid, parsedcomment}) => {
+						const rev = this.list.find((r) => r.getRevid() === String(revid));
+						if (rev) {
+							rev.parsedComment = parsedcomment;
+							rev.parsedCommentFetched = true;
+						}
+					});
+				});
+			}).catch(console.error);
+		};
+
+		const deferreds = [];
+		while (revidsNoComment.length) {
+			deferreds.push(setParsedComments(revidsNoComment.splice(0, apilimit)));
+		}
+		this.initPromise = $.when(deferreds);
+
+	}
+
+	/**
 	 * Fetch the delete-reason dropdown options and add them to the MRD's reason dropdowns.
 	 * @param {OO.ui.DropdownInputWidget[]} dropdowns
 	 * @returns {void}
@@ -359,11 +450,11 @@ class MassRevisionDelete {
 	 */
 	static initializeReasonDropdowns(dropdowns) {
 
-		const reasons = mw.messages.get('revdelete-reason-dropdown');
+		const reasons = getMessage('revdelete-reason-dropdown');
 		/** @type {{optgroup?:string; data?: string; label?: string;}[]} */
 		const options = [{
 			data: '',
-			label: mw.messages.get('revdelete-reasonotherlist') || 'その他の理由'
+			label: getMessage('revdelete-reasonotherlist')
 		}];
 
 		if (typeof reasons === 'string') {
@@ -635,19 +726,19 @@ class MassRevisionDelete {
 				`計${revisionCount}版の閲覧レベルを変更します。`,
 				$('<ul>').append(
 					$('<li>').append(
-						mw.messages.get('revdelete-hide-text') || '版の本文',
+						getMessage('revdelete-hide-text'),
 						' (',
 						conf.content,
 						')'
 					),
 					$('<li>').append(
-						mw.messages.get('revdelete-hide-comment') || '編集の要約',
+						getMessage('revdelete-hide-comment'),
 						' (',
 						conf.comment,
 						')'
 					),
 					$('<li>').append(
-						mw.messages.get('revdelete-hide-user') || '投稿者の利用者名/IPアドレス',
+						getMessage('revdelete-hide-user'),
 						' (',
 						conf.user,
 						')'
@@ -755,13 +846,17 @@ class MassRevisionDelete {
 				}
 			});
 
-			$.when(...deferreds).then((...res) => {
+			// Wait until the deletions finish
+			// Also wait for initPromise to resolve, to ensure that parsed comments have been fetched
+			$.when(...deferreds, this.initPromise).then((...res) => {
 
+				res.pop();
 				// Convert the array of result objects to one object
 				/** @type {Record<string, ApiResultRevisionDelete>} */
 				const result = res.reduce((obj, item) => Object.assign(obj, item), Object.create(null));
 
 				// Update the progress
+				let requireHookCall = false;
 				/** @type {Revision[]} */
 				const failedRevs = [];
 				const allRevs = Object.keys(instances) // Younger revids first, older revids last
@@ -773,7 +868,8 @@ class MassRevisionDelete {
 								rev.setProgress('failed', result[revid].code);
 								failedRevs.push(rev);
 							} else {
-								rev.setProgress('done').setNewVisibility(result[revid], defaultParams.suppress);
+								const h = rev.setProgress('done').setNewVisibility(result[revid], defaultParams.suppress);
+								requireHookCall = requireHookCall || h;
 							}
 						} else {
 							rev.setProgress('failed', 'unknown error');
@@ -782,6 +878,9 @@ class MassRevisionDelete {
 						acc.push(rev);
 						return acc;
 					}, []);
+				if (requireHookCall) {
+					mw.hook('wikipage.content').fire($('.mw-body-content'));
+				}
 
 				// Show a post-execution notification
 				if (!failedRevs.length) { // All succeeded
@@ -1067,11 +1166,21 @@ class Revision {
 		);
 
 		/**
-		 * A <span> tag in which there's an <a> tag. The wrapper is a <strong> tag on a suppressor's view
-		 * if the editing user is hidden for this revision.
-		 * @type {JQuery<HTMLElement>}
+		 * A <span> tag in which there's an <a> tag.
+		 * @type {JQuery<HTMLSpanElement>}
 		 */
 		this.$revdelLink = this.$li.children('.mw-revdelundel-link');
+		// The wrapper is a <strong> tag on a suppressor's view if the editor's name is suppressed
+		const isUserSuppressed = this.$revdelLink.prop('nodeName') === 'STRONG';
+		if (isUserSuppressed) {
+			// Replace <strong> with <span> because it's challenging to do this when we change the revdel
+			// status of "userhidden"
+			const $wrapper = $('<span>').addClass('mw-revdelundel-link mrd-revdelundel-link-userhidden');
+			this.$revdelLink.before($wrapper); // Insert the new wrapper before the revdel link
+			$wrapper.append(this.$revdelLink.children()); // Move the inner elements into the new wrapper
+			this.$revdelLink.remove(); // Remove the old wrapper from the DOM
+			this.$revdelLink = $wrapper;
+		}
 		/**
 		 * Whether the current user can change the visibility of this revision.
 		 * @type {boolean}
@@ -1108,11 +1217,14 @@ class Revision {
 		 * @type {JQuery<HTMLElement>} Usually an `<a>` tag, or a `<span>` tag when revdel-ed.
 		 */
 		this.$date = (() => {
-			const $link = this.$li.find('.mw-changeslist-date').eq(0);
+			let $link = this.$li.find('.mw-changeslist-date').eq(0);
 			if ($link.hasClass(Revision.class.suppressed) && $link.hasClass(Revision.class.deleted)) {
 				this.currentVisibility.content = null;
 			} else if ($link.hasClass(Revision.class.deleted)) {
 				this.currentVisibility.content = false;
+			}
+			if ($link.prop('nodeName') !== 'SPAN' && $link.parent().prop('nodeName') === 'BDI') {
+				$link = $link.parent(); // Substitute with the <bdi> tag
 			}
 			return $link;
 		})();
@@ -1129,19 +1241,34 @@ class Revision {
 		}
 
 		/**
-		 * Comment in an HTML format
-		 * @type {string?}
+		 * Comment in an HTML format.
+		 * @type {string}
 		 */
-		this.parsedComment = null;
+		this.parsedComment = '';
+		/**
+		 * @type {boolean}
+		 */
+		this.parsedCommentFetched = true;
+		if (this.$comment.hasClass(Revision.class.deleted)) {
+			if (isDeletedContribs) {
+				this.parsedComment = this.$comment.children('comment').html();
+			} else {
+				this.parsedCommentFetched = false;
+			}
+		} else if (this.$comment.hasClass('mw-comment-none')) {
+			// Do nothing because the parsed comment will be an empty string
+		} else {
+			this.parsedComment = this.$comment.html();
+		}
 
-		const msgUserHidden = mw.messages.get('rev-deleted-user-contribs') || '[利用者名またはIPアドレスは除去されました - この編集は投稿記録で非表示にされています]';
+		const msgUserHidden = getMessage('rev-deleted-user-contribs');
 		/**
 		 * The \<strong> tag shown if the user name has been hidden.
 		 * @type {JQuery<HTMLElement>}
 		 */
 		this.$userhidden = this.$li.children('strong').filter((_, el) => $(el).text() === msgUserHidden);
 		if (this.$userhidden.length) {
-			if (this.$revdelLink.prop('nodeName') === 'STRONG') {
+			if (isUserSuppressed) {
 				this.currentVisibility.user = null;
 			} else {
 				this.currentVisibility.user = false;
@@ -1150,7 +1277,7 @@ class Revision {
 			// The tag doesn't exist if the username isn't revdel-ed; create one in this case
 			this.$userhidden = $('<strong>')
 				.text(msgUserHidden)
-				.css('margin-right', '0.5em')
+				.css('margin', '0 0.5em')
 				.hide()
 				.insertAfter(this.$comment);
 		}
@@ -1229,12 +1356,16 @@ class Revision {
 	}
 
 	/**
-	 * Given the new visibility levels and the suppression setting, update the {@link currentVisibility} property.
+	 * Given the new visibility levels and the suppression setting, update the {@link currentVisibility} property
+	 * and the DOM appearances of revdel targets.
 	 * @param {Record<RevdelTarget, boolean>} newVis
 	 * @param {DefaultParams['suppress']} suppress
-	 * @returns {Revision}
+	 * @returns {boolean} Whether mw.hook will need to be called
 	 */
 	setNewVisibility(newVis, suppress) {
+
+		// Update the current visibility levels
+		const oldVisibility = {...this.currentVisibility};
 		this.currentVisibility = Revision.targets.reduce((acc, target) => {
 			if (newVis[target]) {
 				acc[target] = true;
@@ -1258,7 +1389,10 @@ class Revision {
 			}
 			return acc;
 		}, Object.create(null));
-		return this;
+
+		// Update the DOM appearances of revdel targets and return
+		return this.toggleTargetVisibility(oldVisibility);
+
 	}
 
 	/**
@@ -1307,7 +1441,19 @@ class Revision {
 	}
 
 	/**
-	 * Toggle the revdel status of a date link.
+	 * Toggle the revdel statuses of all the revdel targets.
+	 * @param {Revision['currentVisibility']} oldVis
+	 * @returns {boolean} Whether mw.hook will need to be called
+	 */
+	toggleTargetVisibility(oldVis) {
+		return this
+			.toggleContentVisibility(oldVis.content, this.currentVisibility.content)
+			.toggleUserVisibility(oldVis.user, this.currentVisibility.user)
+			.toggleCommentVisibility(oldVis.comment, this.currentVisibility.comment);
+	}
+
+	/**
+	 * Toggle the revdel status of the content.
 	 * ```html
 	 * <!-- In both cases below, the <bdi> tag is missing on [[Special:DeletedContributions]] -->
 	 * <!-- Normal date link -->
@@ -1322,41 +1468,137 @@ class Revision {
 	 * 	</bdi>
 	 * </span>
 	 * ```
+	 * @param {boolean?} oldVis
+	 * @param {boolean?} newVis
+	 * @returns {Revision}
 	 */
-	toggleContentVisibility() {
+	toggleContentVisibility(oldVis, newVis) {
+		if (oldVis === newVis) {
+			return this;
+		}
+		if (newVis) { // false/null -> true; wrapper is <span>
 
+			const $inner = this.$date.children().eq(0); // Get the inner element
+			this.$date.before($inner).remove(); // Move the inner element before the wrapper and remove the wrapper
+			this.$date = $inner; // Set the inner element as the date link
+
+		} else if (oldVis) { // true -> false/null; wrapper is <a> or <bdi>
+
+			const $wrapper = $('<span>')
+				.addClass('mw-changeslist-date')
+				.addClass(Revision.class.deleted)
+				.toggleClass(Revision.class.suppressed, newVis === null);
+			this.$date.before($wrapper); // Append the wrapper before the date link
+			$wrapper.append(this.$date); // Move the date link inside the wrapper
+			this.$date = $wrapper; // Set the wrapper as the date link
+
+		} else { // false -> null, null -> false
+
+			this.$date.toggleClass(Revision.class.suppressed, newVis === null);
+
+		}
+		return this;
 	}
 
 	/**
-	 * Toggle the revdel status of a comment (edit summary).
+	 * Toggle the revdel status of the comment (edit summary).
+	 *
+	 * `[[Special:Contributions]]`
 	 * ```html
-	 * <!-- The comment--without-parentheses class is omitted in all of the following -->
 	 * <!-- Normal comment -->
-	 * <span class="comment">COMMENT</span>
+	 * <span class="comment comment--without-parentheses">COMMENT</span>
 	 * <!-- Normal comment (empty) -->
 	 * <span class="comment mw-comment-none">No edit summary</span><!-- Has text but invisible -->
 	 * <!-- Deleted comment -->
-	 * <!-- [[Special:Contributions]] -->
 	 * <span class="history-deleted comment"><!-- Has an additional class if suppressed -->
 	 * 	<span class="comment">(edit summary removed)</span>
 	 * </span>
-	 * <!-- [[Special:DeletedContributions]] -->
+	 * ```
+	 * `[[Special:DeletedContributions]]`
+	 * ```html
+	 * <!-- Normal comment -->
+	 * <span class="comment comment--without-parentheses">COMMENT</span>
+	 * <!-- Normal comment (empty) -->
+	 * <span class="comment mw-comment-none">No edit summary</span><!-- Has text but invisible -->
+	 * <!-- Deleted comment -->
 	 * <span class="history-deleted comment"><!-- Has an additional class if suppressed -->
 	 * 	<!-- Empty if there's no edit summary -->
-	 * 	<span class="comment">COMMENT</span>
+	 * 	<span class="comment comment--without-parentheses">COMMENT</span>
+	 * </span>
+	 * <!-- Suppressed comment on a non-supressor's view (empty, non-empty) -->
+	 * <!-- This pattern is irrelevant to this method because the user can't change visibility -->
+	 * <span class="history-deleted mw-history-suppressed comment">
+	 * 	<span class="comment">(edit summary removed)</span>
 	 * </span>
 	 * ```
+	 * @param {boolean?} oldVis
+	 * @param {boolean?} newVis
+	 * @returns {boolean} Whether mw.hook will need to be called
 	 */
-	toggleCommentVisibility() {
+	toggleCommentVisibility(oldVis, newVis) {
+		if (oldVis === newVis) {
+			return false;
+		}
+		let ret = true;
+		if (newVis) { // false/null -> true
 
+			const $inner =
+				this.$comment.children().length ? // The inner tag can be missing on DC
+				this.$comment.children().eq(0) : // On C, just get the inner tag
+				$('<span>').addClass('comment'); // On DC, create one
+			this.$comment.before($inner).remove(); // Move the inner tag before the wrapper and remove the wrapper
+			this.$comment = $inner;
+			if (this.parsedComment) {
+				this.$comment
+					.addClass('comment--without-parentheses')
+					.html(this.parsedComment);
+			} else {
+				this.$comment
+					.addClass('mw-comment-none')
+					.html(getMessage('changeslist-nocomment'));
+			}
+
+		} else if (oldVis) { // true -> false/null
+
+			const $wrapper = $('<span>')
+				.addClass('comment')
+				.addClass(Revision.class.deleted)
+				.toggleClass(Revision.class.suppressed, newVis === null);
+			this.$comment // This will be the inner content
+				.before($wrapper) // Insert the wrapper before the comment
+				.removeAttr('class').addClass('comment') // Remove all classes but "comment"
+				.toggleClass('comment--without-parentheses', isDeletedContribs);
+			$wrapper.append(this.$comment); // Move the comment into the wrapper
+			if (!isDeletedContribs) { // On C
+				this.$comment.html(getMessage('rev-deleted-comment'));
+			} else if (this.parsedComment) { // On DC and comment is non-empty
+				this.$comment.html(this.parsedComment);
+			} else {
+				$wrapper.empty();
+			}
+			this.$comment = $wrapper;
+
+		} else { // false -> null, null -> false
+
+			this.$comment.toggleClass(Revision.class.suppressed, newVis === null);
+			ret = false;
+
+		}
+		return ret;
 	}
 
 	/**
-	 * @param {boolean} show
+	 * Toggle the revdel status of the username.
+	 * @param {boolean?} oldVis
+	 * @param {boolean?} newVis
 	 * @returns {Revision}
 	 */
-	toggleUserVisibility(show) {
-		this.$userhidden.toggle(!show);
+	toggleUserVisibility(oldVis, newVis) {
+		if (oldVis === newVis) {
+			return this;
+		}
+		this.$userhidden.toggle(!newVis);
+		this.$revdelLink.toggleClass('mrd-revdelundel-link-userhidden', newVis === null);
 		return this;
 	}
 
@@ -1400,6 +1642,33 @@ function getIcon(iconType) {
 	}
 	img.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
 	return img;
+}
+
+/**
+ * Get an interface message.
+ * @param {MessageName} name
+ * @returns {string}
+ */
+function getMessage(name) {
+	let ret = mw.messages.get(name);
+	if (ret === null) {
+		ret = {
+			'revdelete-hide-text': '版の本文',
+			'revdelete-hide-comment': '編集の要約',
+			'revdelete-hide-user': '投稿者の利用者名/IPアドレス',
+			'revdelete-otherreason': '他の、または追加の理由:',
+			'revdelete-reason-dropdown': '',
+			'revdelete-reasonotherlist': 'その他の理由',
+			'rev-deleted-user-contribs': '[利用者名またはIPアドレスは除去されました - この編集は投稿記録で非表示にされています]',
+			'revdelete-hide-restricted': '一般利用者に加え管理者からもデータを隠す',
+			'rev-deleted-comment': '(要約は除去されています)',
+			'changeslist-nocomment': '編集の要約なし'
+		}[name];
+	}
+	if (ret === void 0) {
+		throw new ReferenceError(`Message named ${name} is not found.`);
+	}
+	return ret;
 }
 
 //*********************************************************************************************

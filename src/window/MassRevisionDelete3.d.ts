@@ -60,3 +60,33 @@ interface ApiResultRevisionDeleteSuccess {
 interface ApiResultRevisionDeleteFailure {
 	code: string;
 }
+
+type MessageName =
+	'revdelete-hide-text'|
+	'revdelete-hide-comment'|
+	'revdelete-hide-user'|
+	'revdelete-otherreason'|
+	'revdelete-reason-dropdown'|
+	'revdelete-reasonotherlist'|
+	'rev-deleted-user-contribs'|
+	'revdelete-hide-restricted'|
+	'rev-deleted-comment'|
+	'changeslist-nocomment';
+
+interface ApiResponseQueryRevids {
+	query: {
+		pages: {
+			pageid: number;
+			ns: number;
+			title: string;
+			revisions?: ApiResponseQueryRevidsRevision[];
+			deletedrevisions?: ApiResponseQueryRevidsRevision[];
+		}[];
+	};
+}
+
+interface ApiResponseQueryRevidsRevision {
+	revid: number;
+	parentid: number;
+	parsedcomment: string;
+}
