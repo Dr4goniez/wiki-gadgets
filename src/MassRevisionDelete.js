@@ -7,12 +7,13 @@
 
 	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
-	@version 3.0.0
+	@version 3.0.1
 
 \***************************************************************************/
 // @ts-check
 /// <reference path="./window/MassRevisionDelete.d.ts" />
 /* global mw, OO */
+//<nowiki>
 (() => {
 //*********************************************************************************************
 
@@ -77,7 +78,7 @@ function init() {
 		api = new mw.Api({
 				ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.0 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
@@ -290,9 +291,18 @@ class MassRevisionDelete {
 	constructor(fieldset, $contribsList) {
 
 		/**
+		 * A collection of revision selector checkboxes.
+		 * @type {JQuery<HTMLInputElement>}
+		 */
+		let $checkbox = $([]);
+		/**
 		 * @type {Revision[]}
 		 */
-		this.list = Array.from($contribsList.children('li')).map((li) => new Revision(li));
+		this.list = Array.from($contribsList.children('li')).map((li) => {
+			const rev = new Revision(li);
+			$checkbox = $checkbox.add(rev.$checkbox);
+			return rev;
+		});
 		/**
 		 * @type {JQueryPromise}
 		 */
@@ -364,11 +374,23 @@ class MassRevisionDelete {
 
 		MassRevisionDelete.initializeReasonDropdowns([this.reason1, this.reason2]);
 
+		const {$wrapper, $revisionCounter} = MassRevisionDelete.createRevisionSelector($contribsList, this.list);
 		/**
 		 * The container of the revision selector buttons.
 		 * @type {JQuery<HTMLDivElement>}
 		 */
-		this.$btnContainer = MassRevisionDelete.createRevisionSelector($contribsList, this.list);
+		this.$btnContainer = $wrapper;
+
+		// Selected revision count updater
+		let checkboxChangeTimeout;
+		$checkbox.off('change').on('change', () => {
+			clearTimeout(checkboxChangeTimeout);
+			checkboxChangeTimeout = setTimeout(() => {
+				const cnt = this.list.reduce((acc, rev) => rev.isSelected() ? ++acc : acc, 0);
+				$revisionCounter.text(cnt);
+				console.log('!');
+			}, 100);
+		});
 
 	}
 
@@ -490,7 +512,7 @@ class MassRevisionDelete {
 	 * Create revision selector buttons.
 	 * @param {JQuery<HTMLUListElement>} $contribsList
 	 * @param {MassRevisionDelete['list']} list
-	 * @returns {JQuery<HTMLDivElement>}
+	 * @returns {{$wrapper: JQuery<HTMLDivElement>; $revisionCounter: JQuery<HTMLElement>}}
 	 * @private
 	 */
 	static createRevisionSelector($contribsList, list) {
@@ -503,6 +525,10 @@ class MassRevisionDelete {
 		 * @type {JQuery<HTMLSelectElement>}
 		 */
 		const $dropdown = $('<select>');
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 */
+		const $revisionCounter = $('<b>');
 		/**
 		 * @param {'select'|'unselect'|'invert'} type
 		 */
@@ -532,33 +558,38 @@ class MassRevisionDelete {
 						.attr('title', '選択ボタンの対象を制限します。')
 						.append(
 							new Option('(対象制限なし)', '', true, true),
-							new Option('削除済み版', 'deleted'),
-							new Option('未削除版', 'undeleted')
+							new Option('削除済みの版', 'deleted'),
+							new Option('未削除の版', 'undeleted')
 						),
-					$('<a>')
-						.prop('role', 'button')
-						.text('全選択')
-						.off('click').on('click', () => {
-							clickEvent('select');
-						}),
-					'・',
-					$('<a>')
-						.prop('role', 'button')
-						.text('全選択解除')
-						.off('click').on('click', () => {
-							clickEvent('unselect');
-						}),
-					'・',
-					$('<a>')
-						.prop('role', 'button')
-						.text('選択反転')
-						.off('click').on('click', () => {
-							clickEvent('invert');
-						})
+					$('<span>')
+						.append(
+							$('<a>')
+								.prop('role', 'button')
+								.text('全選択')
+								.off('click').on('click', () => {
+									clickEvent('select');
+								}),
+							'・',
+							$('<a>')
+								.prop('role', 'button')
+								.text('全選択解除')
+								.off('click').on('click', () => {
+									clickEvent('unselect');
+								}),
+							'・',
+							$('<a>')
+								.prop('role', 'button')
+								.text('選択反転')
+								.off('click').on('click', () => {
+									clickEvent('invert');
+								})
+						),
+					$('<span>').text('選択済みの版数:'),
+					$revisionCounter.text('0')
 				)
 		);
 
-		return $wrapper;
+		return {$wrapper, $revisionCounter};
 
 	}
 
@@ -1154,6 +1185,9 @@ class Revision {
 		this.$progress = $('<span>');
 
 		/**
+		 * The revision selector checkbox.
+		 *
+		 * **`$checkbox.prop('checked')` is read-only.** Use {@link toggleSelection} to (un)check the box programmatically.
 		 * @type {JQuery<HTMLInputElement>}
 		 */
 		this.$checkbox = $('<input>');
@@ -1409,6 +1443,7 @@ class Revision {
 	toggleSelection(check) {
 		if (this.changeable) {
 			this.$checkbox.prop('checked', check);
+			this.$checkbox.trigger('change');
 		}
 		return this;
 	}
@@ -1714,3 +1749,4 @@ init();
 
 //*********************************************************************************************
 })();
+//</nowiki>
