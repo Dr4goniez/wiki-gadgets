@@ -7,7 +7,7 @@
 
 	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
-	@version 3.0.1
+	@version 3.0.2
 
 \***************************************************************************/
 // @ts-check
@@ -78,7 +78,7 @@ function init() {
 		api = new mw.Api({
 				ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.2 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
@@ -793,7 +793,7 @@ class MassRevisionDelete {
 				hide: vis.hide.join('|'),
 				show: vis.show.join('|'),
 				suppress,
-				tags: mw.config.get('wgDBname') === 'testwiki' ? 'testtag' : 'MassRevisionDelete|DevScript',
+				tags: mw.config.get('wgDBname') === 'testwiki' ? 'testtag' : 'MassRevisionDelete',
 				formatversion: '2'
 			};
 
