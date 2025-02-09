@@ -7,7 +7,7 @@
 
 	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
-	@version 3.0.2
+	@version 3.0.3
 
 \***************************************************************************/
 // @ts-check
@@ -78,7 +78,7 @@ function init() {
 		api = new mw.Api({
 				ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.2 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.3 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
@@ -388,7 +388,6 @@ class MassRevisionDelete {
 			checkboxChangeTimeout = setTimeout(() => {
 				const cnt = this.list.reduce((acc, rev) => rev.isSelected() ? ++acc : acc, 0);
 				$revisionCounter.text(cnt);
-				console.log('!');
 			}, 100);
 		});
 
