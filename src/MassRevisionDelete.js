@@ -7,7 +7,7 @@
 
 	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
-	@version 3.0.3
+	@version 3.0.4
 
 \***************************************************************************/
 // @ts-check
@@ -74,11 +74,18 @@ function init() {
 	// Load mediawiki.api and the DOM
 	$.when(mw.loader.using('mediawiki.api'), $.ready).then(() => {
 
+		// Get the contributions list
+		/** @type {JQuery<HTMLUListElement>} */
+		const $contribsList = $('ul.mw-contributions-list');
+		if (!$contribsList.length || !$contribsList.children('li').length) {
+			return;
+		}
+
 		// Set up a mw.Api instance
 		api = new mw.Api({
 				ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.3 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.4 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
@@ -87,13 +94,6 @@ function init() {
 				formatversion: '2'
 			}
 		});
-
-		// Get the contributions list
-		/** @type {JQuery<HTMLUListElement>} */
-		const $contribsList = $('ul.mw-contributions-list');
-		if (!$contribsList.length || !$contribsList.children('li').length) {
-			return;
-		}
 
 		// Finish loading other modules and also fetch interface messages
 		$.when(
@@ -214,9 +214,9 @@ function createFieldset($contribsList) {
 class VisibilityLevel {
 
 	/**
-	 * Append a horizontal radio options for revdel visibility levels.
-	 * @param {OO.ui.FieldsetLayout} fieldset
-	 * @param {string} labelText
+	 * Create horizontally-aligned radio options for revdel visibility levels and append them to a FieldsetLayout widget.
+	 * @param {OO.ui.FieldsetLayout} fieldset The FieldsetLayout widget to which to append the RadioSelect widget.
+	 * @param {string} labelText The label text for the RadioSelect widget.
 	 * @param {{show?: string; hide?: string; visible?: boolean;}} [options]
 	 * Optional object to specify the "show" and "hide" radio labels, and the visibility of the widget (`true` by default).
 	 */
@@ -257,27 +257,12 @@ class VisibilityLevel {
 	}
 
 	/**
-	 * Get the data of the selected radio.
+	 * Get the data of the currently selected radio button.
 	 * @returns {RevdelLevel}
 	 */
 	getData() {
-		const selectedRadio = this.radioSelect.findSelectedItem();
-		if (!selectedRadio || Array.isArray(selectedRadio)) {
-			const err = 'VisibilityLevel.getData encountered an unexpected type: ' + (!selectedRadio ? 'null' : 'array');
-			console.error(err);
-			throw new TypeError(err);
-		}
+		const selectedRadio = /** @type {OO.ui.OptionWidget} */ (this.radioSelect.findSelectedItem());
 		return /** @type {RevdelLevel} */ (selectedRadio.getData());
-	}
-
-	/**
-	 * Set the 'disabled' state of the RadioSelect widget.
-	 * @param {boolean} disable
-	 * @returns {VisibilityLevel}
-	 */
-	setDisabled(disable) {
-		this.radioSelect.setDisabled(disable);
-		return this;
 	}
 
 }
@@ -291,7 +276,7 @@ class MassRevisionDelete {
 	constructor(fieldset, $contribsList) {
 
 		/**
-		 * A collection of revision selector checkboxes.
+		 * A collection of revision selector checkboxes, used to add click event handlers.
 		 * @type {JQuery<HTMLInputElement>}
 		 */
 		let $checkbox = $([]);
@@ -304,7 +289,7 @@ class MassRevisionDelete {
 			return rev;
 		});
 		/**
-		 * @type {JQueryPromise}
+		 * @type {JQueryPromise<void>}
 		 */
 		this.initPromise = $.Deferred();
 		/**
@@ -342,7 +327,7 @@ class MassRevisionDelete {
 			placeholder: (getMessage('revdelete-otherreason')).replace(/[:：]$/, '')
 		});
 		/**
-		 * Whether to accept a click on the execute button.
+		 * Whether to accept a new click on the Execute button.
 		 * @type {boolean}
 		 */
 		this.acceptExecution = true;
@@ -353,7 +338,7 @@ class MassRevisionDelete {
 			label: '実行',
 			flags: ['primary', 'progressive']
 		}).off('click').on('click', () => {
-			if (this.acceptsExecution()) {
+			if (this.acceptExecution) {
 				this.setExecutionAcceptability(false).execute();
 			} else {
 				console.warn('The new execution request was rejected.');
@@ -372,8 +357,10 @@ class MassRevisionDelete {
 			new OO.ui.FieldLayout(this.btnExecute)
 		]);
 
+		// Set up options for the revdel reason dropdowns
 		MassRevisionDelete.initializeReasonDropdowns([this.reason1, this.reason2]);
 
+		// Create utility buttons to select revdel target revisions
 		const {$wrapper, $revisionCounter} = MassRevisionDelete.createRevisionSelector($contribsList, this.list);
 		/**
 		 * The container of the revision selector buttons.
@@ -381,12 +368,12 @@ class MassRevisionDelete {
 		 */
 		this.$btnContainer = $wrapper;
 
-		// Selected revision count updater
+		// Dynamically count selected revisions when the checkboxes are (un)checked
 		let checkboxChangeTimeout;
 		$checkbox.off('change').on('change', () => {
 			clearTimeout(checkboxChangeTimeout);
 			checkboxChangeTimeout = setTimeout(() => {
-				const cnt = this.list.reduce((acc, rev) => rev.isSelected() ? ++acc : acc, 0);
+				const cnt = this.list.filter((rev) => rev.isSelected()).length;
 				$revisionCounter.text(cnt);
 			}, 100);
 		});
@@ -398,37 +385,35 @@ class MassRevisionDelete {
 	 */
 	init() {
 
-		const revidsNoComment = this.list.reduce(/** @param {string[]} acc */ (acc, rev) => {
+		// Collect the IDs of revisions whose parsed comments can't be picked up from the DOM
+		const revids = this.list.reduce(/** @param {string[]} acc */ (acc, rev) => {
 			if (!rev.parsedCommentFetched) {
 				acc.push(rev.getRevid());
 			}
 			return acc;
 		}, []);
-		if (!revidsNoComment.length) {
-			this.initPromise = $.Deferred().resolve();
+		if (!revids.length) {
+			this.initPromise = /** @type {JQueryDeferred} */ (this.initPromise).resolve();
 			return;
 		}
 
 		/**
+		 * Given revision IDs, get their parsed comments from the API and set them
+		 * to the corresponding {@link Revision} instances.
 		 * @param {string[]} revids
 		 * @returns {JQueryPromise<void>}
 		 */
 		const setParsedComments = (revids) => {
-			const params = (() => {
-				if (isDeletedContribs) {
-					return {
-						revids: revids.join('|'),
-						prop: 'deletedrevisions',
-						drvprop: 'ids|parsedcomment'
-					};
-				} else {
-					return {
-						revids: revids.join('|'),
-						prop: 'revisions',
-						rvprop: 'ids|parsedcomment'
-					};
-				}
-			})();
+			const params =
+				isDeletedContribs ? {
+					revids: revids.join('|'),
+					prop: 'deletedrevisions',
+					drvprop: 'ids|parsedcomment'
+				} : {
+					revids: revids.join('|'),
+					prop: 'revisions',
+					rvprop: 'ids|parsedcomment'
+				};
 			// @ts-ignore
 			return api.post(params, {
 				ajax: {
@@ -439,7 +424,7 @@ class MassRevisionDelete {
 				}
 			// @ts-ignore
 			}).then(/** @param {ApiResponseQueryRevids} res */ (res) => {
-				const resPages = res && res.query && res.query.pages;
+				const resPages = res && res.query && res.query.pages || [];
 				resPages.forEach(({revisions, deletedrevisions}) => {
 					const arr = revisions || deletedrevisions;
 					if (!arr) {
@@ -456,16 +441,17 @@ class MassRevisionDelete {
 			}).catch(console.error);
 		};
 
+		// Send API requests
 		const deferreds = [];
-		while (revidsNoComment.length) {
-			deferreds.push(setParsedComments(revidsNoComment.splice(0, apilimit)));
+		while (revids.length) {
+			deferreds.push(setParsedComments(revids.splice(0, apilimit)));
 		}
-		this.initPromise = $.when(deferreds);
+		this.initPromise = $.when(...deferreds).then(() => void 0).catch(() => void 0);
 
 	}
 
 	/**
-	 * Fetch the delete-reason dropdown options and add them to the MRD's reason dropdowns.
+	 * Fetch the delete-reason dropdown's options and add them to the MRD's reason dropdowns.
 	 * @param {OO.ui.DropdownInputWidget[]} dropdowns
 	 * @returns {void}
 	 * @private
@@ -484,11 +470,11 @@ class MassRevisionDelete {
 			let m;
 			while ((m = regex.exec(reasons))) {
 				const content = m[2].trim();
-				if (m[1].length === 1) {
+				if (m[1].length === 1) { // * <optgroup text>
 					options.push({
 						optgroup: content
 					});
-				} else {
+				} else { // ** <option text>
 					options.push({
 						data: content,
 						label: content
@@ -500,7 +486,6 @@ class MassRevisionDelete {
 		if (options.length < 2) {
 			mw.notify('MassRevisionDelete: 削除理由の取得に失敗しました。', {type: 'error'});
 		}
-
 		dropdowns.forEach((dd) => {
 			dd.setOptions(options);
 		});
@@ -508,10 +493,10 @@ class MassRevisionDelete {
 	}
 
 	/**
-	 * Create revision selector buttons.
+	 * Create utility buttons to select revdel target revisions.
 	 * @param {JQuery<HTMLUListElement>} $contribsList
 	 * @param {MassRevisionDelete['list']} list
-	 * @returns {{$wrapper: JQuery<HTMLDivElement>; $revisionCounter: JQuery<HTMLElement>}}
+	 * @returns {{$wrapper: JQuery<HTMLDivElement>; $revisionCounter: JQuery<HTMLElement>;}}
 	 * @private
 	 */
 	static createRevisionSelector($contribsList, list) {
@@ -593,14 +578,6 @@ class MassRevisionDelete {
 	}
 
 	/**
-	 * Check if the Execute button currently accepts a click on it.
-	 * @returns {boolean}
-	 */
-	acceptsExecution() {
-		return this.acceptExecution;
-	}
-
-	/**
 	 * Set the state of whether the Execute button should accept a click on it.
 	 * @param {boolean} accept
 	 * @returns {MassRevisionDelete}
@@ -614,7 +591,7 @@ class MassRevisionDelete {
 	 * Set the 'disabled' states of the execute button, the revision selector buttons,
 	 * and the checkboxes and revdel links of all revisions.
 	 * @param {boolean} disable
-	 * @param {('execute'|'selector'|'revisions')[]} [skip] Which target to skip.
+	 * @param {('execute'|'selector'|'revisions')[]} [skip] Which target(s) to skip.
 	 * @returns {MassRevisionDelete}
 	 */
 	setDisabled(disable, skip = []) {
@@ -654,7 +631,7 @@ class MassRevisionDelete {
 	}
 
 	/**
-	 * Set the 'disabled' states of the checkbox and the revdel link for each revision.
+	 * Set the 'disabled' states of the checkboxes and the revdel links for all revisions.
 	 * @param {boolean} disable
 	 * @returns {MassRevisionDelete}
 	 */
@@ -666,7 +643,7 @@ class MassRevisionDelete {
 	}
 
 	/**
-	 * Get the selected visibility level of a revdel target.
+	 * Get the selected visibility level of a revision item with reference to the corresponding RadioSelect widget.
 	 * @param {RevdelTarget} target
 	 * @returns {RevdelLevel}
 	 */
@@ -738,7 +715,7 @@ class MassRevisionDelete {
 		})();
 
 		// Get reason
-		const reason = [this.reason1.getValue(), this.reason2.getValue(), this.reasonC.getValue().trim()].filter(el => el).join(': ');
+		const reason = [this.reason1.getValue(), this.reason2.getValue(), this.reasonC.getValue().trim()].filter(Boolean).join(': ');
 		return (() => {
 			if (reason) {
 				return $.Deferred().resolve(true);
@@ -754,7 +731,7 @@ class MassRevisionDelete {
 			}
 
 			const $confirm = $('<div>').append(
-				`計${revisionCount}版の閲覧レベルを変更します。`,
+				`<b>計${revisionCount}版</b>の閲覧レベルを変更します。`,
 				$('<ul>').append(
 					$('<li>').append(
 						getMessage('revdelete-hide-text'),
@@ -785,15 +762,23 @@ class MassRevisionDelete {
 				return false;
 			}
 
+			let tags = '';
+			switch (mw.config.get('wgWikiID')) {
+				case 'testwiki':
+					tags = 'testtag';
+					break;
+				case 'jawiki':
+					tags = 'MassRevisionDelete';
+			}
+
 			return {
 				action: 'revisiondelete',
 				type: 'revision',
-				reason: reason,
+				reason,
 				hide: vis.hide.join('|'),
 				show: vis.show.join('|'),
 				suppress,
-				tags: mw.config.get('wgDBname') === 'testwiki' ? 'testtag' : 'MassRevisionDelete',
-				formatversion: '2'
+				tags
 			};
 
 		});
@@ -881,34 +866,34 @@ class MassRevisionDelete {
 			// Also wait for initPromise to resolve, to ensure that parsed comments have been fetched
 			$.when(...deferreds, this.initPromise).then((...res) => {
 
-				res.pop();
 				// Convert the array of result objects to one object
 				/** @type {Record<string, ApiResultRevisionDelete>} */
-				const result = res.reduce((obj, item) => Object.assign(obj, item), Object.create(null));
+				const result = Object.assign({}, ...res); // No need to care for initPromise because it's always undefined
 
 				// Update the progress
 				let requireHookCall = false;
 				/** @type {Revision[]} */
 				const failedRevs = [];
-				const allRevs = Object.keys(instances) // Younger revids first, older revids last
-					.reverse() // Sort in descending order to process revision <li>s in a top-down manner
-					.reduce(/** @param {Revision[]} acc */ (acc, revid) => {
-						const rev = instances[revid];
-						if (result[revid]) {
-							if (typeof result[revid].code === 'string') {
-								rev.setProgress('failed', result[revid].code);
-								failedRevs.push(rev);
-							} else {
-								const h = rev.setProgress('done').setNewVisibility(result[revid], defaultParams.suppress);
-								requireHookCall = requireHookCall || h;
-							}
-						} else {
-							rev.setProgress('failed', 'unknown error');
+				// Using Array.reduceRight because "Object.keys(instances)" creates an array of revids in ascending order
+				// The same array can be obtained when we collect revids by processing the revision <li>s in a bottom-up
+				// fashion, but we'll want to process them in a top-down fashion
+				const allRevs = Object.keys(instances).reduceRight(/** @param {Revision[]} acc */ (acc, revid) => {
+					const rev = instances[revid];
+					if (result[revid]) {
+						if (typeof result[revid].code === 'string') {
+							rev.setProgress('failed', result[revid].code);
 							failedRevs.push(rev);
+						} else {
+							const h = rev.setProgress('done').setNewVisibility(result[revid], defaultParams.suppress);
+							requireHookCall = requireHookCall || h;
 						}
-						acc.push(rev);
-						return acc;
-					}, []);
+					} else {
+						rev.setProgress('failed', 'unknown error');
+						failedRevs.push(rev);
+					}
+					acc.push(rev);
+					return acc;
+				}, []);
 				if (requireHookCall) {
 					mw.hook('wikipage.content').fire($('.mw-body-content'));
 				}
@@ -917,32 +902,28 @@ class MassRevisionDelete {
 				if (!failedRevs.length) { // All succeeded
 					this.setDisabled(false);
 					mw.notify(
-						$('<span>').prop('innerHTML',
-							`<b>計${allRevs.length}版</b>の版指定削除を実行しました。`
-						),
+						$('<span>').html(`<b>計${allRevs.length}版</b>の版指定削除を実行しました。`),
 						{type: 'success'}
 					);
 					setTimeout(() => {
 						allRevs.forEach((rev) => rev.setProgress(null));
 					}, 3000);
 
-				} else { // Some failed
+				} else { // Some failed, create detailed elements for mw.notify in this case
 
 					this.setDisabled(false, ['execute']);
 
-					// Create elements for mw.notify
-
 					// Error navigation buttons (prev/next)
-					const btnUp = new OO.ui.ButtonWidget({
+					const btnPrev = new OO.ui.ButtonWidget({
 						icon: 'arrowUp',
 						title: '前のエラーへ'
 					});
-					const btnDown = new OO.ui.ButtonWidget({
+					const btnNext = new OO.ui.ButtonWidget({
 						icon: 'arrowDown',
 						title: '次のエラーへ'
 					});
 					const buttons = new OO.ui.ButtonGroupWidget({
-						items: [btnUp, btnDown]
+						items: [btnPrev, btnNext]
 					});
 					buttons.$element.css('display', 'inline-flex');
 
@@ -962,7 +943,7 @@ class MassRevisionDelete {
 					indexDropdown.$element.css('display', 'inline-flex');
 
 					// Set up the buttons' events
-					btnUp.off('click').on('click', () => {
+					btnPrev.off('click').on('click', () => {
 						const menu = indexDropdown.getMenu();
 						const selectedItem = /** @type {OO.ui.OptionWidget?} */ (menu.findSelectedItem());
 						let index = selectedItem ? /** @type {number} */ (selectedItem.getData()) - 1 : failedRevs.length - 1;
@@ -973,7 +954,7 @@ class MassRevisionDelete {
 						// This is because we want to trigger the "select" event even when the selected option won't change
 						menu.selectItem().selectItemByData(index);
 					});
-					btnDown.off('click').on('click', () => {
+					btnNext.off('click').on('click', () => {
 						const menu = indexDropdown.getMenu();
 						const selectedItem = /** @type {OO.ui.OptionWidget?} */ (menu.findSelectedItem());
 						let index = selectedItem ? /** @type {number} */ (selectedItem.getData()) + 1 : 0;
@@ -986,7 +967,7 @@ class MassRevisionDelete {
 					mw.notify(
 						$('<div>')
 							.append(
-								$('<p>').prop('innerHTML',
+								$('<p>').html(
 									`<b>計${allRevs.length}版</b>の版指定削除を実行しました。` +
 									`うち<b class="mrd-red">${failedRevs.length}版の削除に失敗</b>しました。`
 								),
@@ -1376,8 +1357,6 @@ class Revision {
 			case 'failed':
 				cls = 'mrd-red';
 				this.$progress.append(getIcon(icon));
-				break;
-			default:
 		}
 
 		if (typeof message === 'string') {
@@ -1471,7 +1450,7 @@ class Revision {
 	setDisabled(disable) {
 		if (this.changeable) {
 			// If the revision is revdel-wise not changeable, the checkbox is initially disabled and the revdel
-			// link doesn't contain an <a> tag and is not clickable. Becase of this, we only look at changeable
+			// link doesn't contain an <a> tag (i.e. not clickable). Becase of this, we only look at changeable
 			// revisions, and this also prevents checkboxes that should always be disabled from being enabled back.
 			this.$checkbox.prop('disabled', disable);
 			this.$revdelLink.toggleClass('mrd-disabledlink', disable);
