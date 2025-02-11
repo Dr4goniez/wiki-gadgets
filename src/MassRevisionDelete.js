@@ -7,7 +7,7 @@
 
 	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
-	@version 3.0.5
+	@version 3.0.6
 
 \***************************************************************************/
 // @ts-check
@@ -85,7 +85,7 @@ function init() {
 		api = new mw.Api({
 				ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.5 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.6 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
@@ -750,7 +750,7 @@ class MassRevisionDelete {
 						' (',
 						conf.user,
 						')'
-					),
+					)
 				),
 				'よろしいですか？'
 			);
@@ -980,7 +980,7 @@ class MassRevisionDelete {
 									.css({
 										display: 'flex',
 										marginTop: '0.8em'
-									}),
+									})
 							)
 							.css('text-align', 'justify'),
 						{type: 'warn', autoHide: false}
