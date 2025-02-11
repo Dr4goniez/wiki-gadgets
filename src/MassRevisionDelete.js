@@ -7,7 +7,7 @@
 
 	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
-	@version 3.0.6
+	@version 3.0.7
 
 \***************************************************************************/
 // @ts-check
@@ -85,7 +85,7 @@ function init() {
 		api = new mw.Api({
 				ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.6 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.7 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
@@ -1217,7 +1217,7 @@ class Revision {
 		/**
 		 * An object keyed by revdel targets and each valued by its current visibility level.
 		 * (`true` if visible, `false` if not, or `null` if suppressed)
-		 * @type {Record<'content'|'comment'|'user', boolean?>}
+		 * @type {Record<RevdelTarget, boolean?>}
 		 */
 		this.currentVisibility = {
 			content: true,
@@ -1248,7 +1248,7 @@ class Revision {
 		})();
 
 		/**
-		 * Then `<span>` tag for summary. See {@link toggleCommentVisibility} for all its HTML structures.
+		 * The `<span>` tag for summary. See {@link toggleCommentVisibility} for all its HTML structures.
 		 * @type {JQuery<HTMLSpanElement>}
 		 */
 		this.$comment = this.$li.children('.comment');
@@ -1269,7 +1269,7 @@ class Revision {
 		this.parsedCommentFetched = true;
 		if (this.$comment.hasClass(Revision.class.deleted)) {
 			if (isDeletedContribs) {
-				this.parsedComment = this.$comment.children('comment').html();
+				this.parsedComment = this.$comment.children('.comment').html();
 			} else {
 				this.parsedCommentFetched = false;
 			}
@@ -1419,8 +1419,7 @@ class Revision {
 	 */
 	toggleSelection(check) {
 		if (this.changeable) {
-			this.$checkbox.prop('checked', check);
-			this.$checkbox.trigger('change');
+			this.$checkbox.prop('checked', check).trigger('change');
 		}
 		return this;
 	}
@@ -1449,7 +1448,7 @@ class Revision {
 	setDisabled(disable) {
 		if (this.changeable) {
 			// If the revision is revdel-wise not changeable, the checkbox is initially disabled and the revdel
-			// link doesn't contain an <a> tag (i.e. not clickable). Becase of this, we only look at changeable
+			// link doesn't contain an <a> tag (i.e. not clickable). Because of this, we only look at changeable
 			// revisions, and this also prevents checkboxes that should always be disabled from being enabled back.
 			this.$checkbox.prop('disabled', disable);
 			this.$revdelLink.toggleClass('mrd-disabledlink', disable);
