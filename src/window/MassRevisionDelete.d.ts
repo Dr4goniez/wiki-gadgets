@@ -6,11 +6,10 @@ interface DefaultParams {
 	action: 'revisiondelete';
 	type: 'revision';
 	reason: string;
-	hide: string[];
-	show: string[];
+	hide: string;
+	show: string;
 	suppress: 'no'|'nochange'|'yes';
 	tags: string;
-	formatversion: '2'
 }
 
 interface ApiParamsActionRevisionDelete extends DefaultParams {

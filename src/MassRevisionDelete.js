@@ -7,7 +7,7 @@
 
 	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
-	@version 3.0.4
+	@version 3.0.5
 
 \***************************************************************************/
 // @ts-check
@@ -85,7 +85,7 @@ function init() {
 		api = new mw.Api({
 				ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.4 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.5 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
@@ -771,7 +771,7 @@ class MassRevisionDelete {
 					tags = 'MassRevisionDelete';
 			}
 
-			return {
+			return /** @type {DefaultParams} */ ({
 				action: 'revisiondelete',
 				type: 'revision',
 				reason,
@@ -779,7 +779,7 @@ class MassRevisionDelete {
 				show: vis.show.join('|'),
 				suppress,
 				tags
-			};
+			});
 
 		});
 
@@ -853,11 +853,10 @@ class MassRevisionDelete {
 			Object.keys(revisions).forEach((pagename) => {
 				const ids = revisions[pagename].slice();
 				while (ids.length) {
-					const params = {
+					const params = Object.assign({
 						target: pagename,
 						ids: ids.splice(0, apilimit).join('|'),
-						...defaultParams
-					};
+					}, defaultParams);
 					deferreds.push(debuggingMode ? this.testRevdel(params) : this.revdel(params));
 				}
 			});
@@ -1382,7 +1381,7 @@ class Revision {
 	setNewVisibility(newVis, suppress) {
 
 		// Update the current visibility levels
-		const oldVisibility = {...this.currentVisibility};
+		const oldVisibility = Object.assign({}, this.currentVisibility);
 		this.currentVisibility = Revision.targets.reduce((acc, target) => {
 			if (newVis[target]) {
 				acc[target] = true;
