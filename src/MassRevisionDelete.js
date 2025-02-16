@@ -7,7 +7,7 @@
 
 	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
-	@version 3.0.7
+	@version 3.0.8
 
 \***************************************************************************/
 // @ts-check
@@ -85,7 +85,7 @@ function init() {
 		api = new mw.Api({
 				ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.7 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.8 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
@@ -541,9 +541,9 @@ class MassRevisionDelete {
 					$dropdown
 						.attr('title', '選択ボタンの対象を制限します。')
 						.append(
-							new Option('(対象制限なし)', '', true, true),
-							new Option('削除済みの版', 'deleted'),
-							new Option('未削除の版', 'undeleted')
+							new Option('(対象:全ての版)', '', true, true),
+							new Option('既削除版のみ', 'deleted'),
+							new Option('未削除版のみ', 'undeleted')
 						),
 					$('<span>')
 						.append(
