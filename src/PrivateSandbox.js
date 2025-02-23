@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.21
+	@version 1.0.22
 
 \**************************************************************************************************/
 
@@ -921,7 +921,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.21 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': 'PrivateSandbox/1.0.22 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -1110,6 +1110,11 @@ class PrivateSandbox {
 					}
 				}
 			});
+		}).off('enter').on('enter', () => {
+			// If Enter is pressed when the input is focused, simulate a click on the "Create" button
+			if (!this.btnCreate.isDisabled()) {
+				this.btnCreate.emit('click');
+			}
 		});
 
 		// Fire the "pvtsand.content" hook when the content is edited
