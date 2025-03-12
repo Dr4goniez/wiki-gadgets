@@ -698,7 +698,7 @@ class MassRevisionDelete {
 			conf[target] = widgetToConfirmationMessage(widget); // Will be used later to confirm the revision deletion
 			const level = widget.getData();
 			if (vis[level] && target !== 'suppress') {
-				 // "level=nochange" is ignored because the "vis" object doesn't have that key
+				// "level=nochange" is ignored because the "vis" object doesn't have that key
 				vis[level].push(target);
 			} else if (target === 'suppress' && level !== 'nochange') {
 				vis.suppress = level === 'show' ? 'no' : 'yes';
