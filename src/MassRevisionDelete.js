@@ -7,7 +7,7 @@
 
 	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
-	@version 3.0.8
+	@version 3.0.9
 
 \***************************************************************************/
 // @ts-check
@@ -85,7 +85,7 @@ function init() {
 		api = new mw.Api({
 				ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.8 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.9 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
@@ -223,15 +223,18 @@ class VisibilityLevel {
 	constructor(fieldset, labelText, options = {visible: true}) {
 
 		// Create radio options
-		const optNochange = new OO.ui.RadioOptionWidget({
+		/** @type {OO.ui.RadioOptionWidget} */
+		this.optNochange = new OO.ui.RadioOptionWidget({
 			data: 'nochange',
 			label: '変更なし'
 		});
-		const optShow = new OO.ui.RadioOptionWidget({
+		/** @type {OO.ui.RadioOptionWidget} */
+		this.optShow = new OO.ui.RadioOptionWidget({
 			data: 'show',
 			label: options.show || '閲覧可'
 		});
-		const optHide = new OO.ui.RadioOptionWidget({
+		/** @type {OO.ui.RadioOptionWidget} */
+		this.optHide = new OO.ui.RadioOptionWidget({
 			data: 'hide',
 			label: options.hide || '閲覧不可'
 		});
@@ -239,9 +242,9 @@ class VisibilityLevel {
 		/** @type {OO.ui.RadioSelectWidget} */
 		this.radioSelect = new OO.ui.RadioSelectWidget({
 			classes: ['mrd-horizontal-radios'],
-			items: [optNochange, optShow, optHide]
+			items: [this.optNochange, this.optShow, this.optHide]
 		});
-		this.radioSelect.selectItem(optNochange);
+		this.radioSelect.selectItem(this.optNochange);
 
 		const fieldLayout = new OO.ui.FieldLayout(this.radioSelect, {
 			classes: ['mrd-fieldLayout-boldheader'],
@@ -643,20 +646,22 @@ class MassRevisionDelete {
 	}
 
 	/**
-	 * Get the selected visibility level of a revision item with reference to the corresponding RadioSelect widget.
-	 * @param {RevdelTarget} target
-	 * @returns {RevdelLevel}
+	 * Given a target item of revison deletion, get the corresponding RadioSelect widget that holds settings for the visibility level.
+	 * @param {RevdelTarget | 'suppress'} target
+	 * @returns {VisibilityLevel}
 	 */
-	getSelectedVisibilityLevel(target) {
+	getVisibilityLevelWidget(target) {
 		switch (target) {
 			case 'content':
-				return this.vlContent.getData();
+				return this.vlContent;
 			case 'comment':
-				return this.vlComment.getData();
+				return this.vlComment;
 			case 'user':
-				return this.vlUser.getData();
+				return this.vlUser;
+			case 'suppress':
+				return this.vlSuppress;
 			default: {
-				const err = `MassRevisionDelete.getSelectedVisibilityLevel encountered an unexpected target of "${target}".`;
+				const err = `MassRevisionDelete.getVisibilityLevelWidget encountered an unexpected target of "${target}".`;
 				console.error(err);
 				throw new Error(err);
 			}
@@ -680,39 +685,28 @@ class MassRevisionDelete {
 		// Get visibility levels
 		const vis = {
 			hide: [],
-			show: []
+			show: [],
+			suppress: 'nochange'
 		};
 		/**
 		 * An object valued by jQuery Objects, later used for the revdel confirmation popup.
-		 * @type {Record<RevdelTarget, JQuery<HTMLElement>>}
+		 * @type {Record<RevdelTarget | 'suppress', JQuery<HTMLElement>>}
 		 */
 		const conf = Object.create(null);
-		Revision.targets.forEach((target) => {
-			const level = this.getSelectedVisibilityLevel(target);
-			conf[target] = levelToConfirmationMessage(level); // Will be used later to confirm the revision deletion
-			if (vis[level]) { // Ignore "nochange"
+		/** @type {(RevdelTarget | 'suppress')[]} */(['suppress'].concat(Revision.targets)).forEach((target) => {
+			const widget = this.getVisibilityLevelWidget(target);
+			conf[target] = widgetToConfirmationMessage(widget); // Will be used later to confirm the revision deletion
+			const level = widget.getData();
+			if (vis[level] && target !== 'suppress') {
+				 // "level=nochange" is ignored because the "vis" object doesn't have that key
 				vis[level].push(target);
+			} else if (target === 'suppress' && level !== 'nochange') {
+				vis.suppress = level === 'show' ? 'no' : 'yes';
 			}
 		});
 		if (!vis.hide.length && !vis.show.length) {
 			return mw.notify('版指定削除の対象項目が選択されていません。', {type: 'error'}).then(() => false);
 		}
-		const suppress = (() => {
-			const level = this.vlSuppress.getData();
-			switch (level) {
-				case 'nochange':
-					return 'nochange';
-				case 'show':
-					return 'no';
-				case 'hide':
-					return 'yes';
-				default: {
-					const err = `MassRevisionDelete.vlSuppress.getData encountered an unexpected value of "${level}".`;
-					console.error(err);
-					throw new Error(err);
-				}
-			}
-		})();
 
 		// Get reason
 		const reason = [this.reason1.getValue(), this.reason2.getValue(), this.reasonC.getValue().trim()].filter(Boolean).join(': ');
@@ -750,7 +744,13 @@ class MassRevisionDelete {
 						' (',
 						conf.user,
 						')'
-					)
+					),
+					$('<li>').append(
+						getMessage('revdelete-hide-restricted'),
+						' (',
+						conf.suppress,
+						')'
+					).toggle(rights.suppress)
 				),
 				'よろしいですか？'
 			);
@@ -777,25 +777,26 @@ class MassRevisionDelete {
 				reason,
 				hide: vis.hide.join('|'),
 				show: vis.show.join('|'),
-				suppress,
+				suppress: vis.suppress,
 				tags
 			});
 
 		});
 
 		/**
-		 * @param {RevdelLevel} level
+		 * @param {VisibilityLevel} widget
 		 * @returns {JQuery<HTMLElement>}
 		 */
-		function levelToConfirmationMessage(level) {
+		function widgetToConfirmationMessage(widget) {
+			const level = widget.getData();
 			const $b = $('<b>');
 			switch (level) {
 				case 'nochange':
-					return $b.text('変更なし');
+					return $b.text(/** @type {string} */(widget.optNochange.getLabel()));
 				case 'show':
-					return $b.text('閲覧可').addClass('mrd-green');
+					return $b.text(/** @type {string} */(widget.optShow.getLabel())).addClass('mrd-green');
 				case 'hide':
-					return $b.text('閲覧不可').addClass('mrd-red');
+					return $b.text(/** @type {string} */(widget.optHide.getLabel())).addClass('mrd-red');
 			}
 		}
 
