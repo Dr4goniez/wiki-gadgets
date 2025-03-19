@@ -1,7 +1,7 @@
 /*********************************************************************************\
 	AN Reporter
 	@author [[User:Dragoniez]]
-	@version 8.2.0
+	@version 8.2.1
 	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -1649,6 +1649,7 @@ class Reporter {
 			}
 
 			// Initialize the LTA copier dropdown
+			ltaList = ltaList.filter((el) => !/^(SANNET|HEXAGON|MOPERA|AU ONE NET)($|\/)/.test(el));
 			if (ltaList.length) {
 				const optgroup = document.createElement('optgroup');
 				optgroup.style.display = 'none'; // Wrap with optgroup to adjust font size
