@@ -1,7 +1,7 @@
 /************************************************
 	SpurLink
 	@author [[User:Dragoniez]]
-	@version 2.2.0
+	@version 2.2.1
 *************************************************/
 // @ts-check
 /* global mw */
@@ -1179,10 +1179,12 @@ function addLinks() {
 		 *		)
 		 *	</span>
 		 * ```
-		 * Contribs of a CIDR IP
+		 * Contribs of a CIDR
 		 * ```html
+		 * <bdi>
 		 *	<a class="mw-anonuserlink">IP</a>
-		 *	<a class="new mw-usertoollinks-talk"></a>
+		 * </bdi>
+		 * <a class="mw-usertoollinks-talk"></a>
 		 * ```
 		 * Special:RecentChanges, Special:Watchlist (Group changes by page)
 		 * ```html
@@ -1198,8 +1200,12 @@ function addLinks() {
 		 */
 		var targetElement = a.nextElementSibling;
 		var pr = a.parentElement;
-		if (targetElement&& targetElement.classList.contains('mw-usertoollinks-talk')) { // Contribs of a CIDR IP
+		var el;
+		if (targetElement && targetElement.classList.contains('mw-usertoollinks-talk')) { // Contribs of a CIDR (backwards compatibility)
 			createLinks(cfg, ip, targetElement, 'after');
+			a.classList.add('sl-toollink-added');
+		} else if (pr && (el = pr.nextElementSibling) && el.classList.contains('mw-usertoollinks-talk')) { // Contribs of a CIDR
+			createLinks(cfg, ip, el, 'after');
 			a.classList.add('sl-toollink-added');
 		} else if ( /* Normal */ targetElement && (
 			targetElement.classList.contains('mw-usertoollinks') ||
