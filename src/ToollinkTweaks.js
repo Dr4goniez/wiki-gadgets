@@ -1,7 +1,7 @@
 /******************************************************************************************************************\
 	ToollinkTweaks
 	Extend toollinks attached to user links to the script user's liking.
-	@version 1.3.0
+	@version 1.3.1
 	@author [[User:Dragoniez]]
 \******************************************************************************************************************/
 
@@ -1286,7 +1286,7 @@ function addLinks(cfg) {
 	if (!anchors.length) return;
 	anchors.forEach(function(a) {
 
-		if (a.type === 'button') {
+		if (a.role === 'button') {
 			return;
 		}
 
@@ -1323,10 +1323,12 @@ function addLinks(cfg) {
 		 *		)
 		 *	</span>
 		 * ```
-		 * Contribs of a CIDR IP
+		 * Contribs of a CIDR
 		 * ```html
+		 * <bdi>
 		 *	<a class="mw-anonuserlink">IP</a>
-		 *	<a class="new mw-usertoollinks-talk"></a>
+		 * </bdi>
+		 * <a class="mw-usertoollinks-talk"></a>
 		 * ```
 		 * Special:RecentChanges, Special:Watchlist (Group changes by page)
 		 * ```html
@@ -1342,8 +1344,11 @@ function addLinks(cfg) {
 		 */
 		var targetElement = a.nextElementSibling;
 		var pr = a.parentElement;
-		if (targetElement&& targetElement.classList.contains('mw-usertoollinks-talk')) { // Contribs of a CIDR IP
+		var el;
+		if (targetElement && targetElement.classList.contains('mw-usertoollinks-talk')) { // Contribs of a CIDR (backwards compatibility)
 			createLinks(cfg, user, targetElement, 'after');
+		} else if (pr && (el = pr.nextElementSibling) && el.classList.contains('mw-usertoollinks-talk')) { // Contribs of a CIDR
+			createLinks(cfg, user, el, 'after');
 		} else if ( /* Normal */ targetElement && (
 			targetElement.classList.contains('mw-usertoollinks') ||
 			// There might be an intervening node created by the ipinfo extension
