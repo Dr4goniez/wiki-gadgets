@@ -1,7 +1,7 @@
 /************************************************
 	SpurLink
 	@author [[User:Dragoniez]]
-	@version 2.2.1
+	@version 2.2.2
 *************************************************/
 // @ts-check
 /* global mw */
@@ -318,19 +318,19 @@ function createConfigPage() {
 
 		var chkAll = document.createElement('a');
 		chkAll.classList.add('slc-toollink-iplist-checkbox-all');
-		chkAll.type = 'button';
+		chkAll.role = 'button';
 		chkAll.textContent = 'すべて';
 		checker.appendChild(chkAll);
 		checker.appendChild(document.createTextNode('、'));
 		var chkNone = document.createElement('a');
 		chkNone.classList.add('slc-toollink-iplist-checkbox-none');
-		chkNone.type = 'button';
+		chkNone.role = 'button';
 		chkNone.textContent = 'なし';
 		checker.appendChild(chkNone);
 		checker.appendChild(document.createTextNode('、'));
 		var chkInvert = document.createElement('a');
 		chkInvert.classList.add('slc-toollink-iplist-checkbox-invert');
-		chkInvert.type = 'button';
+		chkInvert.role = 'button';
 		chkInvert.textContent = '反転';
 		checker.appendChild(chkInvert);
 		appendTo.appendChild(checker);
@@ -550,7 +550,7 @@ function createConfigPage() {
 		up.src = '//upload.wikimedia.org/wikipedia/commons/thumb/9/9b/Skip_to_top3.svg/50px-Skip_to_top3.svg.png';
 		up.style.width = '2em';
 		var upA = document.createElement('a');
-		upA.type = 'button';
+		upA.role = 'button';
 		upA.classList.add('slc-toollink-swapup');
 		upA.appendChild(up);
 		swapper.appendChild(upA);
@@ -558,7 +558,7 @@ function createConfigPage() {
 		down.src = '//upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Skip_to_bottom3.svg/50px-Skip_to_bottom3.svg.png';
 		down.style.width = '2em';
 		var downA = document.createElement('a');
-		downA.type = 'button';
+		downA.role = 'button';
 		downA.classList.add('slc-toollink-swapdown');
 		downA.appendChild(down);
 		swapper.appendChild(downA);
@@ -1152,7 +1152,7 @@ function addLinks() {
 		var a = anchors[i];
 		var ip = a.textContent;
 		if (
-			a.type === 'button' ||
+			a.role === 'button' ||
 			a.classList.contains('sl-toollink-added') ||
 			!ip ||
 			!mw.util.isIPAddress(ip, true)
