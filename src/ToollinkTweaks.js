@@ -1,7 +1,7 @@
 /******************************************************************************************************************\
 	ToollinkTweaks
 	Extend toollinks attached to user links to the script user's liking.
-	@version 1.3.1
+	@version 1.3.2
 	@author [[User:Dragoniez]]
 \******************************************************************************************************************/
 
@@ -1277,14 +1277,15 @@ function addLinks(cfg) {
 			}
 		}
 		if (user) {
-			createLinks(cfg, user, headingToollink, '');
+			createLinks(cfg, user, headingToollink);
 		}
 	}
 
-	/** @type {HTMLAnchorElement[]} */
-	var anchors = Array.prototype.slice.call(document.querySelectorAll('.mw-userlink, .mw-anonuserlink'));
-	if (!anchors.length) return;
-	anchors.forEach(function(a) {
+	// Iterate over user links
+	var /** @type {JQuery<HTMLAnchorElement>} */ $anchors = $('.mw-userlink, .mw-anonuserlink');
+	var /** @readonly */ CLS_USERTOOLLINKS = 'mw-usertoollinks';
+	var /** @readonly */ CLS_USERTOOLLINKS_TALK = 'mw-usertoollinks-talk';
+	$anchors.each(function(_, a) {
 
 		if (a.role === 'button') {
 			return;
@@ -1328,7 +1329,11 @@ function addLinks(cfg) {
 		 * <bdi>
 		 *	<a class="mw-anonuserlink">IP</a>
 		 * </bdi>
-		 * <a class="mw-usertoollinks-talk"></a>
+		 * <span class="mw-usertoollinks">
+		 * 	<span>
+		 * 		<a class="mw-usertoollinks-talk"></a>
+		 * 	</span>
+		 * </span>
 		 * ```
 		 * Special:RecentChanges, Special:Watchlist (Group changes by page)
 		 * ```html
@@ -1342,34 +1347,40 @@ function addLinks(cfg) {
 		 *	</span>
 		 * ```
 		 */
-		var targetElement = a.nextElementSibling;
-		var pr = a.parentElement;
-		var el;
-		if (targetElement && targetElement.classList.contains('mw-usertoollinks-talk')) { // Contribs of a CIDR (backwards compatibility)
-			createLinks(cfg, user, targetElement, 'after');
-		} else if (pr && (el = pr.nextElementSibling) && el.classList.contains('mw-usertoollinks-talk')) { // Contribs of a CIDR
-			createLinks(cfg, user, el, 'after');
-		} else if ( /* Normal */ targetElement && (
-			targetElement.classList.contains('mw-usertoollinks') ||
+		var $a = $(a);
+		var $next = $a.next();
+		var $parent = $a.parent();
+		var $el;
+		if ($next.hasClass(CLS_USERTOOLLINKS_TALK)) {
+			// Contribs of a CIDR (backwards compatibility)
+			createLinks(cfg, user, $next[0], 'after');
+		} else if (($el = $parent.next('.' + CLS_USERTOOLLINKS_TALK)).length) {
+			// Contribs of a CIDR (backwards compatibility)
+			createLinks(cfg, user, $el[0], 'after');
+		} else if (($el = $parent.next('.' + CLS_USERTOOLLINKS)).length) {
+			// Contribs of a CIDR
+			createLinks(cfg, user, $el[0]);
+		} else if (
+			($el = $next).hasClass(CLS_USERTOOLLINKS) ||
 			// There might be an intervening node created by the ipinfo extension
-			targetElement.classList.contains('ext-ipinfo-button') && (targetElement = targetElement.nextElementSibling) && targetElement.classList.contains('mw-usertoollinks')
-		)) {
-			/** @type {HTMLElement[]} */
-			var ch = Array.prototype.slice.call(targetElement.children);
-			if (ch.some(function(el) { return el && el.nodeName === 'A'; })) {
-				createLinks(cfg, user, targetElement, 'nospan'); // AbuseLog
-			} else {
-				createLinks(cfg, user, targetElement, ''); // Normal
-			}
-		} else if ( // Non-collaspsed links with the "Group changes by page" setting
-			pr && pr.nodeName === 'SPAN' && pr.classList.contains('mw-changeslist-line-inner-userLink') &&
-			(targetElement = pr.nextElementSibling) && targetElement.classList.contains('mw-changeslist-line-inner-userTalkLink') &&
-			(targetElement = targetElement.querySelector('.mw-usertoollinks'))
+			($next.hasClass('ext-ipinfo-button') && ($el = $next.next('.' + CLS_USERTOOLLINKS)).length)
 		) {
-			createLinks(cfg, user, targetElement, '');
-		} else {
-			return;
+			if ($el.children('a').length) {
+				// AbuseLog, bare anchor toollinks
+				createLinks(cfg, user, $el[0], 'piped');
+			} else {
+				// Normal, just append new links as span tags
+				createLinks(cfg, user, $el[0]);
+			}
+		} else if (
+			// Non-collaspsed links with the "Group changes by page" setting
+			$parent.prop('nodeName') === 'SPAN' && $parent.hasClass('mw-changeslist-line-inner-userLink') &&
+			($el = $parent.next('.mw-changeslist-line-inner-userTalkLink')).length &&
+			($el = $el.find('.' + CLS_USERTOOLLINKS)).length
+		) {
+			createLinks(cfg, user, $el[0]);
 		}
+
 	});
 
 }
@@ -1411,7 +1422,13 @@ function extractCidr(text) {
  * @param {TTBuilderConfig[]} cfg
  * @param {string} username
  * @param {Element} targetElement
- * @param {""|"after"|"nospan"} appendType
+ * @param {"after"|"piped"} [appendType]
+ *
+ * Types:
+ * - `undefined`: Appends toollink spans to `element`.
+ * - `'after'`: Appends toollink spans after `element`.
+ * - `'piped'`: Appends toollink spans to `element`, by delimiting each with a pipe character.
+ *
  * @returns {void}
  */
 function createLinks(cfg, username, targetElement, appendType) {
@@ -1467,7 +1484,7 @@ function createLinks(cfg, username, targetElement, appendType) {
 				$(targetElement).after(span);
 				targetElement = span;
 				break;
-			case 'nospan':
+			case 'piped':
 				var ch = targetElement.childNodes;
 				ch[ch.length - 1].remove(); // Remove text node
 				targetElement.appendChild(document.createTextNode(' | '));
