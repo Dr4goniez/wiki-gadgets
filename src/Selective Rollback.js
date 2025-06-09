@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.3.0
+	@version 4.3.3
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -15,6 +15,7 @@
 // @ts-check
 /// <reference path="./window/Selective Rollback.d.ts" />
 /* global mw, OO */
+/* eslint-disable @typescript-eslint/no-this-alias */
 //<nowiki>
 (function() {
 
@@ -58,7 +59,7 @@
 			api = new mw.Api({
 				ajax: {
 					headers: {
-						'Api-User-Agent': 'Selective_Rollback/4.3.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+						'Api-User-Agent': 'Selective_Rollback/4.3.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 					}
 				}
 			});
@@ -66,7 +67,10 @@
 				var spName = mw.config.get('wgCanonicalSpecialPageName');
 				if (typeof spName === 'string' && ['Recentchanges', 'Watchlist'].indexOf(spName) !== -1) {
 					return null; // RCW
-				} else if (mw.config.get('wgAction') === 'history' || spName === 'Contributions') {
+				} else if (
+					mw.config.get('wgAction') === 'history' ||
+					(spName && ['Contributions', 'IPContributions', 'GlobalContributions'].indexOf(spName) !== -1)
+				) {
 					return 'li';
 				} else if (typeof mw.config.get('wgDiffNewId') === 'number') {
 					return '#mw-diff-ntitle2';
@@ -1093,7 +1097,7 @@
 		var /** @type {mw.Api} @readonly */ previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective Rollback/4.3.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
+					'Api-User-Agent': 'Selective Rollback/4.3.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
@@ -1227,10 +1231,10 @@
 				// Bind AJAX rollback as a click event
 				rbspan.addEventListener('click', function clickEvent(e) {
 					e.preventDefault();
-					var rbspan = this;
+					var _rbspan = this;
 					var ajaxRollback = function() {
-						_this.ajaxRollback(rbspan, box).then(function() {
-							rbspan.removeEventListener('click', clickEvent);
+						_this.ajaxRollback(_rbspan, box).then(function() {
+							_rbspan.removeEventListener('click', clickEvent);
 						});
 					};
 					if (e.ctrlKey) {
@@ -1245,9 +1249,9 @@
 						)
 					) {
 						window.requestAnimationFrame(function() { // Ensure that the popup takes place after the browser's repaint
-							rbspan.style.border = '1px dotted black'; // Visualize which rollback link has been clicked
+							_rbspan.style.border = '1px dotted black'; // Visualize which rollback link has been clicked
 							OO.ui.confirm(msg['msg-confirm']).then(function(confirmed) {
-								rbspan.style.border = '';
+								_rbspan.style.border = '';
 								if (confirmed) ajaxRollback();
 							});
 						});

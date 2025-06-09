@@ -2,7 +2,7 @@
 	MovePageWarnings
 	Generate warnings on Special:Movepage, per the states of the move destination.
 	@author [[User:Dragoniez]]
-	@version 1.2.0
+	@version 1.2.1
 \*****************************************************************************************/
 
 /* eslint-disable @typescript-eslint/no-this-alias */
@@ -128,7 +128,18 @@
 			});
 
 			/** @type {mw.Api} @readonly */
-			this.api = new mw.Api();
+			this.api = new mw.Api({
+				ajax: {
+					headers: {
+						'Api-User-Agent': 'MovePageWarnings/1.2.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MovePageWarnings.js)'
+					}
+				},
+				parameters: {
+					action: 'query',
+					format: 'json',
+					formatversion: '2'
+				}
+			});
 
 			// Watch the move destination specifiers
 			var _this = this;
@@ -185,7 +196,8 @@
 			// Append the warning wrapper to the DOM
 			$('.mw-body-content').children('h2').eq(0).before(
 				this.$warning
-					.addClass('mw-message-box mw-message-box-warning')
+					.addClass('cdx-message cdx-message--warning')
+					.css('display', 'block') // Overwrite the flex display
 					.prop('id', 'mpw-warnings')
 					.hide()
 					.append(
@@ -855,7 +867,6 @@
 				return $.Deferred().resolve(null);
 			}
 			return this.api.get({
-				action: 'query',
 				titles: title,
 				prop: 'info|revisions',
 				inprop: 'protection',
@@ -865,8 +876,7 @@
 				leprop: 'ids|title|type|user|timestamp|parsedcomment|details',
 				letype: 'protect',
 				letitle: title,
-				lelimit: 'max',
-				formatversion: '2'
+				lelimit: 'max'
 			}).then(/** @param {ApiResponse} res */ function(res) {
 
 				/** @type {TitleInfo} */
@@ -964,14 +974,12 @@
 		 * Get mappings from redirecting pages to redirected pages.
 		 * @param {string[]} pagenames
 		 * @returns {JQueryPromise<Record<string, string>>} Object keyed by redirecting pages (where the titles are normalized)
-		 * and valued by redirected pages. 
+		 * and valued by redirected pages.
 		 */
 		MovePageWarnings.prototype.getRedirectMap = function(pagenames) {
 			return this.api.get({
-				action: 'query',
 				titles: pagenames.join('|'),
-				redirects: true,
-				formatversion: '2'
+				redirects: true
 			}).then(/** @param {ApiResponse} res */ function(res) {
 				var ret = Object.create(null);
 				if (res && res.query) {
@@ -1001,9 +1009,7 @@
 			}
 			/** @typedef {Record<string, boolean>} ExistenceMap */
 			return this.api.get({
-				action: 'query',
-				titles: pagenames,
-				formatversion: '2'
+				titles: pagenames
 			}).then(/** @param {ApiResponse} res */ function(res) {
 				var normalize = normalizerFactory(res && res.query && res.query.normalized);
 				var fPagenames = pagenames.map(function(p) {

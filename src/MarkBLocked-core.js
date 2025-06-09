@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.1.1
+ * @version 3.1.4
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js Loader module
@@ -205,7 +205,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.1.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.1.4 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -529,9 +529,7 @@ class MarkBLocked {
 				}),
 				new OO.ui.FieldLayout(g_blocks, {
 					label: getExclMessage('config-label-g_blocks', true),
-					align: 'inline',
-					help: this.getMessage('config-help-g_blocks'),
-					helpInline: true
+					align: 'inline'
 				}),
 				new OO.ui.FieldLayout(g_rangeblocks, {
 					label: getExclMessage('config-label-g_rangeblocks'),
@@ -744,17 +742,9 @@ class MarkBLocked {
 		const allUsers = users.concat(ips);
 
 		// Start markup
-		/**
-		 * For the time being, not looking at registered users for their global blocks. This is because the collected
-		 * user links may contain links for non-existing users, and the current version of `list=globalblocks` throws
-		 * an error when it finds a query for non-existing registered users (but not for IPs). We can pre-check for
-		 * the existence of the users but this will need other API requests, and I (Dragoniez) can't quite make sense
-		 * of why this must be so, unlike other API interfaces for GET requests like `list=blocks`.
-		 * @see https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/extensions/GlobalBlocking/+/refs/heads/master/includes/Api/ApiQueryGlobalBlocks.php#125
-		 */
 		$.when(
 			this.bulkMarkup('local', userLinks, allUsers),
-			this.bulkMarkup('global', userLinks, this.options.g_blocks ? /*allUsers*/ ips : [])
+			this.bulkMarkup('global', userLinks, this.options.g_blocks ? allUsers : [])
 		).then((markedUsers, g_markedUsers) => {
 
 			if (markedUsers === null && g_markedUsers === null) { // Aborted
@@ -853,17 +843,43 @@ class MarkBLocked {
 									// Note: logs can be revdeled or suppressed occasionally
 									const titleVars = ['??', '??','??'];
 									if (resLgev && resLgev.length) {
+										/**
+										 * The `params` property is an object with either the `added` and `removed` keys, or
+										 * the `0` and `1` numeral keys (in the case of an old log entry):
+										 * ```
+										 * "params": {
+										 *		"added": [
+										 *			"locked"
+										 *		],
+										 *		"removed": []
+										 *	}
+										 * ```
+										 * ```
+										 * "params": {
+										 *		"0": "locked",
+										 *		"1": "(none)"
+										 *	}
+										 * ```
+										 */
 										for (const {params, user, timestamp, comment} of resLgev) {
-											if (
-												// If any of the following properties is missing, the query may have failed
-												!params || !params.added || !params.removed ||
-												// Should never be able to find "locked" in the "removed" array before we find
-												// one in the "added" array. In this case, some log entries may be hidden.
-												params.removed.indexOf('locked') !== -1
-											) {
+											if (!params) {
+												// If the "params" property is missing, can't fetch the details of the lock
 												break;
-											}
-											if (params.added.indexOf('locked') === -1) {
+											} else if (
+												// If "params" has an "added" array and a "removed" array, the former should
+												// contain "locked" and the latter shouldn't
+												(
+													params.added && params.removed && (
+														params.added.indexOf('locked') === -1 ||
+														params.removed.indexOf('locked') !== -1
+													)
+												) ||
+												// In the case of an old log entry, the numeral keys should have fixed values
+												(
+													params['0'] && params['0'] !== 'locked' ||
+													params['1'] && params['1'] !== '(none)'
+												)
+											) {
 												continue;
 											}
 											if (user) {
@@ -972,7 +988,7 @@ class MarkBLocked {
 			users: [],
 			ips: []
 		};
-		const prIgnore = /(^|\s)(twg?-rollback-\S+|autocomment)($|\s)/;
+		const prIgnore = /(^|\s)(twg?-rollback-\S+|autocomment|cd-commentLink-\S+)($|\s)/;
 		return Array.from($anchors).reduce((acc, a) => {
 
 			// Ignore some anchors
@@ -1319,7 +1335,6 @@ MarkBLocked.i18n = {
 		'config-label-rangeblocks': 'Mark up IPs in locally blocked IP ranges',
 		'config-label-g_locks': 'Mark up globally locked users',
 		'config-label-g_blocks': 'Mark up globally blocked users and IPs',
-		'config-help-g_blocks': 'Markup for globally blocked registered users is currently not supported due to technical reasons.',
 		'config-label-g_rangeblocks': 'Mark up IPs in globally blocked IP ranges',
 		'config-help-g_rangeblocks': 'This option can be configured only when markup for global blocks is enabled.',
 		'config-label-save': 'Save settings',
@@ -1350,7 +1365,6 @@ MarkBLocked.i18n = {
 		'config-label-rangeblocks': 'ブロックされたIPレンジに含まれるIPをマークアップ',
 		'config-label-g_locks': 'グローバルロックされた利用者をマークアップ',
 		'config-label-g_blocks': 'グローバルブロックされた利用者およびIPをマークアップ',
-		'config-help-g_blocks': 'グローバルブロックされた登録利用者のマークアップは技術的な理由により現在サポートされていません。',
 		'config-label-g_rangeblocks': 'グローバルブロックされたIPレンジに含まれるIPをマークアップ',
 		'config-help-g_rangeblocks': 'この設定はグローバルブロックのマークアップが有効化されている場合のみ変更可能です。',
 		'config-label-save': '設定を保存',

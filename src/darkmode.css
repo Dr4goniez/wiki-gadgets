@@ -1,0 +1,47 @@
+.jawiki-bg-transparent {
+	background-color: var(--background-color-base, #fff);
+	border: 1px solid var(--border-color-base, #a2a9b1);
+}
+.jawiki-bg-transparent hr {
+	background-color: var(--border-color-base, #a2a9b1);
+}
+
+.jawiki-bg-neutral {
+	background-color: var(--background-color-neutral-subtle, #f8f9fa);
+	border: 1px solid var(--border-color-base, #a2a9b1);
+}
+.jawiki-bg-neutral hr {
+	background-color: var(--border-color-base, #a2a9b1);
+}
+
+.jawiki-bg-blue {
+	background-color: var(--background-color-progressive-subtle, #f1f4fd);
+	border: 1px solid var(--border-color-progressive, #6485d1);
+}
+.jawiki-bg-blue hr {
+	background-color: var(--border-color-progressive, #6485d1);
+}
+
+.jawiki-bg-yellow {
+	background-color: var(--background-color-warning-subtle, #fdf2d5);
+	border: 1px solid var(--border-color-warning, #ab7f2a);
+}
+.jawiki-bg-yellow hr {
+	background-color: var(--border-color-warning, #ab7f2a);
+}
+
+.jawiki-bg-red {
+	background-color: var(--background-color-error-subtle, #ffdbdb);
+	border: 1px solid #bb7070;
+}
+.jawiki-bg-red hr {
+	background-color: #bb7070;
+}
+
+.jawiki-bg-green {
+	background-color: var(--background-color-success-subtle, #dff2eb);
+	border: 1px solid var(--border-color-success, #099979);
+}
+.jawiki-bg-green hr {
+	background-color: var(--border-color-success, #099979);
+}

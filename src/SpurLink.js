@@ -1,7 +1,7 @@
 /************************************************
 	SpurLink
 	@author [[User:Dragoniez]]
-	@version 2.2.0
+	@version 2.2.3
 *************************************************/
 // @ts-check
 /* global mw */
@@ -318,19 +318,19 @@ function createConfigPage() {
 
 		var chkAll = document.createElement('a');
 		chkAll.classList.add('slc-toollink-iplist-checkbox-all');
-		chkAll.type = 'button';
+		chkAll.role = 'button';
 		chkAll.textContent = 'すべて';
 		checker.appendChild(chkAll);
 		checker.appendChild(document.createTextNode('、'));
 		var chkNone = document.createElement('a');
 		chkNone.classList.add('slc-toollink-iplist-checkbox-none');
-		chkNone.type = 'button';
+		chkNone.role = 'button';
 		chkNone.textContent = 'なし';
 		checker.appendChild(chkNone);
 		checker.appendChild(document.createTextNode('、'));
 		var chkInvert = document.createElement('a');
 		chkInvert.classList.add('slc-toollink-iplist-checkbox-invert');
-		chkInvert.type = 'button';
+		chkInvert.role = 'button';
 		chkInvert.textContent = '反転';
 		checker.appendChild(chkInvert);
 		appendTo.appendChild(checker);
@@ -550,7 +550,7 @@ function createConfigPage() {
 		up.src = '//upload.wikimedia.org/wikipedia/commons/thumb/9/9b/Skip_to_top3.svg/50px-Skip_to_top3.svg.png';
 		up.style.width = '2em';
 		var upA = document.createElement('a');
-		upA.type = 'button';
+		upA.role = 'button';
 		upA.classList.add('slc-toollink-swapup');
 		upA.appendChild(up);
 		swapper.appendChild(upA);
@@ -558,7 +558,7 @@ function createConfigPage() {
 		down.src = '//upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Skip_to_bottom3.svg/50px-Skip_to_bottom3.svg.png';
 		down.style.width = '2em';
 		var downA = document.createElement('a');
-		downA.type = 'button';
+		downA.role = 'button';
 		downA.classList.add('slc-toollink-swapdown');
 		downA.appendChild(down);
 		swapper.appendChild(downA);
@@ -1137,27 +1137,26 @@ function addLinks() {
 			/** @type {Element|null} */
 			var headingToolLink = document.querySelector('.mw-changeslist-links');
 			if (!headingToolLink) return;
-			createLinks(cfg, relIp, headingToolLink, '');
+			createLinks(cfg, relIp, headingToolLink);
 
 		})();
 	}
 
-	/** @type {NodeListOf<HTMLAnchorElement>} */
-	var anchors = document.querySelectorAll('.mw-anonuserlink');
-	if (!anchors[0]) return;
+	// Iterate over IP user links
+	var /** @type {JQuery<HTMLAnchorElement>} */ $anchors = $('.mw-anonuserlink');
+	var /** @readonly */ CLS_TOOLLINKS_ADDED = 'sl-toollink-added';
+	var /** @readonly */ CLS_USERTOOLLINKS = 'mw-usertoollinks';
+	var /** @readonly */ CLS_USERTOOLLINKS_TALK = 'mw-usertoollinks-talk';
+	$anchors.each(function() {
 
-	// Loop through all anonymous user links
-	for (var i = 0; i < anchors.length; i++) {
-
-		var a = anchors[i];
-		var ip = a.textContent;
+		var $a = $(this);
+		var ip = $a.text();
 		if (
-			a.type === 'button' ||
-			a.classList.contains('sl-toollink-added') ||
-			!ip ||
+			$a.prop('role') === 'button' ||
+			$a.hasClass(CLS_TOOLLINKS_ADDED) ||
 			!mw.util.isIPAddress(ip, true)
 		) {
-			continue;
+			return;
 		}
 
 		/**
@@ -1179,10 +1178,16 @@ function addLinks() {
 		 *		)
 		 *	</span>
 		 * ```
-		 * Contribs of a CIDR IP
+		 * Contribs of a CIDR
 		 * ```html
+		 * <bdi>
 		 *	<a class="mw-anonuserlink">IP</a>
-		 *	<a class="new mw-usertoollinks-talk"></a>
+		 * </bdi>
+		 * <span class="mw-usertoollinks">
+		 * 	<span>
+		 * 		<a class="mw-usertoollinks-talk"></a>
+		 * 	</span>
+		 * </span>
 		 * ```
 		 * Special:RecentChanges, Special:Watchlist (Group changes by page)
 		 * ```html
@@ -1196,47 +1201,65 @@ function addLinks() {
 		 *	</span>
 		 * ```
 		 */
-		var targetElement = a.nextElementSibling;
-		var pr = a.parentElement;
-		if (targetElement&& targetElement.classList.contains('mw-usertoollinks-talk')) { // Contribs of a CIDR IP
-			createLinks(cfg, ip, targetElement, 'after');
-			a.classList.add('sl-toollink-added');
-		} else if ( /* Normal */ targetElement && (
-			targetElement.classList.contains('mw-usertoollinks') ||
+		var $next = $a.next();
+		var $parent = $a.parent();
+		var $el;
+		var toollinksAdded = true;
+		if ($next.hasClass(CLS_USERTOOLLINKS_TALK)) {
+			// Contribs of a CIDR (backwards compatibility)
+			createLinks(cfg, ip, $next[0], 'after');
+		} else if (($el = $parent.next('.' + CLS_USERTOOLLINKS_TALK)).length) {
+			// Contribs of a CIDR (backwards compatibility)
+			createLinks(cfg, ip, $el[0], 'after');
+		} else if (($el = $parent.next('.' + CLS_USERTOOLLINKS)).length) {
+			// Contribs of a CIDR
+			createLinks(cfg, ip, $el[0]);
+		} else if (
+			($el = $next).hasClass(CLS_USERTOOLLINKS) ||
 			// There might be an intervening node created by the ipinfo extension
-			targetElement.classList.contains('ext-ipinfo-button') && (targetElement = targetElement.nextElementSibling) && targetElement.classList.contains('mw-usertoollinks')
-		)) {
-			/** @type {HTMLElement[]} */
-			var ch = Array.prototype.slice.call(targetElement.children);
-			if (ch.some(function(el) { return el && el.nodeName === 'A' && el.textContent !== '無期限'; })) { // Compatibility w/ Simple blocking tool
-				createLinks(cfg, ip, targetElement, 'nospan'); // AbuseLog
-			} else {
-				createLinks(cfg, ip, targetElement, ''); // Normal
-			}
-			a.classList.add('sl-toollink-added');
-		} else if ( // Non-collaspsed links with the "Group changes by page" setting
-			pr && pr.nodeName === 'SPAN' && pr.classList.contains('mw-changeslist-line-inner-userLink') &&
-			(targetElement = pr.nextElementSibling) && targetElement.classList.contains('mw-changeslist-line-inner-userTalkLink') &&
-			(targetElement = targetElement.querySelector('.mw-usertoollinks'))
+			($next.hasClass('ext-ipinfo-button') && ($el = $next.next('.' + CLS_USERTOOLLINKS)).length)
 		) {
-			createLinks(cfg, ip, targetElement, '');
-			a.classList.add('sl-toollink-added');
+			if ($el.children('a').length) {
+				// AbuseLog, bare anchor toollinks
+				createLinks(cfg, ip, $el[0], 'piped');
+			} else {
+				// Normal, just append new links as span tags
+				createLinks(cfg, ip, $el[0]);
+			}
+		} else if (
+			// Non-collaspsed links with the "Group changes by page" setting
+			$parent.prop('nodeName') === 'SPAN' && $parent.hasClass('mw-changeslist-line-inner-userLink') &&
+			($el = $parent.next('.mw-changeslist-line-inner-userTalkLink')).length &&
+			($el = $el.find('.' + CLS_USERTOOLLINKS)).length
+		) {
+			createLinks(cfg, ip, $el[0]);
 		} else {
-			continue;
+			toollinksAdded = false;
 		}
 
-	}
+		// Add class to the anon user link so we'll know the link has already been processed
+		if (toollinksAdded) {
+			$a.addClass(CLS_TOOLLINKS_ADDED);
+		}
+
+	});
 
 }
 
 /**
- * Append span-enclosed toollink
- * @param {Object.<string, Config>} cfg
+ * Append span-enclosed toollinks.
+ *
+ * @param {Record<string, Config>} cfg
  * @param {string} ip
- * @param {Element} targetElement
- * @param {""|"after"|"nospan"} appendType
+ * @param {Element} element
+ * @param {"after"|"piped"} [appendType]
+ *
+ * Types:
+ * - `undefined`: Appends toollink spans to `element`.
+ * - `'after'`: Appends toollink spans after `element`.
+ * - `'piped'`: Appends toollink spans to `element`, by delimiting each with a pipe character.
  */
-function createLinks(cfg, ip, targetElement, appendType) {
+function createLinks(cfg, ip, element, appendType) {
 
 	var isCidr = /\/\d{1,3}$/.test(ip);
 
@@ -1268,18 +1291,18 @@ function createLinks(cfg, ip, targetElement, appendType) {
 
 			switch(appendType) {
 				case 'after':
-					$(targetElement).after(span);
-					targetElement = span;
+					$(element).after(span);
+					element = span;
 					break;
-				case 'nospan':
-					var ch = targetElement.childNodes;
+				case 'piped':
+					var ch = element.childNodes;
 					ch[ch.length - 1].remove(); // Remove text node
-					targetElement.appendChild(document.createTextNode(' | '));
-					targetElement.appendChild(span);
-					targetElement.appendChild(document.createTextNode(')'));
+					element.appendChild(document.createTextNode(' | '));
+					element.appendChild(span);
+					element.appendChild(document.createTextNode(')'));
 					break;
 				default:
-					targetElement.appendChild(span);
+					element.appendChild(span);
 			}
 
 		}
