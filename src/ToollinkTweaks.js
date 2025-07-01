@@ -1,7 +1,7 @@
 /******************************************************************************************************************\
 	ToollinkTweaks
 	Extend toollinks attached to user links to the script user's liking.
-	@version 1.3.4
+	@version 1.3.5
 	@author [[User:Dragoniez]]
 \******************************************************************************************************************/
 
@@ -1291,6 +1291,7 @@ function addLinks(cfg) {
 	}
 
 	// Iterate over user links
+	var onInvestigate = spName === 'Investigate';
 	$('.mw-userlink, .mw-anonuserlink, .mw-tempuserlink').each(function(_, userLink) {
 
 		if (userLink.role === 'button') {
@@ -1299,15 +1300,16 @@ function addLinks(cfg) {
 
 		// Extract username from first <bdi> child (anchor may contain extra nodes)
 		var $userLink = $(userLink);
-		var user = $userLink.children('bdi').first().text() || null;
+		var user = $userLink.children('bdi').first().text();
 		if (!user) {
 			return;
 		}
 
 		// User links might be wrapped in another element
 		if (
-			$userLink.parent().is('bdi') || // e.g. on Special:GlobalContributions
-			$userLink.parent().is('span') // e.g. on Special:Investigate, Special:Watchlist (single log line with grouping enabled)
+			$userLink.parent().is('bdi') || // e.g. Special:GlobalContributions, CIDR Contribs (backwards compat.)
+			$userLink.parent().is('span.mw-changeslist-line-inner-userLink') || // Special:Watchlist (single log line with grouping enabled)
+			(onInvestigate && $userLink.parent().is('span')) // Special:Investigate
 		) {
 			$userLink = $userLink.parent();
 		}
