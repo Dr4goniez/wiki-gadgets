@@ -1,7 +1,7 @@
 /******************************************************************************************************************\
 	ToollinkTweaks
 	Extend toollinks attached to user links to the script user's liking.
-	@version 1.3.2
+	@version 1.3.3
 	@author [[User:Dragoniez]]
 \******************************************************************************************************************/
 
@@ -1254,6 +1254,12 @@ function isSpOptedOut(specialPageName, spInclude, spExclude) {
 	}
 }
 
+var /** @readonly */ CLS_TOOLLINKS = 'mw-usertoollinks';
+
+// Classes used for user links in single log lines when "group entries by page" is enabled
+var /** @readonly */ CLS_USERLINK_GROUPED = 'mw-changeslist-line-inner-userLink';
+var /** @readonly */ CLS_USERTALKLINK_GROUPED = 'mw-changeslist-line-inner-userTalkLink';
+
 /**
  * Add toollinks.
  * @param {TTBuilderConfig[]} cfg
@@ -1266,9 +1272,12 @@ function addLinks(cfg) {
 		return;
 	}
 
-	// Toollink right below the first heading on Special:Contributions
+	// Toollink right below the first heading on contributions-related special pages
 	var headingToollink;
-	if (spName === 'Contributions' && (headingToollink = document.querySelector('.mw-changeslist-links'))) {
+	if (
+		spName && spName.indexOf('Contributions') !== -1 &&
+		(headingToollink = document.querySelector('.mw-changeslist-links'))
+	) {
 		var /** @type {string?} */ user = mw.config.get('wgRelevantUserName');
 		if (!user) {
 			var /** @type {HTMLHeadingElement?} */ heading = document.querySelector('.mw-first-heading');
@@ -1282,103 +1291,47 @@ function addLinks(cfg) {
 	}
 
 	// Iterate over user links
-	var /** @type {JQuery<HTMLAnchorElement>} */ $anchors = $('.mw-userlink, .mw-anonuserlink');
-	var /** @readonly */ CLS_USERTOOLLINKS = 'mw-usertoollinks';
-	var /** @readonly */ CLS_USERTOOLLINKS_TALK = 'mw-usertoollinks-talk';
-	$anchors.each(function(_, a) {
+	$('.mw-userlink, .mw-anonuserlink, .mw-tempuserlink').each(function(_, userLink) {
 
-		if (a.role === 'button') {
+		if (userLink.role === 'button') {
 			return;
 		}
 
-		var /** @type {string?} */ user = null;
-		for (var i = 0; i < a.childNodes.length; i++) {
-			// Get the text content of the first <bdi> node; a.textContent might have been messed up
-			// if other scripts created new nodes in the anchor
-			var node = a.childNodes[i];
-			if (node.nodeName === 'BDI') {
-				user = node.textContent;
-				break;
-			}
-		}
+		// Extract username from first <bdi> child (anchor may contain extra nodes)
+		var user = $(userLink).children('bdi').first().text() || null;
 		if (!user) {
 			return;
 		}
 
+		// User links might be wrapped in a BDI tag, e.g. on Special:GlobalContributions
+		if (userLink.parentElement && userLink.parentElement.nodeName === 'BDI') {
+			userLink = userLink.parentElement;
+		}
+		var $userLink = $(userLink);
+
 		/**
-		 * Normal structure
-		 * ```html
-		 * 	<a class="mw-userlink">User</a>
-		 * 	<span class="mw-usertoollinks">
-		 * 		<span></span>
-		 * 	</span>
+		 * Typical structure:
 		 * ```
-		 * Special:AbuseLog
-		 * ```html
-		 *	<a class="mw-userlink">User</a>
-		 *	<span class="mw-usertoollinks">
-		 *		(
-		 *		<a></a>
-		 *		 |
-		 *		<a></a>
-		 *		)
-		 *	</span>
-		 * ```
-		 * Contribs of a CIDR
-		 * ```html
-		 * <bdi>
-		 *	<a class="mw-anonuserlink">IP</a>
-		 * </bdi>
+		 * <a class="mw-userlink">User</a>
+		 * <!-- Possibly other nodes -->
 		 * <span class="mw-usertoollinks">
-		 * 	<span>
-		 * 		<a class="mw-usertoollinks-talk"></a>
-		 * 	</span>
+		 *   <span></span>
 		 * </span>
-		 * ```
-		 * Special:RecentChanges, Special:Watchlist (Group changes by page)
-		 * ```html
-		 *	<span class="mw-changeslist-line-inner-userLink">
-		 *		<a class="mw-userlink">User</a>
-		 *	</span>
-		 *	<span class="mw-changeslist-line-inner-userTalkLink">
-		 *		<span class="mw-usertoollinks">
-		 *			<span></span>
-		 *		</span>
-		 *	</span>
+		 * </a>
 		 * ```
 		 */
-		var $a = $(a);
-		var $next = $a.next();
-		var $parent = $a.parent();
-		var $el;
-		if ($next.hasClass(CLS_USERTOOLLINKS_TALK)) {
-			// Contribs of a CIDR (backwards compatibility)
-			createLinks(cfg, user, $next[0], 'after');
-		} else if (($el = $parent.next('.' + CLS_USERTOOLLINKS_TALK)).length) {
-			// Contribs of a CIDR (backwards compatibility)
-			createLinks(cfg, user, $el[0], 'after');
-		} else if (($el = $parent.next('.' + CLS_USERTOOLLINKS)).length) {
-			// Contribs of a CIDR
-			createLinks(cfg, user, $el[0]);
-		} else if (
-			($el = $next).hasClass(CLS_USERTOOLLINKS) ||
-			// There might be an intervening node created by the ipinfo extension
-			($next.hasClass('ext-ipinfo-button') && ($el = $next.next('.' + CLS_USERTOOLLINKS)).length)
-		) {
-			if ($el.children('a').length) {
-				// AbuseLog, bare anchor toollinks
-				createLinks(cfg, user, $el[0], 'piped');
-			} else {
-				// Normal, just append new links as span tags
-				createLinks(cfg, user, $el[0]);
-			}
-		} else if (
-			// Non-collaspsed links with the "Group changes by page" setting
-			$parent.prop('nodeName') === 'SPAN' && $parent.hasClass('mw-changeslist-line-inner-userLink') &&
-			($el = $parent.next('.mw-changeslist-line-inner-userTalkLink')).length &&
-			($el = $el.find('.' + CLS_USERTOOLLINKS)).length
-		) {
-			createLinks(cfg, user, $el[0]);
+		var $tools;
+		if ($userLink.parent().is('.' + CLS_USERLINK_GROUPED)) {
+			$tools = $userLink.parent().next('.' + CLS_USERTALKLINK_GROUPED).children('.' + CLS_TOOLLINKS).first();
+		} else {
+			$tools = $userLink.nextAll('.' + CLS_TOOLLINKS).first();
+		}
+		if ($tools.length) {
+			// Get the first child node and check if it's a "(" text node
+			// If so, that means no CSS is applied to create parentheses and pipes via pseudo-elements
+			var first = $tools.contents().first().get(0);
+			var needPipes = first && first.nodeType === 3 /* #text */ && first.nodeValue === '(';
+			createLinks(cfg, user, $tools[0], needPipes ? 'piped'	: 'default');
 		}
 
 	});
@@ -1422,10 +1375,10 @@ function extractCidr(text) {
  * @param {TTBuilderConfig[]} cfg
  * @param {string} username
  * @param {Element} targetElement
- * @param {"after"|"piped"} [appendType]
+ * @param {"default"|"after"|"piped"} [appendType]
  *
  * Types:
- * - `undefined`: Appends toollink spans to `element`.
+ * - `'default'`: Appends toollink spans to `element`. (Default)
  * - `'after'`: Appends toollink spans after `element`.
  * - `'piped'`: Appends toollink spans to `element`, by delimiting each with a pipe character.
  *
@@ -1479,7 +1432,11 @@ function createLinks(cfg, username, targetElement, appendType) {
 		}
 		span.appendChild(a);
 
+		appendType = appendType || 'default';
 		switch (appendType) {
+			case 'default':
+				targetElement.appendChild(span);
+				break;
 			case 'after':
 				$(targetElement).after(span);
 				targetElement = span;
@@ -1492,7 +1449,7 @@ function createLinks(cfg, username, targetElement, appendType) {
 				targetElement.appendChild(document.createTextNode(')'));
 				break;
 			default:
-				targetElement.appendChild(span);
+				throw new Error('Invalid value for "appendType": ' + appendType);
 		}
 
 	});
