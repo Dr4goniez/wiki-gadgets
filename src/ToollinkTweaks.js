@@ -1,7 +1,7 @@
 /******************************************************************************************************************\
 	ToollinkTweaks
 	Extend toollinks attached to user links to the script user's liking.
-	@version 1.3.3
+	@version 1.3.4
 	@author [[User:Dragoniez]]
 \******************************************************************************************************************/
 
@@ -1298,16 +1298,19 @@ function addLinks(cfg) {
 		}
 
 		// Extract username from first <bdi> child (anchor may contain extra nodes)
-		var user = $(userLink).children('bdi').first().text() || null;
+		var $userLink = $(userLink);
+		var user = $userLink.children('bdi').first().text() || null;
 		if (!user) {
 			return;
 		}
 
-		// User links might be wrapped in a BDI tag, e.g. on Special:GlobalContributions
-		if (userLink.parentElement && userLink.parentElement.nodeName === 'BDI') {
-			userLink = userLink.parentElement;
+		// User links might be wrapped in another element
+		if (
+			$userLink.parent().is('bdi') || // e.g. on Special:GlobalContributions
+			$userLink.parent().is('span') // e.g. on Special:Investigate, Special:Watchlist (single log line with grouping enabled)
+		) {
+			$userLink = $userLink.parent();
 		}
-		var $userLink = $(userLink);
 
 		/**
 		 * Typical structure:
@@ -1321,8 +1324,9 @@ function addLinks(cfg) {
 		 * ```
 		 */
 		var $tools;
-		if ($userLink.parent().is('.' + CLS_USERLINK_GROUPED)) {
-			$tools = $userLink.parent().next('.' + CLS_USERTALKLINK_GROUPED).children('.' + CLS_TOOLLINKS).first();
+		if ($userLink.is('.' + CLS_USERLINK_GROUPED)) {
+			// `$userLink` is the anchor's parent (span.mw-changeslist-line-inner-userLink)
+			$tools = $userLink.next('.' + CLS_USERTALKLINK_GROUPED).children('.' + CLS_TOOLLINKS).first();
 		} else {
 			$tools = $userLink.nextAll('.' + CLS_TOOLLINKS).first();
 		}
