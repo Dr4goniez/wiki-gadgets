@@ -59,7 +59,7 @@ interface ApiResponseQueryListBlocks {
 	by: string;
 	expiry: string;
 	reason: string;
-	restrictions?: []|object;
+	partial: boolean;
 }
 
 interface ApiResponseQueryListGlobalallusers {

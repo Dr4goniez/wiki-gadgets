@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.1.4
+ * @version 3.1.5
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js Loader module
@@ -205,7 +205,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.1.4 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.1.5 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -779,7 +779,7 @@ class MarkBLocked {
 						params: {
 							list: 'blocks',
 							bkip: ip,
-							bkprop: 'user|by|expiry|reason|restrictions'
+							bkprop: 'user|by|expiry|reason|flags'
 						},
 						callback: (res) => {
 							// An IP may have multiple blocks
@@ -799,17 +799,16 @@ class MarkBLocked {
 								return acc;
 							}, null);
 							if (resObj) {
-								const {user, by, expiry, reason, restrictions} = resObj;
-								const partialBlk = restrictions && !Array.isArray(restrictions);
+								const {user, by, expiry, reason, partial} = resObj;
 								let clss;
 								const range = (user.match(/\/(\d+)$/) || ['', '??'])[1];
 								// $1: Domain, $2: CIDR range, $3: Expiry, $4: Blocking admin, $5: Reason
 								const titleVars = [this.getMessage('title-domain-local'), range, '', by, reason];
 								if (/^in/.test(expiry)) {
-									clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
+									clss = partial ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
 									titleVars[2] = this.getMessage('title-expiry-indefinite');
 								} else {
-									clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
+									clss = partial ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
 									titleVars[2] = this.getMessage('title-expiry-temporary').replace('$1', expiry);
 								}
 								const tooltip = mw.format(this.getMessage('title-rangeblocked'), ...titleVars);
@@ -1114,19 +1113,18 @@ class MarkBLocked {
 			list: 'blocks',
 			bklimit: 'max',
 			bkusers: users.join('|'),
-			bkprop: 'user|by|expiry|reason|restrictions'
+			bkprop: 'user|by|expiry|reason|flags'
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resBlk = res && res.query && res.query.blocks || [];
-			return resBlk.reduce(/** @param {string[]} acc */ (acc, {user, by, expiry, reason, restrictions}) => {
-				const partialBlk = restrictions && !Array.isArray(restrictions); // Boolean: True if partial block
+			return resBlk.reduce(/** @param {string[]} acc */ (acc, {user, by, expiry, reason, partial}) => {
 				let clss;
 				// $1: Domain, $2: Expiry, $3: Blocking admin, $4: Reason
 				const titleVars = [this.getMessage('title-domain-local'), '', by, reason];
 				if (/^in/.test(expiry)) {
-					clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
+					clss = partial ? 'mbl-blocked-partial' : 'mbl-blocked-indef';
 					titleVars[1] = this.getMessage('title-expiry-indefinite');
 				} else {
-					clss = partialBlk ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
+					clss = partial ? 'mbl-blocked-partial' : 'mbl-blocked-temp';
 					titleVars[1] = this.getMessage('title-expiry-temporary').replace('$1', expiry);
 				}
 				const tooltip = mw.format(this.getMessage('title-blocked'), ...titleVars);
