@@ -1,7 +1,7 @@
 /******************************************************************************************************************\
 	ToollinkTweaks
 	Extend toollinks attached to user links to the script user's liking.
-	@version 1.3.5
+	@version 1.3.6
 	@author [[User:Dragoniez]]
 \******************************************************************************************************************/
 
@@ -1254,6 +1254,9 @@ function isSpOptedOut(specialPageName, spInclude, spExclude) {
 	}
 }
 
+var /** @readonly */ CLS_USERLINK = 'mw-userlink';
+var /** @readonly */ CLS_USERLINK_ANON = 'mw-anonuserlink';
+var /** @readonly */ CLS_USERLINK_TEMP = 'mw-tempuserlink';
 var /** @readonly */ CLS_TOOLLINKS = 'mw-usertoollinks';
 
 // Classes used for user links in single log lines when "group entries by page" is enabled
@@ -1292,7 +1295,8 @@ function addLinks(cfg) {
 
 	// Iterate over user links
 	var onInvestigate = spName === 'Investigate';
-	$('.mw-userlink, .mw-anonuserlink, .mw-tempuserlink').each(function(_, userLink) {
+	var classes = ['.' + CLS_USERLINK, '.' + CLS_USERLINK_ANON, '.' + CLS_USERLINK_TEMP];
+	$(classes.join(', ')).each(function(_, userLink) {
 
 		if (userLink.role === 'button') {
 			return;
@@ -1330,7 +1334,18 @@ function addLinks(cfg) {
 			// `$userLink` is the anchor's parent (span.mw-changeslist-line-inner-userLink)
 			$tools = $userLink.next('.' + CLS_USERTALKLINK_GROUPED).children('.' + CLS_TOOLLINKS).first();
 		} else {
-			$tools = $userLink.nextAll('.' + CLS_TOOLLINKS).first();
+			$tools = $([]);
+			$userLink.nextAll().each(function() {
+				var $this = $(this);
+				if ($this.hasClass(CLS_USERLINK) || $this.hasClass(CLS_USERLINK_ANON) || $this.hasClass(CLS_USERLINK_TEMP)) {
+					// Stop traversal entirely if we find another userlink before finding a toollink
+					return false;
+				}
+				if ($this.hasClass(CLS_TOOLLINKS)) {
+					$tools = $this;
+					return false;
+				}
+			});
 		}
 		if ($tools.length) {
 			// Get the first child node and check if it's a "(" text node
