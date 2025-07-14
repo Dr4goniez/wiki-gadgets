@@ -1,7 +1,7 @@
 /******************************************************************************************************************\
 	ToollinkTweaks
 	Extend toollinks attached to user links to the script user's liking.
-	@version 1.3.6
+	@version 1.3.7
 	@author [[User:Dragoniez]]
 \******************************************************************************************************************/
 
@@ -1278,7 +1278,7 @@ function addLinks(cfg) {
 	// Toollink right below the first heading on contributions-related special pages
 	var headingToollink;
 	if (
-		spName && spName.indexOf('Contributions') !== -1 &&
+		spName && /^(IP)?Contributions$/.test(spName) &&
 		(headingToollink = document.querySelector('.mw-changeslist-links'))
 	) {
 		var /** @type {string?} */ user = mw.config.get('wgRelevantUserName');
@@ -1311,9 +1311,15 @@ function addLinks(cfg) {
 
 		// User links might be wrapped in another element
 		if (
-			$userLink.parent().is('bdi') || // e.g. Special:GlobalContributions, CIDR Contribs (backwards compat.)
-			$userLink.parent().is('span.mw-changeslist-line-inner-userLink') || // Special:Watchlist (single log line with grouping enabled)
-			(onInvestigate && $userLink.parent().is('span')) // Special:Investigate
+			// Ensure subsequent siblings don't contain toollinks
+			!$userLink.nextAll('.' + CLS_TOOLLINKS).length && (
+				// e.g. Special:GlobalContributions, CIDR Contribs (backwards compat.)
+				$userLink.parent('bdi').length ||
+				// Special:Watchlist (single log line with grouping enabled)
+				$userLink.parent('span.mw-changeslist-line-inner-userLink').length ||
+				// Special:Investigate
+				(onInvestigate && $userLink.parent('span').length)
+			)
 		) {
 			$userLink = $userLink.parent();
 		}
@@ -1330,7 +1336,7 @@ function addLinks(cfg) {
 		 * ```
 		 */
 		var $tools;
-		if ($userLink.is('.' + CLS_USERLINK_GROUPED)) {
+		if ($userLink.hasClass(CLS_USERLINK_GROUPED)) {
 			// `$userLink` is the anchor's parent (span.mw-changeslist-line-inner-userLink)
 			$tools = $userLink.next('.' + CLS_USERTALKLINK_GROUPED).children('.' + CLS_TOOLLINKS).first();
 		} else {
@@ -1352,8 +1358,19 @@ function addLinks(cfg) {
 			// If so, that means no CSS is applied to create parentheses and pipes via pseudo-elements
 			var first = $tools.contents().first().get(0);
 			var needPipes = first && first.nodeType === 3 /* #text */ && first.nodeValue === '(';
-			createLinks(cfg, user, $tools[0], needPipes ? 'piped'	: 'default');
+			createLinks(cfg, user, $tools[0], needPipes ? 'piped' : 'default');
 		}
+
+		/**
+		 * Check list
+		 * - https://ja.wikipedia.org/wiki/Special:Watchlist
+		 * - https://ja.wikipedia.org/wiki/Special:Watchlist?enhanced=1
+		 * - https://meta.wikimedia.org/wiki/Special:Contributions/Dragoniez
+		 * - https://meta.wikimedia.org/wiki/Special:GlobalContributions/Dragoniez
+		 * - https://ja.wikipedia.org/wiki/Special:IPContributions/121.103.69.246
+		 * - https://ja.wikipedia.org/wiki/Special:AbuseLog
+		 * - https://ja.wikipedia.org/wiki/Special:CheckUserLog
+		 */
 
 	});
 
@@ -1419,7 +1436,7 @@ function createLinks(cfg, username, targetElement, appendType) {
 
 	var rep = {
 		$2: mw.config.get('wgArticlePath').replace('$1', ''),
-		$3:  mw.config.get('wgScript'),
+		$3: mw.config.get('wgScript'),
 		$4: mw.util.wikiScript('api')
 	};
 	cfg.forEach(function(obj) {
@@ -1464,10 +1481,9 @@ function createLinks(cfg, username, targetElement, appendType) {
 				break;
 			case 'piped':
 				var ch = targetElement.childNodes;
-				ch[ch.length - 1].remove(); // Remove text node
-				targetElement.appendChild(document.createTextNode(' | '));
-				targetElement.appendChild(span);
-				targetElement.appendChild(document.createTextNode(')'));
+				var refNode = ch[ch.length - 1];
+				targetElement.insertBefore(document.createTextNode(' | '), refNode);
+				targetElement.insertBefore(span, refNode);
 				break;
 			default:
 				throw new Error('Invalid value for "appendType": ' + appendType);
