@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.1.5
+ * @version 3.1.6
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js Loader module
@@ -62,7 +62,7 @@ class MarkBLocked {
 		// Disallow a second run
 		if (window.MarkBLockedLoaded) {
 			const err = 'Looks like MarkBLocked is loaded from multiple sources.';
-			mw.notify(err, {type: 'error', autoHideSeconds: 'long'});
+			mw.notify(err, { type: 'error', autoHideSeconds: 'long' });
 			throw new Error(err);
 		} else {
 			window.MarkBLockedLoaded = true;
@@ -205,7 +205,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.1.5 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.1.6 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -238,7 +238,7 @@ class MarkBLocked {
 			const resSpa = res && res.query && res.query.specialpagealiases;
 			if (Array.isArray(resSpa)) {
 				const defaults = ['Contributions', 'Contribs', 'CentralAuth', 'CA', 'GlobalAccount'];
-				return resSpa.reduce(/** @param {string[]} acc */ (acc, {realname, aliases}) => {
+				return resSpa.reduce(/** @param {string[]} acc */ (acc, { realname, aliases }) => {
 					if (realname === 'Contributions' || realname === 'CentralAuth') {
 						acc = acc.concat(aliases.filter(el => defaults.indexOf(el) === -1));
 					}
@@ -265,11 +265,11 @@ class MarkBLocked {
 		/**
 		 * @type {mw.Api}
 		 */
-		this.api = new mw.Api(MarkBLocked.getApiOptions({timeout: 60*1000}));
+		this.api = new mw.Api(MarkBLocked.getApiOptions({ timeout: 60*1000 }));
 		/**
 		 * @type {mw.Api}
 		 */
-		this.readApi = new mw.Api(MarkBLocked.getApiOptions({timeout: 60*1000, nonwritepost: true}));
+		this.readApi = new mw.Api(MarkBLocked.getApiOptions({ timeout: 60*1000, nonwritepost: true }));
 		/**
 		 * @type {mw.Api}
 		 */
@@ -279,12 +279,12 @@ class MarkBLocked {
 				'https://meta.wikimedia.org/w/api.php',
 				/**
 				 * On mobile devices, cross-origin requests may fail becase of a "badtoken" error related to
-				 * `centralauthtoken`. This never happened with the `{anonymous: true}` option for `mw.ForeignApi`,
+				 * `centralauthtoken`. This never happened with the `{ anonymous: true }` option for `mw.ForeignApi`,
 				 * hence included.
 				 * @see https://doc.wikimedia.org/mediawiki-core/1.32.0/js/#!/api/mw.ForeignApi-method-constructor
 				 * We will only need to send GET requests to fetch data, so this shouldn't be problematic.
 				 */
-				Object.assign(MarkBLocked.getApiOptions({timeout: 60*1000}), {anonymous: true})
+				Object.assign(MarkBLocked.getApiOptions({ timeout: 60*1000 }), { anonymous: true })
 			);
 
 		// Show Warning if the config has any invalid property
@@ -387,7 +387,7 @@ class MarkBLocked {
 		 */
 		this.regex = (() => {
 
-			const wgNamespaceIds = mw.config.get('wgNamespaceIds'); // {"special": -1, "user": 2, ...}
+			const wgNamespaceIds = mw.config.get('wgNamespaceIds'); // { "special": -1, "user": 2, ... }
 			const /** @type {string[]} */ specialAliases = [];
 			const /** @type {string[]} */ userAliases = [];
 			for (const alias in wgNamespaceIds) {
@@ -417,7 +417,7 @@ class MarkBLocked {
 
 		/**
 		 * The maximum number of batch parameter values for the API.
-		 * @type {500|50}
+		 * @type {500 | 50}
 		 */
 		this.apilimit = (() => {
 
@@ -589,9 +589,9 @@ class MarkBLocked {
 				return code;
 			}).then(/** @param {string?} err */ (err) => {
 				if (err) {
-					mw.notify(this.getMessage('config-notify-savefailed') + '(' + err + ')', {type: 'error'});
+					mw.notify(this.getMessage('config-notify-savefailed') + '(' + err + ')', { type: 'error' });
 				} else {
-					mw.notify(this.getMessage('config-notify-savedone'), {type: 'success'});
+					mw.notify(this.getMessage('config-notify-savedone'), { type: 'success' });
 				}
 				saveButton.setIcon('bookmarkOutline').setLabel(this.getMessage('config-label-save'));
 				$overlay.hide();
@@ -692,7 +692,7 @@ class MarkBLocked {
 				// Hook.add fires the `wikipage.content` hook, meaning that `markup` is automatically called and classes are reassigned
 			}
 			toggle
-				.setFlags({progressive: !disable, destructive: disable})
+				.setFlags({ progressive: !disable, destructive: disable })
 				.setIcon(icon)
 				.setTitle(title);
 			hookToggle(hookHandler);
@@ -731,7 +731,7 @@ class MarkBLocked {
 		}
 
 		// Collect user links
-		const {userLinks, users, ips} = this.collectLinks($content);
+		const { userLinks, users, ips } = this.collectLinks($content);
 		if ($.isEmptyObject(userLinks)) {
 			console.log('MarkBLocked', {
 				$content,
@@ -799,7 +799,7 @@ class MarkBLocked {
 								return acc;
 							}, null);
 							if (resObj) {
-								const {user, by, expiry, reason, partial} = resObj;
+								const { user, by, expiry, reason, partial } = resObj;
 								let clss;
 								const range = (user.match(/\/(\d+)$/) || ['', '??'])[1];
 								// $1: Domain, $2: CIDR range, $3: Expiry, $4: Blocking admin, $5: Reason
@@ -860,7 +860,7 @@ class MarkBLocked {
 										 *	}
 										 * ```
 										 */
-										for (const {params, user, timestamp, comment} of resLgev) {
+										for (const { params, user, timestamp, comment } of resLgev) {
 											if (!params) {
 												// If the "params" property is missing, can't fetch the details of the lock
 												break;
@@ -926,7 +926,7 @@ class MarkBLocked {
 								return acc;
 							}, null);
 							if (resObj) {
-								const {target, by, expiry, reason} = resObj;
+								const { target, by, expiry, reason } = resObj;
 								let clss;
 								const range = (target.match(/\/(\d+)$/) || ['', '??'])[1];
 								// $1: Domain, $2: CIDR range, $3: Expiry, $4: Blocking admin, $5: Reason
@@ -959,7 +959,7 @@ class MarkBLocked {
 	 * @typedef {Record<string, HTMLAnchorElement[]>} UserLinks
 	 */
 	/**
-	 * @typedef {{userLinks: UserLinks; users: string[]; ips: string[];}} LinkObject
+	 * @typedef {{ userLinks: UserLinks; users: string[]; ips: string[]; }} LinkObject
 	 */
 	/**
 	 * Collect user links to mark up.
@@ -1116,7 +1116,7 @@ class MarkBLocked {
 			bkprop: 'user|by|expiry|reason|flags'
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resBlk = res && res.query && res.query.blocks || [];
-			return resBlk.reduce(/** @param {string[]} acc */ (acc, {user, by, expiry, reason, partial}) => {
+			return resBlk.reduce(/** @param {string[]} acc */ (acc, { user, by, expiry, reason, partial }) => {
 				let clss;
 				// $1: Domain, $2: Expiry, $3: Blocking admin, $4: Reason
 				const titleVars = [this.getMessage('title-domain-local'), '', by, reason];
@@ -1157,7 +1157,7 @@ class MarkBLocked {
 			bgprop: 'target|by|expiry|reason'
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resGblk = res && res.query && res.query.globalblocks || [];
-			return resGblk.reduce(/** @param {string[]} acc */ (acc, {target, by, expiry, reason}) => {
+			return resGblk.reduce(/** @param {string[]} acc */ (acc, { target, by, expiry, reason }) => {
 				let clss;
 				// $1: Domain, $2: Expiry, $3: Blocking admin, $4: Reason
 				const titleVars = [this.getMessage('title-domain-global'), '', by, reason];
