@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.1.7
+ * @version 3.1.8
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js Loader module
@@ -205,7 +205,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.1.7 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.1.8 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -720,7 +720,7 @@ class MarkBLocked {
 	/**
 	 * Mark up user links.
 	 * @param {JQuery<HTMLElement>} $content
-	 * @returns {void}
+	 * @returns {JQueryPromise<void>}
 	 * @requires mediawiki.util
 	 * @requires mediawiki.api
 	 * @requires mediawiki.ForeignApi
@@ -738,12 +738,13 @@ class MarkBLocked {
 				$content,
 				links: 0
 			});
-			return;
+			return $.Deferred().resolve();
 		}
+		mw.hook('userjs.markblocked.start').fire($content);
 		const allUsers = [...users].concat([...ips]);
 
 		// Start markup
-		$.when(
+		return $.when(
 			this.bulkMarkup('local', userLinks, allUsers),
 			this.bulkMarkup('global', userLinks, this.options.g_blocks ? allUsers : [])
 		).then((markedUsers, g_markedUsers) => {
@@ -947,9 +948,13 @@ class MarkBLocked {
 				});
 			}
 
+			const doneHook = mw.hook('userjs.markblocked.end');
 			if (batchArray.length) {
-				this.batchRequest(batchArray);
+				return this.batchRequest(batchArray).then(() => {
+					doneHook.fire($content);
+				});
 			}
+			doneHook.fire($content);
 
 		});
 
