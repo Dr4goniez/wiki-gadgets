@@ -1700,32 +1700,45 @@ class BlockField {
 	}
 
 	/**
+	 * Blocks users and IPs selected in `target`.
+	 *
 	 * @private
 	 */
-	blockUsers() {
+	async blockUsers() {
 		const targets = this.target.getSelectedUsernames();
 		if (!targets.length) {
 			// The user should never get caught in this block because we disable the block button
 			// when no user is selected; hence the message is not translated
-			OO.ui.alert('No users are selected as the block targets.');
-			return;
+			return OO.ui.alert('No users are selected as the block targets.');
 		}
 
 		this.block.setDisabled(true);
 		this.$spinner.show();
+		const reenableForm = () => {
+			this.block.setDisabled(false);
+			this.$spinner.hide();
+		};
 
 		// Ensure users and IPs aren't mixed
 		let hasUser = false, hasIp = false;
-		for (const target of targets) {
+		for (let i = 0; i < targets.length; i++) {
+			const target = targets[i];
 			const isIp = mw.util.isIPAddress(target, true);
 			hasUser = hasUser || !isIp;
 			hasIp = hasIp || !isIp;
 			if (hasUser && hasIp) break;
 		}
+		const userMixConfirmed = await BlockField.confirmUserMix(hasUser && hasIp);
+		if (!userMixConfirmed) return reenableForm();
 
-		BlockField.confirmUserMix(hasUser && hasIp).then((confirmed) => {
-			if (!confirmed) return;
-		});
+		do { // Simply creates a break-able scope
+
+			const blockIdMap = await BlockField.checkBlocks(targets); // TODO: Handle error
+			if (!blockIdMap.size) break;
+
+		// eslint-disable-next-line no-constant-condition
+		} while (false);
+
 
 	}
 
@@ -1751,10 +1764,126 @@ class BlockField {
 	}
 
 	/**
+	 * Map of usernames to block ID data.
 	 *
-	 * @param {string[]} targets
+	 * @typedef {Map<string, BlockIdMapValue>} BlockIdMap
+	 */
+	/**
+	 * Information about a user's active blocks.
+	 *
+	 * @typedef {object} BlockIdMapValue
+	 * @property {number[]} ids Array of active block IDs.
+	 * @property {number} latestTimestamp Unix timestamp (in seconds) of the most recent block.
+	 * @property {number} earliestTimestamp Unix timestamp (in seconds) of the oldest block.
+	 */
+	/**
+	 * Checks the block status of `targets` and returns a Map of usernames to block info.
+	 *
+	 * @param {string[]} targets The users to check the block status of.
+	 * @returns {JQueryPromise<BlockIdMap>} A Promise that resolves with a Map of usernames to block data.
+	 * @private
 	 */
 	static checkBlocks(targets) {
+		const /** @type {BlockIdMap} */ map = new Map();
+		/**
+		 * @param {number} index
+		 */
+		return (function execute(index) {
+			return api.post({
+				action: 'query',
+				list: 'blocks',
+				bkusers: targets.slice(index, index + 500).join('|'),
+				bklimit: 'max',
+				bkprop: 'id|user|timestamp',
+				formatversion: '2'
+			}).then(({ query }) => {
+				/**
+				 * @type {{ id: number; user: string; timestamp: string; }[]}
+				 */
+				const blocks = query.blocks;
+				for (const { id, user, timestamp } of blocks) {
+					const unixTime = Date.parse(timestamp) / 1000;
+					if (!map.has(user)) {
+						map.set(user, {
+							ids: [id],
+							latestTimestamp: unixTime,
+							earliestTimestamp: unixTime
+						});
+					} else {
+						const entry = /** @type {BlockIdMapValue} */ (map.get(user));
+						entry.ids.push(id);
+						entry.latestTimestamp = Math.max(entry.latestTimestamp, unixTime);
+						entry.earliestTimestamp = Math.min(entry.earliestTimestamp, unixTime);
+					}
+				}
+				index += 500;
+				if (targets[index]) {
+					return execute(index);
+				}
+				return map;
+			});
+		})(0);
+	}
+
+	/**
+	 * @param {BlockIdMap} blockIdMap
+	 */
+	static getBlockLogEntries(blockIdMap) {
+
+	}
+
+	/**
+	 * @param {string} username
+	 * @param {BlockIdMapValue} data
+	 */
+	static getBlockLogEntry(username, data) {
+		const { ids, latestTimestamp, earliestTimestamp } = data;
+		return api.get({
+			action: 'query',
+			list: 'logevents',
+			leprop: 'user|type|timestamp|parsedcomment|details',
+			letype: 'block',
+			lestart: latestTimestamp,
+			leend: earliestTimestamp,
+			letitle: `User:${username}`,
+			lelimit: 'max',
+			formatversion: '2'
+		}).then(({ query }) => {
+			/**
+			 * @typedef {object} ApiResponseQueryListLogevents
+			 * @property {ApiResponseQueryListLogeventsParams} params
+			 * @property {"block"} type
+			 * @property {"block" | "reblock" | "unblock"} action
+			 * @property {string} user
+			 * @property {string} timestamp
+			 * @property {string} parsedcomment
+			 *
+			 * @typedef {object} ApiResponseQueryListLogeventsParams
+			 * @property {string} duration
+			 * @property {string[]} flags
+			 * @property {number} blockId
+			 * @property {number} [finalTargetCount]
+			 * @property {boolean} sitewide // TODO: Check source code for whether this can ever be `false`
+			 * @property {string} [expiry] Missing for indefinite blocks
+			 * @property {string} duration-l10n
+			 */
+			/**
+			 * @type {ApiResponseQueryListLogevents[]}
+			 */
+			const logevents = query.logevents;
+		});
+	}
+
+	/**
+	 * `logentry-block-block`, `logentry-block-block-multi`, `logentry-block-reblock`
+	 * * `$1` - link to the user page of the user who performed the action
+	 * * `$2` - username of the user who performed the action (to be used with GENDER)
+	 * * `$3` - link to the affected page
+	 * * `$4` - username for gender or empty string for autoblocks
+	 * * `$5` - the block duration, localized and formatted with the English tooltip
+	 * * `$6` - block detail flags or empty string
+	 */
+	static formatBlockLog() {
 
 	}
 
