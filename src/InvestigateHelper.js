@@ -5,6 +5,7 @@
  * @author [[User:Dragoniez]]
  */
 // @ts-check
+/// <reference path="./window/InvestigateHelper.d.ts" />
 /* global mw, OO */
 // <nowiki>
 (() => {
@@ -13,10 +14,6 @@
 /** @type {mw.Api} */
 let api;
 
-/**
- * @typedef {import('ip-wiki')} IpWiki
- * @typedef {IpWiki['IP']} IP
- */
 /**
  * @type {IpWiki}
  */
@@ -69,7 +66,7 @@ function init() {
 				'oojs-ui.styles.icons-movement',
 				'mediawiki.widgets.UsersMultiselectWidget'
 			]),
-			api.loadMessagesIfMissing([
+			Messages.loadMessagesIfMissing([
 				'tux-editor-translate-mode',
 				'checkuser-helper-user',
 				'sp-contributions-talk',
@@ -102,9 +99,38 @@ function init() {
 
 				'blocklink',
 				'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets',
+
+				'logentry-block-block',
+				'logentry-block-block-multi',
+				'logentry-block-reblock',
+				'logentry-partialblock-block',
+				'logentry-partialblock-block-multi',
+				'logentry-partialblock-reblock',
+				'logentry-non-editing-block-block',
+				'logentry-non-editing-block-block-multi',
+				'logentry-non-editing-block-reblock',
+				'block-log-flags-angry-autoblock',
+				'block-log-flags-anononly',
+				'block-log-flags-hiddenname',
+				'block-log-flags-noautoblock',
+				'block-log-flags-nocreate',
+				'block-log-flags-noemail',
+				'block-log-flags-nousertalk',
+				'parentheses',
+				'comma-separator',
+				'and',
+				'word-separator',
+				'blanknamespace',
+				'ipb-action-create',
+				'ipb-action-move',
+				'ipb-action-thanks',
+				'ipb-action-upload',
+				'logentry-partialblock-block-page',
+				'logentry-partialblock-block-ns',
+				'logentry-partialblock-block-action',
 			])
 		).then(() => {
-			return parseMessages([
+			return Messages.parse([
 				'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets'
 			]);
 		}).then(() => {
@@ -117,7 +143,7 @@ function init() {
 
 			// Create a list of registered users
 			if (users.length) {
-				const userField = collapsibleFieldsetLayout($content, getMessage('checkuser-helper-user'));
+				const userField = collapsibleFieldsetLayout($content, Messages.get('checkuser-helper-user'));
 				list.user = [];
 				for (const { user, ips } of users) {
 					const item = new UserListItem(userField, user, 'user');
@@ -158,7 +184,7 @@ function init() {
 
 			UserListItem.checkExistence();
 
-			const blockField = collapsibleFieldsetLayout($content, getMessage('block'));
+			const blockField = collapsibleFieldsetLayout($content, Messages.get('block'));
 			new BlockField(blockField, list);
 
 			const contentHook = mw.hook('wikipage.content');
@@ -196,18 +222,6 @@ function loadIpWiki() {
 	}
 }
 
-/**
- * @typedef {object} UserInfo
- * @property {string} user The username.
- * @property {(Omit<IpInfo, 'ip' | 'users'> & { ip : string })[]} ips IP addresses associated with the username, if any.
- */
-/**
- * @typedef {object} IpInfo
- * @property {InstanceType<IP>} ip
- * @property {Set<string>} users Usernames associated with the IP.
- * @property {number} actions The total number of actions by a registered user from the respective IP and User Agent.
- * @property {number} all The total number of actions from the respective IP.
- */
 /**
  * Collects user names from the investigate table.
  *
@@ -302,6 +316,447 @@ function getApiOptions() {
 			formatversion: '2'
 		}
 	};
+}
+
+/**
+ * Gets a `{ 'Promise-Non-Write-API-Action': '1' }` header for a non-write POST request.
+ * @returns
+ */
+function nonwritePost() {
+	return {
+		headers: {
+			'Promise-Non-Write-API-Action': '1'
+		}
+	};
+}
+
+class Messages {
+
+	/**
+	 * Loads a set of messages via the MediaWiki API and adds them to `mw.messages`,
+	 * but only if they are missing or depend on other missing `{{int:...}}` messages.
+	 *
+	 * Unlike `mw.Api.loadMessagesIfMissing`, this version supports API continuation
+	 * using batches of 500 messages per request (instead of 50), improving performance.
+	 *
+	 * @param {string[]} messages List of message keys to ensure they are available.
+	 * @returns {JQueryPromise<boolean>} Resolves to `true` if any new messages were added; otherwise `false`.
+	 */
+	static loadMessagesIfMissing(messages) {
+		/**
+		 * Messages that are missing and need to be fetched
+		 * @type {Set<string>}
+		 */
+		const missing = new Set();
+		/**
+		 * Message keys from the input that contain `{{int:...}}` and need re-parsing after dependencies are loaded
+		 * @type {Set<string>}
+		 */
+		const containsInt = new Set();
+
+		for (const key of messages) {
+			/** @type {?string} */
+			const msg = mw.messages.get(key);
+
+			if (msg !== null) {
+				// Parse `{{int:...}}` and track unresolved dependencies
+				const unparsed = this.parseInt(msg, key);
+				if (unparsed.size > 0) {
+					containsInt.add(key);
+					for (const dep of unparsed) {
+						missing.add(dep);
+					}
+				}
+			} else {
+				// Fully missing message
+				missing.add(key);
+			}
+		}
+
+		/**
+		 * Recursively loads missing messages in batches of up to 500.
+		 *
+		 * @param {string[]} keys List of message keys to load.
+		 * @param {number} index Starting index for the current batch.
+		 * @returns {JQueryPromise<boolean>}
+		 */
+		return (function execute(keys, index) {
+			const batch = keys.slice(index, index + 500);
+			const request = batch.length <= 50
+				? (query) => api.get(query)
+				: (query) => api.post(query, nonwritePost());
+
+			return request({
+				action: 'query',
+				meta: 'allmessages',
+				ammessages: batch,
+				amlang: mw.config.get('wgUserLanguage'),
+				formatversion: '2'
+			}).then(({ query }) => {
+				let added = false;
+
+				for (const { name, content, missing } of query.allmessages) {
+					if (!missing) {
+						// Add to mw.messages; track whether any new message was added
+						added = mw.messages.set(name, content) || added;
+					}
+				}
+
+				index += 500;
+				if (keys[index] !== undefined) {
+					// More messages to load
+					return execute(keys, index);
+				}
+
+				// Re-parse original messages that contained unresolved `{{int:...}}`
+				for (const key of containsInt) {
+					const msg = mw.messages.get(key);
+					if (msg !== null) {
+						Messages.parseInt(msg, key);
+					}
+				}
+
+				return added;
+			});
+		})(Array.from(missing), 0);
+	}
+
+	/**
+	 * Parses a message string and replaces any `{{int:messageKey}}` magic words with
+	 * resolved messages from `mw.messages`, if available. If not available, the message
+	 * key is returned so it can be loaded later.
+	 *
+	 * If any substitutions are made, the parsed version is stored in `mw.messages`
+	 * under the original key.
+	 *
+	 * @param {string} msg The raw message string to parse.
+	 * @param {string} key The message key associated with `msg`.
+	 * @returns {Set<string>} A set of message keys that were referenced but missing.
+	 */
+	static parseInt(msg, key) {
+		const regex = /\{\{\s*int:([^}]+)\}\}/g;
+
+		/** @type {Set<string>} */
+		const missingKeys = new Set();
+
+		let text = msg;
+		let match;
+
+		// Look for all `{{int:...}}` occurrences
+		while ((match = regex.exec(msg))) {
+			const rawKey = match[1].trim();
+			const parsedKey = rawKey.charAt(0).toLowerCase() + rawKey.slice(1);
+
+			/** @type {?string} */
+			const replacement = mw.messages.get(parsedKey);
+
+			if (replacement !== null) {
+				// Replace all instances of this placeholder with its message
+				text = text.split(match[0]).join(replacement);
+			} else {
+				missingKeys.add(parsedKey);
+			}
+		}
+
+		// Update the message only if it was modified
+		if (text !== msg) {
+			mw.messages.set(key, text);
+		}
+
+		return missingKeys;
+	}
+
+	/**
+	 * Gets an interface message.
+	 *
+	 * @template {keyof LoadedMessages} K
+	 * @param {K} key
+	 * @returns {LoadedMessages[K]}
+	 */
+	static get(key) {
+		let ret = mw.messages.get(key);
+		if (ret === null) {
+			throw new ReferenceError(`Message named ${key} is not found.`);
+		}
+		return ret;
+	}
+
+	/**
+	 * Parses and caches MediaWiki interface messages using the parse API. Cached values are reused via {@link Storage}.
+	 *
+	 * @param {(keyof LoadedMessages)[]} keys List of message keys to parse.
+	 * @returns {JQueryPromise<void>} A promise that resolves when parsing and caching are complete.
+	 */
+	static parse(keys) {
+		const $messages = $('<div>');
+		const cached = Storage.get('messages') || {};
+		/** @type {Set<string>} */
+		const requestedKeys = new Set();
+		for (const key of keys) {
+			if (cached[key] !== undefined) {
+				mw.messages.set(key, cached[key]);
+				continue;
+			}
+			if (requestedKeys.has(key)) {
+				continue;
+			}
+			requestedKeys.add(key);
+			$messages.append(
+				$('<div>').prop('id', key).text(Messages.get(key))
+			);
+		}
+		if (!$messages.children('div').length) {
+			return $.Deferred().resolve();
+		}
+
+		return api.post({
+			action: 'parse',
+			text: $messages.html(),
+			prop: 'text',
+			disablelimitreport: true,
+			disableeditsection: true,
+			disabletoc: true,
+			contentmodel: 'wikitext',
+			formatversion: '2'
+		}, nonwritePost()).then((res) => {
+			const $res = $(res.parse.text);
+			const cache = Object.create(null);
+			for (const key of requestedKeys) {
+				const $key = $res.find(`#${key}`);
+				if ($key.length) {
+					const parsed = $key.html();
+					mw.messages.set(key, parsed);
+					cache[key] = parsed;
+				}
+			}
+			if (!$.isEmptyObject(cache)) {
+				Storage.set('messages', cache);
+			}
+		});
+	}
+
+	/**
+	 * Parses all `{{PLURAL:$N|...}}` magic words in the text using the provided values.
+	 *
+	 * @param {string} text Input string possibly containing `{{PLURAL:$1|...}}` constructs.
+	 * @param {...string} parameters Positional values used to resolve each $N.
+	 * @returns {string} The processed string with all {{PLURAL}} replaced.
+	 */
+	static parsePlurals(text, ...parameters) {
+		return text.replace(/\{\{\s*PLURAL:\s*\$(\d+)\s*\|([^}]+?)\}\}/gi, (match, numStr, forms) => {
+			const index = parseInt(numStr, 10) - 1;
+			const value = parseInt(parameters[index], 10);
+			if (Number.isNaN(value)) return match;
+
+			// Split into plural forms
+			const formList = forms.split('|').map((f) => f.trim());
+			// Reuse the first form if there's only one form given
+			const chosenForm = value === 1 ? formList[0] : (formList[1] !== undefined ? formList[1] : formList[0]);
+			return chosenForm;
+		});
+	}
+
+	/**
+	 * Replaces occurrences of the `{{GENDER:...}}` parser function based on a gender map.
+	 *
+	 * @param {string} text The text to parse for occurrences of the `GENDER` parser function.
+	 * @returns {string} The parsed text with `GENDER` magic words replaced.
+	 */
+	static parseGenders(text) {
+		// Match {{ GENDER:username | male | female | neutral }} allowing whitespace and optional parameters
+		const genderRegex = /\{\{\s*GENDER:\s*([^}]*)\}\}/g;
+
+		let m;
+		while ((m = genderRegex.exec(text))) {
+			// Destructure up to 4 pipe-separated values: username, male, female, neutral
+			const [usernameRaw, male, female, neutral] = /** @type {[string, string?, string?, string?]} */ (m[1].split('|'));
+
+			// If only one parameter exists (i.e. username), replace with an empty string
+			if (male === undefined) {
+				text = text.replace(m[0], '');
+				continue;
+			}
+
+			// If only male is defined (no female/neutral), use male form
+			if (female === undefined || neutral === undefined) {
+				text = text.replace(m[0], male.trim());
+				continue;
+			}
+
+			// Normalize the username by trimming whitespace and underscores
+			const username = usernameRaw.replace(/^[\s_]+|[\s_]+$/g, '');
+
+			// Lookup gender, fallback to 'unknown' if not found
+			const gender = Messages.userGenderMap.get(username) || 'unknown';
+
+			// Replace with appropriate form
+			text = text.replace(m[0], () => {
+				switch (gender) {
+					case 'male': return male.trim();
+					case 'female': return female.trim();
+					default: return neutral.trim();
+				}
+			});
+		}
+
+		return text;
+	}
+
+	/**
+	 * Parses the `ipbreason-dropdown` message to an array of `OO.ui.OptionWidget` instances.
+	 *
+	 * @returns {OO.ui.OptionWidget[]}
+	 */
+	static parseBlockReasonDropdown() {
+		// Adapted from Html::listDropdownOptions
+		const /** @type {Record<string, string | Record<string, string>>} */ options = {};
+		let /** @type {string | false} */optgroup = false;
+
+		for (const rawOption of Messages.get('ipbreason-dropdown').split('\n')) {
+			const value = rawOption.trim();
+			if (value === '') {
+				continue;
+			}
+
+			if (value.startsWith('*') && !value.startsWith('**')) {
+				// A new group is starting...
+				const groupLabel = value.slice(1).trim();
+				if (groupLabel !== '') {
+					optgroup = groupLabel;
+				} else {
+					optgroup = false;
+				}
+			} else if (value.startsWith('**')) {
+				// Group member
+				const opt = value.slice(2).trim();
+				if (optgroup === false) {
+					options[opt] = opt;
+				} else {
+					if (typeof options[optgroup] !== 'object' || options[optgroup] === null) {
+						options[optgroup] = {};
+					}
+					options[optgroup][opt] = opt;
+				}
+			} else {
+				// Groupless reason list
+				optgroup = false;
+				options[value] = value;
+			}
+		}
+
+		// Adapted from listDropdownOptionsOoui
+		const /** @type {OO.ui.OptionWidget[]} */ items = [
+			new OO.ui.MenuOptionWidget({ data: '', label: Messages.get('htmlform-selectorother-other') })
+		];
+		for (const [text, value] of Object.entries(options)) {
+			if (typeof value === 'object') {
+				items.push(new OO.ui.MenuSectionOptionWidget({ label: text }));
+				for (const [text2, value2] of Object.entries(value)) {
+					items.push(new OO.ui.MenuOptionWidget({ data: value2, label: text2 }));
+				}
+			} else {
+				items.push(new OO.ui.MenuOptionWidget({ data: value, label: text }));
+			}
+		}
+		return items;
+	}
+
+	/**
+	 * Creates a wikilink to a local title as raw HTML.
+	 *
+	 * @param {string} title The title of the page to link to.
+	 * @param {string} [display] The display text of the link. If omitted, `title` is used.
+	 * @returns {string} An `<a>` tag as raw HTML.
+	 */
+	static wikilink(title, display) {
+		return $('<a>')
+			.prop({
+				href: mw.util.getUrl(title, { noredirect: 1 }),
+				target: '_blank'
+			})
+			.text(display || title)
+			.prop('outerHTML');
+	}
+
+}
+/**
+ * Map of usernames to their genders. This object is updated by {@link BlockField.checkBlocks}.
+ *
+ * @type {Map<string, Gender>}
+ */
+Messages.userGenderMap = new Map();
+
+class Storage {
+
+	/**
+	 * Retrieves a stored object from `localStorage` by key.
+	 *
+	 * @param {StorageKeys} key The key to retrieve the object for.
+	 * @returns {?Record<string, any>} The stored object, or `null` if not found or expired.
+	 */
+	static get(key) {
+		const realKey = `investigatehelper-${key}`;
+		const stored = localStorage.getItem(realKey);
+		if (stored === null) {
+			return null;
+		}
+		let object;
+		try {
+			object = JSON.parse(stored);
+			if (!Number.isFinite(object._expiry) || object._expiry < Date.now()) {
+				throw new Error();
+			}
+		} catch (_) {
+			localStorage.removeItem(realKey);
+			return null;
+		}
+		return object;
+	}
+
+	/**
+	 * Retrieves a specific field from a stored object.
+	 *
+	 * @param {StorageKeys} key The key to retrieve the object for.
+	 * @param {string} field The field to retrieve from the object.
+	 * @returns {?any} The value of the field, or `null` if not found or expired.
+	 */
+	static getField(key, field) {
+		const object = this.get(key);
+		if (object && Object.prototype.hasOwnProperty.call(object, field)) {
+			return object[field];
+		}
+		return null;
+	}
+
+	/**
+	 * Saves an object to `localStorage` under a namespaced key, with a 7-day expiration time.
+	 *
+	 * @param {StorageKeys} key The key under which to store the object.
+	 * @param {Record<string, any>} object The object to store.
+	 */
+	static set(key, object) {
+		const realKey = `investigatehelper-${key}`;
+		object._expiry = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days
+		localStorage.setItem(realKey, JSON.stringify(object));
+	}
+
+	/**
+	 * Updates specific fields of an existing stored object.
+	 * If the object doesn't exist or is expired, it creates a new one.
+	 *
+	 * @param {StorageKeys} key The key under which the object is stored.
+	 * @param {Record<string, any>} updates An object containing the fields to update.
+	 */
+	static update(key, updates) {
+		const object = this.get(key) || {};
+		for (const prop in updates) {
+			if (Object.prototype.hasOwnProperty.call(updates, prop)) {
+				object[prop] = updates[prop];
+			}
+		}
+		this.set(key, object);
+	}
+
 }
 
 /**
@@ -408,96 +863,6 @@ function collapsibleFieldsetLayout($target, label) {
 
 }
 
-/**
- * @typedef {object} LoadedMessages
- *
- * @property {string} tux-editor-translate-mode "List"
- * @property {string} checkuser-helper-user
- * @property {string} sp-contributions-talk
- * @property {string} contribslink
- * @property {string} sp-contributions-logs
- * @property {string} sp-contributions-blocklog
- * @property {string} abusefilter-log-linkoncontribs
- * @property {string} checkuser-log-checks-on
- * @property {string} centralauth-contribs-link
- * @property {string} checkuser-global-contributions-link
- * @property {string} ooui-copytextlayout-copy
- * @property {string} checkuser-helper-copy-success
- * @property {string} checkuser-helper-copy-failed
- *
- * @property {string} checkuser-investigate-compare-table-cell-actions
- * @property {string} checkuser-investigate-compare-table-cell-other-actions
- *
- * @property {string} checkuser-investigate-compare-table-header-ip
- * @property {string} block
- * @property {string} checkuser-investigateblock-target
- * @property {string} mw-widgets-usersmultiselect-placeholder
- * @property {string} checkuser-investigate
- * @property {string} checkuser-investigateblock-actions
- * @property {string} checkuser-investigateblock-email-label
- * @property {string} checkuser-investigateblock-usertalk-label
- * @property {string} checkuser-investigateblock-reblock-label
- * @property {string} checkuser-investigateblock-reason
- * @property {string} ipbreason-dropdown
- * @property {string} htmlform-selectorother-other
- *
- * @property {string} blocklink
- * @property {string} wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets
- */
-
-/**
- * Gets an interface message.
- *
- * @template {keyof LoadedMessages} K
- * @param {K} key
- * @returns {LoadedMessages[K]}
- */
-function getMessage(key) {
-	let ret = mw.messages.get(key);
-	if (ret === null) {
-		throw new ReferenceError(`Message named ${key} is not found.`);
-	}
-	return ret;
-}
-
-/**
- * Parses interface messages via the API and sets the results to `mw.messages`.
- *
- * @param {(keyof LoadedMessages)[]} keys
- * @returns {JQueryPromise<void>}
- */
-function parseMessages(keys) {
-	// TODO: Cache parsed messages in localStorage
-	const $wrapper = $('<div>').prop('id', 'parser-wrapper');
-	for (const key of keys) {
-		$wrapper.append(
-			$('<div>').prop('id', key).text(getMessage(key))
-		);
-	}
-	return api.post({
-		action: 'parse',
-		text: $wrapper.html(),
-		prop: 'text',
-		disablelimitreport: true,
-		disableeditsection: true,
-		disabletoc: true,
-		contentmodel: 'wikitext',
-		formatversion: '2'
-	}).then((res) => {
-		const $res = $(res.parse.text);
-		for (const key of keys) {
-			const text = $res.find(`#${key}`).html();
-			if (text) {
-				mw.messages.set(key, text);
-			}
-		}
-	});
-}
-
-/**
- * @typedef {'user' | 'ip' | 'cidr'} UserType
- */
-
 class UserListItem {
 
 	/**
@@ -572,30 +937,30 @@ class UserListItem {
 		const /** @type {JQuery<HTMLElement>[]} */ anchors = [];
 		if (type === 'user') {
 			anchors.push(
-				UserListItem.createInternalLink(getMessage('checkuser-helper-user').toLowerCase(), `User:${username}`, { redirect: 'no' }, true)
+				UserListItem.createInternalLink(Messages.get('checkuser-helper-user').toLowerCase(), `User:${username}`, { redirect: 'no' }, true)
 			);
 		}
 		if (type !== 'cidr') {
 			anchors.push(
-				UserListItem.createInternalLink(getMessage('sp-contributions-talk'), `User talk:${username}`, { redirect: 'no' }, true)
+				UserListItem.createInternalLink(Messages.get('sp-contributions-talk'), `User talk:${username}`, { redirect: 'no' }, true)
 			);
 		}
 		anchors.push(
-			UserListItem.createInternalLink(getMessage('contribslink'), `Special:Contributions/${username}`),
-			UserListItem.createInternalLink(getMessage('sp-contributions-logs'), `Special:Log/${username}`),
-			UserListItem.createInternalLink(getMessage('sp-contributions-blocklog'), 'Special:Log/block', { page: `User:${username}` })
+			UserListItem.createInternalLink(Messages.get('contribslink'), `Special:Contributions/${username}`),
+			UserListItem.createInternalLink(Messages.get('sp-contributions-logs'), `Special:Log/${username}`),
+			UserListItem.createInternalLink(Messages.get('sp-contributions-blocklog'), 'Special:Log/block', { page: `User:${username}` })
 		);
 		if (type !== 'cidr') {
 			anchors.push(
-				UserListItem.createInternalLink(getMessage('abusefilter-log-linkoncontribs'), 'Special:AbuseLog', { wpSearchUser: username })
+				UserListItem.createInternalLink(Messages.get('abusefilter-log-linkoncontribs'), 'Special:AbuseLog', { wpSearchUser: username })
 			);
 		}
 		anchors.push(
-			UserListItem.createInternalLink(getMessage('checkuser-log-checks-on'), 'Special:CheckUserLog', { cuSearch: username })
+			UserListItem.createInternalLink(Messages.get('checkuser-log-checks-on'), 'Special:CheckUserLog', { cuSearch: username })
 		);
 		if (type === 'user') {
 			anchors.push(
-				UserListItem.createInternalLink(getMessage('centralauth-contribs-link'), `Special:CentralAuth/${username}`)
+				UserListItem.createInternalLink(Messages.get('centralauth-contribs-link'), `Special:CentralAuth/${username}`)
 			);
 		} else {
 			anchors.push(
@@ -603,14 +968,14 @@ class UserListItem {
 			);
 		}
 		anchors.push(
-			UserListItem.createInternalLink(getMessage('checkuser-global-contributions-link'), `Special:GlobalContributions/${username}`),
+			UserListItem.createInternalLink(Messages.get('checkuser-global-contributions-link'), `Special:GlobalContributions/${username}`),
 			UserListItem.createExternalLink('stalk toy', `https://meta3.toolforge.org/stalktoy/${username}`)
 		);
 		if (clipboardSupported()) {
 			anchors.push(
 				$('<span>').append($('<a>')
 					.prop('role', 'button')
-					.text(getMessage('ooui-copytextlayout-copy').toLowerCase())
+					.text(Messages.get('ooui-copytextlayout-copy').toLowerCase())
 					.off('click').on('click', () => copy(username))
 				)
 			);
@@ -700,11 +1065,7 @@ class UserListItem {
 				action: 'query',
 				titles,
 				formatversion: '2'
-			}).then(({ query }) => {
-				/**
-				 * @typedef {{ fromencoded: boolean;  from: string; to: string; }} ApiResponseNormalized
-				 * @typedef {{ ns: number; title: string; missing?: true; known?: true; }} ApiResponsePageExistence
-				 */
+			}, nonwritePost()).then(({ query }) => {
 				const {
 					normalized = [],
 					pages = []
@@ -788,7 +1149,7 @@ class UserListItem {
 		const $sublistButton = $('<span>')
 			.append($('<a>')
 				.prop('role', 'button')
-				.text(getMessage('tux-editor-translate-mode').toLowerCase())
+				.text(Messages.get('tux-editor-translate-mode').toLowerCase())
 			)
 			.addClass(UserListItem.CLS_TOGGLE)
 			.off('click').on('click', () => {
@@ -859,10 +1220,10 @@ function clipboardSupported() {
 function copy(text) {
 	if (typeof navigator.clipboard === 'object' && typeof navigator.clipboard.writeText === 'function') {
 		navigator.clipboard.writeText(text).then(() => {
-			mw.notify(getMessage('checkuser-helper-copy-success'), { type: 'success' });
-		}).catch(err => {
+			mw.notify(Messages.get('checkuser-helper-copy-success'), { type: 'success' });
+		}).catch((err) => {
 			console.error('Clipboard copy failed:', err);
-			mw.notify(getMessage('checkuser-helper-copy-failed'), { type: 'error' });
+			mw.notify(Messages.get('checkuser-helper-copy-failed'), { type: 'error' });
 		});
 		return;
 	}
@@ -881,28 +1242,17 @@ function copy(text) {
 	try {
 		const success = document.execCommand('copy');
 		if (success) {
-			mw.notify(getMessage('checkuser-helper-copy-success'), { type: 'success' });
+			mw.notify(Messages.get('checkuser-helper-copy-success'), { type: 'success' });
 		} else {
 			throw new Error('execCommand failed');
 		}
 	} catch (err) {
 		console.error('Clipboard copy failed:', err);
-		mw.notify(getMessage('checkuser-helper-copy-failed'), { type: 'error' });
+		mw.notify(Messages.get('checkuser-helper-copy-failed'), { type: 'error' });
 	}
 
 	document.body.removeChild(textarea);
 }
-
-/**
- * Represents a CIDR block along with the set of indexes of `info` entries it covers.
- * - The `ip` property is an IP instance representing the CIDR.
- * - The `covers` property is a Set of numeric indexes referring to entries in the original `info` array
- *   that fall within the CIDR range.
- *
- * @typedef {object} IpInfoLevel
- * @property {InstanceType<IP>} ip The IP instance representing the CIDR block.
- * @property {Set<number>} covers Set of indexes from the original `info` array covered by this CIDR.
- */
 
 class IPFieldContent {
 
@@ -1047,9 +1397,6 @@ class IPFieldContent {
 		// console.log(allLevels.map((arr) => arr.map(({ ip, covers }) => ({ ip: ip.abbreviate(), covers }))));
 
 		// Convert `allLevels` (`IpInfoLevel[][]`) to `ExtendedIpInfo[][]`
-		/**
-		 * @typedef {IpInfo & { contains?: IpInfo[]; }} ExtendedIpInfo
-		 */
 		const /** @type {ExtendedIpInfo[][]} */ results = [];
 
 		for (const level of allLevels) {
@@ -1206,9 +1553,9 @@ class IPFieldContent {
 	 * @returns
 	 */
 	static getActionCountText(count) {
-		let msg = getMessage('checkuser-investigate-compare-table-cell-actions');
+		let msg = Messages.get('checkuser-investigate-compare-table-cell-actions');
 		const countStr = String(count);
-		msg = this.parsePlural(msg, countStr).replace('$1', countStr);
+		msg = mw.format(Messages.parsePlurals(msg, countStr), countStr);
 		return '&nbsp;' + msg;
 	}
 
@@ -1219,29 +1566,10 @@ class IPFieldContent {
 	 * @returns
 	 */
 	static getAllActionCountText(count) {
-		let msg = getMessage('checkuser-investigate-compare-table-cell-other-actions');
+		let msg = Messages.get('checkuser-investigate-compare-table-cell-other-actions');
 		const countStr = String(count);
-		msg = this.parsePlural(msg, countStr).replace('$1', countStr);
+		msg = mw.format(Messages.parsePlurals(msg, countStr), countStr);
 		return '&nbsp;' + msg;
-	}
-
-	/**
-	 * Parses a `{{PLURAL}}` magic word if `text` contains any.
-	 *
-	 * @param {string} text
-	 * @param {string} $1
-	 * @returns {string}
-	 * @private
-	 */
-	static parsePlural(text, $1) {
-		const m = text.match(/\{\{PLURAL:\s*\$1\s*\|\s*([^|]+?)\s*(?:\|\s*([^}]+?)\s*)?\}\}/i);
-		if (m) {
-			const single = m[1].trim();
-			const plural = m[2] !== undefined ? m[2].trim() : single;
-			const newText = parseInt(String($1)) === 1 ? single : plural;
-			text = text.replace(m[0], newText);
-		}
-		return text;
 	}
 
 }
@@ -1350,13 +1678,6 @@ function setEqual(a, b) {
 	return true;
 }
 
-/**
- * @typedef {object} UserList
- * @property {UserListItem[]} [user]
- * @property {IPFieldContent} [ipv4]
- * @property {IPFieldContent} [ipv6]
- */
-
 class BlockField {
 
 	/**
@@ -1384,7 +1705,7 @@ class BlockField {
 
 		// Block targets
 		const targetField = new OO.ui.FieldsetLayout({
-			label: getMessage('checkuser-investigateblock-target')
+			label: Messages.get('checkuser-investigateblock-target')
 		});
 		/**
 		 * The target selector widget.
@@ -1394,7 +1715,7 @@ class BlockField {
 		this.target = new mw.widgets.UsersMultiselectWidget({
 			inputPosition: 'outline',
 			orientation: 'horizontal',
-			placeholder: getMessage('mw-widgets-usersmultiselect-placeholder'),
+			placeholder: Messages.get('mw-widgets-usersmultiselect-placeholder'),
 			api: new mw.Api(getApiOptions()),
 			ipAllowed: true,
 			ipRangeAllowed: true
@@ -1407,7 +1728,6 @@ class BlockField {
 		 */
 		this.inChangeEvent = false;
 
-		// this.bindTagsWithCheckboxes();
 		this.bindCheckboxesWithTags();
 
 		const investigateButton = this.createInvestigateButton();
@@ -1418,40 +1738,40 @@ class BlockField {
 
 		// Block actions
 		const actionField = new OO.ui.FieldsetLayout({
-			label: getMessage('checkuser-investigateblock-actions')
+			label: Messages.get('checkuser-investigateblock-actions')
 		});
 		const blockEmail = new OO.ui.CheckboxInputWidget();
 		const blockTalk = new OO.ui.CheckboxInputWidget();
 		const reblock = new OO.ui.CheckboxInputWidget();
 		actionField.addItems([
 			new OO.ui.FieldLayout(blockEmail, {
-				label: getMessage('checkuser-investigateblock-email-label'),
+				label: Messages.get('checkuser-investigateblock-email-label'),
 				align: 'inline'
 			}),
 			new OO.ui.FieldLayout(blockTalk, {
-				label: getMessage('checkuser-investigateblock-usertalk-label'),
+				label: Messages.get('checkuser-investigateblock-usertalk-label'),
 				align: 'inline'
 			}),
 			new OO.ui.FieldLayout(reblock, {
-				label: getMessage('checkuser-investigateblock-reblock-label'),
+				label: Messages.get('checkuser-investigateblock-reblock-label'),
 				align: 'inline'
 			}),
 		]);
 
 		// Block reasons
 		const reasonField = new OO.ui.FieldsetLayout({
-			label: getMessage('checkuser-investigateblock-reason')
+			label: Messages.get('checkuser-investigateblock-reason')
 		});
 		const reason1 = new OO.ui.DropdownWidget({
 			menu: {
-				items: BlockField.createReasonMenuItems()
+				items: Messages.parseBlockReasonDropdown()
 			},
 			classes: ['ih-dropdown-reducedmaxheight']
 		});
 		reason1.getMenu().selectItemByData('');
 		const reason2 = new OO.ui.DropdownWidget({
 			menu: {
-				items: BlockField.createReasonMenuItems()
+				items: Messages.parseBlockReasonDropdown()
 			},
 			classes: ['ih-dropdown-reducedmaxheight']
 		});
@@ -1465,7 +1785,7 @@ class BlockField {
 
 		this.block = new OO.ui.ButtonWidget({
 			label: (() => {
-				const msg = getMessage('blocklink');
+				const msg = Messages.get('blocklink');
 				return msg[0].toUpperCase() + msg.slice(1);
 			})(),
 			flags: ['progressive', 'primary'],
@@ -1570,7 +1890,7 @@ class BlockField {
 	 */
 	createInvestigateButton() {
 		const button = new OO.ui.ButtonWidget({
-			label: getMessage('checkuser-investigate'),
+			label: Messages.get('checkuser-investigate'),
 			disabled: true
 		});
 		button.off('click').on('click', () => {
@@ -1640,66 +1960,6 @@ class BlockField {
 	}
 
 	/**
-	 * Parses the `ipbreason-dropdown` message to an array of `OO.ui.OptionWidget` instances.
-	 *
-	 * @returns {OO.ui.OptionWidget[]}
-	 * @private
-	 */
-	static createReasonMenuItems() {
-		// Adapted from Html::listDropdownOptions
-		const /** @type {Record<string, string | Record<string, string>>} */ options = {};
-		let /** @type {string | false} */optgroup = false;
-
-		for (const rawOption of getMessage('ipbreason-dropdown').split('\n')) {
-			const value = rawOption.trim();
-			if (value === '') {
-				continue;
-			}
-
-			if (value.startsWith('*') && !value.startsWith('**')) {
-				// A new group is starting...
-				const groupLabel = value.slice(1).trim();
-				if (groupLabel !== '') {
-					optgroup = groupLabel;
-				} else {
-					optgroup = false;
-				}
-			} else if (value.startsWith('**')) {
-				// Group member
-				const opt = value.slice(2).trim();
-				if (optgroup === false) {
-					options[opt] = opt;
-				} else {
-					if (typeof options[optgroup] !== 'object' || options[optgroup] === null) {
-						options[optgroup] = {};
-					}
-					options[optgroup][opt] = opt;
-				}
-			} else {
-				// Groupless reason list
-				optgroup = false;
-				options[value] = value;
-			}
-		}
-
-		// Adapted from listDropdownOptionsOoui
-		const /** @type {OO.ui.OptionWidget[]} */ items = [
-			new OO.ui.MenuOptionWidget({ data: '', label: getMessage('htmlform-selectorother-other') })
-		];
-		for (const [text, value] of Object.entries(options)) {
-			if (typeof value === 'object') {
-				items.push(new OO.ui.MenuSectionOptionWidget({ label: text }));
-				for (const [text2, value2] of Object.entries(value)) {
-					items.push(new OO.ui.MenuOptionWidget({ data: value2, label: text2 }));
-				}
-			} else {
-				items.push(new OO.ui.MenuOptionWidget({ data: value, label: text }));
-			}
-		}
-		return items;
-	}
-
-	/**
 	 * Blocks users and IPs selected in `target`.
 	 *
 	 * @private
@@ -1721,19 +1981,25 @@ class BlockField {
 
 		// Ensure users and IPs aren't mixed
 		let hasUser = false, hasIp = false;
+		/**
+		 * Set of indexes for registered users in the `targets` array.
+		 *
+		 * @type {Set<number>}
+		 */
+		const userIndexes = new Set();
 		for (let i = 0; i < targets.length; i++) {
 			const target = targets[i];
 			const isIp = mw.util.isIPAddress(target, true);
+			if (!isIp) userIndexes.add(i);
 			hasUser = hasUser || !isIp;
 			hasIp = hasIp || !isIp;
-			if (hasUser && hasIp) break;
 		}
 		const userMixConfirmed = await BlockField.confirmUserMix(hasUser && hasIp);
 		if (!userMixConfirmed) return reenableForm();
 
 		do { // Simply creates a break-able scope
 
-			const blockIdMap = await BlockField.checkBlocks(targets); // TODO: Handle error
+			const blockIdMap = await BlockField.checkBlocks(targets, userIndexes); // TODO: Handle error
 			if (!blockIdMap.size) break;
 
 		// eslint-disable-next-line no-constant-condition
@@ -1755,7 +2021,7 @@ class BlockField {
 			return OO.ui.confirm(
 				$('<div>')
 					.addClass('ih-confirm')
-					.html(getMessage('wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets')),
+					.html(Messages.get('wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets')),
 				{ size: 'large' }
 			);
 		} else {
@@ -1764,39 +2030,38 @@ class BlockField {
 	}
 
 	/**
-	 * Map of usernames to block ID data.
-	 *
-	 * @typedef {Map<string, BlockIdMapValue>} BlockIdMap
-	 */
-	/**
-	 * Information about a user's active blocks.
-	 *
-	 * @typedef {object} BlockIdMapValue
-	 * @property {number[]} ids Array of active block IDs.
-	 * @property {number} latestTimestamp Unix timestamp (in seconds) of the most recent block.
-	 * @property {number} earliestTimestamp Unix timestamp (in seconds) of the oldest block.
-	 */
-	/**
 	 * Checks the block status of `targets` and returns a Map of usernames to block info.
 	 *
 	 * @param {string[]} targets The users to check the block status of.
+	 * @param {Set<number>} userIndexes Set of indexes for registered users in the `targets` array.
 	 * @returns {JQueryPromise<BlockIdMap>} A Promise that resolves with a Map of usernames to block data.
 	 * @private
 	 */
-	static checkBlocks(targets) {
+	static checkBlocks(targets, userIndexes) {
 		const /** @type {BlockIdMap} */ map = new Map();
 		/**
 		 * @param {number} index
 		 */
 		return (function execute(index) {
-			return api.post({
+			const allUsers = targets.slice(index, index + 500);
+			const params = {
 				action: 'query',
-				list: 'blocks',
-				bkusers: targets.slice(index, index + 500).join('|'),
+				list: ['blocks'],
+				bkusers: allUsers.join('|'),
 				bklimit: 'max',
 				bkprop: 'id|user|timestamp',
 				formatversion: '2'
-			}).then(({ query }) => {
+			};
+
+			// Add `list=users` params to retrieve users' genders if `targets` involves registered users
+			const registeredUsers = allUsers.filter((user, i) => userIndexes.has(i + index) && !Messages.userGenderMap.has(user));
+			if (registeredUsers.length) {
+				params.list.push('users');
+				params.usprop = 'gender';
+				params.ususers = registeredUsers.join('|');
+			}
+
+			return api.post(params, nonwritePost()).then(({ query }) => {
 				/**
 				 * @type {{ id: number; user: string; timestamp: string; }[]}
 				 */
@@ -1805,17 +2070,33 @@ class BlockField {
 					const unixTime = Date.parse(timestamp) / 1000;
 					if (!map.has(user)) {
 						map.set(user, {
-							ids: [id],
+							ids: new Set([id]),
 							latestTimestamp: unixTime,
 							earliestTimestamp: unixTime
 						});
 					} else {
 						const entry = /** @type {BlockIdMapValue} */ (map.get(user));
-						entry.ids.push(id);
+						entry.ids.add(id);
 						entry.latestTimestamp = Math.max(entry.latestTimestamp, unixTime);
 						entry.earliestTimestamp = Math.min(entry.earliestTimestamp, unixTime);
 					}
 				}
+
+				/**
+				 * @type {{ userid: number; name: string; gender: Gender; }[]=}
+				 */
+				const users = query.users;
+				if (users) {
+					for (const obj of users) {
+						const { userid, name, gender } = obj;
+						if (!userid || !gender) {
+							console.warn('Unexpected value found in response.query.users', obj);
+							continue;
+						}
+						Messages.userGenderMap.set(name, gender);
+					}
+				}
+
 				index += 500;
 				if (targets[index]) {
 					return execute(index);
@@ -1825,18 +2106,17 @@ class BlockField {
 		})(0);
 	}
 
-	/**
-	 * @param {BlockIdMap} blockIdMap
-	 */
-	static getBlockLogEntries(blockIdMap) {
+}
 
-	}
+class BlockLog {
 
 	/**
 	 * @param {string} username
 	 * @param {BlockIdMapValue} data
+	 * @returns {JQueryPromise<BlockLogMap>}
+	 * @private
 	 */
-	static getBlockLogEntry(username, data) {
+	static getEntry(username, data) {
 		const { ids, latestTimestamp, earliestTimestamp } = data;
 		return api.get({
 			action: 'query',
@@ -1850,41 +2130,229 @@ class BlockField {
 			formatversion: '2'
 		}).then(({ query }) => {
 			/**
-			 * @typedef {object} ApiResponseQueryListLogevents
-			 * @property {ApiResponseQueryListLogeventsParams} params
-			 * @property {"block"} type
-			 * @property {"block" | "reblock" | "unblock"} action
-			 * @property {string} user
-			 * @property {string} timestamp
-			 * @property {string} parsedcomment
-			 *
-			 * @typedef {object} ApiResponseQueryListLogeventsParams
-			 * @property {string} duration
-			 * @property {string[]} flags
-			 * @property {number} blockId
-			 * @property {number} [finalTargetCount]
-			 * @property {boolean} sitewide // TODO: Check source code for whether this can ever be `false`
-			 * @property {string} [expiry] Missing for indefinite blocks
-			 * @property {string} duration-l10n
+			 * @type {BlockLogMap}
 			 */
+			const ret = new Map();
 			/**
 			 * @type {ApiResponseQueryListLogevents[]}
 			 */
 			const logevents = query.logevents;
+
+			const rIsoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+			for (const { params, action, user, timestamp, parsedcomment } of logevents) {
+				const { duration, flags, restrictions, blockId, finalTargetCount, sitewide, 'duration-l10n': duration_l10n } = params;
+
+				if (!ids.has(blockId) || action === 'unblock') {
+					continue;
+				}
+				ret.set(blockId, {
+					subtype: action,
+					timestamp: timestamp.replace(/Z$/, ''),
+					sitewide,
+					count: finalTargetCount !== undefined ? finalTargetCount : 0,
+					performer: user,
+					target: username,
+					// `duration` being an ISO 8601 timestamp means either that an absolute time was specified
+					// for a new block, or that the expiry wasn't updated for a reblock. The latter case isn't
+					// 100% accurate though, as it's possible to specify an absolute time for a reblock. But
+					// this should be sufficient for the purpose here, because we would otherwise have to look
+					// for the initial block log overwritten by the reblock.
+					duration: rIsoTimestamp.test(duration)
+						? duration.replace(/Z$/, '') // Use the ISO 8601 timestamp as the block duration
+						: duration_l10n,
+					flags,
+					restrictions,
+					parsedcomment
+				});
+			}
+			return ret;
 		});
 	}
 
 	/**
-	 * `logentry-block-block`, `logentry-block-block-multi`, `logentry-block-reblock`
+	 * * 新規 (名前空間部分ブロック)
+	 * https://ja.wikipedia.org/w/api.php?action=query&formatversion=2&list=logevents&leprop=user|type|timestamp|parsedcomment|details&letype=block&letitle=User:橋本_悠介&lelimit=max
+	 * * 追加
+	 * https://ja.wikipedia.org/w/api.php?action=query&formatversion=2&list=logevents&leprop=user|type|timestamp|parsedcomment|details&letype=block&letitle=User:Wukiwukinu&lelimit=max
+	 * * 変更 (ページ部分ブロック)
+	 * https://ja.wikipedia.org/w/api.php?action=query&formatversion=2&list=logevents&leprop=user|type|timestamp|parsedcomment|details&letype=block&letitle=User:2001:268:9800::/40&lelimit=max
+	 */
+	/**
+	 * Creates a block log line as raw HTML.
+	 *
+	 * **Messages**:
+	 * * `logentry-block-block`
+	 *   * `"$1 {{GENDER:$2|blocked}} {{GENDER:$4|$3}} with an expiration time of $5 $6"`
+	 * * `logentry-block-block-multi`
+	 *   * `"$1 {{GENDER:$2|added}} a block for {{GENDER:$4|$3}} with an expiration time of $5 $6"`
+	 * * `logentry-block-reblock`
+	 *   * `"$1 {{GENDER:$2|changed}} block settings for {{GENDER:$4|$3}} with an expiration time of $5 $6"`
+	 *
+	 * * `logentry-partialblock-block`
+	 *   * `"$1 {{GENDER:$2|blocked}} {{GENDER:$4|$3}} from $7 with an expiration time of $5 $6"`
+	 * * `logentry-partialblock-block-multi`
+	 *   * `"$1 {{GENDER:$2|added}} a block for {{GENDER:$4|$3}} from $7 with an expiration time of $5 $6"`
+	 * * `logentry-partialblock-reblock`
+	 *   * `"$1 {{GENDER:$2|changed}} block settings for {{GENDER:$4|$3}} blocking $7 with an expiration time of $5 $6"`
+	 *
+	 * * `logentry-non-editing-block-block`
+	 *   * `"$1 {{GENDER:$2|blocked}} {{GENDER:$4|$3}} from specified non-editing actions with an expiration time of $5 $6"`
+	 * * `logentry-non-editing-block-block-multi`
+	 *   * `"$1 {{GENDER:$2|added}} a block for {{GENDER:$4|$3}} from specified non-editing actions with an expiration time of $5 $6"`
+	 * * `logentry-non-editing-block-reblock`
+	 *   * `"$1 {{GENDER:$2|changed}} block settings for {{GENDER:$4|$3}} for specified non-editing actions with an expiration time of $5 $6"`
+	 *
+	 * **Parameters**:
 	 * * `$1` - link to the user page of the user who performed the action
 	 * * `$2` - username of the user who performed the action (to be used with GENDER)
 	 * * `$3` - link to the affected page
 	 * * `$4` - username for gender or empty string for autoblocks
 	 * * `$5` - the block duration, localized and formatted with the English tooltip
 	 * * `$6` - block detail flags or empty string
+	 * * `$7` - restrictions list – any of:
+	 *   * `logentry-partialblock-block-page` (`"the {{PLURAL:$1|page|pages}} $2"`)
+	 *     * `$1` - number of pages
+	 *     * `$2` - list of pages
+	 *   * `logentry-partialblock-block-ns` (`"the {{PLURAL:$1|namespace|namespaces}} $2"`)
+	 *     * `$1` - number of namespaces
+	 *     * `$2` - list of namespaces
+	 *   * `logentry-partialblock-block-action` (`"the {{PLURAL:$1|action|actions}} $2"`)
+	 *     * `$1` - number of actions
+	 *     * `$2` - list of actions
+	 *
+	 * @param {BlockLogMapValue} data
+	 * @returns {string}
 	 */
-	static formatBlockLog() {
+	static create(data) {
+		const { subtype, timestamp, sitewide, count, performer, target, duration, flags, restrictions, parsedcomment} = data;
 
+		/** @type {[string, string, string, string, string, string, string?]} */
+		const parameters = [
+			Messages.wikilink(`User:${performer}`, performer),
+			performer,
+			Messages.wikilink(`User:${target}`, target),
+			target,
+			duration,
+			this.formatFlags(flags)
+		];
+
+		// Adapted from BlockLogFormatter::getMessageKey
+		const type = 'block';
+		let key = `logentry-${type}-${subtype}`;
+		if ((subtype === 'block' || subtype === 'reblock') && !sitewide) {
+			// message changes depending on whether there are editing restrictions or not
+			if (restrictions) {
+				key = `logentry-partial${type}-${subtype}`;
+				parameters.push(
+					this.listToText(this.formatRestrictions(restrictions))
+				);
+			} else {
+				key = `logentry-non-editing-${type}-${subtype}`;
+			}
+		}
+		if (subtype === 'block' && count > 1 ) {
+			// logentry-block-block-multi, logentry-partialblock-block-multi,
+			// logentry-non-editing-block-block-multi
+			key += '-multi';
+		}
+
+		// @ts-ignore
+		let logline = mw.format(Messages.get(key), ...parameters);
+		logline = Messages.parseGenders(logline);
+		const comment = parsedcomment && mw.format(Messages.get('parentheses'), parsedcomment);
+
+		const ret = [timestamp, logline, comment].filter(Boolean);
+		return ret.join('&nbsp;');
+	}
+
+	/**
+	 * Converts block flags to a human-readble string.
+	 *
+	 * @param {BlockFlags[]} flags
+	 * @returns {string}
+	 * @private
+	 */
+	static formatFlags(flags) {
+		const formatted = flags.map((f) => Messages.get(`block-log-flags-${f}`));
+		if (!formatted.length) return '';
+		return mw.format(
+			Messages.get('parentheses'),
+			formatted.join(Messages.get('comma-separator'))
+		);
+	}
+
+	/**
+	 * Converts partial block restrictions to human-readble strings.
+	 *
+	 * @param {ApiResponseQueryListLogeventsParamsRestrictions} restrictions
+	 * @returns {string[]}
+	 * @private
+	 */
+	static formatRestrictions(restrictions) {
+		/** @type {string[]} */
+		const $7 = [];
+		const { pages, namespaces, actions } = restrictions;
+		if (pages && pages.length) {
+			const num = String(pages.length);
+			const list = pages.map(({ page_title }) => Messages.wikilink(page_title));
+			const msg = mw.format(
+				Messages.parsePlurals(Messages.get('logentry-partialblock-block-page'), num),
+				num,
+				this.listToText(list)
+			);
+			$7.push(msg);
+		}
+		if (namespaces && namespaces.length) {
+			const num = String(namespaces.length);
+			const nsMap = Object.assign({}, mw.config.get('wgFormattedNamespaces'));
+			nsMap[0] = Messages.get('blanknamespace');
+			const list = namespaces.map((ns) => nsMap[ns]);
+			const msg = mw.format(
+				Messages.parsePlurals(Messages.get('logentry-partialblock-block-ns'), num),
+				num,
+				this.listToText(list)
+			);
+			$7.push(msg);
+		}
+		if (actions && actions.length) {
+			const num = String(actions.length);
+			const list = actions.map((action) => Messages.get(`ipb-action-${action}`));
+			const msg = mw.format(
+				Messages.parsePlurals(Messages.get('logentry-partialblock-block-action'), num),
+				num,
+				this.listToText(list)
+			);
+			$7.push(msg);
+		}
+		return $7;
+	}
+
+	/**
+	 * Takes a list of strings and build a locale-friendly comma-separated list, using the local
+	 * comma-separator message. The last two strings are chained with an "and".
+	 *
+	 * This method is adapted from `Language::listToText` in MediaWiki-core.
+	 *
+	 * @param {string[]} list
+	 * @return {string}
+	 * @private
+	 */
+	static listToText(list) {
+		const itemCount = list.length;
+		if (!itemCount) {
+			return '';
+		}
+		let text = /** @type {string} */ (list.pop());
+		if (itemCount > 1) {
+			const and = Messages.get('and');
+			const space = Messages.get('word-separator');
+			let comma = '';
+			if (itemCount > 2) {
+				comma = Messages.get('comma-separator');
+			}
+			text = list.join(comma) + and + space + text;
+		}
+		return text;
 	}
 
 }
