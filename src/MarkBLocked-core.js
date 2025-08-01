@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.1.8
+ * @version 3.1.9
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -137,41 +137,55 @@ class MarkBLocked {
 
 					mbl.createPortletLink();
 
-					// `wikipage.content` hook handler
 					/**
+					 * Timeout ID used to defer a `markup` call when needed.
+					 * Cleared or reset depending on the DOM connection state of `$content`.
+					 *
 					 * @type {NodeJS.Timeout=}
 					 */
 					let hookTimeout;
+
 					/**
-					 * @param {JQuery<HTMLElement>} [$content] Falls back to `.mw-body-content`
+					 * Applies user link markup to the given content container.
+					 *
+					 * @param {JQuery<HTMLElement>} [$content] Defaults to `.mw-body-content` if not provided.
 					 */
 					const markup = ($content) => {
-						hookTimeout = void 0; // Reset the value of `hookTimeout`
-						mbl.abort().markup($content || $('.mw-body-content'));
+						hookTimeout = void 0; // Clear the hook timeout reference
+						if (isRCW) {
+							// Abort in-flight requests only on Special:RecentChanges or Special:Watchlist, where
+							// `$content` is fully replaced on each dynamic page update. In these cases, any
+							// .mbl-userlink anchors from the previous DOM are lost, so keeping pending HTTP requests
+							// serves no purpose. On other pages, full DOM replacement is rare, and aborting may
+							// prevent some user links from being processed. `collectLinks()` skips anchors already
+							// marked with `.mbl-userlink`, so duplicate processing is safely avoided.
+							mbl.abort();
+						}
+						mbl.markup($content || $('.mw-body-content'));
 					};
+
 					/**
-					 * A callback to `mw.hook('wikipage.content').add`.
+					 * Callback for `mw.hook('wikipage.content').add()`.
 					 *
-					 * @param {JQuery<HTMLElement>} $content
-					 * @see https://doc.wikimedia.org/mediawiki-core/master/js/#!/api/mw.hook-event-wikipage_content
+					 * @param {JQuery<HTMLElement>} $content The container with potentially updated content.
 					 */
 					const hookHandler = ($content) => {
-						const isConnected = !!$(document).find($content).length;
+						// Filter out any elements that are not connected to the DOM
+						$content = $content.filter((_, el) => el.isConnected);
+						const isConnected = $content.length > 0;
+
 						if (isConnected) {
-							// Ensure that $content is attached to the DOM. The same hook can be fired multiple times,
-							// but in some of them the hook is fired on an element detached (and removed) from the DOM.
-							// It's useless to parse links in the element in such cases because the links are inaccessible.
-							clearTimeout(hookTimeout); // Clear the reserved `markup` call, if any
+							clearTimeout(hookTimeout); // Cancel any pending fallback `markup()` call
 							if ($content.find('a').length) {
 								markup($content);
 							}
 						} else if (typeof hookTimeout !== 'number') {
-							// When the hook is fired (any number of times), we want to ensure that `markup` is called
-							// at least once. Reserve a `markup` call for when the `isConnected` block is never reached
-							// in the set of `wikipage.content` events.
+							// Ensure that `markup()` is called at least once, even if all `wikipage.content` events
+							// are triggered on disconnected elements
 							hookTimeout = setTimeout(markup, 100);
 						}
 					};
+
 					mw.hook('wikipage.content').add(hookHandler);
 
 					// Add a toggle button on RCW
@@ -209,7 +223,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.1.8 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.1.9 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -219,7 +233,7 @@ class MarkBLocked {
 			}
 		};
 		if (typeof options.timeout === 'number') {
-			/** @type {JQuery.AjaxSettings<any>} */ (ret.ajax).timeout = options.timeout;
+			ret.ajax.timeout = options.timeout;
 		}
 		if (options.nonwritepost) {
 			// See https://www.mediawiki.org/wiki/API:Etiquette#Other_notes
@@ -765,7 +779,6 @@ class MarkBLocked {
 			});
 			return $.Deferred().resolve();
 		}
-		mw.hook('userjs.markblocked.start').fire($content);
 		const allUsers = [...users].concat([...ips]);
 
 		// Start markup
@@ -973,13 +986,9 @@ class MarkBLocked {
 				});
 			}
 
-			const doneHook = mw.hook('userjs.markblocked.end');
 			if (batchArray.length) {
-				return this.batchRequest(batchArray).then(() => {
-					doneHook.fire($content);
-				});
+				return this.batchRequest(batchArray);
 			}
-			doneHook.fire($content);
 
 		});
 
@@ -1028,6 +1037,7 @@ class MarkBLocked {
 				!href ||
 				(a.getAttribute('href') || '')[0] === '#' ||
 				a.role === 'button' ||
+				a.classList.contains('mbl-userlink') ||
 				a.classList.contains('ext-discussiontools-init-timestamplink') ||
 				pr && prIgnore.test(pr.className) ||
 				mw.util.getParamValue('action', href) && !mw.util.getParamValue('redlink', href) ||
