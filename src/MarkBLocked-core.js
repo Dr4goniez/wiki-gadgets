@@ -3,22 +3,22 @@
  * @author [[User:Dragoniez]]
  * @version 3.1.8
  *
- * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css Style sheet
- * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js Loader module
+ * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
+ * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
  *
- * Information:
- * @see https://ja.wikipedia.org/wiki/Help:MarkBLocked About the jawiki gadget
+ * Additional information:
+ * @see https://ja.wikipedia.org/wiki/Help:MarkBLocked – About the jawiki gadget
  *
  * Global user script that uses this module:
  * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal.js
- * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal English help page
- * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal/ja Japanese help page
+ * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal – English help page
+ * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal/ja – Japanese help page
  *
- * You can import this gadget to your (WMF) wiki by preparing a loader module for it.
- * See the coding of the loader module above and `ConstructorConfig` below.
+ * To use this gadget on another (WMF) wiki, prepare a loader module for it.
+ * Refer to the example loader module linked above, and see `ConstructorConfig` below.
  *
- * You can also find helper type definitions on:
- * @link https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/MarkBLocked.d.ts
+ * Helper type definitions are available at:
+ * @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/MarkBLocked.d.ts
  */
 // @ts-check
 /// <reference path="./window/MarkBLocked.d.ts" />
@@ -30,30 +30,33 @@ class MarkBLocked {
 
 	/**
 	 * @typedef {object} UserOptions
-	 * @property {boolean} genportlet
-	 * @property {boolean} rangeblocks
-	 * @property {boolean} g_locks
-	 * @property {boolean} g_blocks
-	 * @property {boolean} g_rangeblocks
+	 * Options that control which types of user links are marked up based on block or lock status.
+	 *
+	 * @property {boolean} genportlet Whether to generate a portlet link to the config page.
+	 * @property {boolean} rangeblocks Whether to mark up IPs that fall within locally blocked IP ranges.
+	 * @property {boolean} g_locks Whether to mark up users who are globally locked.
+	 * @property {boolean} g_blocks Whether to mark up users and IPs that are globally blocked.
+	 * @property {boolean} g_rangeblocks Whether to mark up IPs that fall within globally blocked IP ranges.
 	 */
 	/**
 	 * @typedef {object} ConstructorConfig
-	 * @property {Partial<UserOptions>} [defaultOptions] Configured default option values, which will be merged into the
-	 * default config options (i.e. supports partial overrides).
-	 * @property {string} [optionKey] The key of `mw.user.options`, defaulted to `userjs-markblocked-config`.
-	 * @property {boolean} [globalize] If `true`, save the options into global preferences.
-	 * @property {Record<string, Lang>} [i18n] A language object to merge to {@link MarkBLocked.i18n}. Using this config makes
-	 * it possible to configure the default interface messages and add a new interface language (for the latter to work, the
-	 * {@link ConstructorConfig.lang | lang} config must also be configured.
-	 * @property {string} [lang] The code of the language for the interface messages, defaulted to `en`.
-	 * @property {string[]} [contribsCA] Special page aliases for Contributions and CentralAuth in the local language (no need
-	 * to pass `Contributions`, `Contribs`, `CentralAuth`, `CA`, and `GlobalAccount`). If not provided, aliases are fetched from
-	 * the API.
-	 * @property {string[]} [groupsAHL] Local user groups with the `apihighlimits` user right, defaulted to `['sysop', 'bot']`.
+	 * @property {Partial<UserOptions>} [defaultOptions] Optional default values for user options. These will be merged into
+	 * the built-in defaults (i.e. supports partial overrides).
+	 * @property {string} [optionKey] The key used for `mw.user.options`, defaulting to `userjs-markblocked-config`.
+	 * @property {boolean} [globalize] If `true`, saves the options in global preferences.
+	 * @property {Record<string, Lang>} [i18n] A language object to merge into {@link MarkBLocked.i18n}. This allows
+	 * customizing the default interface messages or adding new interface languages.
+	 * For the latter to work, the {@link ConstructorConfig.lang | lang} property must also be set.
+	 * @property {string} [lang] The language code to use for interface messages. Defaults to `en`.
+	 * @property {string[]} [contribsCA] Special page aliases for Contributions and CentralAuth in the local language.
+	 * You do not need to include standard aliases like `Contributions`, `Contribs`, `CentralAuth`, `CA`, or `GlobalAccount`.
+	 * If not provided, aliases will be fetched via the API.
+	 * @property {string[]} [groupsAHL] Local user groups that have the `apihighlimits` right. Defaults to `['sysop', 'bot']`.
 	 */
 
 	/**
-	 * Initialize `MarkBLocked`.
+	 * Initializes `MarkBLocked`.
+	 *
 	 * @param {ConstructorConfig} [config]
 	 * @returns {JQueryPromise<MarkBLocked>}
 	 */
@@ -76,14 +79,15 @@ class MarkBLocked {
 			'mediawiki.api',
 			'mediawiki.ForeignApi',
 			'mediawiki.util',
-			'jquery.ui',
-			'oojs-ui',
-			'oojs-ui.styles.icons-moderation',
+			'jquery.ui'
 		];
 		const onConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(markblockedconfig|mblc)$/i.test(mw.config.get('wgTitle'));
 		const isRCW = ['Recentchanges', 'Watchlist'].includes(mw.config.get('wgCanonicalSpecialPageName') || '');
-		if (!onConfig && !isRCW) {
-			modules.splice(5);
+		if (onConfig || isRCW) {
+			modules.push(
+				'oojs-ui',
+				'oojs-ui.styles.icons-moderation'
+			);
 		}
 		return mw.loader.using(modules).then(() => { // When ready
 
@@ -95,12 +99,12 @@ class MarkBLocked {
 				const oldCfgStr = mw.user.options.get(oldOptionKey);
 				if (
 					oldCfgStr &&
-					(cfg.optionKey === void 0 || cfg.optionKey === MarkBLocked.defaultOptionKey) &&
-					!mw.user.options.get(MarkBLocked.defaultOptionKey)
+					(cfg.optionKey === void 0 || cfg.optionKey === this.defaultOptionKey) &&
+					!mw.user.options.get(this.defaultOptionKey)
 				) {
 					const options = {
 						[oldOptionKey]: null,
-						[MarkBLocked.defaultOptionKey]: oldCfgStr
+						[this.defaultOptionKey]: oldCfgStr
 					};
 					return new mw.Api(this.getApiOptions()).saveOptions(options).then(() => {
 						mw.user.options.set(options);
@@ -117,7 +121,7 @@ class MarkBLocked {
 				cfg.contribsCA ?
 				$.Deferred().resolve(cfg.contribsCA) :
 				this.getContribsCA();
-			return $.when(ccaDeferred, backwards, $.ready).then((contribsCA) => { // contribsCA and backwards are resolved, and the DOM is ready
+			return $.when(ccaDeferred, backwards, $.ready).then((contribsCA) => {
 
 				if (contribsCA) {
 					cfg.contribsCA = contribsCA;
@@ -133,13 +137,13 @@ class MarkBLocked {
 
 					mbl.createPortletLink();
 
-					// wikipage.content hook handler
+					// `wikipage.content` hook handler
 					/**
 					 * @type {NodeJS.Timeout=}
 					 */
 					let hookTimeout;
 					/**
-					 * @param {JQuery<HTMLElement>} [$content] Fall back to `.mw-body-content`
+					 * @param {JQuery<HTMLElement>} [$content] Falls back to `.mw-body-content`
 					 */
 					const markup = ($content) => {
 						hookTimeout = void 0; // Reset the value of `hookTimeout`
@@ -147,6 +151,7 @@ class MarkBLocked {
 					};
 					/**
 					 * A callback to `mw.hook('wikipage.content').add`.
+					 *
 					 * @param {JQuery<HTMLElement>} $content
 					 * @see https://doc.wikimedia.org/mediawiki-core/master/js/#!/api/mw.hook-event-wikipage_content
 					 */
@@ -184,14 +189,9 @@ class MarkBLocked {
 	}
 
 	/**
-	 * @typedef {object} ApiOptions
-	 * @property {number} [timeout]
-	 * @property {boolean} [nonwritepost] Whether the instance is used only to read data though it issues POST requests
-	 */
-	/**
-	 * Get API options to initialize a `mw.Api` instance.
+	 * Gets API options to initialize a `mw.Api` instance.
 	 *
-	 * This method adds a User-Agent header and sets the default query parameters of:
+	 * This method adds an `Api-User-Agent` header and sets the default query parameters of:
 	 * ```
 	 * {
 	 * 	action: 'query',
@@ -199,7 +199,11 @@ class MarkBLocked {
 	 * 	formatversion: '2'
 	 * }
 	 * ```
-	 * @param {ApiOptions} [options]
+	 * @param {object} [options] Addtional options to initialize the options object.
+	 * @param {number} [options.timeout] Optional default timeout for HTTP requests.
+	 * @param {boolean} [options.nonwritepost] Whether the instance is used for read-only POST requests.
+	 * @returns {mw.Api.Options}
+	 * @private
 	 */
 	static getApiOptions(options = {}) {
 		const ret = {
@@ -215,18 +219,20 @@ class MarkBLocked {
 			}
 		};
 		if (typeof options.timeout === 'number') {
-			ret.ajax.timeout = options.timeout;
+			/** @type {JQuery.AjaxSettings<any>} */ (ret.ajax).timeout = options.timeout;
 		}
 		if (options.nonwritepost) {
-			/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
+			// See https://www.mediawiki.org/wiki/API:Etiquette#Other_notes
 			ret.ajax.headers['Promise-Non-Write-API-Action'] = true;
 		}
 		return ret;
 	}
 
 	/**
-	 * Get special page aliases for `Contributions` and `CentralAuth`.
+	 * Retrieves special page aliases for `Contributions` and `CentralAuth` from the API.
+	 *
 	 * @returns {JQueryPromise<string[]?>}
+	 * @private
 	 * @requires mediawiki.api
 	 * @requires mediawiki.ForeignApi
 	 */
@@ -254,8 +260,10 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Initialize the properties of the `MarkBLocked` class. This is only to be called by {@link MarkBLocked.init}.
+	 * Private constructor. Called only by {@link MarkBLocked.init}.
+	 *
 	 * @param {ConstructorConfig} [cfg]
+	 * @private
 	 * @requires mediawiki.api
 	 * @requires mediawiki.ForeignApi
 	 * @requires mediawiki.user
@@ -376,6 +384,7 @@ class MarkBLocked {
 
 		/**
 		 * Regular expressions to collect user links.
+		 *
 		 * @typedef {object} LinkRegex
 		 * @property {RegExp} article `/wiki/PAGENAME`: $1: PAGENAME
 		 * @property {RegExp} script `/w/index.php?title=PAGENAME`: $1: PAGENAME
@@ -434,7 +443,8 @@ class MarkBLocked {
 			];
 			const groupsAHL = new Set(groupsAHLLocal.concat(groupsAHLGlobal));
 			const hasAHL =
-				(mw.config.get('wgUserGroups') || []).concat(/** @type {string[]} */ (mw.config.get('wgGlobalGroups') || []))
+				(mw.config.get('wgUserGroups') || [])
+				.concat(/** @type {string[]} */ (mw.config.get('wgGlobalGroups') || []))
 				.some((group) => groupsAHL.has(group));
 
 			return hasAHL ? 500 : 50;
@@ -444,8 +454,10 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Replace the page content with the MarkBLocked config interface.
+	 * Replaces the page content with the MarkBLocked config interface.
+	 *
 	 * @returns {void}
+	 * @private
 	 * @requires oojs-ui
 	 * @requires oojs-ui.styles.icons-moderation
 	 * @requires mediawiki.api
@@ -621,17 +633,21 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Get an interface message of MarkBLocked.
+	 * Gets an interface message.
+	 *
 	 * @param {keyof Lang} key
 	 * @returns {string}
+	 * @private
 	 */
 	getMessage(key) {
 		return this.msg[key];
 	}
 
 	/**
-	 * Create a portlet link to the config page.
+	 * Creates a portlet link to the config page.
+	 *
 	 * @returns {void}
+	 * @private
 	 * @requires mediawiki.util
 	 */
 	createPortletLink() {
@@ -650,8 +666,10 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Abort all unfinished requests issued by the MarkBLocked class instance.
+	 * Aborts all unfinished requests issued by the MarkBLocked class instance.
+	 *
 	 * @returns {MarkBLocked}
+	 * @private
 	 */
 	abort() {
 		this.api.abort();
@@ -661,9 +679,14 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Create a button to enable/disable MarkBLocked (for Special:Recentchanges and Special:Watchlist, on which `markup`
-	 * is recursively called when the page content is updated.)
+	 * Creates a button to enable/disable MarkBLocked.
+	 *
+	 * This is for Special:Recentchanges and Special:Watchlist, where {@link markup} is called recursively when
+	 * the page content is updated.
+	 *
 	 * @param {($content: JQuery<HTMLElement>) => void} hookHandler A function to (un)bind to the `wikipage.content` hook.
+	 * @returns {void}
+	 * @private
 	 */
 	createToggleButton(hookHandler) {
 
@@ -718,9 +741,11 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Mark up user links.
+	 * Marks up user links.
+	 *
 	 * @param {JQuery<HTMLElement>} $content
 	 * @returns {JQueryPromise<void>}
+	 * @private
 	 * @requires mediawiki.util
 	 * @requires mediawiki.api
 	 * @requires mediawiki.ForeignApi
@@ -965,9 +990,11 @@ class MarkBLocked {
 	 * @typedef {{ userLinks: UserLinks; users: Set<string>; ips: Set<string>; }} LinkObject
 	 */
 	/**
-	 * Collect user links to mark up.
+	 * Collects user links to mark up.
+	 *
 	 * @param {JQuery<HTMLElement>} $content
 	 * @returns {LinkObject}
+	 * @private
 	 * @requires mediawiki.util
 	 */
 	collectLinks($content) {
@@ -1063,12 +1090,15 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Mark up registered users and single IPs locally or globally blocked in bulk. This method does not
-	 * deal with indirect range blocks.
-	 * @param {"local" | "global"} domain
-	 * @param {UserLinks} userLinks
-	 * @param {string[]} usersArr
-	 * @returns {JQueryPromise<Set<string>?>} Usernames whose links are marked up, or `null` if aborted
+	 * Marks up registered users and individual IPs that are locally or globally blocked, in bulk.
+	 * This method does not handle indirect range blocks.
+	 *
+	 * @param {"local" | "global"} domain The block domain to query: `"local"` or `"global"`.
+	 * @param {UserLinks} userLinks The object containing user link references to be marked.
+	 * @param {string[]} usersArr A list of usernames or IPs to process.
+	 * @returns {JQueryPromise<Set<string>?>} A promise resolving to the set of usernames/IPs whose links were marked,
+	 * or `null` if the operation was aborted.
+	 * @private
 	 * @requires mediawiki.api
 	 */
 	bulkMarkup(domain, userLinks, usersArr) {
@@ -1180,12 +1210,14 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Add a class to all anchors associated with a certain username.
+	 * Adds a class to all anchors associated with the given username.
+	 *
 	 * @param {UserLinks} userLinks
 	 * @param {string} userName
 	 * @param {string} className
 	 * @param {string} tooltip
 	 * @returns {string?} The username if any link is marked up, or else `null`.
+	 * @private
 	 */
 	static addClass(userLinks, userName, className, tooltip) {
 		const links = userLinks.get(userName); // Get all links related to the user
@@ -1203,9 +1235,11 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Truncate [[wikilink]]s in a string by extracting their display texts.
+	 * Truncates [[wikilink]] markups in a string by extracting their display texts.
+	 *
 	 * @param {string} str
 	 * @returns {string}
+	 * @private
 	 */
 	static truncateWikilinks(str) {
 		const regex = /\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g;
@@ -1218,9 +1252,11 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Add a tooltip to a user link.
+	 * Adds a tooltip to a user link.
+	 *
 	 * @param {HTMLAnchorElement} anchor
 	 * @param {string} text
+	 * @private
 	 */
 	static addTooltip(anchor, text) {
 		if (typeof anchor.dataset.mblTooltip === 'string') {
@@ -1254,14 +1290,16 @@ class MarkBLocked {
 	 * @property {(res?: ApiResponse) => void} callback
 	 */
 	/**
-	 * Send batched API requests.
+	 * Sends batched API requests.
 	 *
-	 * MarkBLocked has to send quite a few API requests when additional markup functionalities are enabled,
-	 * and this can lead to an `net::ERR_INSUFFICIENT_RESOURCES` error if too many requests are sent all
-	 * at once. This (private) function sends API requests by creating batches of 1000, where each batch is
-	 * processed sequentially after the older batch is resolved.
-	 * @param {BatchObject[]} batchArray
-	 * @returns {JQueryPromise<void>}
+	 * When additional markup functionalities are enabled, MarkBLocked may need to send a large number
+	 * of API requests. Sending too many at once can trigger a `net::ERR_INSUFFICIENT_RESOURCES` error.
+	 * This private method mitigates that by dividing requests into batches of 1000, processing each
+	 * batch sequentially after the previous one has resolved.
+	 *
+	 * @param {BatchObject[]} batchArray An array of request batches to be processed.
+	 * @returns {JQueryPromise<void>} A promise that resolves when all batches have been processed.
+	 * @private
 	 * @requires mediawiki.api
 	 */
 	batchRequest(batchArray) {
