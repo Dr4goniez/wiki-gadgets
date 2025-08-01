@@ -1,10 +1,12 @@
 /*****************************************************************************************\
+
 	ConfirmTempAccountLogout
 
-	Shows a confirmation (warning) popup when a temporary user attemps to log out.
+	Shows a confirmation (warning) popup when a temporary user attempts to log out.
 
-	@version 1.0.0
+	@version 1.0.1
 	@author [[User:Dragoniez]]
+
 \*****************************************************************************************/
 // @ts-check
 /* global mw, OO */
@@ -45,18 +47,24 @@ $.when(
 	$logout.off('click');
 
 	// Warning message shown in a confirmation dialog
+	const rawLinks = {
+		scrutiny: `<a href="${mw.util.getUrl('WP:SCRUTINY')}" target="_blank">投稿記録の分断</a>`,
+		sock: `<a href="${mw.util.getUrl('WP:SOCK')}" target="_blank">多重アカウントの不正使用</a>`,
+		block: `<a href="${mw.util.getUrl('WP:BLOCK')}" target="_blank">投稿ブロック</a>`
+	};
 	const $warning = $('<div>').html(
 		'<h3 style="text-align:center;">警告</h3>' +
-		'<p>' +
-			'一度仮アカウントからログアウトすると、再度ログインすることはできなくなります。' +
-			'この後も編集を行う場合は、ログイン状態を保持してください。' +
-		'</p>' +
-		'<p>' +
-			'ログアウトする場合は、短時間のうちに別の仮アカウントを作成することがないよう注意してください。' +
-			`<a href="${mw.util.getUrl('WP:SCRUTINY')}" target="_blank">投稿記録の分断</a>が行われた場合、` +
-			'投稿ブロックの対象となることがあります。' +
-		'</p>' +
-		'<p>本当にログアウトしますか？</p>'
+		'<div style="text-align:justify;">' +
+			'<p>' +
+				'<b>仮アカウントからのログアウトは推奨されていません。</b>一度仮アカウントからログアウトすると、' +
+				'再度ログインすることはできなくなります。今後も編集を行う場合は、ログイン状態を維持してください。' +
+			'</p>' +
+			'<p>' +
+				`ログアウトする場合、${rawLinks.scrutiny}を行わないよう十二分に注意してください。` +
+				`${rawLinks.sock}とみなされた場合、${rawLinks.block}の対象となることがあります。` +
+			'</p>' +
+			'<p>本当にログアウトしますか？</p>' +
+		'</div>'
 	);
 
 	$logout.on('click', function(event) {
