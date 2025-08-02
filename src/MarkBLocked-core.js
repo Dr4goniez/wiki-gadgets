@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.1.9
+ * @version 3.1.10
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -150,7 +150,7 @@ class MarkBLocked {
 					 *
 					 * @param {JQuery<HTMLElement>} [$content] Defaults to `.mw-body-content` if not provided.
 					 */
-					const markup = ($content) => {
+					const run = ($content = $('.mw-body-content')) => {
 						hookTimeout = void 0; // Clear the hook timeout reference
 						if (isRCW) {
 							// Abort in-flight requests only on Special:RecentChanges or Special:Watchlist, where
@@ -161,7 +161,7 @@ class MarkBLocked {
 							// marked with `.mbl-userlink`, so duplicate processing is safely avoided.
 							mbl.abort();
 						}
-						mbl.markup($content || $('.mw-body-content'));
+						mbl.markup($content, isRCW);
 					};
 
 					/**
@@ -170,19 +170,16 @@ class MarkBLocked {
 					 * @param {JQuery<HTMLElement>} $content The container with potentially updated content.
 					 */
 					const hookHandler = ($content) => {
-						// Filter out any elements that are not connected to the DOM
-						$content = $content.filter((_, el) => el.isConnected);
-						const isConnected = $content.length > 0;
-
+						const isConnected = $content[0] && $content[0].isConnected;
 						if (isConnected) {
-							clearTimeout(hookTimeout); // Cancel any pending fallback `markup()` call
+							clearTimeout(hookTimeout); // Cancel any pending fallback `run()` call
 							if ($content.find('a').length) {
-								markup($content);
+								run($content);
 							}
 						} else if (typeof hookTimeout !== 'number') {
-							// Ensure that `markup()` is called at least once, even if all `wikipage.content` events
+							// Ensure that `run()` is called at least once, even if all `wikipage.content` events
 							// are triggered on disconnected elements
-							hookTimeout = setTimeout(markup, 100);
+							hookTimeout = setTimeout(run, 100);
 						}
 					};
 
@@ -223,7 +220,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.1.9 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.1.10 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -758,20 +755,21 @@ class MarkBLocked {
 	 * Marks up user links.
 	 *
 	 * @param {JQuery<HTMLElement>} $content
+	 * @param {boolean} isRCW
 	 * @returns {JQueryPromise<void>}
 	 * @private
 	 * @requires mediawiki.util
 	 * @requires mediawiki.api
 	 * @requires mediawiki.ForeignApi
 	 */
-	markup($content) {
+	markup($content, isRCW) {
 
 		if (!this.options.g_blocks && this.options.g_rangeblocks) {
 			throw new Error('g_rangeblocks is unexpectedly turned on when g_blocks is turned off.');
 		}
 
 		// Collect user links
-		const { userLinks, users, ips } = this.collectLinks($content);
+		const { userLinks, users, ips } = this.collectLinks($content, isRCW);
 		if (!userLinks.size) {
 			console.log('MarkBLocked', {
 				$content,
@@ -1002,11 +1000,12 @@ class MarkBLocked {
 	 * Collects user links to mark up.
 	 *
 	 * @param {JQuery<HTMLElement>} $content
+	 * @param {boolean} isRCW
 	 * @returns {LinkObject}
 	 * @private
 	 * @requires mediawiki.util
 	 */
-	collectLinks($content) {
+	collectLinks($content, isRCW) {
 
 		// Get all anchors in the content
 		let $anchors = $content.find('a');
@@ -1037,10 +1036,12 @@ class MarkBLocked {
 				!href ||
 				(a.getAttribute('href') || '')[0] === '#' ||
 				a.role === 'button' ||
-				a.classList.contains('mbl-userlink') ||
+				// Skip processed links unless on RCW
+				// On RCW, such links need to be re-processed for them to be marked up properly
+				(!isRCW && a.classList.contains('mbl-userlink')) ||
 				a.classList.contains('ext-discussiontools-init-timestamplink') ||
-				pr && prIgnore.test(pr.className) ||
-				mw.util.getParamValue('action', href) && !mw.util.getParamValue('redlink', href) ||
+				(pr && prIgnore.test(pr.className)) ||
+				(mw.util.getParamValue('action', href) && !mw.util.getParamValue('redlink', href)) ||
 				mw.util.getParamValue('diff', href) ||
 				mw.util.getParamValue('oldid', href)
 			) {
