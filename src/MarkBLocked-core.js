@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.1.10
+ * @version 3.2.0
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -26,6 +26,103 @@
 //<nowiki>
 // const MarkBLocked = (() => {
 module.exports = (() => {
+
+/**
+ * A simple typed wrapper around localStorage that serializes to/from JSON.
+ *
+ * @template {Record<string, any>} T
+ */
+class Storage {
+	/**
+	 * @param {string} key The localStorage key to persist data under.
+	 */
+	constructor(key) {
+		/**
+		 * @type {string}
+		 * @private
+		 * @readonly
+		 */
+		this.key = key;
+
+		if (!localStorage.getItem(key)) {
+			localStorage.setItem(key, '{}');
+		}
+	}
+
+	/**
+	 * Returns the parsed value from localStorage, or an empty object if missing or invalid.
+	 *
+	 * @returns {T}
+	 */
+	get() {
+		const raw = localStorage.getItem(this.key);
+		if (!raw) {
+			localStorage.setItem(this.key, '{}');
+			return /** @type {T} */ ({});
+		}
+
+		try {
+			const parsed = JSON.parse(raw);
+			if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+				return parsed;
+			}
+		} catch (_) { /* empty */ }
+
+		localStorage.setItem(this.key, '{}');
+		return /** @type {T} */ ({});
+	}
+
+	/**
+	 * Returns the value for the given key, or `null` if not present.
+	 *
+	 * @param {keyof T} key
+	 * @returns {?T[keyof T]}
+	 */
+	getByKey(key) {
+		const obj = this.get();
+		return Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null;
+	}
+
+	/**
+	 * Overwrites the entire object in storage.
+	 *
+	 * @param {T} data
+	 * @returns {this}
+	 */
+	set(data) {
+		localStorage.setItem(this.key, JSON.stringify(data));
+		return this;
+	}
+
+	/**
+	 * Sets a specific key in the stored object.
+	 *
+	 * @param {keyof T} key
+	 * @param {T[keyof T]} value
+	 * @returns {this}
+	 */
+	setByKey(key, value) {
+		const obj = this.get();
+		obj[key] = value;
+		return this.set(obj);
+	}
+
+	/**
+	 * Removes a specific key from the stored object.
+	 *
+	 * @param {keyof T} key
+	 * @returns {this}
+	 */
+	removeByKey(key) {
+		const obj = this.get();
+		if (Object.prototype.hasOwnProperty.call(obj, key)) {
+			delete obj[key];
+			this.set(obj);
+		}
+		return this;
+	}
+}
+
 class MarkBLocked {
 
 	/**
@@ -48,10 +145,6 @@ class MarkBLocked {
 	 * customizing the default interface messages or adding new interface languages.
 	 * For the latter to work, the {@link ConstructorConfig.lang | lang} property must also be set.
 	 * @property {string} [lang] The language code to use for interface messages. Defaults to `en`.
-	 * @property {string[]} [contribsCA] Special page aliases for Contributions and CentralAuth in the local language.
-	 * You do not need to include standard aliases like `Contributions`, `Contribs`, `CentralAuth`, `CA`, or `GlobalAccount`.
-	 * If not provided, aliases will be fetched via the API.
-	 * @property {string[]} [groupsAHL] Local user groups that have the `apihighlimits` right. Defaults to `['sysop', 'bot']`.
 	 */
 
 	/**
@@ -115,28 +208,21 @@ class MarkBLocked {
 			})();
 
 			// Entry point
-			const /** @type {JQueryPromise<string[]?>} */ ccaDeferred =
-				onConfig ?
-				$.Deferred().resolve([]) :
-				cfg.contribsCA ?
-				$.Deferred().resolve(cfg.contribsCA) :
-				this.getContribsCA();
-			return $.when(ccaDeferred, backwards, $.ready).then((contribsCA) => {
+			return $.when(
+				this.getSpecialPageAliases(),
+				this.getUserRights(),
+				backwards,
+				$.ready
+			).then((aliases, rights) => {
 
-				if (contribsCA) {
-					cfg.contribsCA = contribsCA;
-				} else {
-					console.warn('MarkBLocked: Failed to get special page aliases.');
-					cfg.contribsCA = [];
-				}
-
-				const mbl = new MarkBLocked(cfg);
+				const mbl = new MarkBLocked(cfg, aliases, rights);
 				if (onConfig) {
 					mbl.createConfigInterface();
 				} else {
 
 					mbl.createPortletLink();
 
+					// Handle the `wikipage.content` hook
 					/**
 					 * Timeout ID used to defer a `markup` call when needed.
 					 * Cleared or reset depending on the DOM connection state of `$content`.
@@ -185,6 +271,8 @@ class MarkBLocked {
 
 					mw.hook('wikipage.content').add(hookHandler);
 
+					mbl.handleIpReveals(rights, isRCW);
+
 					// Add a toggle button on RCW
 					if (isRCW) {
 						mbl.createToggleButton(hookHandler);
@@ -220,7 +308,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.1.10 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.0 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -240,46 +328,192 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Retrieves special page aliases for `Contributions` and `CentralAuth` from the API.
-	 *
-	 * @returns {JQueryPromise<string[]?>}
-	 * @private
-	 * @requires mediawiki.api
-	 * @requires mediawiki.ForeignApi
+	 * @typedef {object} SpecialPageAliases
+	 * @property {number} _expiry
+	 * @property {string[]} Contributions
+	 * @property {string[]} IPContributions
+	 * @property {string[]} GlobalContributions
+	 * @property {string[]} CentralAuth
 	 */
-	static getContribsCA() {
+	/**
+	 * Retrieves special page aliases related to link markups.
+	 *
+	 * @returns {JQueryPromise<SpecialPageAliases>}
+	 * @private
+	 */
+	static getSpecialPageAliases() {
+		/**
+		 * @type {Storage<Record<string, SpecialPageAliases>>}
+		 */
+		const storage = new Storage('markblocked-specialpagealiases');
+		const server = mw.config.get('wgServerName');
+
+		// Define the expected structure and types
+		/** @type {Record<keyof SpecialPageAliases, 'number' | 'object'>} */
+		const expectedProps = {
+			_expiry: 'number',
+			Contributions: 'object',
+			IPContributions: 'object',
+			GlobalContributions: 'object',
+			CentralAuth: 'object',
+		};
+
+		let data = storage.getByKey(server);
+		const now = Date.now();
+		if (
+			data !== null &&
+			Number.isInteger(data._expiry) && data._expiry > now &&
+			Object.entries(expectedProps).every(([prop, expectedType]) => {
+				const value = /** @type {SpecialPageAliases} */ (data)[prop];
+				if (typeof value !== expectedType) return false;
+				if (expectedType === 'object' && !Array.isArray(value)) return false;
+				return true;
+			})
+		) {
+			return $.Deferred().resolve(data);
+		}
+
+		data = {
+			_expiry: now + 24 * 60 * 60 * 1000, // 1 day from now
+			Contributions: [],
+			IPContributions: [],
+			GlobalContributions: [],
+			CentralAuth: [],
+		};
 		return new mw.Api(this.getApiOptions()).get({
 			meta: 'siteinfo',
 			siprop: 'specialpagealiases'
 		}).then(/** @param {ApiResponse} res */ (res) => {
-			const resSpa = res && res.query && res.query.specialpagealiases;
-			if (Array.isArray(resSpa)) {
-				const defaults = new Set(['Contributions', 'Contribs', 'CentralAuth', 'CA', 'GlobalAccount']);
-				return resSpa.reduce(/** @param {string[]} acc */ (acc, { realname, aliases }) => {
-					if (realname === 'Contributions' || realname === 'CentralAuth') {
-						acc = acc.concat(aliases.filter(el => !defaults.has(el)));
+			const specialpagealiases = res && res.query && res.query.specialpagealiases;
+			if (specialpagealiases) {
+				specialpagealiases.forEach(({ realname, aliases }) => {
+					if (data[realname] && realname !== '_expiry') {
+						data[realname].push(
+							...aliases.filter(el => el !== realname)
+						);
 					}
-					return acc;
-				}, []);
+				});
+				storage.setByKey(server, data);
 			} else {
-				return null;
+				storage.removeByKey(server);
 			}
+			return data;
 		}).catch((_, err) => {
-			console.warn(err);
-			return null;
+			console.warn('Failed to special page aliases:', err);
+			storage.removeByKey(server);
+			return data;
+		});
+	}
+
+	/**
+	 * @typedef {object} UserRights
+	 * @property {number} _expiry
+	 * @property {string[]} rights
+	 */
+	/**
+	 * Retrieves and caches user rights.
+	 *
+	 * @returns {JQueryPromise<Set<string>>}
+	 * @private
+	 */
+	static getUserRights() {
+		/**
+		 * @type {Storage<Record<string, UserRights>>}
+		 */
+		const storage = new Storage('markblocked-userrights');
+		const server = mw.config.get('wgServerName');
+
+		let data = storage.getByKey(server);
+		const now = Date.now();
+		if (
+			data !== null &&
+			Number.isInteger(data._expiry) && data._expiry > now &&
+			Array.isArray(data.rights) && data.rights.every(el => typeof el === 'string')
+		) {
+			return $.Deferred().resolve(new Set(data.rights));
+		}
+
+		data = {
+			_expiry: now + 60 * 60 * 1000, // 1 hour from now
+			rights: [],
+		};
+		return mw.user.getRights().then((rights) => {
+			data.rights = rights;
+			storage.setByKey(server, data);
+			return new Set(data.rights);
+		}).catch((...err) => {
+			console.warn('Failed to get user rights:', err);
+			storage.removeByKey(server);
+			return new Set();
+		});
+	}
+
+	/**
+	 * Handles post-processing of temporary account IP reveals, allowing the script to mark revealed IPs.
+	 *
+	 * @param {Set<string>} rights
+	 * @param {boolean} isRCW
+	 * @private
+	 */
+	handleIpReveals(rights, isRCW) {
+		if (!rights.has('checkuser-temporary-account')) {
+			return;
+		}
+
+		// Override $.fn.replaceWith to intercept IP reveals
+		const ipRevealHook = mw.hook('userjs.markblocked.ipreveal');
+		const originalReplaceWith = $.fn.replaceWith;
+		$.fn.replaceWith = function() {
+			if (this.hasClass('ext-checkuser-tempaccount-reveal-ip-button')) {
+				/** @type {JQuery<HTMLElement>} */
+				const $arg0 = arguments[0];
+				if (
+					$arg0 instanceof $ &&
+					$arg0.hasClass('ext-checkuser-tempaccount-reveal-ip') &&
+					$arg0.children('a.ext-checkuser-tempaccount-reveal-ip-anchor').length
+				) {
+					ipRevealHook.fire($arg0);
+				}
+			}
+			return originalReplaceWith.apply(this, arguments);
+		};
+
+		// Handle the IP reveal hook
+		/**
+		 * @type {NodeJS.Timeout=}
+		 */
+		let revealHookTimeout;
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 */
+		let $batchRevealed = $([]);
+
+		// When a new IP element is revealed, queue it for batch markup
+		ipRevealHook.add(/** @param {JQuery<HTMLElement>} $element */ ($element) => {
+			$batchRevealed = $batchRevealed.add($element);
+			clearTimeout(revealHookTimeout);
+
+			// Delay execution to allow batching multiple IP reveals within 100ms
+			revealHookTimeout = setTimeout(() => {
+				const $revealed = $batchRevealed;
+				$batchRevealed = $([]);
+				this.markup($revealed, isRCW);
+			}, 100);
 		});
 	}
 
 	/**
 	 * Private constructor. Called only by {@link MarkBLocked.init}.
 	 *
-	 * @param {ConstructorConfig} [cfg]
+	 * @param {ConstructorConfig} cfg
+	 * @param {SpecialPageAliases} aliasMap
+	 * @param {Set<string>} rights
 	 * @private
 	 * @requires mediawiki.api
 	 * @requires mediawiki.ForeignApi
 	 * @requires mediawiki.user
 	 */
-	constructor(cfg = {}) {
+	constructor(cfg, aliasMap, rights) {
 
 		/**
 		 * @type {mw.Api}
@@ -307,7 +541,7 @@ class MarkBLocked {
 			);
 
 		// Show Warning if the config has any invalid property
-		const validKeys = new Set(['defaultOptions', 'optionKey', 'globalize', 'i18n', 'lang', 'contribsCA', 'groupsAHL']);
+		const validKeys = new Set(['defaultOptions', 'optionKey', 'globalize', 'i18n', 'lang']);
 		const invalidKeys = Object.keys(cfg).reduce(/** @param {string[]} acc */ (acc, key) => {
 			if (!validKeys.has(key)) {
 				acc.push(key);
@@ -394,73 +628,65 @@ class MarkBLocked {
 		})();
 
 		/**
-		 * Regular expressions to collect user links.
+		 * Regular expressions to collect user-related links.
 		 *
 		 * @typedef {object} LinkRegex
 		 * @property {RegExp} article `/wiki/PAGENAME`: $1: PAGENAME
 		 * @property {RegExp} script `/w/index.php?title=PAGENAME`: $1: PAGENAME
-		 * @property {RegExp} contribsCA `^Special:(?:Contribs|CA)($|/)`
+		 * @property {RegExp} special `^Special:(?:Contribs|CA)($|/)`
 		 * @property {RegExp} user `^(?:Special:.../|User:)(USERNAME|CIDR)`: $1: USERNAME or CIDR
 		 */
 		/**
 		 * @type {LinkRegex}
 		 */
 		this.regex = (() => {
-
+			// Collect namespace aliases
 			const wgNamespaceIds = mw.config.get('wgNamespaceIds'); // { "special": -1, "user": 2, ... }
-			const /** @type {string[]} */ specialAliases = [];
-			const /** @type {string[]} */ userAliases = [];
+			const nsAliases = {
+				special: /** @type {string[]} */ ([]),
+				user: /** @type {string[]} */ ([])
+			};
 			for (const alias in wgNamespaceIds) {
-				const namespaceId = wgNamespaceIds[alias];
-				switch(namespaceId) {
+				const nsId = wgNamespaceIds[alias];
+				switch (nsId) {
 					case -1:
-						specialAliases.push(alias);
+						nsAliases.special.push(alias);
 						break;
 					case 2:
 					case 3:
-						userAliases.push(alias);
+						nsAliases.user.push(alias);
 				}
 			}
 
-			let rContribsCA = cfg.contribsCA && cfg.contribsCA.length ? '|' + cfg.contribsCA.join('|') : '';
-			rContribsCA = '(?:' + specialAliases.join('|') + '):(?:contrib(?:ution)?s|ca|centralauth|globalaccount' + rContribsCA + ')';
-			const rUser = '(?:' + userAliases.join('|') + '):';
+			// Process special page aliases
+			const /** @type {string[]} */ spAliases = [];
+			const /** @type {string[]} */ spAliasesNoTarget = [];
+			Object.entries(aliasMap).forEach(([realname, aliases]) => {
+				if (Array.isArray(aliases)) {
+					spAliases.push(realname, ...aliases);
+					if (realname !== 'IPContributions' && realname !== 'GlobalContributions') {
+						// For these pages, the &target= query does not override the subpage target (2025-08-02)
+						spAliasesNoTarget.push(realname, ...aliases);
+					}
+				}
+			});
 
+			const rSpecial = `(?:${nsAliases.special.join('|')}):(?:${spAliases.join('|')})`;
+			const rSpecialNoTarget = `(?:${nsAliases.special.join('|')}):(?:${spAliasesNoTarget.join('|')})`;
+			const rUser = `(?:${nsAliases.user.join('|')}):`;
 			return {
 				article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
 				script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)'),
-				contribsCA: new RegExp('^' + rContribsCA + '($|/)', 'i'),
-				user: new RegExp('^(?:' + rContribsCA + '/|' + rUser + ')([^/#]+|[a-f\\d:\\.]+/\\d\\d)$', 'i')
+				special: new RegExp(`^${rSpecialNoTarget}($|/)`, 'i'),
+				user: new RegExp(`^(?:${rSpecial}/|${rUser})([^/#]+|[a-f\\d:\\.]+/\\d\\d)$`, 'i')
 			};
-
 		})();
 
 		/**
 		 * The maximum number of batch parameter values for the API.
 		 * @type {500 | 50}
 		 */
-		this.apilimit = (() => {
-
-			const groupsAHLLocal = cfg.groupsAHL || ['sysop', 'bot'];
-			const groupsAHLGlobal = [
-				'apihighlimits-requestor',
-				'founder',
-				'global-bot',
-				// 'global-sysop',
-				'staff',
-				'steward',
-				'sysadmin',
-				'wmf-researcher'
-			];
-			const groupsAHL = new Set(groupsAHLLocal.concat(groupsAHLGlobal));
-			const hasAHL =
-				(mw.config.get('wgUserGroups') || [])
-				.concat(/** @type {string[]} */ (mw.config.get('wgGlobalGroups') || []))
-				.some((group) => groupsAHL.has(group));
-
-			return hasAHL ? 500 : 50;
-
-		})();
+		this.apilimit = rights.has('apihighlimits') ? 500 : 50;
 
 	}
 
@@ -1062,7 +1288,7 @@ class MarkBLocked {
 
 			// Extract a username from the pagetitle
 			let tar, username;
-			if (this.regex.contribsCA.test(pagetitle) && (tar = mw.util.getParamValue('target', href))) {
+			if (this.regex.special.test(pagetitle) && (tar = mw.util.getParamValue('target', href))) {
 				// If the parsing title is one for a special page, check whether there's a valid &target= query parameter.
 				// This parameter's value is prioritized than the subpage name, if any, hence "Special:CA/Foo?target=Bar"
 				// shows CentralAuth for User:Bar, not User:Foo.
@@ -1277,6 +1503,7 @@ class MarkBLocked {
 				.attr('data-mbl-tooltip', text)
 				.tooltip({
 					tooltipClass: 'mbl-tooltip',
+					items: '[data-mbl-tooltip]',
 					content: /** @this {HTMLAnchorElement} */ function() {
 						const tt = this.dataset.mblTooltip;
 						if (tt) {
