@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.0
+ * @version 3.2.1
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -308,7 +308,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.0 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -942,15 +942,29 @@ class MarkBLocked {
 				title = this.getMessage('toggle-title-disabled');
 				hookToggle = mw.hook('wikipage.content').remove;
 				msg = this.getMessage('toggle-notify-disabled');
-				$('.mbl-userlink').removeClass((_, className) => { // Remove all mbl- classes from user links
-					return (className.match(/(^|\s)mbl-\S+/) || []).join(' ');
+				$('.mbl-userlink').each(function () {
+					const $el = $(this);
+
+					// Remove all classes starting with 'mbl-'
+					const mblClasses = this.className.match(/(^|\s)mbl-\S+/g);
+					if (mblClasses) {
+						$el.removeClass(mblClasses.map(el => el.trim()).join(' '));
+					}
+
+					// Destroy tooltip if present
+					if (this.dataset.mblTooltip) {
+						try {
+							$el.tooltip('destroy');
+						} catch (e) {
+							console.warn('Tooltip destroy failed:', e);
+						}
+					}
 				});
 			} else {
 				icon = 'unLock';
 				title = this.getMessage('toggle-title-enabled');
 				hookToggle = mw.hook('wikipage.content').add;
 				msg = this.getMessage('toggle-notify-enabled');
-				// Hook.add fires the `wikipage.content` hook, meaning that `markup` is automatically called and classes are reassigned
 			}
 			toggle
 				.setFlags({ progressive: !disable, destructive: disable })
@@ -972,7 +986,6 @@ class MarkBLocked {
 		} else if (spName === 'Watchlist') {
 			selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-watchlistTopSectionWidget-savedLinks';
 			$(selector).eq(0).before($wrapper);
-			$wrapper.css('margin-left', 'auto');
 		}
 
 	}

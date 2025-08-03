@@ -93,3 +93,18 @@
 		opacity: 0.8;
 	}
 }
+
+/* Improve alignment of the MBL toggle button on Watchlist */
+.mw-rcfilters-ui-watchlistTopSectionWidget-savedLinksTable #mbl-toggle-wrapper {
+	margin-left: auto;
+	margin-right: 0.5em;
+}
+
+@media screen and (max-width: 1119px) {
+	/* On narrow screens, push the toggle button to the end and normalize margins */
+	.mw-rcfilters-ui-watchlistTopSectionWidget-savedLinksTable #mbl-toggle-wrapper {
+		margin-left: 0;
+		margin-right: 0;
+		order: 3;
+	}
+}
