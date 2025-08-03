@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.3
+ * @version 3.2.4
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -81,6 +81,7 @@ class MarkBLocked {
 			'mediawiki.user',
 			'mediawiki.api',
 			'mediawiki.ForeignApi',
+			'mediawiki.storage',
 			'mediawiki.util',
 			'jquery.ui'
 		];
@@ -92,8 +93,7 @@ class MarkBLocked {
 				'oojs-ui.styles.icons-moderation'
 			);
 		}
-		return mw.loader.using(modules).then(() => { // When ready
-
+		return mw.loader.using(modules).then(() => {
 			// For backwards compatibility, clear old config if any
 			/** @type {JQueryPromise<void>} */
 			const backwards = (() => {
@@ -123,75 +123,74 @@ class MarkBLocked {
 				this.getUserRights(),
 				backwards,
 				$.ready
-			).then((aliases, rights) => {
+			);
+		}).then((aliases, rights) => {
 
-				const mbl = new MarkBLocked(cfg, aliases, rights);
-				if (onConfig) {
-					mbl.createConfigInterface();
-				} else {
+			const mbl = new MarkBLocked(cfg, aliases, rights);
+			if (onConfig) {
+				mbl.createConfigInterface();
+			} else {
 
-					mbl.createPortletLink();
+				mbl.createPortletLink();
 
-					// Handle the `wikipage.content` hook
-					/**
-					 * Timeout ID used to defer a `markup` call when needed.
-					 * Cleared or reset depending on the DOM connection state of `$content`.
-					 *
-					 * @type {NodeJS.Timeout=}
-					 */
-					let hookTimeout;
+				// Handle the `wikipage.content` hook
+				/**
+				 * Timeout ID used to defer a `markup` call when needed.
+				 * Cleared or reset depending on the DOM connection state of `$content`.
+				 *
+				 * @type {NodeJS.Timeout=}
+				 */
+				let hookTimeout;
 
-					/**
-					 * Applies user link markup to the given content container.
-					 *
-					 * @param {JQuery<HTMLElement>} [$content] Defaults to `.mw-body-content` if not provided.
-					 */
-					const run = ($content = $('.mw-body-content')) => {
-						hookTimeout = void 0; // Clear the hook timeout reference
-						if (isRCW) {
-							// Abort in-flight requests only on Special:RecentChanges or Special:Watchlist, where
-							// `$content` is fully replaced on each dynamic page update. In these cases, any
-							// .mbl-userlink anchors from the previous DOM are lost, so keeping pending HTTP requests
-							// serves no purpose. On other pages, full DOM replacement is rare, and aborting may
-							// prevent some user links from being processed. `collectLinks()` skips anchors already
-							// marked with `.mbl-userlink`, so duplicate processing is safely avoided.
-							mbl.abort();
-						}
-						mbl.markup($content, isRCW);
-					};
-
-					/**
-					 * Callback for `mw.hook('wikipage.content').add()`.
-					 *
-					 * @param {JQuery<HTMLElement>} $content The container with potentially updated content.
-					 */
-					const hookHandler = ($content) => {
-						const isConnected = $content[0] && $content[0].isConnected;
-						if (isConnected) {
-							clearTimeout(hookTimeout); // Cancel any pending fallback `run()` call
-							if ($content.find('a').length) {
-								run($content);
-							}
-						} else if (typeof hookTimeout !== 'number') {
-							// Ensure that `run()` is called at least once, even if all `wikipage.content` events
-							// are triggered on disconnected elements
-							hookTimeout = setTimeout(run, 100);
-						}
-					};
-
-					mw.hook('wikipage.content').add(hookHandler);
-
-					mbl.handleIpReveals(rights, isRCW);
-
-					// Add a toggle button on RCW
+				/**
+				 * Applies user link markup to the given content container.
+				 *
+				 * @param {JQuery<HTMLElement>} [$content] Defaults to `.mw-body-content` if not provided.
+				 */
+				const run = ($content = $('.mw-body-content')) => {
+					hookTimeout = void 0; // Clear the hook timeout reference
 					if (isRCW) {
-						mbl.createToggleButton(hookHandler);
+						// Abort in-flight requests only on Special:RecentChanges or Special:Watchlist, where
+						// `$content` is fully replaced on each dynamic page update. In these cases, any
+						// .mbl-userlink anchors from the previous DOM are lost, so keeping pending HTTP requests
+						// serves no purpose. On other pages, full DOM replacement is rare, and aborting may
+						// prevent some user links from being processed. `collectLinks()` skips anchors already
+						// marked with `.mbl-userlink`, so duplicate processing is safely avoided.
+						mbl.abort();
 					}
+					mbl.markup($content, isRCW);
+				};
 
+				/**
+				 * Callback for `mw.hook('wikipage.content').add()`.
+				 *
+				 * @param {JQuery<HTMLElement>} $content The container with potentially updated content.
+				 */
+				const hookHandler = ($content) => {
+					const isConnected = $content[0] && $content[0].isConnected;
+					if (isConnected) {
+						clearTimeout(hookTimeout); // Cancel any pending fallback `run()` call
+						if ($content.find('a').length) {
+							run($content);
+						}
+					} else if (typeof hookTimeout !== 'number') {
+						// Ensure that `run()` is called at least once, even if all `wikipage.content` events
+						// are triggered on disconnected elements
+						hookTimeout = setTimeout(run, 100);
+					}
+				};
+
+				mw.hook('wikipage.content').add(hookHandler);
+
+				mbl.handleIpReveals(rights, isRCW);
+
+				// Add a toggle button on RCW
+				if (isRCW) {
+					mbl.createToggleButton(hookHandler);
 				}
-				return mbl;
 
-			});
+			}
+			return mbl;
 
 		});
 
@@ -218,7 +217,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.3 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.4 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
