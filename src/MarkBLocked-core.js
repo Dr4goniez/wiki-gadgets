@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.2
+ * @version 3.2.3
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -218,7 +218,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.3 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -814,7 +814,7 @@ class MarkBLocked {
 				title = this.getMessage('toggle-title-disabled');
 				hookToggle = mw.hook('wikipage.content').remove;
 				msg = this.getMessage('toggle-notify-disabled');
-				$('.mbl-userlink').each(function () {
+				$('.mbl-userlink').each(function() {
 					const $el = $(this);
 
 					// Remove all classes starting with 'mbl-'
@@ -904,7 +904,7 @@ class MarkBLocked {
 			} else {
 				console.log('MarkBLocked', {
 					$content,
-					links: $('.mbl-userlink').length,
+					links: Array.from(userLinks.values()).reduce((sum, arr) => sum + arr.length, 0),
 					user_registered: users.size,
 					user_anonymous: ips.size
 				});
