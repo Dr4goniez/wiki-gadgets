@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.1
+ * @version 3.2.2
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -26,102 +26,6 @@
 //<nowiki>
 // const MarkBLocked = (() => {
 module.exports = (() => {
-
-/**
- * A simple typed wrapper around localStorage that serializes to/from JSON.
- *
- * @template {Record<string, any>} T
- */
-class Storage {
-	/**
-	 * @param {string} key The localStorage key to persist data under.
-	 */
-	constructor(key) {
-		/**
-		 * @type {string}
-		 * @private
-		 * @readonly
-		 */
-		this.key = key;
-
-		if (!localStorage.getItem(key)) {
-			localStorage.setItem(key, '{}');
-		}
-	}
-
-	/**
-	 * Returns the parsed value from localStorage, or an empty object if missing or invalid.
-	 *
-	 * @returns {T}
-	 */
-	get() {
-		const raw = localStorage.getItem(this.key);
-		if (!raw) {
-			localStorage.setItem(this.key, '{}');
-			return /** @type {T} */ ({});
-		}
-
-		try {
-			const parsed = JSON.parse(raw);
-			if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-				return parsed;
-			}
-		} catch (_) { /* empty */ }
-
-		localStorage.setItem(this.key, '{}');
-		return /** @type {T} */ ({});
-	}
-
-	/**
-	 * Returns the value for the given key, or `null` if not present.
-	 *
-	 * @param {keyof T} key
-	 * @returns {?T[keyof T]}
-	 */
-	getByKey(key) {
-		const obj = this.get();
-		return Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null;
-	}
-
-	/**
-	 * Overwrites the entire object in storage.
-	 *
-	 * @param {T} data
-	 * @returns {this}
-	 */
-	set(data) {
-		localStorage.setItem(this.key, JSON.stringify(data));
-		return this;
-	}
-
-	/**
-	 * Sets a specific key in the stored object.
-	 *
-	 * @param {keyof T} key
-	 * @param {T[keyof T]} value
-	 * @returns {this}
-	 */
-	setByKey(key, value) {
-		const obj = this.get();
-		obj[key] = value;
-		return this.set(obj);
-	}
-
-	/**
-	 * Removes a specific key from the stored object.
-	 *
-	 * @param {keyof T} key
-	 * @returns {this}
-	 */
-	removeByKey(key) {
-		const obj = this.get();
-		if (Object.prototype.hasOwnProperty.call(obj, key)) {
-			delete obj[key];
-			this.set(obj);
-		}
-		return this;
-	}
-}
 
 class MarkBLocked {
 
@@ -162,6 +66,12 @@ class MarkBLocked {
 			throw new Error(err);
 		} else {
 			window.MarkBLockedLoaded = true;
+		}
+
+		// Backwards compat.
+		if (localStorage) {
+			localStorage.removeItem('markblocked-specialpagealiases');
+			localStorage.removeItem('markblocked-userrights');
 		}
 
 		const cfg = config || {};
@@ -329,11 +239,10 @@ class MarkBLocked {
 
 	/**
 	 * @typedef {object} SpecialPageAliases
-	 * @property {number} _expiry
-	 * @property {string[]} Contributions
-	 * @property {string[]} IPContributions
-	 * @property {string[]} GlobalContributions
-	 * @property {string[]} CentralAuth
+	 * @property {string[]} [Contributions]
+	 * @property {string[]} [IPContributions]
+	 * @property {string[]} [GlobalContributions]
+	 * @property {string[]} [CentralAuth]
 	 */
 	/**
 	 * Retrieves special page aliases related to link markups.
@@ -342,44 +251,27 @@ class MarkBLocked {
 	 * @private
 	 */
 	static getSpecialPageAliases() {
+		const key = 'mw-MarkBLocked-specialpagealiases';
+		const allowedKeys = new Set([
+			'Contributions',
+			'IPContributions',
+			'GlobalContributions',
+			'CentralAuth'
+		]);
 		/**
-		 * @type {Storage<Record<string, SpecialPageAliases>>}
+		 * @type {SpecialPageAliases | null | false}
 		 */
-		const storage = new Storage('markblocked-specialpagealiases');
-		const server = mw.config.get('wgServerName');
-
-		// Define the expected structure and types
-		/** @type {Record<keyof SpecialPageAliases, 'number' | 'object'>} */
-		const expectedProps = {
-			_expiry: 'number',
-			Contributions: 'object',
-			IPContributions: 'object',
-			GlobalContributions: 'object',
-			CentralAuth: 'object',
-		};
-
-		let data = storage.getByKey(server);
-		const now = Date.now();
+		let data = mw.storage.getObject(key);
 		if (
-			data !== null &&
-			Number.isInteger(data._expiry) && data._expiry > now &&
-			Object.entries(expectedProps).every(([prop, expectedType]) => {
-				const value = /** @type {SpecialPageAliases} */ (data)[prop];
-				if (typeof value !== expectedType) return false;
-				if (expectedType === 'object' && !Array.isArray(value)) return false;
-				return true;
-			})
+			data !== null && data !== false &&
+			Object.entries(data).every(([key, value]) =>
+				allowedKeys.has(key) && Array.isArray(value) && value.every(el => typeof el === 'string')
+			)
 		) {
 			return $.Deferred().resolve(data);
 		}
+		data = {};
 
-		data = {
-			_expiry: now + 24 * 60 * 60 * 1000, // 1 day from now
-			Contributions: [],
-			IPContributions: [],
-			GlobalContributions: [],
-			CentralAuth: [],
-		};
 		return new mw.Api(this.getApiOptions()).get({
 			meta: 'siteinfo',
 			siprop: 'specialpagealiases'
@@ -387,29 +279,19 @@ class MarkBLocked {
 			const specialpagealiases = res && res.query && res.query.specialpagealiases;
 			if (specialpagealiases) {
 				specialpagealiases.forEach(({ realname, aliases }) => {
-					if (data[realname] && realname !== '_expiry') {
-						data[realname].push(
-							...aliases.filter(el => el !== realname)
-						);
+					if (allowedKeys.has(realname)) {
+						data[realname] = aliases.filter(el => el !== realname);
 					}
 				});
-				storage.setByKey(server, data);
-			} else {
-				storage.removeByKey(server);
+				mw.storage.set(key, JSON.stringify(data), 24 * 60 * 60); // 1 day expiry
 			}
 			return data;
 		}).catch((_, err) => {
 			console.warn('Failed to special page aliases:', err);
-			storage.removeByKey(server);
 			return data;
 		});
 	}
 
-	/**
-	 * @typedef {object} UserRights
-	 * @property {number} _expiry
-	 * @property {string[]} rights
-	 */
 	/**
 	 * Retrieves and caches user rights.
 	 *
@@ -417,33 +299,23 @@ class MarkBLocked {
 	 * @private
 	 */
 	static getUserRights() {
+		const key = 'mw-MarkBLocked-userrights';
 		/**
-		 * @type {Storage<Record<string, UserRights>>}
+		 * @type {string[] | null | false}
 		 */
-		const storage = new Storage('markblocked-userrights');
-		const server = mw.config.get('wgServerName');
-
-		let data = storage.getByKey(server);
-		const now = Date.now();
+		const data = mw.storage.getObject(key);
 		if (
-			data !== null &&
-			Number.isInteger(data._expiry) && data._expiry > now &&
-			Array.isArray(data.rights) && data.rights.every(el => typeof el === 'string')
+			data !== null && data !== false &&
+			Array.isArray(data) && data.every(el => typeof el === 'string')
 		) {
-			return $.Deferred().resolve(new Set(data.rights));
+			return $.Deferred().resolve(new Set(data));
 		}
 
-		data = {
-			_expiry: now + 60 * 60 * 1000, // 1 hour from now
-			rights: [],
-		};
 		return mw.user.getRights().then((rights) => {
-			data.rights = rights;
-			storage.setByKey(server, data);
-			return new Set(data.rights);
+			mw.storage.set(key, JSON.stringify(rights), 60 * 60); // 1 hour expiry
+			return new Set(rights);
 		}).catch((...err) => {
 			console.warn('Failed to get user rights:', err);
-			storage.removeByKey(server);
 			return new Set();
 		});
 	}
