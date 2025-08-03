@@ -7,17 +7,12 @@
 			.then((req) => {
 				const MarkBLocked = req(moduleName);
 				MarkBLocked.init({
-					lang: 'ja',
-					contribsCA: [
-						'投稿記録',
-						'アカウント統一管理',
-						'統一ログインの管理'
-					]
+					lang: 'ja'
 				});
 			})
 			.catch(console.error);
 	};
-	if (!mw.loader.getState(moduleName)) { // Module doesn't exist locally
+	if (!new Set(mw.loader.getModuleNames()).has(moduleName)) { // Module doesn't exist locally
 		mw.loader.getScript('https://ja.wikipedia.org/w/load.php?modules=' + moduleName) // Import the module
 			.then(loadModule)
 			.catch(console.error);

@@ -17,7 +17,7 @@
 			})
 			.catch(console.error);
 	};
-	if (!mw.loader.getState(moduleName)) { // Module doesn't exist locally
+	if (!new Set(mw.loader.getModuleNames()).has(moduleName)) { // Module doesn't exist locally
 		mw.loader.getScript('https://ja.wikipedia.org/w/load.php?modules=' + moduleName) // Import the module
 			.then(loadModule)
 			.catch(console.error);
