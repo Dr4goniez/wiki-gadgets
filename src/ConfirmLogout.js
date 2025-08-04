@@ -2,68 +2,67 @@
 
 	ConfirmLogout
 
-	Shows a confirmation popup when a logged-in user attempts to log out.
+	Displays a confirmation popup when a logged-in user attempts to log out.
 
-	@version 1.1.1
+	This gadget:
+	- Supports all skins.
+	- Supports all languages supported by MediaWiki.
+	- Involves no DOM alterations or hardcoded logout logic (uses the built-in
+	  `skin.logout` hook).
+	- Can be loaded as a global script using:
+	```
+	mw.loader.load('https://ja.wikipedia.org/w/load.php?modules=ext.gadget.ConfirmLogout');
+	```
+
+	@version 1.1.2
 	@author [[User:Dragoniez]]
 
 \*****************************************************************************************/
 // @ts-check
 /* global mw, OO */
 //<nowiki>
-(() => {
-// ***************************************************************************************
+if ((mw.config.get('wgUserGroups') || []).includes('user')) {
 
-if (!(mw.config.get('wgUserGroups') || []).includes('user')) {
-	return;
-}
+	/** @type {string} */
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
+	const selectorLogoutLink = require('./selectorLogoutLink.js');
 
-mw.loader.using([
-	'mediawiki.storage',
-	'mediawiki.api',
-	'oojs-ui'
-]).then(() => {
-	return $.when(
-		getMessage(),
-		$.ready
-	);
-}).then((logoutMessage) => {
+	mw.loader.using([
+		'mediawiki.storage',
+		'mediawiki.api',
+		'oojs-ui'
+	]).then(() => {
+		return $.when(
+			getMessage(),
+			$.ready
+		);
+	}).then((logoutMessage) => {
 
-	/**
-	 * Selector for the logout button, defined in `resources/Resources.php`.
-	 * Only the Minerva skin overrides this in its own `Hooks.php`.
-	 *
-	 * @see https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/core/+/refs/heads/master/resources/Resources.php
-	 * @see https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/skins/MinervaNeue/+/refs/heads/master/includes/Hooks.php
-	 * @see https://codesearch.wmcloud.org/search/?q=%5CbselectorLogoutLink%5Cb
-	 */
-	const selectorLogoutLink = mw.config.get('skin') === 'minerva'
-		? 'a.menu__item--logout[data-mw="interface"]'
-		: '#pt-logout a[data-mw="interface"]';
+		/**
+		 * @type {JQuery<HTMLAnchorElement>}
+		 */
+		const $logout = $(selectorLogoutLink);
+		if (!$logout.length) {
+			return;
+		}
 
-	/**
-	 * @type {JQuery<HTMLAnchorElement>}
-	 */
-	const $logout = $(selectorLogoutLink);
-	if (!$logout.length) {
-		return;
-	}
+		// Remove MediaWiki's default click handler that fires the logout hook
+		$logout.off('click');
 
-	// Remove MediaWiki's default click handler that fires the logout hook
-	$logout.off('click');
+		$logout.on('click', function(event) {
+			event.preventDefault(); // Cancel default anchor navigation
 
-	$logout.on('click', function(event) {
-		event.preventDefault(); // Cancel default anchor navigation
-
-		OO.ui.confirm(logoutMessage).then((confirmed) => {
-			if (confirmed) {
-				// Re-fire the logout hook with the href manually
-				mw.hook('skin.logout').fire(this.href);
-			}
+			OO.ui.confirm(logoutMessage).then((confirmed) => {
+				if (confirmed) {
+					// Re-fire the logout hook with the href manually
+					mw.hook('skin.logout').fire(this.href);
+				}
+			});
 		});
+
 	});
 
-});
+}
 
 /**
  * @returns {JQueryPromise<string>}
@@ -114,7 +113,4 @@ function getMessage() {
 		return msg;
 	});
 }
-
-// ***************************************************************************************
-})();
 //</nowiki>
