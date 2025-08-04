@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.5
+ * @version 3.2.6
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -217,7 +217,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.5 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.6 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -787,6 +787,7 @@ class MarkBLocked {
 		this.api.abort();
 		this.readApi.abort();
 		this.metaApi.abort();
+		MarkBLocked.abortHook.fire();
 		return this;
 	}
 
@@ -1420,7 +1421,7 @@ class MarkBLocked {
 	 *
 	 * When additional markup functionalities are enabled, MarkBLocked may need to send a large number
 	 * of API requests. Sending too many at once can trigger a `net::ERR_INSUFFICIENT_RESOURCES` error.
-	 * This private method mitigates that by dividing requests into batches of 1000, processing each
+	 * This private method mitigates that by dividing requests into batches of 500, processing each
 	 * batch sequentially after the previous one has resolved.
 	 *
 	 * @param {BatchObject[]} batchArray An array of request batches to be processed.
@@ -1432,7 +1433,7 @@ class MarkBLocked {
 		// Unflatten the array of objects to an array of arrays of objects
 		const unflattened = batchArray.reduce(/** @param {BatchObject[][]} acc */ (acc, obj) => {
 			const len = acc.length - 1;
-			if (Array.isArray(acc[len]) && acc[len].length < 1000) {
+			if (Array.isArray(acc[len]) && acc[len].length < 500) {
 				acc[len].push(obj);
 			} else {
 				acc[len + 1] = [obj];
@@ -1466,9 +1467,31 @@ class MarkBLocked {
 		return (function batch(index) {
 			return $.when(...unflattened[index].map(req)).then((...args) => {
 				console.log('MarkBLocked batch count: ' + args.length);
+
 				if (!aborted && unflattened[++index]) {
-					return batch(index);
+					const deferred = $.Deferred();
+
+					// Throttle the next batch to avoid rate limiting (e.g., HTTP 429)
+					console.log('Next batch scheduled in 10 seconds...');
+					const batchTimeout = setTimeout(() => {
+						MarkBLocked.abortHook.remove(hookHandler);
+						deferred.resolve(batch(index));
+					}, 10000);
+
+					// If aborted before the timeout completes, cancel the delay and resolve early
+					const hookHandler = () => {
+						console.log('Batch aborted: request sequence cancelled');
+						clearTimeout(batchTimeout);
+						MarkBLocked.abortHook.remove(hookHandler);
+						deferred.resolve();
+					};
+					MarkBLocked.abortHook.add(hookHandler);
+
+					return deferred.promise();
 				}
+
+				// No more batches or processing was aborted; resolve to complete the chain
+				return $.Deferred().resolve().promise();
 			});
 		})(0);
 	}
@@ -1542,6 +1565,7 @@ MarkBLocked.i18n = {
 };
 
 MarkBLocked.defaultOptionKey = 'userjs-markblocked-config';
+MarkBLocked.abortHook = mw.hook('userjs.markblocked.aborted');
 
 /**
  * Creates a new Set containing only the elements that satisfy the provided predicate.
