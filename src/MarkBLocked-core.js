@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.4
+ * @version 3.2.5
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -217,7 +217,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.4 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.5 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -263,9 +263,11 @@ class MarkBLocked {
 		let data = mw.storage.getObject(key);
 		if (
 			data !== null && data !== false &&
-			Object.entries(data).every(([key, value]) =>
-				allowedKeys.has(key) && Array.isArray(value) && value.every(el => typeof el === 'string')
-			)
+			Object.keys(data).every((key) => {
+				/** @type {string[]} */
+				const value = /** @type {SpecialPageAliases} */ (data)[key];
+				return allowedKeys.has(key) && Array.isArray(value) && value.every(el => typeof el === 'string');
+			})
 		) {
 			return $.Deferred().resolve(data);
 		}
@@ -532,7 +534,9 @@ class MarkBLocked {
 			// Process special page aliases
 			const /** @type {string[]} */ spAliases = [];
 			const /** @type {string[]} */ spAliasesNoTarget = [];
-			Object.entries(aliasMap).forEach(([realname, aliases]) => {
+			for (const realname in aliasMap) {
+				/** @type {string[]} */
+				const aliases = aliasMap[realname];
 				if (Array.isArray(aliases)) {
 					spAliases.push(realname, ...aliases);
 					if (realname !== 'IPContributions' && realname !== 'GlobalContributions') {
@@ -540,7 +544,7 @@ class MarkBLocked {
 						spAliasesNoTarget.push(realname, ...aliases);
 					}
 				}
-			});
+			}
 
 			const rSpecial = `(?:${nsAliases.special.join('|')}):(?:${spAliases.join('|')})`;
 			const rSpecialNoTarget = `(?:${nsAliases.special.join('|')}):(?:${spAliasesNoTarget.join('|')})`;
