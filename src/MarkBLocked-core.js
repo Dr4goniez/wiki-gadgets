@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.8
+ * @version 3.2.9
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -195,7 +195,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.8 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.9 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -911,7 +911,7 @@ class MarkBLocked {
 		}
 
 		// Collect user links
-		const { userLinks, users, ips } = this.collectLinks($content, isRCW);
+		const { userLinks, users, ips, temps } = this.collectLinks($content, isRCW);
 		if (!userLinks.size) {
 			console.log('MarkBLocked', {
 				$content,
@@ -919,7 +919,7 @@ class MarkBLocked {
 			});
 			return $.Deferred().resolve();
 		}
-		const allUsers = [...users].concat([...ips]);
+		const allUsers = [...users].concat([...ips], [...temps]);
 
 		// Start markup
 		return $.when(
@@ -937,7 +937,8 @@ class MarkBLocked {
 					$content,
 					links: Array.from(userLinks.values()).reduce((sum, arr) => sum + arr.length, 0),
 					user_registered: users.size,
-					user_anonymous: ips.size
+					user_ip: ips.size,
+					user_temporary: temps.size
 				});
 			}
 
@@ -1136,7 +1137,7 @@ class MarkBLocked {
 
 	/**
 	 * @typedef {Map<string, HTMLAnchorElement[]>} UserLinks
-	 * @typedef {{ userLinks: UserLinks; users: Set<string>; ips: Set<string>; }} LinkObject
+	 * @typedef {{ userLinks: UserLinks; users: Set<string>; ips: Set<string>; temps: Set<string>; }} LinkObject
 	 */
 	/**
 	 * Collects user links to mark up.
@@ -1165,9 +1166,18 @@ class MarkBLocked {
 		const ret = {
 			userLinks: new Map(),
 			users: new Set(),
-			ips: new Set()
+			ips: new Set(),
+			temps: new Set(),
 		};
 		const prIgnore = /(^|\s)(twg?-rollback-\S+|autocomment|cd-commentLink-\S+)($|\s)/;
+		/**
+		 * @param {string} username
+		 * @returns {boolean=}
+		 */
+		const isTempUser = (username) => {
+			// Defensive: Ensure MediaWiki version support
+			return mw.util.isTemporaryUser && mw.util.isTemporaryUser(username);
+		};
 
 		$anchors.each((_, a) => {
 
@@ -1216,10 +1226,12 @@ class MarkBLocked {
 				return;
 			}
 			username = username.replace(/_/g, ' ').replace(/@global$/, '').trim();
-			let /** @type {"users" | "ips"} */ key;
+			let /** @type {keyof Omit<LinkObject, 'userLinks'>} */ key;
 			if (mw.util.isIPAddress(username, true)) {
 				username = mw.util.sanitizeIP(username) || username; // The right operand is never reached
 				key = 'ips';
+			} else if (isTempUser(username)) {
+				key = 'temps';
 			} else if (/[/@#<>[\]|{}:]|^(\d{1,3}\.){3}\d{1,3}$/.test(username)) {
 				// Ensure the username doesn't contain characters that can't be used for usernames (do this here or block status query might fail)
 				console.log('MarkBLocked: Unprocessable username: ' + username);
