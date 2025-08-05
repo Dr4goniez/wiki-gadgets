@@ -15,6 +15,7 @@
  *
  * For constructor configuration options, refer to `ConstructorConfig` in:
  *
+ * @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/MarkBLocked.d.ts
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js
  */
 const MarkBLocked = require('./MarkBLocked-core.js');

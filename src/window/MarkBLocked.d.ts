@@ -1,4 +1,55 @@
-interface Lang {
+/**
+ * Options that control which types of user links are marked up based on block or lock status.
+ */
+export interface UserOptions {
+	/**
+	 * Whether to generate a portlet link to the config page.
+	 */
+	genportlet: boolean;
+	/**
+	 * Whether to mark up IPs that fall within locally blocked IP ranges.
+	 */
+	rangeblocks: boolean;
+	/**
+	 * Whether to mark up users who are globally locked.
+	 */
+	g_locks: boolean;
+	/**
+	 * Whether to mark up users and IPs that are globally blocked.
+	 */
+	g_blocks: boolean;
+	/**
+	 * Whether to mark up IPs that fall within globally blocked IP ranges.
+	 */
+	g_rangeblocks: boolean;
+}
+
+export interface ConstructorConfig {
+	/**
+	 * Optional default values for user options. These will be merged into the built-in defaults.
+	 */
+	defaultOptions?: Partial<UserOptions>;
+	/**
+	 * The key used for `mw.user.options`, defaulting to `userjs-markblocked-config`.
+	 */
+	optionKey?: string;
+	/**
+	 * If `true`, saves the options in global preferences.
+	 */
+	globalize?: boolean;
+	/**
+	 * A language object to merge into `MarkBLocked.i18n`. This allows customizing the default interface
+	 * messages or adding new interface languages. For the latter to work, the {@link lang} property
+	 * must also be set.
+	 */
+	i18n?: Record<string, Lang>;
+	/**
+	 * The language code to use for interface messages. Defaults to `en`.
+	 */
+	lang?: string;
+}
+
+export interface Lang {
 	'config-notify-notloaded': string;
 	'config-label-heading': string;
 	'config-label-fsgeneral': string;
@@ -33,15 +84,46 @@ interface Lang {
 	'title-locked': string;
 }
 
-interface Window {
-	MarkBLockedLoaded?: boolean;
+declare global {
+	interface Window {
+		MarkBLockedLoaded?: boolean;
+	}
 }
 
-interface ApiResponse {
+export interface SpecialPageAliases {
+	Contributions?: string[];
+	IPContributions?: string[];
+	GlobalContributions?: string[];
+	CentralAuth?: string[];
+}
+
+/**
+ * Regular expressions to collect user-related links.
+ */
+export interface LinkRegex {
+	/**
+	 * `/wiki/PAGENAME`: $1: PAGENAME
+	 */
+	article: RegExp;
+	/**
+	 * `/w/index.php?title=PAGENAME`: $1: PAGENAME
+	 */
+	script: RegExp;
+	/**
+	 * `^Special:(?:Contribs|CA)($|/)`
+	 */
+	special: RegExp;
+	/**
+	 * `^(?:Special:.../|User:)(USERNAME|CIDR)`: $1: USERNAME or CIDR
+	 */
+	user: RegExp;
+}
+
+export interface ApiResponse {
 	query?: ApiResponseQuery;
 }
 
-interface ApiResponseQuery {
+export interface ApiResponseQuery {
 	specialpagealiases?: ApiResponseQuerySpecialpagealiases[];
 	blocks?: ApiResponseQueryListBlocks[];
 	globalallusers?: ApiResponseQueryListGlobalallusers[];
@@ -49,12 +131,12 @@ interface ApiResponseQuery {
 	logevents?: ApiResponseQueryListLogevents[];
 }
 
-interface ApiResponseQuerySpecialpagealiases {
+export interface ApiResponseQuerySpecialpagealiases {
 	realname: string;
 	aliases: string[];
 }
 
-interface ApiResponseQueryListBlocks {
+export interface ApiResponseQueryListBlocks {
 	user: string;
 	by: string;
 	expiry: string;
@@ -62,18 +144,18 @@ interface ApiResponseQueryListBlocks {
 	partial: boolean;
 }
 
-interface ApiResponseQueryListGlobalallusers {
+export interface ApiResponseQueryListGlobalallusers {
 	locked?: string;
 }
 
-interface ApiResponseQueryListGlobalblocks {
+export interface ApiResponseQueryListGlobalblocks {
 	target: string;
 	by: string;
 	expiry: string;
 	reason: string;
 }
 
-interface ApiResponseQueryListLogevents {
+export interface ApiResponseQueryListLogevents {
 	/**
 	 * Note: This is basically of type `Record<string, any>`. Keys and values for this property are radically different
 	 * depending on what kind of logevent we fetch.

@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.6
+ * @version 3.2.7
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -10,46 +10,22 @@
  * @see https://ja.wikipedia.org/wiki/Help:MarkBLocked – About the jawiki gadget
  *
  * Global user script that uses this module:
- * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal.js
+ * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal.js – Loader script
  * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal – English help page
  * @see https://meta.wikimedia.org/wiki/User:Dragoniez/MarkBLockedGlobal/ja – Japanese help page
  *
- * To use this gadget on another (WMF) wiki, prepare a loader module for it.
- * Refer to the example loader module linked above, and see `ConstructorConfig` below.
+ * To use this gadget on another (WMF) wiki, prepare a loader script for it.
+ * Refer to the example loaders linked above, and see `ConstructorConfig` in:
  *
- * Helper type definitions are available at:
  * @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/MarkBLocked.d.ts
  */
 // @ts-check
-/// <reference path="./window/MarkBLocked.d.ts" />
 /* global mw, OO */
 //<nowiki>
 // const MarkBLocked = (() => {
 module.exports = (() => {
 
 class MarkBLocked {
-
-	/**
-	 * @typedef {object} UserOptions
-	 * Options that control which types of user links are marked up based on block or lock status.
-	 *
-	 * @property {boolean} genportlet Whether to generate a portlet link to the config page.
-	 * @property {boolean} rangeblocks Whether to mark up IPs that fall within locally blocked IP ranges.
-	 * @property {boolean} g_locks Whether to mark up users who are globally locked.
-	 * @property {boolean} g_blocks Whether to mark up users and IPs that are globally blocked.
-	 * @property {boolean} g_rangeblocks Whether to mark up IPs that fall within globally blocked IP ranges.
-	 */
-	/**
-	 * @typedef {object} ConstructorConfig
-	 * @property {Partial<UserOptions>} [defaultOptions] Optional default values for user options. These will be merged into
-	 * the built-in defaults (i.e. supports partial overrides).
-	 * @property {string} [optionKey] The key used for `mw.user.options`, defaulting to `userjs-markblocked-config`.
-	 * @property {boolean} [globalize] If `true`, saves the options in global preferences.
-	 * @property {Record<string, Lang>} [i18n] A language object to merge into {@link MarkBLocked.i18n}. This allows
-	 * customizing the default interface messages or adding new interface languages.
-	 * For the latter to work, the {@link ConstructorConfig.lang | lang} property must also be set.
-	 * @property {string} [lang] The language code to use for interface messages. Defaults to `en`.
-	 */
 
 	/**
 	 * Initializes `MarkBLocked`.
@@ -217,7 +193,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.6 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.7 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -236,13 +212,6 @@ class MarkBLocked {
 		return ret;
 	}
 
-	/**
-	 * @typedef {object} SpecialPageAliases
-	 * @property {string[]} [Contributions]
-	 * @property {string[]} [IPContributions]
-	 * @property {string[]} [GlobalContributions]
-	 * @property {string[]} [CentralAuth]
-	 */
 	/**
 	 * Retrieves special page aliases related to link markups.
 	 *
@@ -500,15 +469,6 @@ class MarkBLocked {
 			return MarkBLocked.i18n[langCode];
 		})();
 
-		/**
-		 * Regular expressions to collect user-related links.
-		 *
-		 * @typedef {object} LinkRegex
-		 * @property {RegExp} article `/wiki/PAGENAME`: $1: PAGENAME
-		 * @property {RegExp} script `/w/index.php?title=PAGENAME`: $1: PAGENAME
-		 * @property {RegExp} special `^Special:(?:Contribs|CA)($|/)`
-		 * @property {RegExp} user `^(?:Special:.../|User:)(USERNAME|CIDR)`: $1: USERNAME or CIDR
-		 */
 		/**
 		 * @type {LinkRegex}
 		 */
@@ -1588,6 +1548,16 @@ function filterSet(set, predicate) {
 	return result;
 }
 
+/**
+ * @typedef {import('./window/MarkBLocked.d.ts').ConstructorConfig} ConstructorConfig
+ * @typedef {import('./window/MarkBLocked.d.ts').UserOptions} UserOptions
+ * @typedef {import('./window/MarkBLocked.d.ts').Lang} Lang
+ * @typedef {import('./window/MarkBLocked.d.ts').SpecialPageAliases} SpecialPageAliases
+ * @typedef {import('./window/MarkBLocked.d.ts').LinkRegex} LinkRegex
+ * @typedef {import('./window/MarkBLocked.d.ts').ApiResponse} ApiResponse
+ * @typedef {import('./window/MarkBLocked.d.ts').ApiResponseQueryListBlocks} ApiResponseQueryListBlocks
+ * @typedef {import('./window/MarkBLocked.d.ts').ApiResponseQueryListGlobalblocks} ApiResponseQueryListGlobalblocks
+ */
 return MarkBLocked;
 })();
 //</nowiki>
