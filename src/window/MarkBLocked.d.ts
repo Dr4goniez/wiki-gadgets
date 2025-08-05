@@ -90,6 +90,20 @@ declare global {
 	}
 }
 
+export interface Initializer {
+	specialpagealiases: SpecialPageAliases;
+	userrights: Set<string>;
+}
+
+export interface CachedInitializer {
+	specialpagealiases: SpecialPageAliases;
+	userrights: string[];
+}
+
+export type CacheValidator = {
+	[K in keyof CachedInitializer]: (value: CachedInitializer[K] | null | false) => value is CachedInitializer[K];
+};
+
 export interface SpecialPageAliases {
 	Contributions?: string[];
 	IPContributions?: string[];
@@ -124,11 +138,18 @@ export interface ApiResponse {
 }
 
 export interface ApiResponseQuery {
+	userinfo?: ApiResponseQueryUserinfo;
 	specialpagealiases?: ApiResponseQuerySpecialpagealiases[];
 	blocks?: ApiResponseQueryListBlocks[];
 	globalallusers?: ApiResponseQueryListGlobalallusers[];
 	globalblocks?: ApiResponseQueryListGlobalblocks[];
 	logevents?: ApiResponseQueryListLogevents[];
+}
+
+export interface ApiResponseQueryUserinfo {
+	id: number;
+	name: string;
+	rights?: string[];
 }
 
 export interface ApiResponseQuerySpecialpagealiases {

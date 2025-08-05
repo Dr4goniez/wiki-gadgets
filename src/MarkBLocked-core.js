@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.7
+ * @version 3.2.8
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -70,6 +70,9 @@ class MarkBLocked {
 			);
 		}
 		return mw.loader.using(modules).then(() => {
+
+			const api = new mw.Api(this.getApiOptions());
+
 			// For backwards compatibility, clear old config if any
 			/** @type {JQueryPromise<void>} */
 			const backwards = (() => {
@@ -85,7 +88,7 @@ class MarkBLocked {
 						[oldOptionKey]: null,
 						[this.defaultOptionKey]: oldCfgStr
 					};
-					return new mw.Api(this.getApiOptions()).saveOptions(options).then(() => {
+					return api.saveOptions(options).then(() => {
 						mw.user.options.set(options);
 					});
 				} else {
@@ -95,14 +98,13 @@ class MarkBLocked {
 
 			// Entry point
 			return $.when(
-				this.getSpecialPageAliases(),
-				this.getUserRights(),
+				this.getInitializer(api),
 				backwards,
 				$.ready
 			);
-		}).then((aliases, rights) => {
+		}).then((initializer) => {
 
-			const mbl = new MarkBLocked(cfg, aliases, rights);
+			const mbl = new MarkBLocked(cfg, initializer);
 			if (onConfig) {
 				mbl.createConfigInterface();
 			} else {
@@ -158,7 +160,7 @@ class MarkBLocked {
 
 				mw.hook('wikipage.content').add(hookHandler);
 
-				mbl.handleIpReveals(rights, isRCW);
+				mbl.handleIpReveals(initializer.userrights, isRCW);
 
 				// Add a toggle button on RCW
 				if (isRCW) {
@@ -193,7 +195,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.7 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.8 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -213,80 +215,137 @@ class MarkBLocked {
 	}
 
 	/**
-	 * Retrieves special page aliases related to link markups.
+	 * Loads initial user and site metadata from cache or via MediaWiki API.
 	 *
-	 * @returns {JQueryPromise<SpecialPageAliases>}
+	 * Attempts to retrieve cached initializer values from `mw.storage`.
+	 * If any are missing or invalid, it makes an API request to fetch the data.
+	 *
+	 * @param {mw.Api} api Instance of `mw.Api` for making the request.
+	 * @returns {JQueryPromise<Initializer>} A promise that resolves to the initializer object.
 	 * @private
 	 */
-	static getSpecialPageAliases() {
-		const key = 'mw-MarkBLocked-specialpagealiases';
-		const allowedKeys = new Set([
+	static getInitializer(api) {
+		const storageKeyPrefix = 'mw-MarkBLocked-';
+
+		/** @type {Initializer} */
+		const initializer = {
+			specialpagealiases: Object.create(null),
+			userrights: new Set()
+		};
+
+		/**
+		 * API request parameters. Will be populated based on what's missing from cache.
+		 * @type {{
+		 *   action: 'query';
+		 *   formatversion: '2';
+		 *   meta?: ('siteinfo' | 'userinfo')[];
+		 *   uiprop?: 'rights';
+		 *   siprop?: 'specialpagealiases';
+		 * }}
+		 */
+		const params = {
+			action: 'query',
+			formatversion: '2'
+		};
+
+		/** @type {Set<keyof SpecialPageAliases>} */
+		const canonicalSpecialPageNames = new Set([
 			'Contributions',
 			'IPContributions',
 			'GlobalContributions',
 			'CentralAuth'
 		]);
-		/**
-		 * @type {SpecialPageAliases | null | false}
-		 */
-		let data = mw.storage.getObject(key);
-		if (
-			data !== null && data !== false &&
-			Object.keys(data).every((key) => {
-				/** @type {string[]} */
-				const value = /** @type {SpecialPageAliases} */ (data)[key];
-				return allowedKeys.has(key) && Array.isArray(value) && value.every(el => typeof el === 'string');
-			})
-		) {
-			return $.Deferred().resolve(data);
-		}
-		data = {};
 
-		return new mw.Api(this.getApiOptions()).get({
-			meta: 'siteinfo',
-			siprop: 'specialpagealiases'
-		}).then(/** @param {ApiResponse} res */ (res) => {
-			const specialpagealiases = res && res.query && res.query.specialpagealiases;
+		/**
+		 * Type guard to check if a value is a string array.
+		 * @param {unknown} value
+		 * @returns {value is string[]}
+		 */
+		const isStringArray = (value) => Array.isArray(value) && value.every(el => typeof el === 'string');
+
+		/**
+		 * Cache validators for each initializer key. These check whether the value loaded from storage is valid.
+		 * @type {CacheValidator}
+		 */
+		const cacheValidator = {
+			// @ts-expect-error - Return type inferred as boolean instead of type guard
+			specialpagealiases: (cache) => {
+				if (!cache || typeof cache !== 'object') return false;
+				for (const key in cache) {
+					if (!canonicalSpecialPageNames.has(/** @type {keyof SpecialPageAliases} */ (key))) return false;
+					if (!isStringArray(cache[key])) return false;
+				}
+				return true;
+			},
+			userrights: isStringArray
+		};
+
+		// Attempt to load values from localStorage
+		for (const key of /** @type {(keyof Initializer)[]} */ (Object.keys(initializer))) {
+			const cache = mw.storage.getObject(storageKeyPrefix + key);
+
+			if (key === 'specialpagealiases' && cacheValidator[key](cache)) {
+				initializer[key] = cache;
+				continue;
+			}
+			if (key === 'userrights' && cacheValidator[key](cache)) {
+				initializer[key] = new Set(cache);
+				continue;
+			}
+
+			// Populate API params for this key
+			if (!Array.isArray(params.meta)) {
+				params.meta = [];
+			}
+			switch (key) {
+				case 'specialpagealiases':
+					params.meta.push('siteinfo');
+					params.siprop = 'specialpagealiases';
+					break;
+				case 'userrights':
+					params.meta.push('userinfo');
+					params.uiprop = 'rights';
+			}
+		}
+
+		// API params not populated, meaning all initializer values have been fetched from the storage
+		if (Object.keys(params).length <= 2) {
+			return $.Deferred().resolve(initializer);
+		}
+
+		return api.get(params).then(/** @param {ApiResponse} res */ ({ query }) => {
+			if (!query) {
+				return initializer;
+			}
+			let storageKey;
+			const expiry = {
+				_3days: 3 * 24 * 60 * 60,
+				_3hours: 3 * 60 * 60
+			};
+
+			const specialpagealiases = query.specialpagealiases;
 			if (specialpagealiases) {
+				storageKey = `${storageKeyPrefix}specialpagealiases`;
+				const data = initializer.specialpagealiases;
 				specialpagealiases.forEach(({ realname, aliases }) => {
-					if (allowedKeys.has(realname)) {
+					if (canonicalSpecialPageNames.has(/** @type {keyof SpecialPageAliases} */ (realname))) {
 						data[realname] = aliases.filter(el => el !== realname);
 					}
 				});
-				mw.storage.set(key, JSON.stringify(data), 24 * 60 * 60); // 1 day expiry
+				mw.storage.set(storageKey, JSON.stringify(data), expiry._3days);
 			}
-			return data;
+
+			const userrights = query.userinfo && query.userinfo.rights;
+			if (userrights) {
+				storageKey = `${storageKeyPrefix}userrights`;
+				initializer.userrights = new Set(userrights);
+				mw.storage.set(storageKey, JSON.stringify(userrights), expiry._3hours);
+			}
+
+			return initializer;
 		}).catch((_, err) => {
-			console.warn('Failed to special page aliases:', err);
-			return data;
-		});
-	}
-
-	/**
-	 * Retrieves and caches user rights.
-	 *
-	 * @returns {JQueryPromise<Set<string>>}
-	 * @private
-	 */
-	static getUserRights() {
-		const key = 'mw-MarkBLocked-userrights';
-		/**
-		 * @type {string[] | null | false}
-		 */
-		const data = mw.storage.getObject(key);
-		if (
-			data !== null && data !== false &&
-			Array.isArray(data) && data.every(el => typeof el === 'string')
-		) {
-			return $.Deferred().resolve(new Set(data));
-		}
-
-		return mw.user.getRights().then((rights) => {
-			mw.storage.set(key, JSON.stringify(rights), 60 * 60); // 1 hour expiry
-			return new Set(rights);
-		}).catch((...err) => {
-			console.warn('Failed to get user rights:', err);
-			return new Set();
+			console.warn('Failed to get user/site information:', err);
+			return initializer;
 		});
 	}
 
@@ -348,14 +407,22 @@ class MarkBLocked {
 	 * Private constructor. Called only by {@link MarkBLocked.init}.
 	 *
 	 * @param {ConstructorConfig} cfg
-	 * @param {SpecialPageAliases} aliasMap
-	 * @param {Set<string>} rights
+	 * @param {Initializer} initializer
 	 * @private
 	 * @requires mediawiki.api
 	 * @requires mediawiki.ForeignApi
 	 * @requires mediawiki.user
 	 */
-	constructor(cfg, aliasMap, rights) {
+	constructor(cfg, initializer) {
+		const {
+			specialpagealiases: aliasMap,
+			userrights
+		} = initializer;
+		if ($.isEmptyObject(aliasMap)) {
+			// Defensive: This object should never be empty
+			console.warn('Detected an empty object for "initializer.specialpagealiases".');
+			Object.assign(aliasMap, { Contributions: ['Contribs'] });
+		}
 
 		/**
 		 * @type {mw.Api}
@@ -521,7 +588,7 @@ class MarkBLocked {
 		 * The maximum number of batch parameter values for the API.
 		 * @type {500 | 50}
 		 */
-		this.apilimit = rights.has('apihighlimits') ? 500 : 50;
+		this.apilimit = userrights.has('apihighlimits') ? 500 : 50;
 
 	}
 
@@ -1552,6 +1619,8 @@ function filterSet(set, predicate) {
  * @typedef {import('./window/MarkBLocked.d.ts').ConstructorConfig} ConstructorConfig
  * @typedef {import('./window/MarkBLocked.d.ts').UserOptions} UserOptions
  * @typedef {import('./window/MarkBLocked.d.ts').Lang} Lang
+ * @typedef {import('./window/MarkBLocked.d.ts').Initializer} Initializer
+ * @typedef {import('./window/MarkBLocked.d.ts').CacheValidator} CacheValidator
  * @typedef {import('./window/MarkBLocked.d.ts').SpecialPageAliases} SpecialPageAliases
  * @typedef {import('./window/MarkBLocked.d.ts').LinkRegex} LinkRegex
  * @typedef {import('./window/MarkBLocked.d.ts').ApiResponse} ApiResponse
