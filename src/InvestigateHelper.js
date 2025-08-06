@@ -14,25 +14,13 @@
 /** @type {mw.Api} */
 let api;
 
-/**
- * @type {IpWiki}
- */
-let ipWiki = Object.create(null);
+/** @type {IP} */
+let IP = Object.create(null);
 
 /**
  * Initializes the script.
  */
 function init() {
-
-	let mblRunning = false;
-	const mblStartHook = mw.hook('userjs.markblocked-start');
-	const mblEndHook = mw.hook('userjs.markblocked-end');
-	mblStartHook.add(() => {
-		mblRunning = true;
-	});
-	mblEndHook.add(() => {
-		mblRunning = false;
-	});
 
 	// Run the script only on Special:Investigate
 	if (mw.config.get('wgCanonicalSpecialPageName') !== 'Investigate') {
@@ -99,6 +87,7 @@ function init() {
 
 				'blocklink',
 				'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets',
+				'api-feed-error-title',
 
 				'logentry-block-block',
 				'logentry-block-block-multi',
@@ -136,7 +125,6 @@ function init() {
 		}).then(() => {
 
 			const $content = $('.mw-body-content');
-			let $newContent = $([]);
 			createStyleTag();
 			const { users, ips } = names;
 			const /** @type {UserList} */ list = {};
@@ -156,7 +144,6 @@ function init() {
 					});
 					list.user.push(item);
 				}
-				$newContent = $newContent.add(userField.$element);
 			}
 
 			// Create a list of IP addresses including common IP ranges
@@ -173,12 +160,10 @@ function init() {
 				if (v4s.length) {
 					const ipField = collapsibleFieldsetLayout($content, 'IPv4');
 					list.ipv4 = new IPFieldContent(ipField, v4s);
-					$newContent = $newContent.add(ipField.$element);
 				}
 				if (v6s.length) {
 					const ipField = collapsibleFieldsetLayout($content, 'IPv6');
 					list.ipv6 = new IPFieldContent(ipField, v6s);
-					$newContent = $newContent.add(ipField.$element);
 				}
 			}
 
@@ -187,16 +172,7 @@ function init() {
 			const blockField = collapsibleFieldsetLayout($content, Messages.get('block'));
 			new BlockField(blockField, list);
 
-			const contentHook = mw.hook('wikipage.content');
-			if (!mblRunning) {
-				contentHook.fire($newContent);
-			} else {
-				const hookHandler = function hookHandler() {
-					contentHook.fire($newContent);
-					mblEndHook.remove(hookHandler);
-				};
-				mblEndHook.add(hookHandler);
-			}
+			mw.hook('wikipage.content').fire($content);
 
 		}).catch(console.error);
 	});
@@ -211,7 +187,7 @@ function loadIpWiki() {
 	const moduleName = 'ext.gadget.ip-wiki';
 	const loadModule = () => {
 		return mw.loader.using(moduleName).then((req) => {
-			ipWiki = req(moduleName);
+			IP = req(moduleName).IP;
 		});
 	};
 	if (!mw.loader.getState(moduleName)) { // Module doesn't exist locally
@@ -232,7 +208,6 @@ function loadIpWiki() {
 function collectUsernames($table) {
 	const USER_TARGET = 'td.ext-checkuser-compare-table-cell-user-target';
 	const IP_TARGET = 'td.ext-checkuser-compare-table-cell-ip-target';
-	const { IP } = ipWiki;
 
 	const /** @type {Map<string, InstanceType<IP>>} */ rawIpMap = new Map();
 
@@ -564,42 +539,23 @@ class Messages {
 	 */
 	static parseGenders(text) {
 		// Match {{ GENDER:username | male | female | neutral }} allowing whitespace and optional parameters
-		const genderRegex = /\{\{\s*GENDER:\s*([^}]*)\}\}/g;
+		return text.replace(/\{\{\s*GENDER:\s*([^}]*)\}\}/g, (_, inner) => {
+			const [usernameRaw, male, female, neutral] = /** @type {[string, string?, string?, string?]} */ (
+				inner.split('|')
+			);
 
-		let m;
-		while ((m = genderRegex.exec(text))) {
-			// Destructure up to 4 pipe-separated values: username, male, female, neutral
-			const [usernameRaw, male, female, neutral] = /** @type {[string, string?, string?, string?]} */ (m[1].split('|'));
+			if (male === undefined) return ''; // No fallback, just username given
+			if (female === undefined || neutral === undefined) return male.trim(); // Only male defined
 
-			// If only one parameter exists (i.e. username), replace with an empty string
-			if (male === undefined) {
-				text = text.replace(m[0], '');
-				continue;
-			}
-
-			// If only male is defined (no female/neutral), use male form
-			if (female === undefined || neutral === undefined) {
-				text = text.replace(m[0], male.trim());
-				continue;
-			}
-
-			// Normalize the username by trimming whitespace and underscores
 			const username = usernameRaw.replace(/^[\s_]+|[\s_]+$/g, '');
-
-			// Lookup gender, fallback to 'unknown' if not found
 			const gender = Messages.userGenderMap.get(username) || 'unknown';
 
-			// Replace with appropriate form
-			text = text.replace(m[0], () => {
-				switch (gender) {
-					case 'male': return male.trim();
-					case 'female': return female.trim();
-					default: return neutral.trim();
-				}
-			});
-		}
-
-		return text;
+			switch (gender) {
+				case 'male': return male.trim();
+				case 'female': return female.trim();
+				default: return neutral.trim();
+			}
+		});
 	}
 
 	/**
@@ -863,16 +819,30 @@ function collapsibleFieldsetLayout($target, label) {
 
 }
 
+/**
+ * Class that generates a username label accompanied by a checkbox and toollinks.
+ */
 class UserListItem {
 
 	/**
 	 * Creates a new `UserListItem` instance.
 	 *
-	 * @param {OO.ui.FieldsetLayout} fieldset
-	 * @param {string} username
-	 * @param {UserType} type
+	 * @param {OO.ui.FieldsetLayout} fieldset The FieldsetLayout widget to which the list item will be appended.
+	 * @param {string} username The username label. IP addresses must be in abbreviated (normalized) format.
+	 * @param {UserType} type The type of user.
 	 */
 	constructor(fieldset, username, type) {
+		// Ensure IP addresses are in normalized form
+		if (type !== 'user' && (
+			// IPv4: any octet with leading zeros (e.g., 192.168.001.001)
+			/\b0\d+\b/.test(username) ||
+			// IPv6: any hextet with leading zeros (e.g., 00ff)
+			/\b0[0-9a-fA-F]{2,}\b/.test(username) ||
+			// IPv6: uncompressed zero run (e.g., :0:0:0:) without "::"
+			/(^|:)0(:0){2,}(:|$)(?!:)/.test(username) && !username.includes('::')
+		)) {
+			throw new Error(`Non-user IP address must be in abbreviated form: ${username}`);
+		}
 		/**
 		 * @type {string}
 		 * @readonly
@@ -1268,7 +1238,6 @@ class IPFieldContent {
 	constructor(ipField, info) {
 
 		const isV6 = info[0].ip.isIPv6(true);
-		const { IP } = ipWiki;
 
 		// Level 1: Individual IPs, each with a 1-to-1 mapping
 		const /** @type {IpInfoLevel[]} */ firstLevel = [];
@@ -1285,7 +1254,7 @@ class IPFieldContent {
 
 			// For IPv6, create a /64 CIDR that covers this IP
 			if (!isV6) continue;
-			const cidr = IP.newFromRange(ip.sanitize(), 64);
+			const cidr = IP.newFromRange(ip, 64);
 			if (!cidr) { // This is basically never `null`
 				console.warn(`${ip.abbreviate()} could not be converted to a /64 CIDR.`);
 				continue;
@@ -1448,6 +1417,11 @@ class IPFieldContent {
 					IPFieldContent.getActionCountText(actions),
 					IPFieldContent.getAllActionCountText(all)
 				);
+
+				if (ip.isCIDR()) {
+					const { first, last } = ip.getRange();
+					item.addSublistItem($('<li>').html(`<i>${first} - ${last}</i>`));
+				}
 
 				if (users.size) {
 					for (const user of users) {
@@ -1689,7 +1663,7 @@ class BlockField {
 		/**
 		 * Maps from usernames to {@link UserListItem} instances.
 		 *
-		 * @type {Map<string, UserListItem>}
+		 * @type {Map<string, UserListItem[]>}
 		 * @readonly
 		 */
 		this.checkboxMap = new Map();
@@ -1700,7 +1674,10 @@ class BlockField {
 		if (list.ipv6) userList.push(...list.ipv6.items);
 		for (const item of userList) {
 			const username = item.getUsername();
-			this.checkboxMap.set(username, item);
+			if (!this.checkboxMap.has(username)) {
+				this.checkboxMap.set(username, []);
+			}
+			/** @type {UserListItem[]} */ (this.checkboxMap.get(username)).push(item);
 		}
 
 		// Block targets
@@ -1844,11 +1821,11 @@ class BlockField {
 			const removed = new Set(previousItems.filter((old) => !currentData.includes(old)));
 			const added = new Set(currentData.filter((curr) => !previousItems.includes(curr)));
 			if (removed.size || added.size) {
-				for (const [username, item] of this.checkboxMap) {
+				for (const [username, items] of this.checkboxMap) {
 					if (removed.has(username)) {
-						item.checkbox.setSelected(false);
+						items.forEach((item) => item.checkbox.setSelected(false));
 					} else if (added.has(username)) {
-						item.checkbox.setSelected(true);
+						items.forEach((item) => item.checkbox.setSelected(true));
 					}
 				}
 			}
@@ -1864,19 +1841,21 @@ class BlockField {
 	 * @private
 	 */
 	bindCheckboxesWithTags() {
-		for (const [username, item] of this.checkboxMap) {
-			this.target.addAllowedValue(item.getUsername());
-			item.checkbox.off('change').on('change', (selected) => {
-				if (this.inChangeEvent) {
-					return;
-				}
-				this.inChangeEvent = true;
-				if (selected) {
-					this.target.addTag(username, username);
-				} else {
-					this.target.removeTagByData(username);
-				}
-				this.inChangeEvent = false;
+		for (const [username, items] of this.checkboxMap) {
+			this.target.addAllowedValue(username);
+			items.forEach((item) => {
+				item.checkbox.off('change').on('change', (selected) => {
+					if (this.inChangeEvent) {
+						return;
+					}
+					this.inChangeEvent = true;
+					if (selected) {
+						this.target.addTag(username, username);
+					} else {
+						this.target.removeTagByData(username);
+					}
+					this.inChangeEvent = false;
+				});
 			});
 		}
 	}
@@ -1914,7 +1893,6 @@ class BlockField {
 	static filterTargets(selected) {
 		if (!selected.length) return selected;
 
-		const { IP } = ipWiki;
 		/**
 		 * Maps seen usernames to either an IP instance or `false` if not an IP.
 		 *
@@ -1965,13 +1943,14 @@ class BlockField {
 	 * @private
 	 */
 	async blockUsers() {
-		const targets = this.target.getSelectedUsernames();
-		if (!targets.length) {
+		const targets = this.getCategorizedUsernames();
+		if (!targets || !Object.values(targets).some(arr => arr.length)) {
 			// The user should never get caught in this block because we disable the block button
 			// when no user is selected; hence the message is not translated
 			return OO.ui.alert('No users are selected as the block targets.');
 		}
 
+		// Disable widgets to prevent interactions while processing the blocks
 		this.block.setDisabled(true);
 		this.$spinner.show();
 		const reenableForm = () => {
@@ -1980,32 +1959,170 @@ class BlockField {
 		};
 
 		// Ensure users and IPs aren't mixed
-		let hasUser = false, hasIp = false;
-		/**
-		 * Set of indexes for registered users in the `targets` array.
-		 *
-		 * @type {Set<number>}
-		 */
-		const userIndexes = new Set();
-		for (let i = 0; i < targets.length; i++) {
-			const target = targets[i];
-			const isIp = mw.util.isIPAddress(target, true);
-			if (!isIp) userIndexes.add(i);
-			hasUser = hasUser || !isIp;
-			hasIp = hasIp || !isIp;
-		}
-		const userMixConfirmed = await BlockField.confirmUserMix(hasUser && hasIp);
+		const userMixConfirmed = await BlockField.confirmUserMix(!!targets.user.length && !!targets.ip.length);
 		if (!userMixConfirmed) return reenableForm();
 
-		do { // Simply creates a break-able scope
+		/**
+		 * @param {string} code
+		 */
+		const handleRequestError = (code) => {
+			OO.ui.alert(mw.format(Messages.get('api-feed-error-title'), code));
+			reenableForm();
+		};
 
-			const blockIdMap = await BlockField.checkBlocks(targets, userIndexes); // TODO: Handle error
-			if (!blockIdMap.size) break;
+		// Check for existing blocks on the targets
+		const blockIdMap = await BlockField.checkBlocks(targets);
+		if (typeof blockIdMap === 'string') {
+			handleRequestError(blockIdMap);
+			return;
+		}
 
-		// eslint-disable-next-line no-constant-condition
-		} while (false);
+		/**
+		 * Map of usernames to `BlockLog` instances.
+		 * @type {Map<string, BlockLog>}
+		 */
+		const logMap = new Map();
 
+		// Fetch block logs if any of the targets are currently blocked
+		if (blockIdMap.size) {
+			const deferreds = [];
+			for (const [username, data] of blockIdMap) {
+				deferreds.push(BlockLog.new(username, data));
+			}
+			const results = await Promise.all(deferreds);
 
+			for (const log of results) {
+				if (typeof log === 'string') {
+					handleRequestError(log);
+					return;
+				}
+				logMap.set(log.username, log);
+			}
+		}
+
+		/**
+		 * @typedef {{ logs?: BlockLog; }} BlockLogObjectLogs
+		 * @typedef {CategorizedUsernameUser & BlockLogObjectLogs} BlockLogObjectUser
+		 * @typedef {CategorizedUsernameIp & BlockLogObjectLogs} BlockLogObjectIp
+		 * @typedef {import('ts-xor').XOR<BlockLogObjectUser, BlockLogObjectIp>} BlockLogObject
+		 */
+		/**
+		 * @type {BlockLogObject[]}
+		 */
+		const confirmations = [];
+
+		// Create an array of block target objects for confirmation, where the objects may include
+		// a `logs` field if the corresponding user is currenctly blocked
+		Object.values(targets).forEach((arr) => {
+			arr.forEach((obj) => {
+				const username = obj.username;
+				const logs = logMap.get(username);
+				const value = Object.assign(logs ? { logs } : {}, obj);
+				confirmations.push(value);
+			});
+		});
+
+		console.log(confirmations);
+	}
+
+	/**
+	 * Gets currently selected usernames, categorized by registered users, temporary users, and IP users.
+	 *
+	 * @returns
+	 */
+	getCategorizedUsernames() {
+		const targets = this.target.getSelectedUsernames();
+		if (!targets.length) return null;
+
+		/** @type {Set<string>} */
+		const users = new Set();
+		/** @type {Set<string>} */
+		const temps = new Set();
+		/** @type {Map<string, InstanceType<IP>>} */
+		const ips = new Map();
+		/**
+		 * @param {string} username
+		 * @returns {boolean=}
+		 */
+		const isTempUser = (username) => {
+			return mw.util.isTemporaryUser && mw.util.isTemporaryUser(username);
+		};
+
+		for (let i = 0; i < targets.length; i++) {
+			const target = targets[i];
+			if (isTempUser(target)) {
+				temps.add(target);
+				continue;
+			}
+			const ip = IP.newFromText(target);
+			if (!ip) {
+				users.add(target);
+			} else {
+				const ipStr = ip.sanitize();
+				if (!ips.has(ipStr)) {
+					ips.set(ipStr, ip);
+				}
+			}
+		}
+
+		const ret = {
+			/** @type {CategorizedUsernameUser[]} */
+			user: [],
+			/** @type {CategorizedUsernameUser[]} */
+			temp: [],
+			/** @type {CategorizedUsernameIp[]} */
+			ip: []
+		};
+		if (users.size) {
+			for (const user of users) {
+				ret.user.push({
+					username: user,
+					type: 'user'
+				});
+			}
+			ret.user.sort((a, b) => b.username.localeCompare(a.username));
+		}
+		if (temps.size) {
+			for (const temp of temps) {
+				ret.temp.push({
+					username: temp,
+					type: 'temp'
+				});
+			}
+			ret.temp.sort((a, b) => b.username.localeCompare(a.username));
+		}
+		if (ips.size) {
+			for (const [sanitized, ip] of ips) {
+				/** @type {Set<string>} */
+				const covers = new Set();
+				/** @type {Set<string>} */
+				const coveredBy = new Set();
+
+				if (ip.isCIDR()) {
+					for (const ip2 of ips.values()) {
+						if (ip !== ip2 && ip.contains(ip2, { excludeEquivalent: true })) {
+							covers.add(ip2.abbreviate());
+						}
+					}
+				}
+				for (const ip2 of ips.values()) {
+					if (ip !== ip2 && ip.isInRange(ip2, { excludeEquivalent: true })) {
+						coveredBy.add(ip2.abbreviate());
+					}
+				}
+
+				ret.ip.push({
+					username: sanitized,
+					type: 'ip',
+					abbreviated: ip.abbreviate(),
+					covers: Array.from(covers).sort(),
+					coveredBy: Array.from(coveredBy).sort()
+				});
+			}
+
+		}
+
+		return ret;
 	}
 
 	/**
@@ -2032,18 +2149,33 @@ class BlockField {
 	/**
 	 * Checks the block status of `targets` and returns a Map of usernames to block info.
 	 *
-	 * @param {string[]} targets The users to check the block status of.
-	 * @param {Set<number>} userIndexes Set of indexes for registered users in the `targets` array.
-	 * @returns {JQueryPromise<BlockIdMap>} A Promise that resolves with a Map of usernames to block data.
+	 * @param {NonNullable<ReturnType<BlockField['getCategorizedUsernames']>>} targets The users to check the block status of.
+	 * @returns {JQueryPromise<BlockIdMap | string>} A Promise that resolves with a Map of usernames to block data, or
+	 * an API error code as a string on failure.
 	 * @private
 	 */
-	static checkBlocks(targets, userIndexes) {
+	static checkBlocks(targets) {
+		/** @type {string[]} */
+		const usernames = [];
+		/** @type {Set<number>} */
+		const userIndexes = new Set();
+
+		Object.values(targets).forEach((arr) => {
+			arr.forEach(({ username, type }) => {
+				if (type === 'user') {
+					userIndexes.add(usernames.length);
+				}
+				usernames.push(username);
+			});
+		});
+
 		const /** @type {BlockIdMap} */ map = new Map();
 		/**
 		 * @param {number} index
+		 * @returns {JQueryPromise<?BlockIdMap>}
 		 */
 		return (function execute(index) {
-			const allUsers = targets.slice(index, index + 500);
+			const allUsers = usernames.slice(index, index + 500);
 			const params = {
 				action: 'query',
 				list: ['blocks'],
@@ -2053,7 +2185,7 @@ class BlockField {
 				formatversion: '2'
 			};
 
-			// Add `list=users` params to retrieve users' genders if `targets` involves registered users
+			// Add `list=users` params to retrieve users' genders if `usernames` involves registered users
 			const registeredUsers = allUsers.filter((user, i) => userIndexes.has(i + index) && !Messages.userGenderMap.has(user));
 			if (registeredUsers.length) {
 				params.list.push('users');
@@ -2102,6 +2234,9 @@ class BlockField {
 					return execute(index);
 				}
 				return map;
+			}).catch((code, err) => {
+				console.warn(err);
+				return /** @type {string} */ (code);
 			});
 		})(0);
 	}
@@ -2111,12 +2246,16 @@ class BlockField {
 class BlockLog {
 
 	/**
+	 * Retrieves the detailed log entries of active blocks for the given user,
+	 * based on block IDs and time frames in which the blocks were applied.
+	 *
 	 * @param {string} username
 	 * @param {BlockIdMapValue} data
-	 * @returns {JQueryPromise<BlockLogMap>}
+	 * @returns {JQueryPromise<BlockLogMap | string>} A Promise resolving to a Map of block IDs to log information,
+	 * or an API error code as a string on failure.
 	 * @private
 	 */
-	static getEntry(username, data) {
+	static getEntries(username, data) {
 		const { ids, latestTimestamp, earliestTimestamp } = data;
 		return api.get({
 			action: 'query',
@@ -2166,6 +2305,9 @@ class BlockLog {
 				});
 			}
 			return ret;
+		}).catch((code, err) => {
+			console.warn(err);
+			return /** @type {string} */ (code);
 		});
 	}
 
@@ -2224,7 +2366,7 @@ class BlockLog {
 	 * @returns {string}
 	 */
 	static create(data) {
-		const { subtype, timestamp, sitewide, count, performer, target, duration, flags, restrictions, parsedcomment} = data;
+		const { subtype, timestamp, sitewide, count, performer, target, duration, flags, restrictions, parsedcomment } = data;
 
 		/** @type {[string, string, string, string, string, string, string?]} */
 		const parameters = [
@@ -2353,6 +2495,44 @@ class BlockLog {
 			text = list.join(comma) + and + space + text;
 		}
 		return text;
+	}
+
+	/**
+	 * @param {string} username
+	 * @param {BlockIdMapValue} data
+	 * @returns {Promise<BlockLog | string>}
+	 */
+	static async new(username, data) {
+		const entry = await this.getEntries(username, data);
+		if (typeof entry === 'string') {
+			return entry;
+		}
+		if (!entry.size) {
+			console.warn(`Block log query for ${username} returned an empty response.`);
+			return 'empty';
+		}
+
+		/** @type {BlockLoglineMap} */
+		const loglineMap = new Map();
+		for (const [id, builder] of entry) {
+			loglineMap.set(id, this.create(builder));
+		}
+		return new this(username, loglineMap);
+	}
+
+	/**
+	 * @param {string} username
+	 * @param {BlockLoglineMap} loglineMap
+	 */
+	constructor(username, loglineMap) {
+		/**
+		 * @type {string}
+		 */
+		this.username = username;
+		/**
+		 * @type {BlockLoglineMap}
+		 */
+		this.loglineMap = loglineMap;
 	}
 
 }

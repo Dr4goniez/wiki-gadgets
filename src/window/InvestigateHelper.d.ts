@@ -1,5 +1,4 @@
-type IpWiki = import('ip-wiki');
-type IP = IpWiki['IP'];
+type IP = typeof import('ip-wiki').IP;
 
 interface UserInfo {
 	/**
@@ -61,6 +60,7 @@ type MessageKeys =
 
 	| 'blocklink'
 	| 'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets'
+	| 'api-feed-error-title'
 
 	| 'logentry-block-block'
 	| 'logentry-block-block-multi'
@@ -196,10 +196,28 @@ interface ApiResponseQueryListLogeventsParamsRestrictionsPages {
 	page_title: string;
 }
 
+interface CategorizedUsernameUser {
+	username: string;
+	type: 'user' | 'temp';
+}
+
+interface CategorizedUsernameIp {
+	username: string;
+	type: 'ip';
+	abbreviated: string;
+	covers: string[];
+	coveredBy: string[];
+}
+
+type CategorizedUsername = import('ts-xor').XOR<CategorizedUsernameUser, CategorizedUsernameIp>;
+
 type BlockableActions = 'create' | 'move' | 'thanks' | 'upload';
 
 type BlockFlags = 'angry-autoblock' | 'anononly' | 'hiddenname' | 'noautoblock' | 'nocreate' | 'noemail' | 'nousertalk';
 
+/**
+ * Map of block IDs to log information to construct a log line.
+ */
 type BlockLogMap = Map<number, BlockLogMapValue>;
 
 interface BlockLogMapValue {
@@ -241,3 +259,8 @@ interface BlockLogMapValue {
 	 */
 	parsedcomment: string;
 }
+
+/**
+ * Map of block IDs to block log lines.
+ */
+type BlockLoglineMap = Map<number, string>;
