@@ -5,7 +5,6 @@
  * @author [[User:Dragoniez]]
  */
 // @ts-check
-/// <reference path="./window/InvestigateHelper.d.ts" />
 /* global mw, OO */
 // <nowiki>
 (() => {
@@ -1035,11 +1034,11 @@ class UserListItem {
 				action: 'query',
 				titles,
 				formatversion: '2'
-			}, nonwritePost()).then(({ query }) => {
+			}, nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
 				const {
 					normalized = [],
 					pages = []
-				} = /** @type {{ normalized?: ApiResponseNormalized[]; pages?: ApiResponsePageExistence[] }} */ (query);
+				} =  res && res.query || {};
 
 				const /** @type {Map<string, string>} */ canonicalizedMap = new Map();
 				for (const { from, to } of normalized) {
@@ -2267,15 +2266,12 @@ class BlockLog {
 			letitle: `User:${username}`,
 			lelimit: 'max',
 			formatversion: '2'
-		}).then(({ query }) => {
+		}).then(/** @param {ApiResponse} res */ (res) => {
+			const logevents = res && res.query && res.query.logevents || [];
 			/**
 			 * @type {BlockLogMap}
 			 */
 			const ret = new Map();
-			/**
-			 * @type {ApiResponseQueryListLogevents[]}
-			 */
-			const logevents = query.logevents;
 
 			const rIsoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 			for (const { params, action, user, timestamp, parsedcomment } of logevents) {
@@ -2536,6 +2532,29 @@ class BlockLog {
 	}
 
 }
+
+/**
+ * @typedef {import('./window/InvestigateHelper.d.ts').IP} IP
+ * @typedef {import('./window/InvestigateHelper.d.ts').UserList} UserList
+ * @typedef {import('./window/InvestigateHelper.d.ts').UserInfo} UserInfo
+ * @typedef {import('./window/InvestigateHelper.d.ts').IpInfo} IpInfo
+ * @typedef {import('./window/InvestigateHelper.d.ts').LoadedMessages} LoadedMessages
+ * @typedef {import('./window/InvestigateHelper.d.ts').Gender} Gender
+ * @typedef {import('./window/InvestigateHelper.d.ts').StorageKeys} StorageKeys
+ * @typedef {import('./window/InvestigateHelper.d.ts').ApiResponse} ApiResponse
+ * @typedef {import('./window/InvestigateHelper.d.ts').UserType} UserType
+ * @typedef {import('./window/InvestigateHelper.d.ts').IpInfoLevel} IpInfoLevel
+ * @typedef {import('./window/InvestigateHelper.d.ts').ExtendedIpInfo} ExtendedIpInfo
+ * @typedef {import('./window/InvestigateHelper.d.ts').CategorizedUsernameUser} CategorizedUsernameUser
+ * @typedef {import('./window/InvestigateHelper.d.ts').CategorizedUsernameIp} CategorizedUsernameIp
+ * @typedef {import('./window/InvestigateHelper.d.ts').BlockIdMap} BlockIdMap
+ * @typedef {import('./window/InvestigateHelper.d.ts').BlockIdMapValue} BlockIdMapValue
+ * @typedef {import('./window/InvestigateHelper.d.ts').BlockLogMap} BlockLogMap
+ * @typedef {import('./window/InvestigateHelper.d.ts').BlockLogMapValue} BlockLogMapValue
+ * @typedef {import('./window/InvestigateHelper.d.ts').BlockFlags} BlockFlags
+ * @typedef {import('./window/InvestigateHelper.d.ts').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
+ * @typedef {import('./window/InvestigateHelper.d.ts').BlockLoglineMap} BlockLoglineMap
+ */
 
 // ********************************************* ENTRY POINT *********************************************
 

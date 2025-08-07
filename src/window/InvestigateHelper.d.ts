@@ -1,6 +1,6 @@
-type IP = typeof import('ip-wiki').IP;
+export type IP = typeof import('ip-wiki').IP;
 
-interface UserInfo {
+export interface UserInfo {
 	/**
 	 * The username.
 	 */
@@ -11,7 +11,7 @@ interface UserInfo {
 	ips: (Omit<IpInfo, 'ip' | 'users'> & { ip : string })[];
 }
 
-interface IpInfo {
+export interface IpInfo {
 	ip: InstanceType<IP>;
 	/**
 	 * Usernames associated with the IP.
@@ -27,7 +27,7 @@ interface IpInfo {
 	all: number;
 }
 
-type MessageKeys =
+export type MessageKeys =
 	| 'tux-editor-translate-mode'
 	| 'checkuser-helper-user'
 	| 'sp-contributions-talk'
@@ -91,13 +91,23 @@ type MessageKeys =
 	| 'logentry-partialblock-block-ns'
 	| 'logentry-partialblock-block-action';
 
-type LoadedMessages = Record<MessageKeys, string>;
+export type LoadedMessages = Record<MessageKeys, string>;
 
-type Gender = 'male' | 'female' | 'unknown';
+export type Gender = 'male' | 'female' | 'unknown';
 
-type StorageKeys = 'messages';
+export type StorageKeys = 'messages';
 
-type UserType = 'user' | 'ip' | 'cidr';
+export type UserType = 'user' | 'ip' | 'cidr';
+
+export interface ApiResponse {
+	query?: ApiResponseQuery;
+}
+
+interface ApiResponseQuery {
+	normalized?: ApiResponseNormalized[];
+	pages?: ApiResponsePageExistence[];
+	logevents?: ApiResponseQueryListLogevents[];
+}
 
 interface ApiResponseNormalized {
 	fromencoded: boolean;
@@ -110,56 +120,6 @@ interface ApiResponsePageExistence {
 	title: string;
 	missing?: true;
 	known?: true;
-}
-
-/**
- * Represents a CIDR block along with the set of indexes of `info` entries it covers.
- * - The `ip` property is an IP instance representing the CIDR.
- * - The `covers` property is a Set of numeric indexes referring to entries in the original `info` array
- *   that fall within the CIDR range.
- */
-interface IpInfoLevel {
-	/**
-	 * The IP instance representing the CIDR block.
-	 */
-	ip: InstanceType<IP>;
-	/**
-	 * Set of indexes from the original `info` array covered by this CIDR.
-	 */
-	covers: Set<number>;
-}
-
-interface ExtendedIpInfo extends IpInfo {
-	contains?: IpInfo[];
-}
-
-interface UserList {
-	user?: UserListItem[];
-	ipv4?: IPFieldContent;
-	ipv6?: IPFieldContent;
-}
-
-/**
- * Map of usernames to block ID data.
- */
-type BlockIdMap = Map<string, BlockIdMapValue>;
-
-/**
- * Information about a user's active blocks.
- */
-interface BlockIdMapValue {
-	/**
-	 * Set of active block IDs.
-	 */
-	ids: Set<number>;
-	/**
-	 * Unix timestamp (in seconds) of the most recent block.
-	 */
-	latestTimestamp: number;
-	/**
-	 * Unix timestamp (in seconds) of the oldest block.
-	 */
-	earliestTimestamp: number;
 }
 
 interface ApiResponseQueryListLogevents {
@@ -185,7 +145,7 @@ interface ApiResponseQueryListLogeventsParams {
 	'duration-l10n': string;
 }
 
-interface ApiResponseQueryListLogeventsParamsRestrictions {
+export interface ApiResponseQueryListLogeventsParamsRestrictions {
 	pages?: ApiResponseQueryListLogeventsParamsRestrictionsPages[];
 	namespaces?: number[];
 	actions?: BlockableActions[];
@@ -196,12 +156,64 @@ interface ApiResponseQueryListLogeventsParamsRestrictionsPages {
 	page_title: string;
 }
 
-interface CategorizedUsernameUser {
+type BlockableActions = 'create' | 'move' | 'thanks' | 'upload';
+
+/**
+ * Represents a CIDR block along with the set of indexes of `info` entries it covers.
+ * - The `ip` property is an IP instance representing the CIDR.
+ * - The `covers` property is a Set of numeric indexes referring to entries in the original `info` array
+ *   that fall within the CIDR range.
+ */
+export interface IpInfoLevel {
+	/**
+	 * The IP instance representing the CIDR block.
+	 */
+	ip: InstanceType<IP>;
+	/**
+	 * Set of indexes from the original `info` array covered by this CIDR.
+	 */
+	covers: Set<number>;
+}
+
+export interface ExtendedIpInfo extends IpInfo {
+	contains?: IpInfo[];
+}
+
+export interface UserList {
+	user?: UserListItem[];
+	ipv4?: IPFieldContent;
+	ipv6?: IPFieldContent;
+}
+
+/**
+ * Map of usernames to block ID data.
+ */
+export type BlockIdMap = Map<string, BlockIdMapValue>;
+
+/**
+ * Information about a user's active blocks.
+ */
+export interface BlockIdMapValue {
+	/**
+	 * Set of active block IDs.
+	 */
+	ids: Set<number>;
+	/**
+	 * Unix timestamp (in seconds) of the most recent block.
+	 */
+	latestTimestamp: number;
+	/**
+	 * Unix timestamp (in seconds) of the oldest block.
+	 */
+	earliestTimestamp: number;
+}
+
+export interface CategorizedUsernameUser {
 	username: string;
 	type: 'user' | 'temp';
 }
 
-interface CategorizedUsernameIp {
+export interface CategorizedUsernameIp {
 	username: string;
 	type: 'ip';
 	abbreviated: string;
@@ -209,18 +221,16 @@ interface CategorizedUsernameIp {
 	coveredBy: string[];
 }
 
-type CategorizedUsername = import('ts-xor').XOR<CategorizedUsernameUser, CategorizedUsernameIp>;
+export type CategorizedUsername = import('ts-xor').XOR<CategorizedUsernameUser, CategorizedUsernameIp>;
 
-type BlockableActions = 'create' | 'move' | 'thanks' | 'upload';
-
-type BlockFlags = 'angry-autoblock' | 'anononly' | 'hiddenname' | 'noautoblock' | 'nocreate' | 'noemail' | 'nousertalk';
+export type BlockFlags = 'angry-autoblock' | 'anononly' | 'hiddenname' | 'noautoblock' | 'nocreate' | 'noemail' | 'nousertalk';
 
 /**
  * Map of block IDs to log information to construct a log line.
  */
-type BlockLogMap = Map<number, BlockLogMapValue>;
+export type BlockLogMap = Map<number, BlockLogMapValue>;
 
-interface BlockLogMapValue {
+export interface BlockLogMapValue {
 	subtype: 'block' | 'reblock';
 	/**
 	 * The ISO timestamp at which the block was applied.
@@ -263,4 +273,4 @@ interface BlockLogMapValue {
 /**
  * Map of block IDs to block log lines.
  */
-type BlockLoglineMap = Map<number, string>;
+export type BlockLoglineMap = Map<number, string>;
