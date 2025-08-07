@@ -95,8 +95,6 @@ export type LoadedMessages = Record<MessageKeys, string>;
 
 export type Gender = 'male' | 'female' | 'unknown';
 
-export type StorageKeys = 'messages';
-
 export type UserType = 'user' | 'ip' | 'cidr';
 
 export interface ApiResponse {
@@ -104,9 +102,17 @@ export interface ApiResponse {
 }
 
 interface ApiResponseQuery {
+	allmessages?: ApiResponseQueryMetaAllmessages[];
 	normalized?: ApiResponseNormalized[];
 	pages?: ApiResponsePageExistence[];
 	logevents?: ApiResponseQueryListLogevents[];
+}
+
+interface ApiResponseQueryMetaAllmessages {
+	name: string;
+	normalizedname: string;
+	missing?: true;
+	content?: string; // Missing if "missing" is true
 }
 
 interface ApiResponseNormalized {

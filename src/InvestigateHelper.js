@@ -28,7 +28,7 @@ function init() {
 
 	$.when(
 		loadIpWiki(), // This must be called before calling collectUsernames()
-		mw.loader.using(['mediawiki.util', 'mediawiki.api']),
+		mw.loader.using(['mediawiki.util', 'mediawiki.api', 'mediawiki.storage']),
 		$.ready
 	).then(() => {
 
@@ -321,7 +321,7 @@ class Messages {
 		 * Messages that are missing and need to be fetched
 		 * @type {Set<string>}
 		 */
-		const missing = new Set();
+		const missingMessages = new Set();
 		/**
 		 * Message keys from the input that contain `{{int:...}}` and need re-parsing after dependencies are loaded
 		 * @type {Set<string>}
@@ -338,12 +338,12 @@ class Messages {
 				if (unparsed.size > 0) {
 					containsInt.add(key);
 					for (const dep of unparsed) {
-						missing.add(dep);
+						missingMessages.add(dep);
 					}
 				}
 			} else {
 				// Fully missing message
-				missing.add(key);
+				missingMessages.add(key);
 			}
 		}
 
@@ -366,23 +366,53 @@ class Messages {
 				ammessages: batch,
 				amlang: mw.config.get('wgUserLanguage'),
 				formatversion: '2'
-			}).then(({ query }) => {
+			}).then(/** @param {ApiResponse} res */ (res) => {
+				const allmessages = res && res.query && res.query.allmessages || [];
 				let added = false;
+				/** @type {Set<string>} */
+				const containsIntAndMissing = new Set();
 
-				for (const { name, content, missing } of query.allmessages) {
-					if (!missing) {
+				for (const { name, content, missing } of allmessages) {
+					if (!missing && content) {
 						// Add to mw.messages; track whether any new message was added
 						added = mw.messages.set(name, content) || added;
+
+						const unparsed = Messages.parseInt(content, name);
+						if (unparsed.size > 0) {
+							containsInt.add(name);
+							for (const dep of unparsed) {
+								if (!mw.messages.exists(dep)) {
+									containsIntAndMissing.add(dep);
+								}
+							}
+						}
+					} else {
+						console.warn('Message not found: ' + name);
 					}
 				}
 
 				index += 500;
+
+				// Recursively process messages that contain {{int:...}}
+				if (containsIntAndMissing.size) {
+					if (keys[index] === undefined) {
+						let i = index;
+						for (const key of containsIntAndMissing) {
+							keys[i] = key;
+							i++;
+						}
+					} else {
+						keys.push(...containsIntAndMissing);
+					}
+				}
+
 				if (keys[index] !== undefined) {
 					// More messages to load
 					return execute(keys, index);
 				}
 
 				// Re-parse original messages that contained unresolved `{{int:...}}`
+				// TODO: Recursively processed messages should be cached
 				for (const key of containsInt) {
 					const msg = mw.messages.get(key);
 					if (msg !== null) {
@@ -392,7 +422,7 @@ class Messages {
 
 				return added;
 			});
-		})(Array.from(missing), 0);
+		})(Array.from(missingMessages), 0);
 	}
 
 	/**
@@ -408,33 +438,28 @@ class Messages {
 	 * @returns {Set<string>} A set of message keys that were referenced but missing.
 	 */
 	static parseInt(msg, key) {
-		const regex = /\{\{\s*int:([^}]+)\}\}/g;
-
+		const original = msg;
 		/** @type {Set<string>} */
 		const missingKeys = new Set();
 
-		let text = msg;
-		let match;
-
-		// Look for all `{{int:...}}` occurrences
-		while ((match = regex.exec(msg))) {
-			const rawKey = match[1].trim();
+		msg = msg.replace(/\{\{\s*int:([^}]+)\}\}/g, /** @param {string} rawKey */ (match, rawKey) => {
+			rawKey = rawKey.trim();
 			const parsedKey = rawKey.charAt(0).toLowerCase() + rawKey.slice(1);
 
 			/** @type {?string} */
 			const replacement = mw.messages.get(parsedKey);
 
 			if (replacement !== null) {
-				// Replace all instances of this placeholder with its message
-				text = text.split(match[0]).join(replacement);
+				return replacement;
 			} else {
 				missingKeys.add(parsedKey);
+				return match;
 			}
-		}
+		});
 
 		// Update the message only if it was modified
-		if (text !== msg) {
-			mw.messages.set(key, text);
+		if (msg !== original) {
+			mw.messages.set(key, msg);
 		}
 
 		return missingKeys;
@@ -456,30 +481,32 @@ class Messages {
 	}
 
 	/**
-	 * Parses and caches MediaWiki interface messages using the parse API. Cached values are reused via {@link Storage}.
+	 * Parses and caches MediaWiki interface messages using the parse API. Cached values are reused via `mw.storage`.
 	 *
 	 * @param {(keyof LoadedMessages)[]} keys List of message keys to parse.
 	 * @returns {JQueryPromise<void>} A promise that resolves when parsing and caching are complete.
 	 */
 	static parse(keys) {
+		/**
+		 * @type {Partial<LoadedMessages>}
+		 */
+		const cache = mw.storage.getObject(this.storageKey) || {};
+
 		const $messages = $('<div>');
-		const cached = Storage.get('messages') || {};
-		/** @type {Set<string>} */
-		const requestedKeys = new Set();
+		let setCount = 0;
+
+		// Retrieve all from the storage or re-parse all via the API
+		// This non-partial approach makes it possible to manage the cache as one object
 		for (const key of keys) {
-			if (cached[key] !== undefined) {
-				mw.messages.set(key, cached[key]);
-				continue;
+			if (cache[key]) {
+				mw.messages.set(key, cache[key]);
+				setCount++;
 			}
-			if (requestedKeys.has(key)) {
-				continue;
-			}
-			requestedKeys.add(key);
 			$messages.append(
 				$('<div>').prop('id', key).text(Messages.get(key))
 			);
 		}
-		if (!$messages.children('div').length) {
+		if (keys.length === setCount) {
 			return $.Deferred().resolve();
 		}
 
@@ -494,17 +521,19 @@ class Messages {
 			formatversion: '2'
 		}, nonwritePost()).then((res) => {
 			const $res = $(res.parse.text);
-			const cache = Object.create(null);
-			for (const key of requestedKeys) {
+			const toCache = Object.create(null);
+
+			for (const key of keys) {
 				const $key = $res.find(`#${key}`);
 				if ($key.length) {
 					const parsed = $key.html();
 					mw.messages.set(key, parsed);
-					cache[key] = parsed;
+					toCache[key] = parsed;
 				}
 			}
-			if (!$.isEmptyObject(cache)) {
-				Storage.set('messages', cache);
+
+			if (!$.isEmptyObject(toCache)) {
+				mw.storage.set(this.storageKey, JSON.stringify(toCache), 3 * 24 * 60 * 60); // 3-day expiry
 			}
 		});
 	}
@@ -640,79 +669,7 @@ class Messages {
  * @type {Map<string, Gender>}
  */
 Messages.userGenderMap = new Map();
-
-class Storage {
-
-	/**
-	 * Retrieves a stored object from `localStorage` by key.
-	 *
-	 * @param {StorageKeys} key The key to retrieve the object for.
-	 * @returns {?Record<string, any>} The stored object, or `null` if not found or expired.
-	 */
-	static get(key) {
-		const realKey = `investigatehelper-${key}`;
-		const stored = localStorage.getItem(realKey);
-		if (stored === null) {
-			return null;
-		}
-		let object;
-		try {
-			object = JSON.parse(stored);
-			if (!Number.isFinite(object._expiry) || object._expiry < Date.now()) {
-				throw new Error();
-			}
-		} catch (_) {
-			localStorage.removeItem(realKey);
-			return null;
-		}
-		return object;
-	}
-
-	/**
-	 * Retrieves a specific field from a stored object.
-	 *
-	 * @param {StorageKeys} key The key to retrieve the object for.
-	 * @param {string} field The field to retrieve from the object.
-	 * @returns {?any} The value of the field, or `null` if not found or expired.
-	 */
-	static getField(key, field) {
-		const object = this.get(key);
-		if (object && Object.prototype.hasOwnProperty.call(object, field)) {
-			return object[field];
-		}
-		return null;
-	}
-
-	/**
-	 * Saves an object to `localStorage` under a namespaced key, with a 7-day expiration time.
-	 *
-	 * @param {StorageKeys} key The key under which to store the object.
-	 * @param {Record<string, any>} object The object to store.
-	 */
-	static set(key, object) {
-		const realKey = `investigatehelper-${key}`;
-		object._expiry = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days
-		localStorage.setItem(realKey, JSON.stringify(object));
-	}
-
-	/**
-	 * Updates specific fields of an existing stored object.
-	 * If the object doesn't exist or is expired, it creates a new one.
-	 *
-	 * @param {StorageKeys} key The key under which the object is stored.
-	 * @param {Record<string, any>} updates An object containing the fields to update.
-	 */
-	static update(key, updates) {
-		const object = this.get(key) || {};
-		for (const prop in updates) {
-			if (Object.prototype.hasOwnProperty.call(updates, prop)) {
-				object[prop] = updates[prop];
-			}
-		}
-		this.set(key, object);
-	}
-
-}
+Messages.storageKey = 'mw-InvestigateHelper-messages';
 
 /**
  * Creates a style tag for `InvestigateHelper` in the document header.
@@ -2540,7 +2497,6 @@ class BlockLog {
  * @typedef {import('./window/InvestigateHelper.d.ts').IpInfo} IpInfo
  * @typedef {import('./window/InvestigateHelper.d.ts').LoadedMessages} LoadedMessages
  * @typedef {import('./window/InvestigateHelper.d.ts').Gender} Gender
- * @typedef {import('./window/InvestigateHelper.d.ts').StorageKeys} StorageKeys
  * @typedef {import('./window/InvestigateHelper.d.ts').ApiResponse} ApiResponse
  * @typedef {import('./window/InvestigateHelper.d.ts').UserType} UserType
  * @typedef {import('./window/InvestigateHelper.d.ts').IpInfoLevel} IpInfoLevel
