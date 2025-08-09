@@ -1,40 +1,25 @@
-/*****************************************************************************************\
-
-	ConfirmTempAccountLogout
-
-	Shows a confirmation (warning) popup when a temporary user attempts to log out.
-
-	@version 1.0.1
-	@author [[User:Dragoniez]]
-
-\*****************************************************************************************/
+/* ここにあるすべてのJavaScriptは、仮利用者のみに読み込まれます */
 // @ts-check
 /* global mw, OO */
-//<nowiki>
-(() => {
-// ***************************************************************************************
 
-if (!mw.config.get('wgUserIsTemp')) {
-	return;
-}
-
+/**
+ * ConfirmTempAccountLogout
+ *
+ * Shows a confirmation (warning) popup when a temporary user attempts to log out.
+ *
+ * @version 1.1.0
+ * @author [[User:Dragoniez]]
+ */
+const moduleName = 'ext.gadget.selectorLogoutLink';
 $.when(
-	mw.loader.using(['mediawiki.util', 'oojs-ui']),
+	mw.loader.using([moduleName, 'mediawiki.util', 'oojs-ui']),
 	$.ready
-).then(() => {
+).then((req) => {
 
 	/**
-	 * Selector for the logout button, defined in `resources/Resources.php`.
-	 * Only the Minerva skin overrides this in its own `Hooks.php`.
-	 *
-	 * @see https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/core/+/refs/heads/master/resources/Resources.php
-	 * @see https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/skins/MinervaNeue/+/refs/heads/master/includes/Hooks.php
-	 * @see https://codesearch.wmcloud.org/search/?q=%5CbselectorLogoutLink%5Cb
+	 * @type {string}
 	 */
-	const selectorLogoutLink = mw.config.get('skin') === 'minerva'
-		? 'a.menu__item--logout[data-mw="interface"]'
-		: '#pt-logout a[data-mw="interface"]';
-
+	const selectorLogoutLink = req(moduleName);
 	/**
 	 * @type {JQuery<HTMLAnchorElement>}
 	 */
@@ -56,12 +41,13 @@ $.when(
 		'<h3 style="text-align:center;">警告</h3>' +
 		'<div style="text-align:justify;">' +
 			'<p>' +
-				'<b>仮アカウントからのログアウトは推奨されていません。</b>一度仮アカウントからログアウトすると、' +
-				'再度ログインすることはできなくなります。今後も編集を行う場合は、ログイン状態を維持してください。' +
+				'ご利用中の端末を今後も継続して使用する場合、通常は仮アカウントからログアウトする必要はありません。' +
+				'一度ログアウトすると、同じ仮アカウントに再度ログインすることはできなくなります。今後も編集を行う場合は、' +
+				'ログイン状態を維持してください。' +
 			'</p>' +
 			'<p>' +
-				`ログアウトする場合、${rawLinks.scrutiny}を行わないよう十二分に注意してください。` +
-				`${rawLinks.sock}とみなされた場合、${rawLinks.block}の対象となることがあります。` +
+				`ログアウトする場合は、${rawLinks.scrutiny}を招かないよう十分に注意してください。${rawLinks.sock}と` +
+				`みなされた場合、${rawLinks.block}の対象となることがあります。` +
 			'</p>' +
 			'<p>本当にログアウトしますか？</p>' +
 		'</div>'
@@ -70,7 +56,7 @@ $.when(
 	$logout.on('click', function(event) {
 		event.preventDefault(); // Cancel default anchor navigation
 
-		OO.ui.confirm($warning, { size: 'large' }).then((confirmed) => {
+		OO.ui.confirm($warning, { size: 'larger' }).then((confirmed) => {
 			if (confirmed) {
 				// Re-fire the logout hook with the href manually
 				mw.hook('skin.logout').fire(this.href);
@@ -79,7 +65,3 @@ $.when(
 	});
 
 });
-
-// ***************************************************************************************
-})();
-//</nowiki>
