@@ -27,84 +27,156 @@ export interface IpInfo {
 	all: number;
 }
 
-export type MessageKeys =
-	| 'tux-editor-translate-mode'
-	| 'checkuser-helper-user'
-	| 'sp-contributions-talk'
-	| 'contribslink'
-	| 'sp-contributions-logs'
-	| 'sp-contributions-blocklog'
-	| 'abusefilter-log-linkoncontribs'
-	| 'checkuser-log-checks-on'
-	| 'centralauth-contribs-link'
-	| 'checkuser-global-contributions-link'
-	| 'ooui-copytextlayout-copy'
-	| 'checkuser-helper-copy-success'
-	| 'checkuser-helper-copy-failed'
+export interface LoadedMessages {
+	/** `'List'` */
+	'tux-editor-translate-mode': string;
+	/** `'User'` */
+	'checkuser-helper-user': string;
+	/** `'talk'` */
+	'sp-contributions-talk': string;
+	/** `'contribs'` */
+	'contribslink': string;
+	/** `'logs'` */
+	'sp-contributions-logs': string;
+	/** `'block log'` */
+	'sp-contributions-blocklog': string;
+	/** `'abuse log'` */
+	'abusefilter-log-linkoncontribs': string;
+	/** `'checks on'` */
+	'checkuser-log-checks-on': string;
+	/** `'global account'` */
+	'centralauth-contribs-link': string;
+	/** `'global contributions'` */
+	'checkuser-global-contributions-link': string;
+	/** `'Copy'` */
+	'ooui-copytextlayout-copy': string;
+	/** `'Copied'` */
+	'checkuser-helper-copy-success': string;
+	/** `'Could not copy'` */
+	'checkuser-helper-copy-failed': string;
 
-	| 'checkuser-investigate-compare-table-cell-actions'
-	| 'checkuser-investigate-compare-table-cell-other-actions'
+	/** `'<b>[$1 {{PLURAL:$1|action|actions}}]</b>'` */
+	'checkuser-investigate-compare-table-cell-actions': string;
+	/** `'<i>(~$1 from all users)</i>'` */
+	'checkuser-investigate-compare-table-cell-other-actions': string;
 
-	| 'checkuser-investigate-compare-table-header-ip'
-	| 'block'
-	| 'checkuser-investigateblock-target'
-	| 'mw-widgets-usersmultiselect-placeholder'
-	| 'checkuser-investigate'
-	| 'checkuser-investigateblock-actions'
-	| 'checkuser-investigateblock-email-label'
-	| 'checkuser-investigateblock-usertalk-label'
-	| 'checkuser-investigateblock-reblock-label'
-	| 'checkuser-investigateblock-reason'
-	| 'ipbreason-dropdown'
-	| 'htmlform-selectorother-other'
+	/** `'IP'` */
+	'checkuser-investigate-compare-table-header-ip': string;
+	/** `'Block user'` */
+	'block': string;
+	/** `'Usernames and IP addresses'` */
+	'checkuser-investigateblock-target': string;
+	/** `'Add more...'` */
+	'mw-widgets-usersmultiselect-placeholder': string;
+	/** `'Investigate'` */
+	'checkuser-investigate': string;
 
-	| 'blocklink'
-	| 'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets'
-	| 'api-feed-error-title'
+	/** `'Expiration'` */
+	'block-expiry': string;
+	/** `'2 hours:2 hours,1 day:1 day,...'` */
+	'ipboptions': string;
+	/** `'Other time:'` */
+	'ipbother': string;
 
-	| 'logentry-block-block'
-	| 'logentry-block-block-multi'
-	| 'logentry-block-reblock'
-	| 'logentry-partialblock-block'
-	| 'logentry-partialblock-block-multi'
-	| 'logentry-partialblock-reblock'
-	| 'logentry-non-editing-block-block'
-	| 'logentry-non-editing-block-block-multi'
-	| 'logentry-non-editing-block-reblock'
-	| 'block-log-flags-angry-autoblock'
-	| 'block-log-flags-anononly'
-	| 'block-log-flags-hiddenname'
-	| 'block-log-flags-noautoblock'
-	| 'block-log-flags-nocreate'
-	| 'block-log-flags-noemail'
-	| 'block-log-flags-nousertalk'
-	| 'parentheses'
-	| 'comma-separator'
-	| 'and'
-	| 'word-separator'
-	| 'blanknamespace'
-	| 'ipb-action-create'
-	| 'ipb-action-move'
-	| 'ipb-action-thanks'
-	| 'ipb-action-upload'
-	| 'logentry-partialblock-block-page'
-	| 'logentry-partialblock-block-ns'
-	| 'logentry-partialblock-block-action';
+	/** `'Reason'` */
+	'checkuser-investigateblock-reason': string;
+	/** `'*Common block reasons\n...'` */
+	'ipbreason-dropdown': string;
+	/** `'Other'` */
+	'htmlform-selectorother-other': string;
 
-export type LoadedMessages = Record<MessageKeys, string>;
+	/** `'Actions to block'` */
+	'checkuser-investigateblock-actions': string;
+	/** `'Account creation'` */
+	'ipbcreateaccount': string;
+	/** `'Sending email'` */
+	'ipbemailban': string;
+	/** `'Editing own talk page'` */
+	'ipb-disableusertalk': string;
+	/** `'Additional options'` */
+	'block-options': string;
+	/** `'(optional)'` */
+	'htmlform-optional-flag': string;
+	/** `'Block the last IP address used by this account,...'` */
+	'ipbenableautoblock': string;
+	/** `'{{PLURAL:$1|$1 day|$1 days}}'` */
+	'days': string;
+	/** `'Hide username from edits and lists'` */
+	'ipbhidename': string;
+	/** `'Apply block to logged-in users from this IP address'` */
+	'ipb-hardblock': string;
+
+	/** `'block'` */
+	'blocklink': string;
+	/** `'You are about to block both accounts and IPs with the same reason...'` */
+	'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets': string;
+	/** `'Error ($1)'` */
+	'api-feed-error-title': string;
+	/** `'Submit'` */
+	'block-submit': string;
+	/** `'Cancel'` */
+	'block-cancel': string;
+	/** `'Type a reason'` */
+	'block-removal-reason-placeholder': string;
+	'historyempty': string;
+	/** `'Add block'` */
+	'block-create': string;
+	/** `'Override existing blocks'` */
+	'checkuser-investigateblock-reblock-label': string;
+	/** `'Remove block'` */
+	'block-removal-confirm-yes': string;
+
+	'logentry-block-block': string;
+	'logentry-block-block-multi': string;
+	'logentry-block-reblock': string;
+	'logentry-partialblock-block': string;
+	'logentry-partialblock-block-multi': string;
+	'logentry-partialblock-reblock': string;
+	'logentry-non-editing-block-block': string;
+	'logentry-non-editing-block-block-multi': string;
+	'logentry-non-editing-block-reblock': string;
+	'block-log-flags-angry-autoblock': string;
+	'block-log-flags-anononly': string;
+	'block-log-flags-hiddenname': string;
+	'block-log-flags-noautoblock': string;
+	'block-log-flags-nocreate': string;
+	'block-log-flags-noemail': string;
+	'block-log-flags-nousertalk': string;
+	'parentheses': string;
+	'comma-separator': string;
+	'and': string;
+	'word-separator': string;
+	'blanknamespace': string;
+	'ipb-action-create': string;
+	'ipb-action-move': string;
+	'ipb-action-thanks': string;
+	'ipb-action-upload': string;
+	'logentry-partialblock-block-page': string;
+	'logentry-partialblock-block-ns': string;
+	'logentry-partialblock-block-action': string;
+}
 
 export type Gender = 'male' | 'female' | 'unknown';
 
 export type UserType = 'user' | 'ip' | 'cidr';
 
 export interface ApiResponse {
+	parse?: ApiResponseParse;
 	query?: ApiResponseQuery;
+}
+
+interface ApiResponseParse {
+	title: 'API';
+	pageid: number;
+	parsedsummary: string;
 }
 
 interface ApiResponseQuery {
 	allmessages?: ApiResponseQueryMetaAllmessages[];
 	normalized?: ApiResponseNormalized[];
 	pages?: ApiResponsePageExistence[];
+	blocks?: ApiResponseQueryListBlocks[];
+	users?: ApiResponseQueryListUsers[];
 	logevents?: ApiResponseQueryListLogevents[];
 }
 
@@ -126,6 +198,18 @@ interface ApiResponsePageExistence {
 	title: string;
 	missing?: true;
 	known?: true;
+}
+
+interface ApiResponseQueryListBlocks {
+	id: number;
+	user: string;
+	timestamp: string;
+}
+
+interface ApiResponseQueryListUsers {
+	userid: number;
+	name: string;
+	gender: Gender;
 }
 
 interface ApiResponseQueryListLogevents {
@@ -214,20 +298,32 @@ export interface BlockIdMapValue {
 	earliestTimestamp: number;
 }
 
-export interface CategorizedUsernameUser {
+export interface CategorizedUsername {
+	/**
+	 * The username.
+	 */
 	username: string;
-	type: 'user' | 'temp';
+	/**
+	 * The type of the username.
+	 */
+	usertype: 'user' | 'temp' | 'ip';
+	/**
+	 * The abbreviated notation of `username`. Exists only if the usertype is `'ip'`.
+	 */
+	abbreviated?: string;
+	/**
+	 * IP addresses that the username covers.
+	 *
+	 * Exists only if the usertype is `'ip'` and may be an empty array.
+	 */
+	covers?: string[];
+	/**
+	 * IP addresses that are covered by the username.
+	 *
+	 * Exists only if the usertype is `'ip'` and may be an empty array.
+	 */
+	coveredBy?: string[];
 }
-
-export interface CategorizedUsernameIp {
-	username: string;
-	type: 'ip';
-	abbreviated: string;
-	covers: string[];
-	coveredBy: string[];
-}
-
-export type CategorizedUsername = import('ts-xor').XOR<CategorizedUsernameUser, CategorizedUsernameIp>;
 
 export type BlockFlags = 'angry-autoblock' | 'anononly' | 'hiddenname' | 'noautoblock' | 'nocreate' | 'noemail' | 'nousertalk';
 

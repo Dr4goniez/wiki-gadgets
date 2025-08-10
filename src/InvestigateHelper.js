@@ -50,7 +50,9 @@ function init() {
 			mw.loader.using([
 				'jquery.makeCollapsible',
 				'oojs-ui',
-				'oojs-ui.styles.icons-movement',
+				'oojs-ui.styles.icons-movement', // collapse, expand
+				'oojs-ui.styles.icons-moderation', // trash
+				'oojs-ui.styles.icons-editing-core', // edit
 				'mediawiki.widgets.UsersMultiselectWidget'
 			]),
 			Messages.loadMessagesIfMissing([
@@ -76,17 +78,36 @@ function init() {
 				'checkuser-investigateblock-target',
 				'mw-widgets-usersmultiselect-placeholder',
 				'checkuser-investigate',
-				'checkuser-investigateblock-actions',
-				'checkuser-investigateblock-email-label',
-				'checkuser-investigateblock-usertalk-label',
-				'checkuser-investigateblock-reblock-label',
+
+				'block-expiry',
+				'ipboptions',
+				'ipbother',
+
 				'checkuser-investigateblock-reason',
 				'ipbreason-dropdown',
 				'htmlform-selectorother-other',
 
+				'checkuser-investigateblock-actions',
+				'ipbcreateaccount',
+				'ipbemailban',
+				'ipb-disableusertalk',
+				'block-options',
+				'htmlform-optional-flag',
+				'ipbenableautoblock',
+				'days',
+				'ipbhidename',
+				'ipb-hardblock',
+
 				'blocklink',
 				'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets',
 				'api-feed-error-title',
+				'block-submit',
+				'block-cancel',
+				'block-removal-reason-placeholder',
+				'historyempty',
+				'block-create',
+				'checkuser-investigateblock-reblock-label',
+				'block-removal-confirm-yes',
 
 				'logentry-block-block',
 				'logentry-block-block-multi',
@@ -362,10 +383,10 @@ class Messages {
 
 			return request({
 				action: 'query',
+				formatversion: '2',
 				meta: 'allmessages',
 				ammessages: batch,
-				amlang: mw.config.get('wgUserLanguage'),
-				formatversion: '2'
+				amlang: mw.config.get('wgUserLanguage')
 			}).then(/** @param {ApiResponse} res */ (res) => {
 				const allmessages = res && res.query && res.query.allmessages || [];
 				let added = false;
@@ -512,13 +533,13 @@ class Messages {
 
 		return api.post({
 			action: 'parse',
+			formatversion: '2',
 			text: $messages.html(),
 			prop: 'text',
 			disablelimitreport: true,
 			disableeditsection: true,
 			disabletoc: true,
-			contentmodel: 'wikitext',
-			formatversion: '2'
+			contentmodel: 'wikitext'
 		}, nonwritePost()).then((res) => {
 			const $res = $(res.parse.text);
 			const toCache = Object.create(null);
@@ -536,6 +557,14 @@ class Messages {
 				mw.storage.set(this.storageKey, JSON.stringify(toCache), 3 * 24 * 60 * 60); // 3-day expiry
 			}
 		});
+	}
+
+	/**
+	 * @param {string} message
+	 * @returns {string}
+	 */
+	static ucFirst(message) {
+		return message.charAt(0).toUpperCase() + message.slice(1);
 	}
 
 	/**
@@ -587,9 +616,9 @@ class Messages {
 	}
 
 	/**
-	 * Parses the `ipbreason-dropdown` message to an array of `OO.ui.OptionWidget` instances.
+	 * Parses the `ipbreason-dropdown` message to an array of `OO.ui.MenuOptionWidget` instances.
 	 *
-	 * @returns {OO.ui.OptionWidget[]}
+	 * @returns {OO.ui.MenuOptionWidget[]}
 	 */
 	static parseBlockReasonDropdown() {
 		// Adapted from Html::listDropdownOptions
@@ -629,7 +658,7 @@ class Messages {
 		}
 
 		// Adapted from listDropdownOptionsOoui
-		const /** @type {OO.ui.OptionWidget[]} */ items = [
+		const /** @type {OO.ui.MenuOptionWidget[]} */ items = [
 			new OO.ui.MenuOptionWidget({ data: '', label: Messages.get('htmlform-selectorother-other') })
 		];
 		for (const [text, value] of Object.entries(options)) {
@@ -662,6 +691,101 @@ class Messages {
 			.prop('outerHTML');
 	}
 
+	/**
+	 * Parse labels and values out of a comma- and colon-separated list of options, such as is
+	 * used for expiry and duration lists.
+	 *
+	 * This method is adapted from `XmlSelect::parseOptionsMessage`.
+	 * @param {string} message The message to parse as a list.
+	 * @returns {Map<string, string>}
+	 */
+	static parseOptionsMessage(message) {
+		/** @type {Map<string, string>} */
+		const ret = new Map();
+		if (message === '-') {
+			return ret;
+		}
+		message.split(',').forEach((el) => {
+			// Normalize options that only have one part
+			if (!el.includes(':')) {
+				el = `${el}:${el}`;
+			}
+			// Extract the two parts.
+			const [label, value] = el.split(':');
+			ret.set(label.trim(), value.trim());
+		});
+		return ret;
+	}
+
+	/**
+	 * Parses the `ipboptions` message to an array of `OO.ui.MenuOptionWidget` instances.
+	 *
+	 * @returns {OO.ui.MenuOptionWidget[]}
+	 */
+	static getBlockDurations() {
+		const map = this.parseOptionsMessage(this.get('ipboptions'));
+		/** @type {OO.ui.MenuOptionWidget[]} */
+		const options = [
+			new OO.ui.MenuOptionWidget({
+				label: this.get('ipbother').replace(/[:：]$/, ''),
+				data: ''
+			})
+		];
+		for (const [label, value] of map) {
+			options.push(
+				new OO.ui.MenuOptionWidget({ label, data: value })
+			);
+		}
+		return options;
+	}
+
+	/**
+	 * @param {unknown} value
+	 * @returns {boolean}
+	 */
+	static isIndefExpiry(value) {
+		return typeof value === 'string' && /^(infinite|indefinite|infinity|never)$/.test(value);
+	}
+
+	/**
+	 * Translates an expiry value to its localized label if available.
+	 *
+	 * @param {string} expiry
+	 * @returns {string} The localized label for the input expiry value, or the input expiry value
+	 * as-is if no translation is available.
+	 */
+	static translateBlockExpiry(expiry) {
+		const map = this.parseOptionsMessage(this.get('ipboptions'));
+		const isInputIndef = this.isIndefExpiry(expiry);
+		for (const [label, value] of map) {
+			if (expiry === value || isInputIndef && this.isIndefExpiry(value)) {
+				return label;
+			}
+		}
+		return expiry;
+	}
+
+	/**
+	 * Parses a summary via the API.
+	 *
+	 * @param {string} summary The summary to parse.
+	 * @returns {JQueryPromise<?string>}
+	 */
+	static parseSummary(summary) {
+		return api.get({
+			action: 'parse',
+			formatversion: '2',
+			summary,
+			prop: ''
+		}).then(/** @param {ApiResponse} res */ (res) => {
+			const parsedsummary = res && res.parse && res.parse.parsedsummary;
+			return parsedsummary === 'string' ? parsedsummary : null;
+		}).catch((_, err) => {
+			console.log('Failed to parse summary:', err);
+			return null;
+		});
+	}
+
 }
 /**
  * Map of usernames to their genders. This object is updated by {@link BlockField.checkBlocks}.
@@ -678,6 +802,10 @@ function createStyleTag() {
 	const style = document.createElement('style');
 	style.id = 'ih-styles';
 	style.textContent =
+		// For inline elements that should be displayed as block elements
+		'.ih-inlineblock {' +
+			'display: block;' +
+		'}' +
 		// Allow user list items to have an unlimited width
 		'.ih-username .oo-ui-fieldLayout-body {' +
 			'max-width: initial !important;' +
@@ -723,6 +851,18 @@ function createStyleTag() {
 		// For OO.ui.confirm dialogs
 		'.ih-confirm {' +
 			'text-align: justify;' +
+		'}' +
+		// For block confirmation dialogs
+		'.ih-dialog-subrow {' +
+			'margin-left: 1.6em;' +
+		'}' +
+		'.ih-dialog-subrow tr > th:nth-child(-n + 2),' +
+		'.ih-dialog-subrow tr > td:nth-child(-n + 2) {' +
+			'padding-right: 0.5em;' +
+		'}' +
+		'.ih-dialog-addblock {' +
+			'margin-top: 6px !important;' +
+			'margin-bottom: 3px;' +
 		'}' +
 		'';
 	document.head.appendChild(style);
@@ -989,8 +1129,8 @@ class UserListItem {
 			const titles = batches[iter];
 			return api.post({
 				action: 'query',
-				titles,
-				formatversion: '2'
+				formatversion: '2',
+				titles
 			}, nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
 				const {
 					normalized = [],
@@ -1640,6 +1780,11 @@ class BlockField {
 		const targetField = new OO.ui.FieldsetLayout({
 			label: Messages.get('checkuser-investigateblock-target')
 		});
+		const presetTargets = [ // For debugging
+			'WXYZ-origin',
+			'220.152.111.0/28',
+			'220.152.111.0/24'
+		];
 		/**
 		 * The target selector widget.
 		 *
@@ -1651,7 +1796,8 @@ class BlockField {
 			placeholder: Messages.get('mw-widgets-usersmultiselect-placeholder'),
 			api: new mw.Api(getApiOptions()),
 			ipAllowed: true,
-			ipRangeAllowed: true
+			ipRangeAllowed: true,
+			selected: presetTargets
 		});
 		/**
 		 * Tracks change events to the {@link target} widget, in order to prevent circular
@@ -1663,94 +1809,168 @@ class BlockField {
 
 		this.bindCheckboxesWithTags();
 
-		const investigateButton = this.createInvestigateButton();
+		const investigateButton = this.createInvestigateButton(!!presetTargets.length);
 		targetField.addItems([
 			new OO.ui.FieldLayout(this.target),
 			new OO.ui.FieldLayout(investigateButton)
 		]);
 
-		// Block actions
-		const actionField = new OO.ui.FieldsetLayout({
-			label: Messages.get('checkuser-investigateblock-actions')
+		// Block expiry
+		const expiryField = new OO.ui.FieldsetLayout({
+			label: Messages.get('block-expiry')
 		});
-		const blockEmail = new OO.ui.CheckboxInputWidget();
-		const blockTalk = new OO.ui.CheckboxInputWidget();
-		const reblock = new OO.ui.CheckboxInputWidget();
-		actionField.addItems([
-			new OO.ui.FieldLayout(blockEmail, {
-				label: Messages.get('checkuser-investigateblock-email-label'),
-				align: 'inline'
-			}),
-			new OO.ui.FieldLayout(blockTalk, {
-				label: Messages.get('checkuser-investigateblock-usertalk-label'),
-				align: 'inline'
-			}),
-			new OO.ui.FieldLayout(reblock, {
-				label: Messages.get('checkuser-investigateblock-reblock-label'),
-				align: 'inline'
-			}),
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 */
+		this.expiry = new OO.ui.DropdownWidget({
+			menu: {
+				items: Messages.getBlockDurations()
+			}
+		});
+		let indefData = '';
+		for (const item of /** @type {OO.ui.MenuOptionWidget[]} */ (this.expiry.getMenu().getItems())) {
+			indefData = /** @type {string} */ (item.getData());
+			if (Messages.isIndefExpiry(indefData)) {
+				break;
+			}
+		}
+		if (indefData) {
+			this.expiry.getMenu().selectItemByData(indefData);
+		}
+		/**
+		 * @type {OO.ui.TextInputWidget}
+		 */
+		this.expiryCustom = new OO.ui.TextInputWidget({
+			placeholder: Messages.get('ipbother').replace(/[:：]$/, '')
+		});
+		this.expiryCustom.on('change', (value) => {
+			if (value) this.expiry.getMenu().selectItemByData('');
+		});
+		expiryField.addItems([
+			new OO.ui.FieldLayout(this.expiry),
+			new OO.ui.FieldLayout(this.expiryCustom)
 		]);
 
 		// Block reasons
 		const reasonField = new OO.ui.FieldsetLayout({
 			label: Messages.get('checkuser-investigateblock-reason')
 		});
-		const reason1 = new OO.ui.DropdownWidget({
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 */
+		this.reason1 = new OO.ui.DropdownWidget({
 			menu: {
 				items: Messages.parseBlockReasonDropdown()
-			},
-			classes: ['ih-dropdown-reducedmaxheight']
+			}
 		});
-		reason1.getMenu().selectItemByData('');
-		const reason2 = new OO.ui.DropdownWidget({
+		this.reason1.getMenu().selectItemByData('');
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 */
+		this.reason2 = new OO.ui.DropdownWidget({
 			menu: {
 				items: Messages.parseBlockReasonDropdown()
-			},
-			classes: ['ih-dropdown-reducedmaxheight']
+			}
 		});
-		reason2.getMenu().selectItemByData('');
-		const reasonC = new OO.ui.TextInputWidget();
+		this.reason2.getMenu().selectItemByData('');
+		/**
+		 * @type {OO.ui.TextInputWidget}
+		 */
+		this.reasonC = new OO.ui.TextInputWidget();
 		reasonField.addItems([
-			new OO.ui.FieldLayout(reason1),
-			new OO.ui.FieldLayout(reason2),
-			new OO.ui.FieldLayout(reasonC)
+			new OO.ui.FieldLayout(this.reason1),
+			new OO.ui.FieldLayout(this.reason2),
+			new OO.ui.FieldLayout(this.reasonC)
 		]);
 
+		// Block actions
+		const actionField = new OO.ui.FieldsetLayout({
+			label: Messages.get('checkuser-investigateblock-actions')
+		});
+
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 */
+		this.nocreate = new OO.ui.CheckboxInputWidget({ selected: true });
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 */
+		this.noemail = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 */
+		this.nousertalk = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 */
+		this.autoblock = new OO.ui.CheckboxInputWidget({ selected: true });
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 */
+		this.hidename = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 */
+		this.hardblock = new OO.ui.CheckboxInputWidget();
+
+		const canSuppressGroups = new Set(['suppress', 'staff', 'steward']);
+		const canSuppress =
+			(mw.config.get('wgUserGroups') || [])
+			.concat(/** @type {?string[]} */ (mw.config.get('wgGlobalGroups')) || [])
+			.some((group) => canSuppressGroups.has(group));
+		let hidename;
+		actionField.addItems([
+			new OO.ui.FieldLayout(this.nocreate, {
+				label: Messages.get('ipbcreateaccount'),
+				align: 'inline'
+			}),
+			new OO.ui.FieldLayout(this.noemail, {
+				label: Messages.get('ipbemailban'),
+				align: 'inline'
+			}),
+			new OO.ui.FieldLayout(this.nousertalk, {
+				label: Messages.get('ipb-disableusertalk'),
+				align: 'inline'
+			}),
+			new OO.ui.Element({
+				$element: $('<span>')
+					.addClass('ih-inlineblock')
+					.css('padding', '8px 0')
+					.html(`<b>${Messages.get('block-options')}</b>&nbsp;${Messages.get('htmlform-optional-flag')}`)
+			}),
+			new OO.ui.FieldLayout(this.autoblock, {
+				label: mw.format(
+					Messages.get('ipbenableautoblock'),
+					mw.format(Messages.parsePlurals(Messages.get('days'), '1'), '1')
+				),
+				align: 'inline'
+			}),
+			(hidename = new OO.ui.FieldLayout(this.hidename, {
+				label: Messages.get('ipbhidename'),
+				align: 'inline'
+			})),
+			new OO.ui.FieldLayout(this.hardblock, {
+				label: Messages.get('ipb-hardblock'),
+				align: 'inline'
+			})
+		]);
+		hidename.toggle(canSuppress);
+
 		this.block = new OO.ui.ButtonWidget({
-			label: (() => {
-				const msg = Messages.get('blocklink');
-				return msg[0].toUpperCase() + msg.slice(1);
-			})(),
+			label: Messages.ucFirst(Messages.get('blocklink')),
 			flags: ['progressive', 'primary'],
-			disabled: true
+			disabled: !presetTargets.length
 		});
 		this.block.off('click').on('click', () => this.blockUsers());
 
 		const blockButtonLayout = new OO.ui.FieldLayout(this.block);
-
-		/**
-		 * A loading icon placed next to the block button.
-		 *
-		 * @type {JQuery<HTMLImageElement>}
-		 * @readonly
-		 * @private
-		 */
-		this.$spinner = $('<img>');
-		this.$spinner
-			.prop('src', 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif')
-			.css({
-				verticalAlign: 'middle',
-				height: '1.4em',
-				border: 0,
-				marginLeft: '0.5em'
-			})
-			.hide();
-		blockButtonLayout.$body.append(this.$spinner);
+		blockButtonLayout.$element.css('margin-top', '0.5em');
 
 		fieldset.addItems([
 			targetField,
-			actionField,
+			expiryField,
 			reasonField,
+			actionField,
 			blockButtonLayout
 		]);
 
@@ -1788,6 +2008,11 @@ class BlockField {
 			previousItems = currentData;
 			this.inChangeEvent = false;
 		});
+
+		/**
+		 * @type {ReturnType<BlockDialogFactory>}
+		 */
+		this.BlockDialog = BlockDialogFactory();
 	}
 
 	/**
@@ -1820,13 +2045,14 @@ class BlockField {
 	 * Creates a button to open Special:Investigate on a new tab, inheriting usernames
 	 * selected in {@link target}.
 	 *
+	 * @param {boolean} [disabled=true]
 	 * @returns {OO.ui.ButtonWidget}
 	 * @private
 	 */
-	createInvestigateButton() {
+	createInvestigateButton(disabled) {
 		const button = new OO.ui.ButtonWidget({
 			label: Messages.get('checkuser-investigate'),
-			disabled: true
+			disabled
 		});
 		button.off('click').on('click', () => {
 			// Open Special:Investigate in a new tab with selected usernames
@@ -1899,86 +2125,38 @@ class BlockField {
 	 * @private
 	 */
 	async blockUsers() {
+		this.block.setDisabled(true);
+
 		const targets = this.getCategorizedUsernames();
 		if (!targets || !Object.values(targets).some(arr => arr.length)) {
 			// The user should never get caught in this block because we disable the block button
 			// when no user is selected; hence the message is not translated
-			return OO.ui.alert('No users are selected as the block targets.');
-		}
-
-		// Disable widgets to prevent interactions while processing the blocks
-		this.block.setDisabled(true);
-		this.$spinner.show();
-		const reenableForm = () => {
+			await OO.ui.alert('No users are selected as the block targets.');
 			this.block.setDisabled(false);
-			this.$spinner.hide();
-		};
-
-		// Ensure users and IPs aren't mixed
-		const userMixConfirmed = await BlockField.confirmUserMix(!!targets.user.length && !!targets.ip.length);
-		if (!userMixConfirmed) return reenableForm();
-
-		/**
-		 * @param {string} code
-		 */
-		const handleRequestError = (code) => {
-			OO.ui.alert(mw.format(Messages.get('api-feed-error-title'), code));
-			reenableForm();
-		};
-
-		// Check for existing blocks on the targets
-		const blockIdMap = await BlockField.checkBlocks(targets);
-		if (typeof blockIdMap === 'string') {
-			handleRequestError(blockIdMap);
 			return;
 		}
 
-		/**
-		 * Map of usernames to `BlockLog` instances.
-		 * @type {Map<string, BlockLog>}
-		 */
-		const logMap = new Map();
-
-		// Fetch block logs if any of the targets are currently blocked
-		if (blockIdMap.size) {
-			const deferreds = [];
-			for (const [username, data] of blockIdMap) {
-				deferreds.push(BlockLog.new(username, data));
-			}
-			const results = await Promise.all(deferreds);
-
-			for (const log of results) {
-				if (typeof log === 'string') {
-					handleRequestError(log);
-					return;
-				}
-				logMap.set(log.username, log);
-			}
+		// Ensure users and IPs aren't mixed
+		const userMixConfirmed = await BlockField.confirmUserMix(!!targets.user.length && !!targets.ip.length);
+		if (!userMixConfirmed) {
+			this.block.setDisabled(false);
+			return;
 		}
 
+		const dialog = new this.BlockDialog(this, { size: 'larger' });
+		this.BlockDialog.windowManager.addWindows([dialog]);
+		this.BlockDialog.windowManager.openWindow(dialog, { targets });
 		/**
-		 * @typedef {{ logs?: BlockLog; }} BlockLogObjectLogs
-		 * @typedef {CategorizedUsernameUser & BlockLogObjectLogs} BlockLogObjectUser
-		 * @typedef {CategorizedUsernameIp & BlockLogObjectLogs} BlockLogObjectIp
-		 * @typedef {import('ts-xor').XOR<BlockLogObjectUser, BlockLogObjectIp>} BlockLogObject
+		 * @param {OO.ui.Window} win
 		 */
-		/**
-		 * @type {BlockLogObject[]}
-		 */
-		const confirmations = [];
-
-		// Create an array of block target objects for confirmation, where the objects may include
-		// a `logs` field if the corresponding user is currenctly blocked
-		Object.values(targets).forEach((arr) => {
-			arr.forEach((obj) => {
-				const username = obj.username;
-				const logs = logMap.get(username);
-				const value = Object.assign(logs ? { logs } : {}, obj);
-				confirmations.push(value);
-			});
-		});
-
-		console.log(confirmations);
+		const handleClosure = (win) => {//teardown
+			if (win === dialog) {
+				this.block.setDisabled(false);
+				this.BlockDialog.windowManager.off('closing', handleClosure);
+				// Note: BlockDialog.teardown removes the dialog from the window
+			}
+		};
+		this.BlockDialog.windowManager.on('closing', handleClosure);
 	}
 
 	/**
@@ -2021,19 +2199,17 @@ class BlockField {
 			}
 		}
 
+		/** @type {Record<CategorizedUsername['usertype'], CategorizedUsername[]>} */
 		const ret = {
-			/** @type {CategorizedUsernameUser[]} */
 			user: [],
-			/** @type {CategorizedUsernameUser[]} */
 			temp: [],
-			/** @type {CategorizedUsernameIp[]} */
 			ip: []
 		};
 		if (users.size) {
 			for (const user of users) {
 				ret.user.push({
 					username: user,
-					type: 'user'
+					usertype: 'user'
 				});
 			}
 			ret.user.sort((a, b) => b.username.localeCompare(a.username));
@@ -2042,7 +2218,7 @@ class BlockField {
 			for (const temp of temps) {
 				ret.temp.push({
 					username: temp,
-					type: 'temp'
+					usertype: 'temp'
 				});
 			}
 			ret.temp.sort((a, b) => b.username.localeCompare(a.username));
@@ -2069,7 +2245,7 @@ class BlockField {
 
 				ret.ip.push({
 					username: sanitized,
-					type: 'ip',
+					usertype: 'ip',
 					abbreviated: ip.abbreviate(),
 					covers: Array.from(covers).sort(),
 					coveredBy: Array.from(coveredBy).sort()
@@ -2108,7 +2284,6 @@ class BlockField {
 	 * @param {NonNullable<ReturnType<BlockField['getCategorizedUsernames']>>} targets The users to check the block status of.
 	 * @returns {JQueryPromise<BlockIdMap | string>} A Promise that resolves with a Map of usernames to block data, or
 	 * an API error code as a string on failure.
-	 * @private
 	 */
 	static checkBlocks(targets) {
 		/** @type {string[]} */
@@ -2117,8 +2292,8 @@ class BlockField {
 		const userIndexes = new Set();
 
 		Object.values(targets).forEach((arr) => {
-			arr.forEach(({ username, type }) => {
-				if (type === 'user') {
+			arr.forEach(({ username, usertype }) => {
+				if (usertype === 'user') {
 					userIndexes.add(usernames.length);
 				}
 				usernames.push(username);
@@ -2134,11 +2309,11 @@ class BlockField {
 			const allUsers = usernames.slice(index, index + 500);
 			const params = {
 				action: 'query',
+				formatversion: '2',
 				list: ['blocks'],
 				bkusers: allUsers.join('|'),
 				bklimit: 'max',
-				bkprop: 'id|user|timestamp',
-				formatversion: '2'
+				bkprop: 'id|user|timestamp'
 			};
 
 			// Add `list=users` params to retrieve users' genders if `usernames` involves registered users
@@ -2149,31 +2324,26 @@ class BlockField {
 				params.ususers = registeredUsers.join('|');
 			}
 
-			return api.post(params, nonwritePost()).then(({ query }) => {
-				/**
-				 * @type {{ id: number; user: string; timestamp: string; }[]}
-				 */
-				const blocks = query.blocks;
+			return api.post(params, nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
+				const blocks = res && res.query && res.query.blocks || [];
 				for (const { id, user, timestamp } of blocks) {
+					const username = mw.util.isIPAddress(user, true) ? user.toLowerCase() : user;
 					const unixTime = Date.parse(timestamp) / 1000;
-					if (!map.has(user)) {
-						map.set(user, {
+					if (!map.has(username)) {
+						map.set(username, {
 							ids: new Set([id]),
 							latestTimestamp: unixTime,
 							earliestTimestamp: unixTime
 						});
 					} else {
-						const entry = /** @type {BlockIdMapValue} */ (map.get(user));
+						const entry = /** @type {BlockIdMapValue} */ (map.get(username));
 						entry.ids.add(id);
 						entry.latestTimestamp = Math.max(entry.latestTimestamp, unixTime);
 						entry.earliestTimestamp = Math.min(entry.earliestTimestamp, unixTime);
 					}
 				}
 
-				/**
-				 * @type {{ userid: number; name: string; gender: Gender; }[]=}
-				 */
-				const users = query.users;
+				const users = res && res.query && res.query.users;
 				if (users) {
 					for (const obj of users) {
 						const { userid, name, gender } = obj;
@@ -2197,8 +2367,41 @@ class BlockField {
 		})(0);
 	}
 
+	getBaseParams() {
+		return {
+			expiry: this.getExpiry(),
+			reason: this.getReason(),
+			anononly: !this.hardblock.isSelected(),
+			nocreate: this.nocreate.isSelected(),
+			autoblock: this.autoblock.isSelected(),
+			noemail: this.noemail.isSelected(),
+			hidename: this.hidename.isSelected(),
+			allowusertalk: !this.nousertalk.isSelected()
+		};
+	}
+
+	getExpiry() {
+		return (
+			/** @type {string} */ (/** @type {OO.ui.MenuOptionWidget} */ (this.expiry.getMenu().findFirstSelectedItem()).getData()) ||
+			this.expiryCustom.getValue() ||
+			'never'
+		);
+	}
+
+	getReason() {
+		const reasons = [
+			/** @type {string} */ (/** @type {OO.ui.MenuOptionWidget} */ (this.reason1.getMenu().findFirstSelectedItem()).getData()),
+			/** @type {string} */ (/** @type {OO.ui.MenuOptionWidget} */ (this.reason2.getMenu().findFirstSelectedItem()).getData()),
+			this.reasonC.getValue()
+		];
+		return reasons.filter(Boolean).join(': ');
+	}
+
 }
 
+/**
+ * Class that generates block loglines for a given blocked user.
+ */
 class BlockLog {
 
 	/**
@@ -2215,14 +2418,14 @@ class BlockLog {
 		const { ids, latestTimestamp, earliestTimestamp } = data;
 		return api.get({
 			action: 'query',
+			formatversion: '2',
 			list: 'logevents',
 			leprop: 'user|type|timestamp|parsedcomment|details',
 			letype: 'block',
-			lestart: latestTimestamp,
+			lestart: latestTimestamp + 1,
 			leend: earliestTimestamp,
 			letitle: `User:${username}`,
-			lelimit: 'max',
-			formatversion: '2'
+			lelimit: 'max'
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const logevents = res && res.query && res.query.logevents || [];
 			/**
@@ -2264,14 +2467,6 @@ class BlockLog {
 		});
 	}
 
-	/**
-	 * * 新規 (名前空間部分ブロック)
-	 * https://ja.wikipedia.org/w/api.php?action=query&formatversion=2&list=logevents&leprop=user|type|timestamp|parsedcomment|details&letype=block&letitle=User:橋本_悠介&lelimit=max
-	 * * 追加
-	 * https://ja.wikipedia.org/w/api.php?action=query&formatversion=2&list=logevents&leprop=user|type|timestamp|parsedcomment|details&letype=block&letitle=User:Wukiwukinu&lelimit=max
-	 * * 変更 (ページ部分ブロック)
-	 * https://ja.wikipedia.org/w/api.php?action=query&formatversion=2&list=logevents&leprop=user|type|timestamp|parsedcomment|details&letype=block&letitle=User:2001:268:9800::/40&lelimit=max
-	 */
 	/**
 	 * Creates a block log line as raw HTML.
 	 *
@@ -2351,7 +2546,7 @@ class BlockLog {
 			key += '-multi';
 		}
 
-		// @ts-ignore
+		// @ts-expect-error
 		let logline = mw.format(Messages.get(key), ...parameters);
 		logline = Messages.parseGenders(logline);
 		const comment = parsedcomment && mw.format(Messages.get('parentheses'), parsedcomment);
@@ -2491,6 +2686,451 @@ class BlockLog {
 }
 
 /**
+ * Lazy-loads the `BlockDialog` class.
+ *
+ * This factory function ensures that `oojs-ui` is fully loaded before `BlockDialog` extends `OO.ui.ProcessDialog`.
+ *
+ * @returns The `BlockDialog` class.
+ * @requires oojs-ui
+ */
+function BlockDialogFactory() {
+
+	const redSpan = () => $('<span>').css('color', 'var(--color-icon-error, #f54739)');
+
+	class BlockDialog extends OO.ui.ProcessDialog {
+
+		/**
+		 * Creates a BlockDialog.
+		 *
+		 * @param {BlockField} blockField
+		 * @param {OO.ui.ProcessDialog.ConfigOptions} [config]
+		 */
+		constructor(blockField, config) {
+			super(config);
+			/**
+			 * @type {BlockField}
+			 */
+			this.blockField = blockField;
+			/**
+			 * @type {OO.ui.FieldsetLayout}
+			 */
+			this.fieldset = new OO.ui.FieldsetLayout();
+			/**
+			 * @type {OO.ui.TextInputWidget}
+			 */
+			this.unblockReason = new OO.ui.TextInputWidget({
+				placeholder: Messages.get('block-removal-reason-placeholder')
+			});
+			/**
+			 * @type {BlockTargetSelector[]}
+			 */
+			this.targets = [];
+		}
+
+		/**
+		 * @inheritdoc
+		 * @override
+		 */
+		initialize() {
+			super.initialize.apply(this, arguments);
+
+			this.content = new OO.ui.PanelLayout({
+				padded: true,
+				expanded: false
+			});
+			this.content.$element.append(this.fieldset.$element);
+			// @ts-expect-error
+			this.$body.append(this.content.$element);
+
+			return this;
+		}
+
+		/**
+		 * @inheritdoc
+		 * @override
+		 */
+		getSetupProcess() {
+			return super.getSetupProcess().next(() => {
+
+				// Always start up in pending mode
+				this.pushPending();
+
+				// Disable all buttons on start-up
+				this.getActions().forEach(null, (action) => {
+					action.setDisabled(true);
+				});
+
+			}, this);
+		}
+
+		/**
+		 * @inheritdoc
+		 * @param {DialogData} data
+		 * @override
+		 */
+		getReadyProcess(data) {
+			// @ts-expect-error - The call back type is `() => Promise<void>` rather than `() => Promise<void, any, any>`
+			return super.getReadyProcess().next(async () => {
+
+				// Check for existing blocks on the targets
+				const blockIdMap = await BlockField.checkBlocks(data.targets);
+				if (typeof blockIdMap === 'string') {
+					return this.handleSetupError(blockIdMap);
+				}
+
+				const params = this.blockField.getBaseParams();
+				const summaryPromise = params.reason
+					? Messages.parseSummary(params.reason)
+					: $.Deferred().resolve('');
+
+				/**
+				 * Map of usernames to `BlockLog` instances.
+				 * @type {Map<string, BlockLog>}
+				 */
+				const logMap = new Map();
+
+				// Fetch block logs if any of the targets are currently blocked
+				if (blockIdMap.size) {
+					const deferreds = [];
+					for (const [username, data] of blockIdMap) {
+						deferreds.push(BlockLog.new(username, data));
+					}
+					const results = await Promise.all(deferreds);
+
+					for (const log of results) {
+						if (typeof log === 'string') {
+							return this.handleSetupError(log);
+						}
+						logMap.set(log.username, log);
+					}
+				}
+
+				/**
+				 * @type {BlockLogObject[]}
+				 */
+				const targets = [];
+
+				// Create an array of block target objects for confirmation, where the objects may include
+				// a `logs` field if the corresponding user is currenctly blocked
+				Object.values(data.targets).forEach((arr) => {
+					arr.forEach((obj) => {
+						const logs = logMap.get(obj.username);
+						const value = Object.assign(logs ? { logs } : {}, obj);
+						targets.push(value);
+					});
+				});
+
+				// Set up top elements on the dialog
+				const parsedSummary = await summaryPromise;
+
+				this.fieldset.addItems([
+					new OO.ui.Element({
+						$element: $('<div>')
+							.css('margin-bottom', '0.5em')
+							.append(
+								$('<b>').text(Messages.get('block-expiry') + ':'),
+								'&nbsp;',
+								Messages.translateBlockExpiry(params.expiry)
+							)
+					}),
+					new OO.ui.Element({
+						$element: $('<div>')
+							.css('margin-bottom', '0.5em')
+							.append(
+								$('<b>').text(Messages.get('checkuser-investigateblock-reason') + ':'),
+								'&nbsp;',
+								parsedSummary !== null
+									? (parsedSummary
+										? $(parsedSummary)
+										: redSpan().text(`(${Messages.get('historyempty')})`)
+									)
+									: redSpan().text('???')
+							)
+					})
+				]);
+
+				const unblockReasonLayout = new OO.ui.FieldLayout(this.unblockReason, {
+					label: Messages.get('block-removal-confirm-yes'), // TODO: Need a better label
+					align: 'top'
+				});
+				unblockReasonLayout.$element.css('margin-top', '0');
+
+				this.fieldset.addItems([
+					unblockReasonLayout,
+					new OO.ui.Element({
+						$element: $('<hr>').css('margin', '1em 0')
+					})
+				]);
+
+				// Set up the dialog body for block confirmation
+				let hasUnblockCheckbox = false;
+				/**
+				 * @type {BlockTargetSelector[]}
+				 */
+				this.targets = targets.map((target) => {
+					hasUnblockCheckbox = hasUnblockCheckbox || !!target.logs;
+					return new BlockTargetSelector(this.fieldset, target);
+				});
+				unblockReasonLayout.toggle(hasUnblockCheckbox);
+
+				// Mark the dialog as ready for user interaction
+				this.popPending();
+				this.getActions().forEach(null, (action) => {
+					action.setDisabled(false);
+				});
+				BlockDialog.windowManager.updateWindowSize(this);
+
+			}, this);
+		}
+
+		/**
+		 * Displays an error message in the dialog to halt further setup.
+		 *
+		 * @param {string} errorCode Error code to display in the message.
+		 */
+		handleSetupError(errorCode) {
+			const error = new OO.ui.MessageWidget({
+				type: 'error',
+				label: mw.format(Messages.get('api-feed-error-title'), errorCode),
+				inline: true
+			});
+			/** @type {OO.ui.PanelLayout} */ (this.content).$element.append(error.$element);
+
+			// Re-enable the Cancel button
+			this.getActions().forEach(null, (action) => {
+				if (action.getAction() === '') {
+					action.setDisabled(false);
+				}
+			});
+		}
+
+		/**
+		 * @inheritdoc
+		 * @param {string} [action]
+		 * @override
+		 */
+		getActionProcess(action) {
+			if (action) {
+				return new OO.ui.Process(() => {
+					this.close( {
+						action: action
+					});
+				});
+			}
+			return super.getActionProcess(action);
+		}
+
+		/**
+		 * @inheritdoc
+		 * @override
+		 */
+		teardown() {
+			// Remove the current instance from the WindowManager when the dialog has been closed
+			return super.teardown().then(() => {
+				BlockDialog.windowManager.removeWindows(['BlockDialog']);
+			});
+		}
+
+	}
+
+	BlockDialog.static.name = 'BlockDialog';
+	BlockDialog.static.title = Messages.get('block');
+	BlockDialog.static.actions = [
+		{
+			action: 'block',
+			label: Messages.get('block-submit'),
+			flags: ['primary', 'progressive']
+		},
+		{
+			label: Messages.get('block-cancel'),
+			flags: 'safe'
+		}
+	];
+	BlockDialog.windowManager = (() => {
+		const windowManager = new OO.ui.WindowManager();
+		$(document.body).append(windowManager.$element);
+		return windowManager;
+	})();
+
+	return BlockDialog;
+}
+
+class BlockTargetSelector {
+
+	/**
+	 * @param {OO.ui.FieldsetLayout} fieldset
+	 * @param {BlockLogObject} target
+	 */
+	constructor(fieldset, target) {
+
+		const {
+			username,
+			abbreviated,
+			covers,
+			coveredBy,
+			logs
+		} = target;
+
+		/**
+		 * The main checkbox with a boolean indicating whether the target should be blocked.
+		 *
+		 * @type {OO.ui.CheckboxInputWidget}
+		 */
+		this.checkbox = new OO.ui.CheckboxInputWidget({
+			selected: true
+		});
+		/**
+		 * A `FieldLayout` widget that serves as the entire row.
+		 *
+		 * @type {OO.ui.FieldLayout}
+		 */
+		this.row = new OO.ui.FieldLayout(this.checkbox, {
+			label: new OO.ui.HtmlSnippet(`<b>${abbreviated || username}</b>`),
+			align: 'inline',
+			classes: ['ih-dialog-row']
+		});
+		/**
+		 * @type {OO.ui.Element}
+		 */
+		this.subrow = new OO.ui.Element({
+			$element: $('<div>'),
+			classes: ['ih-dialog-subrow']
+		});
+
+		// If the target is an IP, display a list of IP addresses that the target contains and is contained in
+		if (covers && covers.length) {
+			this.subrow.$element.append(
+				$('<i>').addClass('ih-inlineblock').text('Contains: ' + covers.join(', ')) // TODO: Translate
+			);
+		}
+		if (coveredBy && coveredBy.length) {
+			this.subrow.$element.append(
+				$('<i>').addClass('ih-inlineblock').text('Contained in: ' + coveredBy.join(', ')) // TODO: Translate
+			);
+		}
+
+		/**
+		 * Map of block IDs to checkboxes whose values indicate how the associated existing blocks should be handled.
+		 *
+		 * @type {Map<number, { override: OO.ui.CheckboxInputWidget; lift: OO.ui.CheckboxInputWidget; }>}
+		 */
+		this.existing = new Map();
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 */
+		this.addBlock = new OO.ui.CheckboxInputWidget();
+
+		const addBlockLayout = new OO.ui.FieldLayout(this.addBlock, {
+			label: Messages.get('block-create'),
+			align: 'inline',
+			classes: ['ih-dialog-addblock']
+		});
+
+		// List existing blocks so that the client can choose to add/override/lift blocks
+		if (logs) {
+			const $tbody = $('<tbody>');
+			const $table = $('<table>').append(
+				$('<thead>').append(
+					$('<tr>').append(
+						$('<th>').append(
+							new OO.ui.IconWidget({
+								icon: 'edit',
+								title: Messages.get('checkuser-investigateblock-reblock-label')
+							}).$element
+						),
+						$('<th>').append(
+							new OO.ui.IconWidget({
+								icon: 'trash',
+								title: Messages.get('block-removal-confirm-yes'),
+								flags: 'destructive'
+							}).$element
+						),
+						$('<th>')
+					)
+				),
+				$tbody
+			);
+
+			for (const [id, logline] of logs.loglineMap) {
+				const override = new OO.ui.CheckboxInputWidget();
+				const lift = new OO.ui.CheckboxInputWidget();
+
+				$tbody.append(
+					$('<tr>').append(
+						$('<td>').append(override.$element),
+						$('<td>').append(lift.$element),
+						$('<td>').html(logline)
+					)
+				);
+
+				if (!this.existing.size) {
+					// Check the first "override" checkbox
+					override.setSelected(true);
+					lift.setDisabled(true);
+				}
+				this.existing.set(id, { override, lift });
+			}
+
+			this.subrow.$element.append(
+				addBlockLayout.$element,
+				$table
+			);
+		}
+
+		fieldset.addItems([this.row]);
+		if (this.subrow.$element.children().length) {
+			fieldset.addItems([this.subrow]);
+		}
+		this.initializeDisabled();
+
+	}
+
+	/**
+	 * Initializes event handlers to enable/disable checkboxes when other checkboxes are changed.
+	 *
+	 * @private
+	 */
+	initializeDisabled() {
+
+		// For the "Add block" checkbox
+		this.addBlock.off('change').on('change', (checked) => {
+			for (const { override, lift } of this.existing.values()) {
+				if (checked) {
+					override.setSelected(false).setDisabled(true);
+					lift.setDisabled(false);
+				} else {
+					override.setDisabled(lift.isSelected());
+				}
+			}
+		});
+
+		// For the "Override block" and "Remove block" checkboxes
+		for (const { override, lift } of this.existing.values()) {
+			override.off('change').on('change', (checked) => {
+				if (!this.addBlock.isSelected()) {
+					lift.setDisabled(!!checked);
+				}
+			});
+			lift.off('change').on('change', (checked) => {
+				if (!this.addBlock.isSelected()) {
+					override.setDisabled(!!checked);
+				}
+			});
+		}
+
+	}
+
+	/**
+	 * Returns a boolean indicating whether the main checkbox is checked.
+	 *
+	 * @returns {boolean} `true` if the target should be blocked; `false` otherwise.
+	 */
+	isSelected() {
+		return this.checkbox.isSelected();
+	}
+}
+
+/**
  * @typedef {import('./window/InvestigateHelper.d.ts').IP} IP
  * @typedef {import('./window/InvestigateHelper.d.ts').UserList} UserList
  * @typedef {import('./window/InvestigateHelper.d.ts').UserInfo} UserInfo
@@ -2501,8 +3141,7 @@ class BlockLog {
  * @typedef {import('./window/InvestigateHelper.d.ts').UserType} UserType
  * @typedef {import('./window/InvestigateHelper.d.ts').IpInfoLevel} IpInfoLevel
  * @typedef {import('./window/InvestigateHelper.d.ts').ExtendedIpInfo} ExtendedIpInfo
- * @typedef {import('./window/InvestigateHelper.d.ts').CategorizedUsernameUser} CategorizedUsernameUser
- * @typedef {import('./window/InvestigateHelper.d.ts').CategorizedUsernameIp} CategorizedUsernameIp
+ * @typedef {import('./window/InvestigateHelper.d.ts').CategorizedUsername} CategorizedUsername
  * @typedef {import('./window/InvestigateHelper.d.ts').BlockIdMap} BlockIdMap
  * @typedef {import('./window/InvestigateHelper.d.ts').BlockIdMapValue} BlockIdMapValue
  * @typedef {import('./window/InvestigateHelper.d.ts').BlockLogMap} BlockLogMap
@@ -2510,6 +3149,12 @@ class BlockLog {
  * @typedef {import('./window/InvestigateHelper.d.ts').BlockFlags} BlockFlags
  * @typedef {import('./window/InvestigateHelper.d.ts').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
  * @typedef {import('./window/InvestigateHelper.d.ts').BlockLoglineMap} BlockLoglineMap
+ */
+/**
+ * @typedef {object} DialogData
+ * @property {NonNullable<ReturnType<BlockField['getCategorizedUsernames']>>} targets
+ *
+ * @typedef {CategorizedUsername & { logs?: BlockLog; }} BlockLogObject
  */
 
 // ********************************************* ENTRY POINT *********************************************
