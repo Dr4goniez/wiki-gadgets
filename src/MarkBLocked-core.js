@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.9
+ * @version 3.2.10
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -195,7 +195,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.9 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.10 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -560,21 +560,21 @@ class MarkBLocked {
 
 			// Process special page aliases
 			const /** @type {string[]} */ spAliases = [];
-			const /** @type {string[]} */ spAliasesNoTarget = [];
+			const /** @type {string[]} */ spAliasesOverrideTarget = [];
 			for (const realname in aliasMap) {
 				/** @type {string[]} */
 				const aliases = aliasMap[realname];
 				if (Array.isArray(aliases)) {
 					spAliases.push(realname, ...aliases);
-					if (realname !== 'IPContributions' && realname !== 'GlobalContributions') {
-						// For these pages, the &target= query does not override the subpage target (2025-08-02)
-						spAliasesNoTarget.push(realname, ...aliases);
+					if (realname === 'CentralAuth') {
+						// The &target= query parameter is overridden by the subpage target on this page
+						spAliasesOverrideTarget.push(realname, ...aliases);
 					}
 				}
 			}
 
 			const rSpecial = `(?:${nsAliases.special.join('|')}):(?:${spAliases.join('|')})`;
-			const rSpecialNoTarget = `(?:${nsAliases.special.join('|')}):(?:${spAliasesNoTarget.join('|')})`;
+			const rSpecialNoTarget = `(?:${nsAliases.special.join('|')}):(?:${spAliasesOverrideTarget.join('|')})`;
 			const rUser = `(?:${nsAliases.user.join('|')}):`;
 			return {
 				article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
@@ -1215,9 +1215,9 @@ class MarkBLocked {
 			// Extract a username from the pagetitle
 			let tar, username;
 			if (this.regex.special.test(pagetitle) && (tar = mw.util.getParamValue('target', href))) {
-				// If the parsing title is one for a special page, check whether there's a valid &target= query parameter.
-				// This parameter's value is prioritized than the subpage name, if any, hence "Special:CA/Foo?target=Bar"
-				// shows CentralAuth for User:Bar, not User:Foo.
+				// Currently, on Special:CentralAuth, the &target= query parameter overrides the subpage.
+				// If present, use its value instead of any subpage name. For example:
+				// "Special:CentralAuth/Foo?target=Bar" displays CentralAuth for User:Bar, not User:Foo.
 				username = tar;
 			} else if ((m = this.regex.user.exec(pagetitle))) {
 				// If the condition above isn't met, just parse out a username from the pagetitle
