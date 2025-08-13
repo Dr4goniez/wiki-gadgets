@@ -1,3 +1,8 @@
+export interface PagerHref {
+	prev?: string;
+	next?: string;
+}
+
 export type IP = typeof import('ip-wiki').IP;
 
 export type MultiValue<T> = T | T[];
@@ -11,6 +16,10 @@ export interface UserInfo {
 	 * IP addresses associated with the username, if any.
 	 */
 	ips: (Omit<IpInfo, 'ip' | 'users'> & { ip : string })[];
+	/**
+	 * Whether the username was collected from a foreign tab.
+	 */
+	// foreign: boolean; // TODO
 }
 
 export interface IpInfo {
@@ -27,9 +36,34 @@ export interface IpInfo {
 	 * The total number of actions from the respective IP.
 	 */
 	all: number;
+	/**
+	 * Whether the IP was collected from a foreign tab.
+	 */
+	// foreign: boolean; // TODO
+}
+
+export interface CollectedUsernames {
+	users: UserInfo[];
+	ips: IpInfo[];
 }
 
 export interface OriginalMessages {
+	/**
+	 * Label for the button that collects data from other Special:Investigate tabs.
+	 */
+	'investigatehelper-traverser-button': string;
+	/**
+	 * Text shown in the screen overlay when the traverser is running.
+	 */
+	'investigatehelper-traverser-running': string;
+	/**
+	 * Text shown after the traverser completes, explaining the next steps to the user.
+	 */
+	'investigatehelper-traverser-notice': string;
+	/**
+	 * A `mw.notify` message shown when the traverser finishes running.
+	 */
+	'investigatehelper-traverser-complete': string;
 	/**
 	 * Label for the button to expand the dialog.
 	 */

@@ -151,53 +151,12 @@ class InvestigateHelper {
 
 		const $content = $('.mw-body-content');
 		this.createStyleTag();
-		const { users, ips } = names;
-		const /** @type {UserList} */ list = {};
 
-		// Create a list of registered users
-		if (users.length) {
-			const userField = this.collapsibleFieldsetLayout($content, Messages.get('checkuser-helper-user'));
-			list.user = [];
-			for (const { user, ips } of users) {
-				const item = new UserListItem(userField, user, mw.util.isTemporaryUser(user) ? 'temp' : 'user');
-				ips.forEach(({ ip, actions, all }) => {
-					item.addSublistItem($('<li>').append(
-						ip,
-						IPFieldContent.getActionCountText(actions),
-						IPFieldContent.getAllActionCountText(all)
-					));
-				});
-				list.user.push(item);
-			}
+		const pager = this.findPagers($table);
+		if (!$.isEmptyObject(pager)) {
+			this.createTraverser($content, pager);
 		}
-
-		// Create a list of IP addresses including common IP ranges
-		if (ips.length) {
-			const /** @type {IpInfo[]} */ v4s = [];
-			const /** @type {IpInfo[]} */ v6s = [];
-			for (const info of ips) {
-				if (info.ip.version === 4) {
-					v4s.push(info);
-				} else {
-					v6s.push(info);
-				}
-			}
-			if (v4s.length) {
-				const ipField = this.collapsibleFieldsetLayout($content, 'IPv4');
-				list.ipv4 = new IPFieldContent(ipField, v4s);
-			}
-			if (v6s.length) {
-				const ipField = this.collapsibleFieldsetLayout($content, 'IPv6');
-				list.ipv6 = new IPFieldContent(ipField, v6s);
-			}
-		}
-
-		UserListItem.checkExistence();
-
-		const blockField = this.collapsibleFieldsetLayout($content, Messages.get('block'));
-		new BlockField(blockField, list);
-
-		mw.hook('wikipage.content').fire($content);
+		this.createInterface($content, names);
 	}
 
 	/**
@@ -234,7 +193,7 @@ class InvestigateHelper {
 	 *
 	 * @param {JQuery<HTMLTableElement>} $table
 	 * @param {boolean} [dev=false]
-	 * @returns {{ users: UserInfo[]; ips: IpInfo[]; } | null} `null` if both `users` and `ips` are empty.
+	 * @returns {?CollectedUsernames} `null` if both `users` and `ips` are empty.
 	 * The returned arrays are both sorted by username/IP address.
 	 */
 	static collectUsernames($table, dev = false) {
@@ -242,12 +201,12 @@ class InvestigateHelper {
 		const IP_TARGET = 'td.ext-checkuser-compare-table-cell-ip-target';
 
 		const /** @type {Map<string, InstanceType<IP>>} */ rawIpMap = new Map();
-
 		const /** @type {Map<string, Set<string>>} */ users = new Map();
 		const /** @type {Map<string, IpInfo>} */ ips = new Map();
 
 		$table.children('tbody').children('tr').each((_, tr) => {
 			const $tr = $(tr);
+			// const foreign = $tr.closest('table').hasClass(InvestigateHelper.CLS_FOREIGN_TABLE); // TODO
 			const username = $tr.children(USER_TARGET).attr('data-value') || null;
 			const $ipTarget = $tr.children(IP_TARGET);
 			const rawIp = $ipTarget.attr('data-value') || null;
@@ -323,6 +282,31 @@ class InvestigateHelper {
 		const style = document.createElement('style');
 		style.id = 'ih-styles';
 		style.textContent =
+			'#investigatehelper-overlay {' +
+				'position: fixed;' +
+				'top: 0;' +
+				'left: 0;' +
+				'height: 100%;' +
+				'width: 100%;' +
+				'z-index: 1000;' +
+				'overflow: hidden;' +
+				'background-color: var(--background-color-base, white);' +
+				'opacity: 0.8;' +
+			'}' +
+			'#investigatehelper-overlay-inner {' +
+				'position: fixed;' +
+				'top: 50%;' +
+				'left: 50%;' +
+				'-webkit-transform: translate(-50%, -50%);' +
+				'transform: translate(-50%, -50%);' +
+			'}' +
+			'#investigatehelper-overlay-inner p {' +
+				'font-size: 140%;' +
+				'font-family: inherit;' +
+			'}' +
+			'#investigatehelper-overlay-inner img {' +
+				'height: 1em;' +
+			'}' +
 			// For inline elements that should be displayed as block elements
 			'.ih-inlineblock {' +
 				'display: block;' +
@@ -387,6 +371,192 @@ class InvestigateHelper {
 			'}' +
 			'';
 		document.head.appendChild(style);
+	}
+
+	/**
+	 * Searches for `Special:Investigate` pager links and returns their hrefs as an object.
+	 *
+	 * @param {JQuery<HTMLTableElement>} $table The Investigate table as a jQuery object.
+	 * @returns {PagerHref} The found pager hrefs as an object.
+	 */
+	static findPagers($table) {
+		/** @type {PagerHref} */
+		const pagerHref = Object.create(null);
+		const pager = $table.siblings('.TablePager_nav')[0];
+
+		if (pager) {
+			/** @type {?HTMLAnchorElement} */
+			const prev = pager.querySelector('.TablePager-button-prev > a');
+			if (prev && prev.href) {
+				pagerHref.prev = prev.href;
+			}
+
+			/** @type {?HTMLAnchorElement} */
+			const next = pager.querySelector('.TablePager-button-next > a');
+			if (next && next.href) {
+				pagerHref.next = next.href;
+			}
+		}
+
+		return pagerHref;
+	}
+
+	/**
+	 * Creates a traverser button.
+	 *
+	 * @param {JQuery<HTMLElement>} $content
+	 * @param {PagerHref} pager
+	 */
+	static createTraverser($content, pager) {
+		const traverser = new OO.ui.ButtonWidget({
+			label: Messages.get('investigatehelper-traverser-button'),
+			flags: ['primary', 'progressive']
+		});
+		$content.append(traverser.$element);
+
+		const createOverlay = () => {
+			const $overlay = $('<div>')
+				.prop('id', 'investigatehelper-overlay')
+				.append(
+					$('<div>')
+						.prop('id', 'investigatehelper-overlay-inner')
+						.append(
+							$('<p>')
+								.append(
+									Messages.get('investigatehelper-traverser-running'),
+									$('<img>')
+										.prop('src', 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif')
+								)
+						)
+				);
+			$('body').append($overlay);
+			return $overlay;
+		};
+
+		traverser.off('click').on('click', async () => {
+			const $overlay = createOverlay();
+
+			/** @type {Promise<JQuery<HTMLTableElement>>[]} */
+			const promises = [];
+			if (pager.prev) {
+				promises.push(this.traverse(pager.prev, 'prev'));
+			}
+			if (pager.next) {
+				promises.push(this.traverse(pager.next, 'next'));
+			}
+			const result = await Promise.all(promises);
+
+			result.push(this.getTable()); // Add table on the current page
+			const $tables = result.reduce(($acc, $tbl) => $acc.add($tbl), $([]));
+			const names = this.collectUsernames($tables);
+			if (!names) {
+				mw.notify(mw.format(Messages.get('api-feed-error-title'), 'nodata'), { type: 'error' });
+				$overlay.remove();
+				return;
+			}
+
+			traverser.$element.remove();
+			$('.ih-collapsible').remove();
+			const message = new OO.ui.MessageWidget({
+				label: new OO.ui.HtmlSnippet(Messages.get('investigatehelper-traverser-notice')),
+				type: 'success'
+			});
+			$content.append(message.$element);
+			this.createInterface($content, names);
+			requestAnimationFrame(() => {
+				$overlay.remove();
+				mw.notify(Messages.get('investigatehelper-traverser-complete'), { type: 'success' });
+			});
+		});
+	}
+
+	/**
+	 * Recursively scrapes pager pages in one direction and collect tables.
+	 *
+	 * @param {string} href The starting page URL.
+	 * @param {'prev' | 'next'} direction Pager direction to follow.
+	 * @param {JQuery<HTMLTableElement>} [$acc] Internal accumulator for recursion.
+	 * @returns {Promise<JQuery<HTMLTableElement>>}
+	 */
+	static async traverse(href, direction, $acc = $([])) {
+		let html;
+		try {
+			html = await $.get(href);
+		} catch (err) {
+			console.warn(err);
+			return $acc; // Return what we have so far
+		}
+
+		const $html = $(html);
+		const $table = this.getTable($html);
+		if ($table.length) {
+			$table.addClass(InvestigateHelper.CLS_FOREIGN_TABLE);
+			$acc = $acc.add($table);
+		}
+
+		const pager = this.findPagers($table);
+		if (pager && pager[direction]) {
+			// Recurse with the same accumulator
+			return this.traverse(pager[direction], direction, $acc);
+		}
+
+		return $acc;
+	}
+
+	/**
+	 * Constructs the `InvestigateHelper` interface.
+	 *
+	 * @param {JQuery<HTMLElement>} $content
+	 * @param {CollectedUsernames} names
+	 */
+	static createInterface($content, names) {
+		const { users, ips } = names;
+		const /** @type {UserList} */ list = {};
+
+		// Create a list of registered users
+		if (users.length) {
+			const userField = this.collapsibleFieldsetLayout($content, Messages.get('checkuser-helper-user'));
+			list.user = [];
+			for (const { user, ips } of users) {
+				const item = new UserListItem(userField, user, mw.util.isTemporaryUser(user) ? 'temp' : 'user');
+				ips.forEach(({ ip, actions, all }) => {
+					item.addSublistItem($('<li>').append(
+						ip,
+						IPFieldContent.getActionCountText(actions),
+						IPFieldContent.getAllActionCountText(all)
+					));
+				});
+				list.user.push(item);
+			}
+		}
+
+		// Create a list of IP addresses including common IP ranges
+		if (ips.length) {
+			const /** @type {IpInfo[]} */ v4s = [];
+			const /** @type {IpInfo[]} */ v6s = [];
+			for (const info of ips) {
+				if (info.ip.version === 4) {
+					v4s.push(info);
+				} else {
+					v6s.push(info);
+				}
+			}
+			if (v4s.length) {
+				const ipField = this.collapsibleFieldsetLayout($content, 'IPv4');
+				list.ipv4 = new IPFieldContent(ipField, v4s);
+			}
+			if (v6s.length) {
+				const ipField = this.collapsibleFieldsetLayout($content, 'IPv6');
+				list.ipv6 = new IPFieldContent(ipField, v6s);
+			}
+		}
+
+		UserListItem.checkExistence();
+
+		const blockField = this.collapsibleFieldsetLayout($content, Messages.get('block'));
+		new BlockField(blockField, list);
+
+		mw.hook('wikipage.content').fire($content);
 	}
 
 	/**
@@ -468,6 +638,7 @@ class InvestigateHelper {
 	}
 
 }
+InvestigateHelper.CLS_FOREIGN_TABLE = 'ih-foreigntable';
 
 class Messages {
 
@@ -936,6 +1107,14 @@ class Messages {
  */
 Messages.i18n = {
 	en: {
+		'investigatehelper-traverser-button': 'Collect data from other tabs',
+		'investigatehelper-traverser-running': 'Collecting data...',
+		'investigatehelper-traverser-notice':
+			'CheckUser data has been collected from all other Special:Investigate tabs. Note that <b>the collected data ' +
+			'will be lost if you refresh or leave this page</b>, because InvestigateHelper does not cache any sensitive ' +
+			'data for security reasons. If you want to navigate to other tabs on this special page, it is recommended to ' +
+			'open them in a new tab or window to keep the current page intact.',
+		'investigatehelper-traverser-complete': 'CheckUser data has been collected from all tabs.',
 		'investigatehelper-dialog-button-expand': 'Expand',
 		'investigatehelper-dialog-button-shrink': 'Shrink',
 		'investigatehelper-dialog-unblockreason': 'Reason for lifting any blocks:',
@@ -948,6 +1127,13 @@ Messages.i18n = {
 			'Processed $1 {{PLURAL:$1|request|requests}}.<ul><li>Success: $2</li><li>Failure: $3</li></ul>'
 	},
 	ja: {
+		'investigatehelper-traverser-button': '他のタブからデータを収集',
+		'investigatehelper-traverser-running': 'データを収集しています...',
+		'investigatehelper-traverser-notice':
+			'特別:Investigate の他のすべてのタブからチェックユーザーデータを収集しました。<b>収集したデータは、このページを更新したり離れた' +
+			'場合失われます</b>。これは、セキュリティ上の理由で InvestigateHelper がいかなる機密データもキャッシュしないためです。この特別' +
+			'ページ上の別タブに移動したい場合は、新しいタブまたはウィンドウで開くことを推奨します。',
+		'investigatehelper-traverser-complete': 'すべてのタブからチェックユーザーデータを収集しました。',
 		'investigatehelper-dialog-button-expand': '拡大',
 		'investigatehelper-dialog-button-shrink': '縮小',
 		'investigatehelper-dialog-unblockreason': 'ブロック解除理由:',
@@ -1707,7 +1893,7 @@ IPFieldContent.intersectOptions = {
 	minV4: 16,
 	maxV6: 63,
 	minV6: 19,
-	verbose: true
+	verbose: false
 };
 
 /**
@@ -3614,10 +3800,12 @@ class BlockTarget {
 }
 
 /**
+ * @typedef {import('./window/InvestigateHelper').PagerHref} PagerHref
  * @typedef {import('./window/InvestigateHelper').IP} IP
  * @typedef {import('./window/InvestigateHelper').UserList} UserList
  * @typedef {import('./window/InvestigateHelper').UserInfo} UserInfo
  * @typedef {import('./window/InvestigateHelper').IpInfo} IpInfo
+ * @typedef {import('./window/InvestigateHelper').CollectedUsernames} CollectedUsernames
  * @typedef {import('./window/InvestigateHelper').OriginalMessages} OriginalMessages
  * @typedef {import('./window/InvestigateHelper').LoadedMessages} LoadedMessages
  * @typedef {import('./window/InvestigateHelper').Gender} Gender
