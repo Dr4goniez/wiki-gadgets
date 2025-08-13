@@ -2035,7 +2035,7 @@ class BlockField {
 
 		this.bindCheckboxesWithTags();
 
-		const investigateButton = this.createInvestigateButton(!!presetTargets.length);
+		const investigateButton = this.createInvestigateButton(!presetTargets.length);
 		targetField.addItems([
 			new OO.ui.FieldLayout(this.target),
 			new OO.ui.FieldLayout(investigateButton)
@@ -2275,7 +2275,7 @@ class BlockField {
 	 * @returns {OO.ui.ButtonWidget}
 	 * @private
 	 */
-	createInvestigateButton(disabled) {
+	createInvestigateButton(disabled = true) {
 		const button = new OO.ui.ButtonWidget({
 			label: Messages.get('checkuser-investigate'),
 			disabled
