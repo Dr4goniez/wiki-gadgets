@@ -1,5 +1,7 @@
 export type IP = typeof import('ip-wiki').IP;
 
+export type MultiValue<T> = T | T[];
+
 export interface UserInfo {
 	/**
 	 * The username.
@@ -27,7 +29,54 @@ export interface IpInfo {
 	all: number;
 }
 
-export interface LoadedMessages {
+export interface OriginalMessages {
+	/**
+	 * Label for the button to expand the dialog.
+	 */
+	'investigatehelper-dialog-button-expand': string;
+	/**
+	 * Label for the button to shrink the dialog.
+	 */
+	'investigatehelper-dialog-button-shrink': string;
+	/**
+	 * Label for the input box where the user enters an unblock reason in the dialog.
+	 */
+	'investigatehelper-dialog-unblockreason': string;
+	/**
+	 * The default unblock reason prefilled in the corresponding input box in the dialog.
+	 */
+	'investigatehelper-dialog-unblockreason-default': string;
+	/**
+	 * Text shown when a given IP block target contains other block targets (CIDR-wise).
+	 *
+	 * * `$1` – A comma-separated list of the contained block targets.
+	 */
+	'investigatehelper-dialog-blocktarget-contains': string;
+	/**
+	 * Text shown when a given IP block target is contained within other block targets (CIDR-wise).
+	 *
+	 * * `$1` – A comma-separated list of the containing block targets.
+	 */
+	'investigatehelper-dialog-blocktarget-containedin': string;
+	/**
+	 * A `mw.notify` message shown when no users are selected as block targets in the dialog.
+	 */
+	'investigatehelper-dialog-blocktarget-none': string;
+	/**
+	 * An `OO.ui.confirm` message shown when only unblock requests will be made.
+	 */
+	'investigatehelper-dialog-blocktarget-unblockonly': string;
+	/**
+	 * A `mw.notify` message shown when all block/unblock requests are complete.
+	 *
+	 * `$1` - The total number of requests.
+	 * `$2` - The number of successful requests.
+	 * `$3` - The number of failed requests.
+	 */
+	'investigatehelper-dialog-blocktarget-processed': string;
+}
+
+export interface LoadedMessages extends OriginalMessages {
 	/** `'List'` */
 	'tux-editor-translate-mode': string;
 	/** `'User'` */
@@ -60,8 +109,6 @@ export interface LoadedMessages {
 	/** `'<i>(~$1 from all users)</i>'` */
 	'checkuser-investigate-compare-table-cell-other-actions': string;
 
-	/** `'IP'` */
-	'checkuser-investigate-compare-table-header-ip': string;
 	/** `'Block user'` */
 	'block': string;
 	/** `'Usernames and IP addresses'` */
@@ -70,23 +117,20 @@ export interface LoadedMessages {
 	'mw-widgets-usersmultiselect-placeholder': string;
 	/** `'Investigate'` */
 	'checkuser-investigate': string;
-
 	/** `'Expiration'` */
 	'block-expiry': string;
 	/** `'2 hours:2 hours,1 day:1 day,...'` */
 	'ipboptions': string;
 	/** `'Other time:'` */
 	'ipbother': string;
-
 	/** `'Reason'` */
 	'checkuser-investigateblock-reason': string;
 	/** `'*Common block reasons\n...'` */
 	'ipbreason-dropdown': string;
 	/** `'Other'` */
 	'htmlform-selectorother-other': string;
-
-	/** `'Actions to block'` */
-	'checkuser-investigateblock-actions': string;
+	/** `'Block details'` */
+	'block-details': string;
 	/** `'Account creation'` */
 	'ipbcreateaccount': string;
 	/** `'Sending email'` */
@@ -105,17 +149,15 @@ export interface LoadedMessages {
 	'ipbhidename': string;
 	/** `'Apply block to logged-in users from this IP address'` */
 	'ipb-hardblock': string;
-
 	/** `'block'` */
 	'blocklink': string;
+
 	/** `'You are about to block both accounts and IPs with the same reason...'` */
 	'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets': string;
 	/** `'Error ($1)'` */
 	'api-feed-error-title': string;
 	/** `'Submit'` */
 	'block-submit': string;
-	/** `'Cancel'` */
-	'block-cancel': string;
 	/** `'Type a reason'` */
 	'block-removal-reason-placeholder': string;
 	'historyempty': string;
@@ -158,7 +200,7 @@ export interface LoadedMessages {
 
 export type Gender = 'male' | 'female' | 'unknown';
 
-export type UserType = 'user' | 'ip' | 'cidr';
+export type UserType = 'user' | 'temp' | 'ip' | 'cidr';
 
 export interface ApiResponse {
 	parse?: ApiResponseParse;
@@ -306,7 +348,7 @@ export interface CategorizedUsername {
 	/**
 	 * The type of the username.
 	 */
-	usertype: 'user' | 'temp' | 'ip';
+	usertype: UserType;
 	/**
 	 * The abbreviated notation of `username`. Exists only if the usertype is `'ip'`.
 	 */
@@ -376,3 +418,54 @@ export interface BlockLogMapValue {
  * Map of block IDs to block log lines.
  */
 export type BlockLoglineMap = Map<number, string>;
+
+export interface BlockParamsDetails {
+	expiry: string;
+	reason: string;
+	anononly: boolean;
+	nocreate: boolean;
+	autoblock: boolean;
+	noemail: boolean;
+	hidename: boolean;
+	allowusertalk: boolean;
+}
+
+type BlockParamsDetailsOptionalKeys = keyof Pick<BlockParamsDetails, 'anononly' | 'autoblock' | 'hidename'>;
+
+export type BlockParamsCore =
+	| {
+		action: 'block';
+		formatversion: '2';
+		id: number;
+		user?: never;
+		reblock?: never;
+		newblock?: never;
+	}
+	| {
+		action: 'block';
+		formatversion: '2';
+		id?: never;
+		user: string;
+		reblock?: true;
+		newblock?: never;
+	}
+	| {
+		action: 'block';
+		formatversion: '2';
+		id?: never;
+		user: string;
+		reblock?: never;
+		newblock?: true;
+	};
+
+export type BlockParams =
+	BlockParamsCore &
+	Omit<BlockParamsDetails, BlockParamsDetailsOptionalKeys> &
+	Partial<Pick<BlockParamsDetails, BlockParamsDetailsOptionalKeys>>;
+
+export interface UnblockParams {
+	action: 'unblock';
+	formatversion: '2';
+	id: number;
+	reason: string;
+}

@@ -16,186 +16,186 @@ let api;
 /** @type {IP} */
 let IP = Object.create(null);
 
+const wgUserLanguage = mw.config.get('wgUserLanguage');
+
 /**
  * Initializes the script.
  */
-function init() {
+async function init() {
 
 	// Run the script only on Special:Investigate
 	if (mw.config.get('wgCanonicalSpecialPageName') !== 'Investigate') {
 		return;
 	}
 
-	$.when(
+	await $.when(
 		loadIpWiki(), // This must be called before calling collectUsernames()
 		mw.loader.using(['mediawiki.util', 'mediawiki.api', 'mediawiki.storage']),
 		$.ready
-	).then(() => {
+	);
 
-		// Parse the "IPs & User agents" table
-		const /** @type {JQuery<HTMLTableElement>} */ $table = $('.ext-checkuser-investigate-table');
-		if (!$table.length) {
-			return;
+	// Parse the "IPs & User agents" table
+	const dev = false;
+	const $table = getInvestigateTable();
+	if (!$table.length && !dev) {
+		return;
+	}
+	const names = collectUsernames($table, dev);
+	if (!names) {
+		return;
+	}
+
+	/** @type {Record<string, string>} */
+	const i18n = Messages.i18n[wgUserLanguage] || Messages.i18n.en;
+	mw.messages.set(i18n);
+
+	// Initialize a mw.Api instance
+	api = new mw.Api(getApiOptions());
+
+	// Wait for dependent modules and messages to get ready
+	await $.when(
+		mw.loader.using([
+			'jquery.makeCollapsible',
+			'oojs-ui',
+			'oojs-ui.styles.icons-movement', // collapse, expand
+			'oojs-ui.styles.icons-moderation', // trash
+			'oojs-ui.styles.icons-editing-core', // edit
+			'oojs-ui.styles.icons-alerts', // success, error
+			'mediawiki.widgets.UsersMultiselectWidget'
+		]),
+		Messages.loadMessagesIfMissing([
+			// For UserListItem
+			'tux-editor-translate-mode',
+			'checkuser-helper-user',
+			'sp-contributions-talk',
+			'contribslink',
+			'sp-contributions-logs',
+			'sp-contributions-blocklog',
+			'abusefilter-log-linkoncontribs',
+			'checkuser-log-checks-on',
+			'centralauth-contribs-link',
+			'checkuser-global-contributions-link',
+			'ooui-copytextlayout-copy',
+			'checkuser-helper-copy-success',
+			'checkuser-helper-copy-failed',
+			// Related to the Investigate table
+			'checkuser-investigate-compare-table-cell-actions',
+			'checkuser-investigate-compare-table-cell-other-actions',
+			// For BlockField
+			'block',
+			'checkuser-investigateblock-target',
+			'mw-widgets-usersmultiselect-placeholder',
+			'checkuser-investigate',
+			'block-expiry',
+			'ipboptions',
+			'ipbother',
+			'checkuser-investigateblock-reason',
+			'ipbreason-dropdown',
+			'htmlform-selectorother-other',
+			'block-details',
+			'ipbcreateaccount',
+			'ipbemailban',
+			'ipb-disableusertalk',
+			'block-options',
+			'htmlform-optional-flag',
+			'ipbenableautoblock',
+			'days',
+			'ipbhidename',
+			'ipb-hardblock',
+			'blocklink',
+			// For BlockDialog
+			'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets',
+			'api-feed-error-title',
+			'block-submit',
+			'block-removal-reason-placeholder',
+			'historyempty',
+			'block-create',
+			'checkuser-investigateblock-reblock-label',
+			'block-removal-confirm-yes',
+			// For BlockLog
+			'logentry-block-block',
+			'logentry-block-block-multi',
+			'logentry-block-reblock',
+			'logentry-partialblock-block',
+			'logentry-partialblock-block-multi',
+			'logentry-partialblock-reblock',
+			'logentry-non-editing-block-block',
+			'logentry-non-editing-block-block-multi',
+			'logentry-non-editing-block-reblock',
+			'block-log-flags-angry-autoblock',
+			'block-log-flags-anononly',
+			'block-log-flags-hiddenname',
+			'block-log-flags-noautoblock',
+			'block-log-flags-nocreate',
+			'block-log-flags-noemail',
+			'block-log-flags-nousertalk',
+			'parentheses',
+			'comma-separator',
+			'and',
+			'word-separator',
+			'blanknamespace',
+			'ipb-action-create',
+			'ipb-action-move',
+			'ipb-action-thanks',
+			'ipb-action-upload',
+			'logentry-partialblock-block-page',
+			'logentry-partialblock-block-ns',
+			'logentry-partialblock-block-action',
+		])
+	);
+	await Messages.parse([
+		'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets'
+	]);
+
+	const $content = $('.mw-body-content');
+	createStyleTag();
+	const { users, ips } = names;
+	const /** @type {UserList} */ list = {};
+
+	// Create a list of registered users
+	if (users.length) {
+		const userField = collapsibleFieldsetLayout($content, Messages.get('checkuser-helper-user'));
+		list.user = [];
+		for (const { user, ips } of users) {
+			const item = new UserListItem(userField, user, mw.util.isTemporaryUser(user) ? 'temp' : 'user');
+			ips.forEach(({ ip, actions, all }) => {
+				item.addSublistItem($('<li>').append(
+					ip,
+					IPFieldContent.getActionCountText(actions),
+					IPFieldContent.getAllActionCountText(all)
+				));
+			});
+			list.user.push(item);
 		}
-		const names = collectUsernames($table);
-		if (!names) {
-			return;
+	}
+
+	// Create a list of IP addresses including common IP ranges
+	if (ips.length) {
+		const /** @type {IpInfo[]} */ v4s = [];
+		const /** @type {IpInfo[]} */ v6s = [];
+		for (const info of ips) {
+			if (info.ip.version === 4) {
+				v4s.push(info);
+			} else {
+				v6s.push(info);
+			}
 		}
+		if (v4s.length) {
+			const ipField = collapsibleFieldsetLayout($content, 'IPv4');
+			list.ipv4 = new IPFieldContent(ipField, v4s);
+		}
+		if (v6s.length) {
+			const ipField = collapsibleFieldsetLayout($content, 'IPv6');
+			list.ipv6 = new IPFieldContent(ipField, v6s);
+		}
+	}
 
-		// Initialize a mw.Api instance
-		api = new mw.Api(getApiOptions());
+	UserListItem.checkExistence();
 
-		// Wait for dependent modules and messages to get ready
-		$.when(
-			mw.loader.using([
-				'jquery.makeCollapsible',
-				'oojs-ui',
-				'oojs-ui.styles.icons-movement', // collapse, expand
-				'oojs-ui.styles.icons-moderation', // trash
-				'oojs-ui.styles.icons-editing-core', // edit
-				'mediawiki.widgets.UsersMultiselectWidget'
-			]),
-			Messages.loadMessagesIfMissing([
-				'tux-editor-translate-mode',
-				'checkuser-helper-user',
-				'sp-contributions-talk',
-				'contribslink',
-				'sp-contributions-logs',
-				'sp-contributions-blocklog',
-				'abusefilter-log-linkoncontribs',
-				'checkuser-log-checks-on',
-				'centralauth-contribs-link',
-				'checkuser-global-contributions-link',
-				'ooui-copytextlayout-copy',
-				'checkuser-helper-copy-success',
-				'checkuser-helper-copy-failed',
+	const blockField = collapsibleFieldsetLayout($content, Messages.get('block'));
+	new BlockField(blockField, list);
 
-				'checkuser-investigate-compare-table-cell-actions',
-				'checkuser-investigate-compare-table-cell-other-actions',
-
-				'checkuser-investigate-compare-table-header-ip',
-				'block',
-				'checkuser-investigateblock-target',
-				'mw-widgets-usersmultiselect-placeholder',
-				'checkuser-investigate',
-
-				'block-expiry',
-				'ipboptions',
-				'ipbother',
-
-				'checkuser-investigateblock-reason',
-				'ipbreason-dropdown',
-				'htmlform-selectorother-other',
-
-				'checkuser-investigateblock-actions',
-				'ipbcreateaccount',
-				'ipbemailban',
-				'ipb-disableusertalk',
-				'block-options',
-				'htmlform-optional-flag',
-				'ipbenableautoblock',
-				'days',
-				'ipbhidename',
-				'ipb-hardblock',
-
-				'blocklink',
-				'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets',
-				'api-feed-error-title',
-				'block-submit',
-				'block-cancel',
-				'block-removal-reason-placeholder',
-				'historyempty',
-				'block-create',
-				'checkuser-investigateblock-reblock-label',
-				'block-removal-confirm-yes',
-
-				'logentry-block-block',
-				'logentry-block-block-multi',
-				'logentry-block-reblock',
-				'logentry-partialblock-block',
-				'logentry-partialblock-block-multi',
-				'logentry-partialblock-reblock',
-				'logentry-non-editing-block-block',
-				'logentry-non-editing-block-block-multi',
-				'logentry-non-editing-block-reblock',
-				'block-log-flags-angry-autoblock',
-				'block-log-flags-anononly',
-				'block-log-flags-hiddenname',
-				'block-log-flags-noautoblock',
-				'block-log-flags-nocreate',
-				'block-log-flags-noemail',
-				'block-log-flags-nousertalk',
-				'parentheses',
-				'comma-separator',
-				'and',
-				'word-separator',
-				'blanknamespace',
-				'ipb-action-create',
-				'ipb-action-move',
-				'ipb-action-thanks',
-				'ipb-action-upload',
-				'logentry-partialblock-block-page',
-				'logentry-partialblock-block-ns',
-				'logentry-partialblock-block-action',
-			])
-		).then(() => {
-			return Messages.parse([
-				'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets'
-			]);
-		}).then(() => {
-
-			const $content = $('.mw-body-content');
-			createStyleTag();
-			const { users, ips } = names;
-			const /** @type {UserList} */ list = {};
-
-			// Create a list of registered users
-			if (users.length) {
-				const userField = collapsibleFieldsetLayout($content, Messages.get('checkuser-helper-user'));
-				list.user = [];
-				for (const { user, ips } of users) {
-					const item = new UserListItem(userField, user, 'user');
-					ips.forEach(({ ip, actions, all }) => {
-						item.addSublistItem($('<li>').append(
-							ip,
-							IPFieldContent.getActionCountText(actions),
-							IPFieldContent.getAllActionCountText(all)
-						));
-					});
-					list.user.push(item);
-				}
-			}
-
-			// Create a list of IP addresses including common IP ranges
-			if (ips.length) {
-				const /** @type {IpInfo[]} */ v4s = [];
-				const /** @type {IpInfo[]} */ v6s = [];
-				for (const info of ips) {
-					if (info.ip.version === 4) {
-						v4s.push(info);
-					} else {
-						v6s.push(info);
-					}
-				}
-				if (v4s.length) {
-					const ipField = collapsibleFieldsetLayout($content, 'IPv4');
-					list.ipv4 = new IPFieldContent(ipField, v4s);
-				}
-				if (v6s.length) {
-					const ipField = collapsibleFieldsetLayout($content, 'IPv6');
-					list.ipv6 = new IPFieldContent(ipField, v6s);
-				}
-			}
-
-			UserListItem.checkExistence();
-
-			const blockField = collapsibleFieldsetLayout($content, Messages.get('block'));
-			new BlockField(blockField, list);
-
-			mw.hook('wikipage.content').fire($content);
-
-		}).catch(console.error);
-	});
+	mw.hook('wikipage.content').fire($content);
 }
 
 /**
@@ -210,22 +210,32 @@ function loadIpWiki() {
 			IP = req(moduleName).IP;
 		});
 	};
-	if (!mw.loader.getState(moduleName)) { // Module doesn't exist locally
-		return mw.loader.getScript('https://ja.wikipedia.org/w/load.php?modules=' + moduleName) // Import the module
-			.then(loadModule);
+	if (!new Set(mw.loader.getModuleNames()).has(moduleName)) { // Module doesn't exist locally
+		return mw.loader.getScript('https://ja.wikipedia.org/w/load.php?modules=' + moduleName).then(loadModule);
 	} else {
 		return loadModule();
 	}
 }
 
 /**
+ * Retrieves the investigate table as a jQuery object.
+ *
+ * @param {Document | JQuery<HTMLElement>} [referenceDoc]
+ * @returns {JQuery<HTMLTableElement>}
+ */
+function getInvestigateTable(referenceDoc = document) {
+	return $('.ext-checkuser-investigate-table', referenceDoc);
+}
+
+/**
  * Collects user names from the investigate table.
  *
  * @param {JQuery<HTMLTableElement>} $table
+ * @param {boolean} [dev=false]
  * @returns {{ users: UserInfo[]; ips: IpInfo[]; } | null} `null` if both `users` and `ips` are empty.
  * The returned arrays are both sorted by username/IP address.
  */
-function collectUsernames($table) {
+function collectUsernames($table, dev = false) {
 	const USER_TARGET = 'td.ext-checkuser-compare-table-cell-user-target';
 	const IP_TARGET = 'td.ext-checkuser-compare-table-cell-ip-target';
 
@@ -265,6 +275,16 @@ function collectUsernames($table) {
 		}
 	});
 
+	if (dev) {
+		const ipStr = '192.168.0.1';
+		users.set('DragoTest', new Set([ipStr]));
+		ips.set(ipStr, {
+			ip: /** @type {InstanceType<IP>} */ (IP.newFromText(ipStr)),
+			users: new Set(['DragoTest']),
+			actions: 0,
+			all: 0
+		});
+	}
 	if (!users.size && !ips.size) {
 		return null;
 	}
@@ -386,7 +406,7 @@ class Messages {
 				formatversion: '2',
 				meta: 'allmessages',
 				ammessages: batch,
-				amlang: mw.config.get('wgUserLanguage')
+				amlang: wgUserLanguage
 			}).then(/** @param {ApiResponse} res */ (res) => {
 				const allmessages = res && res.query && res.query.allmessages || [];
 				let added = false;
@@ -779,7 +799,7 @@ class Messages {
 			prop: ''
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const parsedsummary = res && res.parse && res.parse.parsedsummary;
-			return parsedsummary === 'string' ? parsedsummary : null;
+			return typeof parsedsummary === 'string' ? parsedsummary : null;
 		}).catch((_, err) => {
 			console.log('Failed to parse summary:', err);
 			return null;
@@ -788,11 +808,43 @@ class Messages {
 
 }
 /**
+ * @type {Record<'en' | 'ja', OriginalMessages>}
+ */
+Messages.i18n = {
+	en: {
+		'investigatehelper-dialog-button-expand': 'Expand',
+		'investigatehelper-dialog-button-shrink': 'Shrink',
+		'investigatehelper-dialog-unblockreason': 'Reason for lifting any blocks:',
+		'investigatehelper-dialog-unblockreason-default': 'Remove duplicate block',
+		'investigatehelper-dialog-blocktarget-contains': 'Contains: $1',
+		'investigatehelper-dialog-blocktarget-containedin': 'Contained in: $1',
+		'investigatehelper-dialog-blocktarget-none': 'No block targets have been selected.',
+		'investigatehelper-dialog-blocktarget-unblockonly': 'This will only <b>unblock</b> the targets. Do you want to continue?',
+		'investigatehelper-dialog-blocktarget-processed':
+			'Processed $1 {{PLURAL:$1|request|requests}}.<ul><li>Success: $2</li><li>Failure: $3</li></ul>'
+	},
+	ja: {
+		'investigatehelper-dialog-button-expand': '拡大',
+		'investigatehelper-dialog-button-shrink': '縮小',
+		'investigatehelper-dialog-unblockreason': 'ブロック解除理由:',
+		'investigatehelper-dialog-unblockreason-default': '重複ブロックを除去',
+		'investigatehelper-dialog-blocktarget-contains': '含有するIP: $1',
+		'investigatehelper-dialog-blocktarget-containedin': '含有されるIP: $1',
+		'investigatehelper-dialog-blocktarget-none': 'ブロック対象が選択されていません。',
+		'investigatehelper-dialog-blocktarget-unblockonly': '<b>ブロック解除</b>の処理のみが行われます。続行しますか？',
+		'investigatehelper-dialog-blocktarget-processed':
+			'$1{{PLURAL:$1|件}}のリクエストを処理しました。<ul><li>成功: $2</li><li>失敗: $3</li></ul>'
+	}
+};
+/**
  * Map of usernames to their genders. This object is updated by {@link BlockField.checkBlocks}.
  *
  * @type {Map<string, Gender>}
  */
 Messages.userGenderMap = new Map();
+/**
+ * Key for `mw.storage` to cache some messages.
+ */
 Messages.storageKey = 'mw-InvestigateHelper-messages';
 
 /**
@@ -998,44 +1050,44 @@ class UserListItem {
 	 * @private
 	 */
 	static createToolLinks(username, type) {
-		// (user | talk | contribs | logs | block log | filter log | CU log | global account | checkuser | investigate)
+		// (list | user | talk | contribs | logs | block log | abuse log | checks on | global account | global contributions | stalk toy | copy)
 		const $tools = $('<span>').addClass('ih-toollinks');
 		const /** @type {JQuery<HTMLElement>[]} */ anchors = [];
-		if (type === 'user') {
+		if (type === 'user' || type === 'temp') {
 			anchors.push(
-				UserListItem.createInternalLink(Messages.get('checkuser-helper-user').toLowerCase(), `User:${username}`, { redirect: 'no' }, true)
+				this.createInternalLink(Messages.get('checkuser-helper-user').toLowerCase(), `User:${username}`, { redirect: 'no' }, true)
 			);
 		}
 		if (type !== 'cidr') {
 			anchors.push(
-				UserListItem.createInternalLink(Messages.get('sp-contributions-talk'), `User talk:${username}`, { redirect: 'no' }, true)
+				this.createInternalLink(Messages.get('sp-contributions-talk'), `User talk:${username}`, { redirect: 'no' }, true)
 			);
 		}
 		anchors.push(
-			UserListItem.createInternalLink(Messages.get('contribslink'), `Special:Contributions/${username}`),
-			UserListItem.createInternalLink(Messages.get('sp-contributions-logs'), `Special:Log/${username}`),
-			UserListItem.createInternalLink(Messages.get('sp-contributions-blocklog'), 'Special:Log/block', { page: `User:${username}` })
+			this.createInternalLink(Messages.get('contribslink'), `Special:Contributions/${username}`),
+			this.createInternalLink(Messages.get('sp-contributions-logs'), `Special:Log/${username}`),
+			this.createInternalLink(Messages.get('sp-contributions-blocklog'), 'Special:Log/block', { page: `User:${username}` })
 		);
 		if (type !== 'cidr') {
 			anchors.push(
-				UserListItem.createInternalLink(Messages.get('abusefilter-log-linkoncontribs'), 'Special:AbuseLog', { wpSearchUser: username })
+				this.createInternalLink(Messages.get('abusefilter-log-linkoncontribs'), 'Special:AbuseLog', { wpSearchUser: username })
 			);
 		}
 		anchors.push(
-			UserListItem.createInternalLink(Messages.get('checkuser-log-checks-on'), 'Special:CheckUserLog', { cuSearch: username })
+			this.createInternalLink(Messages.get('checkuser-log-checks-on'), 'Special:CheckUserLog', { cuSearch: username })
 		);
-		if (type === 'user') {
+		if (type === 'user' || type === 'temp') {
 			anchors.push(
-				UserListItem.createInternalLink(Messages.get('centralauth-contribs-link'), `Special:CentralAuth/${username}`)
+				this.createInternalLink(Messages.get('centralauth-contribs-link'), `Special:CentralAuth/${username}`)
 			);
 		} else {
 			anchors.push(
-				UserListItem.createExternalLink('APNIC', `https://wq.apnic.net/apnic-bin/whois.pl?searchtext=${username}`)
+				this.createExternalLink('APNIC', `https://wq.apnic.net/apnic-bin/whois.pl?searchtext=${username}`)
 			);
 		}
 		anchors.push(
-			UserListItem.createInternalLink(Messages.get('checkuser-global-contributions-link'), `Special:GlobalContributions/${username}`),
-			UserListItem.createExternalLink('stalk toy', `https://meta3.toolforge.org/stalktoy/${username}`)
+			this.createInternalLink(Messages.get('checkuser-global-contributions-link'), `Special:GlobalContributions/${username}`),
+			this.createExternalLink('stalk toy', `https://meta3.toolforge.org/stalktoy/${username}`)
 		);
 		if (clipboardSupported()) {
 			anchors.push(
@@ -1135,7 +1187,7 @@ class UserListItem {
 				const {
 					normalized = [],
 					pages = []
-				} =  res && res.query || {};
+				} = res && res.query || {};
 
 				const /** @type {Map<string, string>} */ canonicalizedMap = new Map();
 				for (const { from, to } of normalized) {
@@ -1245,7 +1297,9 @@ class UserListItem {
 	 * @returns {this} The current instance for chaining.
 	 */
 	addSublistItem($item) {
-		if (!this.hasSublist()) this.createSublist();
+		if (!this.hasSublist()) {
+			this.createSublist();
+		}
 		this.$sublist.append($item);
 		return this;
 	}
@@ -1473,8 +1527,6 @@ class IPFieldContent {
 				const /** @type {Set<string>} */ users = new Set();
 				const canContain = ip.isCIDR();
 
-				// TODO: `contains` should be sorted
-				// TODO: Add the IP range in the first line
 				const /** @type {IpInfo[]} */ contains = [];
 				for (const i of covers) {
 					const { users: i_users, actions: i_actions, all: i_all } = info[i];
@@ -1708,23 +1760,6 @@ function setDifference(a, b) {
 	return result;
 }
 
-// /**
-//  * Merges two sets and returns a new set containing all unique elements from both.
-//  *
-//  * This is equivalent to `Set.prototype.union` from ES2024.
-//  *
-//  * @template T
-//  * @param {Set<T>} a The first set.
-//  * @param {Set<T>} b The second set.
-//  * @returns {Set<T>} A new set with all elements from both `a` and `b`.
-//  */
-// function setUnion(a, b) {
-// 	if (!(a instanceof Set) || !(b instanceof Set)) {
-// 		throw new TypeError('Both arguments must be Set instances.');
-// 	}
-// 	return new Set([...a, ...b]);
-// }
-
 /**
  * Checks whether two sets contain exactly the same elements (order-insensitive).
  *
@@ -1781,9 +1816,10 @@ class BlockField {
 			label: Messages.get('checkuser-investigateblock-target')
 		});
 		const presetTargets = [ // For debugging
-			'WXYZ-origin',
-			'220.152.111.0/28',
-			'220.152.111.0/24'
+			// 'WXYZ-origin',
+			// '220.152.111.0/28',
+			// '220.152.111.0/24',
+			// 'DragoTest',
 		];
 		/**
 		 * The target selector widget.
@@ -1885,7 +1921,7 @@ class BlockField {
 
 		// Block actions
 		const actionField = new OO.ui.FieldsetLayout({
-			label: Messages.get('checkuser-investigateblock-actions')
+			label: Messages.get('block-details')
 		});
 
 		/**
@@ -2143,13 +2179,14 @@ class BlockField {
 			return;
 		}
 
+		// Open the BlockDialog to process the blocks
 		const dialog = new this.BlockDialog(this, { size: 'larger' });
 		this.BlockDialog.windowManager.addWindows([dialog]);
 		this.BlockDialog.windowManager.openWindow(dialog, { targets });
 		/**
 		 * @param {OO.ui.Window} win
 		 */
-		const handleClosure = (win) => {//teardown
+		const handleClosure = (win) => {
 			if (win === dialog) {
 				this.block.setDisabled(false);
 				this.BlockDialog.windowManager.off('closing', handleClosure);
@@ -2199,7 +2236,7 @@ class BlockField {
 			}
 		}
 
-		/** @type {Record<CategorizedUsername['usertype'], CategorizedUsername[]>} */
+		/** @type {Record<Exclude<UserType, 'cidr'>, CategorizedUsername[]>} */
 		const ret = {
 			user: [],
 			temp: [],
@@ -2230,7 +2267,8 @@ class BlockField {
 				/** @type {Set<string>} */
 				const coveredBy = new Set();
 
-				if (ip.isCIDR()) {
+				const isCIDR = ip.isCIDR();
+				if (isCIDR) {
 					for (const ip2 of ips.values()) {
 						if (ip !== ip2 && ip.contains(ip2, { excludeEquivalent: true })) {
 							covers.add(ip2.abbreviate());
@@ -2245,7 +2283,7 @@ class BlockField {
 
 				ret.ip.push({
 					username: sanitized,
-					usertype: 'ip',
+					usertype: isCIDR ? 'cidr' : 'ip',
 					abbreviated: ip.abbreviate(),
 					covers: Array.from(covers).sort(),
 					coveredBy: Array.from(coveredBy).sort()
@@ -2367,7 +2405,10 @@ class BlockField {
 		})(0);
 	}
 
-	getBaseParams() {
+	/**
+	 * @returns {BlockParamsDetails}
+	 */
+	getBlockDetails() {
 		return {
 			expiry: this.getExpiry(),
 			reason: this.getReason(),
@@ -2425,7 +2466,8 @@ class BlockLog {
 			lestart: latestTimestamp + 1,
 			leend: earliestTimestamp,
 			letitle: `User:${username}`,
-			lelimit: 'max'
+			lelimit: 'max',
+			uselang: wgUserLanguage
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const logevents = res && res.query && res.query.logevents || [];
 			/**
@@ -2719,12 +2761,18 @@ function BlockDialogFactory() {
 			 * @type {OO.ui.TextInputWidget}
 			 */
 			this.unblockReason = new OO.ui.TextInputWidget({
-				placeholder: Messages.get('block-removal-reason-placeholder')
+				placeholder: Messages.get('block-removal-reason-placeholder'),
+				value: Messages.get('investigatehelper-dialog-unblockreason-default')
 			});
 			/**
-			 * @type {BlockTargetSelector[]}
+			 * @type {BlockTarget[]}
 			 */
 			this.targets = [];
+			/**
+			 * @type {boolean}
+			 * @private
+			 */
+			this.actionProcessRunning = false;
 		}
 
 		/**
@@ -2751,16 +2799,26 @@ function BlockDialogFactory() {
 		 */
 		getSetupProcess() {
 			return super.getSetupProcess().next(() => {
-
-				// Always start up in pending mode
-				this.pushPending();
-
-				// Disable all buttons on start-up
-				this.getActions().forEach(null, (action) => {
-					action.setDisabled(true);
-				});
-
+				this.pushPending(); // Always start up in pending mode
+				this.setDisabledOnButtons(true); // Disable all buttons on start-up
 			}, this);
+		}
+
+		/**
+		 * Sets the disabled states of the dialog buttons.
+		 *
+		 * @param {boolean} disable Whether to disable the button(s).
+		 * @param {import('./window/InvestigateHelper').MultiValue<'block' | 'resize' | ''>} [actions]
+		 * Actions to target. If omitted, targets all applicable actions.
+		 * @returns {this}
+		 * @private
+		 */
+		setDisabledOnButtons(disable, actions) {
+			const filter = actions ? { actions } : null;
+			this.getActions().forEach(filter, (action) => {
+				action.setDisabled(disable);
+			});
+			return this;
 		}
 
 		/**
@@ -2778,7 +2836,7 @@ function BlockDialogFactory() {
 					return this.handleSetupError(blockIdMap);
 				}
 
-				const params = this.blockField.getBaseParams();
+				const params = this.blockField.getBlockDetails();
 				const summaryPromise = params.reason
 					? Messages.parseSummary(params.reason)
 					: $.Deferred().resolve('');
@@ -2841,7 +2899,7 @@ function BlockDialogFactory() {
 								'&nbsp;',
 								parsedSummary !== null
 									? (parsedSummary
-										? $(parsedSummary)
+										? $('<span>').html(parsedSummary)
 										: redSpan().text(`(${Messages.get('historyempty')})`)
 									)
 									: redSpan().text('???')
@@ -2850,7 +2908,9 @@ function BlockDialogFactory() {
 				]);
 
 				const unblockReasonLayout = new OO.ui.FieldLayout(this.unblockReason, {
-					label: Messages.get('block-removal-confirm-yes'), // TODO: Need a better label
+					label: new OO.ui.HtmlSnippet(
+						`<b>${Messages.get('investigatehelper-dialog-unblockreason')}</b>`
+					),
 					align: 'top'
 				});
 				unblockReasonLayout.$element.css('margin-top', '0');
@@ -2865,20 +2925,16 @@ function BlockDialogFactory() {
 				// Set up the dialog body for block confirmation
 				let hasUnblockCheckbox = false;
 				/**
-				 * @type {BlockTargetSelector[]}
+				 * @type {BlockTarget[]}
 				 */
 				this.targets = targets.map((target) => {
 					hasUnblockCheckbox = hasUnblockCheckbox || !!target.logs;
-					return new BlockTargetSelector(this.fieldset, target);
+					return new BlockTarget(this.fieldset, target);
 				});
 				unblockReasonLayout.toggle(hasUnblockCheckbox);
 
 				// Mark the dialog as ready for user interaction
-				this.popPending();
-				this.getActions().forEach(null, (action) => {
-					action.setDisabled(false);
-				});
-				BlockDialog.windowManager.updateWindowSize(this);
+				this.popPending().setDisabledOnButtons(false).updateSize();
 
 			}, this);
 		}
@@ -2896,28 +2952,8 @@ function BlockDialogFactory() {
 			});
 			/** @type {OO.ui.PanelLayout} */ (this.content).$element.append(error.$element);
 
-			// Re-enable the Cancel button
-			this.getActions().forEach(null, (action) => {
-				if (action.getAction() === '') {
-					action.setDisabled(false);
-				}
-			});
-		}
-
-		/**
-		 * @inheritdoc
-		 * @param {string} [action]
-		 * @override
-		 */
-		getActionProcess(action) {
-			if (action) {
-				return new OO.ui.Process(() => {
-					this.close( {
-						action: action
-					});
-				});
-			}
-			return super.getActionProcess(action);
+			// Remove the pending state and re-enable the Cancel button
+			this.popPending().setDisabledOnButtons(false, '').updateSize();
 		}
 
 		/**
@@ -2928,6 +2964,194 @@ function BlockDialogFactory() {
 			// Remove the current instance from the WindowManager when the dialog has been closed
 			return super.teardown().then(() => {
 				BlockDialog.windowManager.removeWindows(['BlockDialog']);
+			});
+		}
+
+		/**
+		 * @inheritdoc
+		 * @param {string} [action]
+		 * @override
+		 */
+		getActionProcess(action) {
+			if (action === 'resize') {
+				const isExpanded = this.getSize() === 'full';
+				const resizeButton = this.getActions().get({ actions: action })[0];
+				if (isExpanded) {
+					this.setSize('larger');
+					resizeButton.setLabel(Messages.get('investigatehelper-dialog-button-expand'));
+				} else {
+					this.setSize('full');
+					resizeButton.setLabel(Messages.get('investigatehelper-dialog-button-shrink'));
+				}
+				return new OO.ui.Process(() => true);
+			}
+
+			// Ensure no duplicate runs
+			if (this.actionProcessRunning) {
+				return new OO.ui.Process(() => true);
+			}
+			this.actionProcessRunning = true;
+
+			// Close dialog via the parent method when "Cancel" is clicked
+			if (!action) {
+				return super.getActionProcess(action);
+			}
+
+			// Construct (un)block params in batches
+			const blockParamsDetails = this.blockField.getBlockDetails();
+			const unblockReason = this.unblockReason.getValue();
+			/** @type {Map<OO.ui.CheckboxInputWidget, BlockParams | UnblockParams | null>} */
+			const paramMap = new Map();
+			/** @type {Set<number>} */
+			const blockIndexes = new Set();
+			/** @type {Set<number>} */
+			const unblockIndexes = new Set();
+			let index = -1;
+
+			for (const target of this.targets) {
+				const isUser = ['user', 'temp'].includes(target.getUsertype());
+				const map = target.getParamMap(unblockReason);
+				for (const [checkbox, params] of map) {
+					index++;
+					if (!params) {
+						paramMap.set(checkbox, null);
+						continue;
+					}
+					if (params.action === 'unblock') {
+						paramMap.set(checkbox, params);
+						unblockIndexes.add(index);
+						continue;
+					}
+					const blockParams = /** @type {BlockParams} */ (Object.assign({}, params, blockParamsDetails));
+					if (isUser) {
+						delete blockParams.anononly;
+					} else {
+						delete blockParams.autoblock;
+						delete blockParams.hidename;
+					}
+					paramMap.set(checkbox, blockParams);
+					blockIndexes.add(index);
+				}
+			}
+
+			// Do nothing if no targets are selected
+			if (!blockIndexes.size && !unblockIndexes.size) {
+				return new OO.ui.Process(() => {
+					mw.notify(Messages.get('investigatehelper-dialog-blocktarget-none'), { type: 'error' });
+					this.actionProcessRunning = false;
+					return true;
+				});
+			}
+
+			// Start async jobs
+			let confirmed = false;
+			return super.getActionProcess(action).next(() => {
+				// Confirm an unblock-only job if applicable
+				const deferred = $.Deferred();
+				if (!blockIndexes.size) {
+					this.$element.css('z-index', '100');
+					OO.ui.confirm(
+						$('<div>').html(Messages.get('investigatehelper-dialog-blocktarget-unblockonly')),
+						{ size: 'large' }
+					).then((go) => {
+						this.$element.css('z-index', '');
+						confirmed = go;
+						deferred.resolve();
+					});
+				} else {
+					confirmed = true;
+					deferred.resolve();
+				}
+				return deferred.promise();
+			// @ts-expect-error
+			}).next(async () => {
+				if (!confirmed) {
+					this.actionProcessRunning = false;
+					return true;
+				}
+
+				// @ts-expect-error
+				const headerItems = /** @type {OO.ui.Element[]} */ (this.fieldset.getItems()).filter((item) => {
+					return !item.$element.hasClass('ih-dialog-row') && !item.$element.hasClass('ih-dialog-subrow');
+				});
+				this.fieldset.removeItems(headerItems);
+				this.pushPending().setDisabledOnButtons(true).updateSize();
+
+				// Replace checked boxes with spinner icons
+				/** @type {Map<JQuery<HTMLElement>, BlockParams | UnblockParams>} */
+				const iconMap = new Map();
+				for (const [checkbox, params] of paramMap) {
+					if (!params) {
+						checkbox.setDisabled(true);
+						continue;
+					}
+					const $icon = BlockTarget.replaceWithIcon(checkbox.$element, 'doing');
+					iconMap.set($icon, params);
+				}
+
+				// Perform blocks
+				/** @type {JQueryPromise<void>[]} */
+				let promises = [];
+				let successCount = 0;
+				let failureCount = 0;
+				/**
+				 * @param {JQuery<HTMLElement>} $icon
+				 * @param {?string} err
+				 * @returns {void}
+				 */
+				const postProcess = ($icon, err) => {
+					/** @type {'done' | 'failed'} */
+					let iconType;
+					if (err) {
+						iconType = 'failed';
+						failureCount++;
+					} else {
+						iconType = 'done';
+						successCount++;
+					}
+					BlockTarget.replaceWithIcon($icon, iconType, err || undefined);
+				};
+				/**
+				 * @param {'block' | 'unblock'} action
+				 */
+				const execute = async (action) => {
+					for (const [$icon, params] of iconMap) {
+						if (params.action === action) {
+							const req = BlockTarget.doBlock(params).then((err) => postProcess($icon, err));
+							promises.push(req);
+							if (promises.length === 50) {
+								await Promise.all(promises);
+								promises = [];
+							}
+						}
+					}
+					if (promises.length) {
+						await Promise.all(promises);
+						promises = [];
+					}
+				};
+
+				// Process blocks first and then unblocks to ensure sanity in the generated block logs
+				await execute('block');
+				await execute('unblock');
+
+				const totalCount = String(successCount + failureCount);
+				mw.notify(
+					$('<div>').html(
+						mw.format(
+							Messages.parsePlurals(
+								Messages.get('investigatehelper-dialog-blocktarget-processed'),
+								totalCount
+							),
+							totalCount,
+							String(successCount),
+							String(failureCount)
+						)
+					),
+					{ autoHideSeconds: 'long' }
+				);
+				this.popPending().setDisabledOnButtons(false, ['', 'resize']);
+				this.actionProcessRunning = false;
 			});
 		}
 
@@ -2942,8 +3166,11 @@ function BlockDialogFactory() {
 			flags: ['primary', 'progressive']
 		},
 		{
-			label: Messages.get('block-cancel'),
-			flags: 'safe'
+			action: 'resize',
+			label: Messages.get('investigatehelper-dialog-button-expand')
+		},
+		{
+			flags: ['safe', 'close']
 		}
 	];
 	BlockDialog.windowManager = (() => {
@@ -2955,7 +3182,7 @@ function BlockDialogFactory() {
 	return BlockDialog;
 }
 
-class BlockTargetSelector {
+class BlockTarget {
 
 	/**
 	 * @param {OO.ui.FieldsetLayout} fieldset
@@ -2965,6 +3192,7 @@ class BlockTargetSelector {
 
 		const {
 			username,
+			usertype,
 			abbreviated,
 			covers,
 			coveredBy,
@@ -2972,25 +3200,39 @@ class BlockTargetSelector {
 		} = target;
 
 		/**
+		 * @type {string}
+		 * @readonly
+		 * @private
+		 */
+		this.username = username;
+		/**
+		 * @type {UserType}
+		 * @readonly
+		 * @private
+		 */
+		this.usertype = usertype;
+		/**
 		 * The main checkbox with a boolean indicating whether the target should be blocked.
 		 *
 		 * @type {OO.ui.CheckboxInputWidget}
 		 */
-		this.checkbox = new OO.ui.CheckboxInputWidget({
+		this.blockToggle = new OO.ui.CheckboxInputWidget({
 			selected: true
 		});
 		/**
 		 * A `FieldLayout` widget that serves as the entire row.
 		 *
 		 * @type {OO.ui.FieldLayout}
+		 * @private
 		 */
-		this.row = new OO.ui.FieldLayout(this.checkbox, {
+		this.row = new OO.ui.FieldLayout(this.blockToggle, {
 			label: new OO.ui.HtmlSnippet(`<b>${abbreviated || username}</b>`),
 			align: 'inline',
 			classes: ['ih-dialog-row']
 		});
 		/**
 		 * @type {OO.ui.Element}
+		 * @private
 		 */
 		this.subrow = new OO.ui.Element({
 			$element: $('<div>'),
@@ -3000,12 +3242,22 @@ class BlockTargetSelector {
 		// If the target is an IP, display a list of IP addresses that the target contains and is contained in
 		if (covers && covers.length) {
 			this.subrow.$element.append(
-				$('<i>').addClass('ih-inlineblock').text('Contains: ' + covers.join(', ')) // TODO: Translate
+				$('<i>').addClass('ih-inlineblock').text(
+					mw.format(
+						Messages.get('investigatehelper-dialog-blocktarget-contains'),
+						covers.join(Messages.get('comma-separator'))
+					)
+				)
 			);
 		}
 		if (coveredBy && coveredBy.length) {
 			this.subrow.$element.append(
-				$('<i>').addClass('ih-inlineblock').text('Contained in: ' + coveredBy.join(', ')) // TODO: Translate
+				$('<i>').addClass('ih-inlineblock').text(
+					mw.format(
+						Messages.get('investigatehelper-dialog-blocktarget-containedin'),
+						coveredBy.join(Messages.get('comma-separator'))
+					)
+				)
 			);
 		}
 
@@ -3014,7 +3266,7 @@ class BlockTargetSelector {
 		 *
 		 * @type {Map<number, { override: OO.ui.CheckboxInputWidget; lift: OO.ui.CheckboxInputWidget; }>}
 		 */
-		this.existing = new Map();
+		this.existingBlocks = new Map();
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 */
@@ -3063,12 +3315,14 @@ class BlockTargetSelector {
 					)
 				);
 
-				if (!this.existing.size) {
+				if (!this.existingBlocks.size) {
 					// Check the first "override" checkbox
 					override.setSelected(true);
 					lift.setDisabled(true);
+				} else {
+					override.setDisabled(true);
 				}
-				this.existing.set(id, { override, lift });
+				this.existingBlocks.set(id, { override, lift });
 			}
 
 			this.subrow.$element.append(
@@ -3092,9 +3346,33 @@ class BlockTargetSelector {
 	 */
 	initializeDisabled() {
 
+		const PREVENT_ENABLE_FLAG = 'ihPreventEnable';
+
+		// For the main checkbox
+		this.blockToggle.off('change').on('change', (checked) => {
+			this.addBlock.setDisabled(!checked);
+			for (const { override, lift } of this.existingBlocks.values()) {
+				for (const cb of [override, lift]) {
+					if (!checked) {
+						if (cb.isDisabled()) {
+							cb.$element.data(PREVENT_ENABLE_FLAG, true);
+						} else {
+							cb.setDisabled(true);
+						}
+					} else {
+						if (cb.$element.data(PREVENT_ENABLE_FLAG)) {
+							cb.$element.removeData(PREVENT_ENABLE_FLAG);
+						} else {
+							cb.setDisabled(false);
+						}
+					}
+				}
+			}
+		});
+
 		// For the "Add block" checkbox
 		this.addBlock.off('change').on('change', (checked) => {
-			for (const { override, lift } of this.existing.values()) {
+			for (const { override, lift } of this.existingBlocks.values()) {
 				if (checked) {
 					override.setSelected(false).setDisabled(true);
 					lift.setDisabled(false);
@@ -3105,8 +3383,18 @@ class BlockTargetSelector {
 		});
 
 		// For the "Override block" and "Remove block" checkboxes
-		for (const { override, lift } of this.existing.values()) {
+		for (const { override, lift } of this.existingBlocks.values()) {
 			override.off('change').on('change', (checked) => {
+				for (const { override: override2, lift: lift2 } of this.existingBlocks.values()) {
+					if (override2 === override) {
+						continue;
+					}
+					if (checked) {
+						override2.setSelected(false).setDisabled(true);
+					} else if (!lift2.isSelected()) {
+						override2.setDisabled(false);
+					}
+				}
 				if (!this.addBlock.isSelected()) {
 					lift.setDisabled(!!checked);
 				}
@@ -3120,35 +3408,231 @@ class BlockTargetSelector {
 
 	}
 
-	/**
-	 * Returns a boolean indicating whether the main checkbox is checked.
-	 *
-	 * @returns {boolean} `true` if the target should be blocked; `false` otherwise.
-	 */
-	isSelected() {
-		return this.checkbox.isSelected();
+	getUsername() {
+		return this.username;
 	}
+
+	getUsertype() {
+		return this.usertype;
+	}
+
+	/**
+	 * Creates a mapping from a `OO.ui.CheckboxInputWidget` to (un)block parameter objects or `null`,
+	 * where `null` values indicate the corresponding checkbox is not checked or irrelevant.
+	 *
+	 * @param {string} unblockReason Reason used for `action=unblock`.
+	 * @returns {Map<OO.ui.CheckboxInputWidget, BlockParamsCore | UnblockParams | null>}
+	 */
+	getParamMap(unblockReason) {
+		/** @type {Map<OO.ui.CheckboxInputWidget, BlockParamsCore | UnblockParams | null>} */
+		const ret = new Map();
+
+		const hasSubrow = this.addBlock.$element[0].isConnected;
+		const rowEnabled = this.blockToggle.isSelected();
+		if (!hasSubrow) {
+			ret.set(this.blockToggle, rowEnabled ? this.generateBlockParams() : null);
+			return ret;
+		}
+
+		// If `subrow` is attached (i.e., the user has active blocks), the main toggle only serves as a label
+		// and doesn't determine which of the active blocks to modify
+		ret.set(this.blockToggle, null);
+
+		const addBlock = rowEnabled && !this.addBlock.isDisabled() && this.addBlock.isSelected();
+		ret.set(
+			this.addBlock,
+			addBlock ? this.generateBlockParams({ blockType: 'newblock' }) : null
+		);
+
+		let reblockScheduled = false;
+		for (const [id, { override, lift }] of this.existingBlocks) {
+			const reblock = rowEnabled && !override.isDisabled() && override.isSelected();
+			const unblock = rowEnabled && !lift.isDisabled() && lift.isSelected();
+			if (!reblock && !unblock) {
+				ret.set(override, null);
+				ret.set(lift, null);
+				continue;
+			} else if (reblock && unblock) {
+				throw new Error(`Invalid state for block ID ${id}: both "reblock" and "unblock" are selected.`);
+			}
+			if (reblock && addBlock) {
+				throw new Error(
+					`Inconsistent UI state: "newblock" is selected, but existing block ID ${id} also has ` +
+					`"reblock" selected. These options are mutually exclusive.`
+				);
+			}
+			if (reblock) { // reblock && !unblock
+				if (reblockScheduled) {
+					throw new Error(
+						`Multiple "reblock" actions detected: block ID ${id} attempted to reblock after another ` +
+						`reblock was already scheduled. Only one reblock action can be sent at a time.`
+					);
+				}
+				ret.set(override, this.generateBlockParams({ id }));
+				ret.set(lift, null);
+				reblockScheduled = true;
+			} else { // !reblock && unblock
+				ret.set(override, null);
+				ret.set(lift, this.generateUnblockParams(id, unblockReason));
+			}
+		}
+
+		return ret;
+	}
+
+	/**
+	 * @param {object} [options]
+	 * @param {number} [options.id] If not provided, {@link username} is used for the `user` parameter.
+	 * @param {'reblock' | 'newblock'} [options.blockType]
+	 * @returns {BlockParamsCore}
+	 * @private
+	 */
+	generateBlockParams(options = {}) {
+		const { id, blockType } = options;
+		/** @type {Partial<BlockParamsCore> & Pick<BlockParamsCore, 'action' | 'formatversion'>} */
+		const params = {
+			action: 'block',
+			formatversion: '2'
+		};
+		const hasId = typeof id === 'number';
+		if (hasId) {
+			params.id = id;
+		} else {
+			params.user = this.getUsername();
+		}
+		if (blockType) {
+			if (hasId) {
+				throw new Error('"blockType" must be undefined when providing an ID.');
+			}
+			params[blockType] = true;
+		}
+		return /** @type {BlockParamsCore} */ (params);
+	}
+
+	/**
+	 * @param {number} id ID of the block to unblock.
+	 * @param {string} reason Reason for unblock.
+	 * @returns {UnblockParams}
+	 * @private
+	 */
+	generateUnblockParams(id, reason) {
+		return {
+			action: 'unblock',
+			formatversion: '2',
+			id,
+			reason
+		};
+	}
+
+	/**
+	 * Performs an `action=block` or `action=unblock` request.
+	 *
+	 * @param {BlockParams | UnblockParams} params
+	 * @returns {JQueryPromise<?string>} A Promise resolving to `null` on success or an error code on failure.
+	 */
+	static doBlock(params) {
+		return api.postWithEditToken(/** @type {Record<string, any>} */ (params))
+			.then((res) => {
+				if (res.block || res.unblock) {
+					return null;
+				}
+				return 'empty';
+			})
+			.catch(/** @param {string} code */ (code, err) => {
+				console.warn(err);
+				return code;
+			});
+	}
+
+	/**
+	 * @param {BlockParams | UnblockParams} _params
+	 * @returns {JQueryPromise<?string>}
+	 */
+	static doFakeBlock(_params) {
+		const def = $.Deferred();
+		const rand = Math.random();
+		setTimeout(() => {
+			if (rand < 0.1) {
+				def.resolve('http');
+				return;
+			}
+			def.resolve(null);
+		}, 800 + rand * 1000);
+		return def.promise();
+	}
+
+	/**
+	 * Replaces an jQuery object with an icon element.
+	 *
+	 * @param {JQuery<HTMLElement>} $target The target object to replace with the icon.
+	 * @param {'doing' | 'done' | 'failed'} iconType The icon type.
+	 * @param {string} [additionalText] Additional text to show on the right of the icon in parentheses.
+	 * @returns {JQuery<HTMLElement>} The inserted icon.
+	 */
+	static replaceWithIcon($target, iconType, additionalText) {
+		let href, color;
+		switch (iconType) {
+			case 'doing':
+				href = 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif';
+				color = '';
+				break;
+			case 'done':
+				href = 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Antu_mail-mark-notjunk.svg/30px-Antu_mail-mark-notjunk.svg.png';
+				color = 'var(--color-icon-success, #099979)';
+				break;
+			case 'failed':
+				href = 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Cross_reject.svg/30px-Cross_reject.svg.png';
+				color = 'var(--color-icon-error, #f54739)';
+				break;
+			default:
+				throw new Error('Invalid icon type: ' + iconType);
+		}
+		/** @type {JQuery<HTMLImageElement>} */
+		const $icon = $('<img>');
+		$icon.prop('src', href)
+			.css({
+				width: /** @type {number} */ ($target.width()),
+				'vertical-align': 'middle',
+				border: 0
+			});
+		const $container = $('<span>').css('display', 'inline-block');
+		$container.append($icon);
+		if (additionalText) {
+			$container.append($('<span>')
+				.css('color', color)
+				.html(`&nbsp;(${additionalText})`)
+			);
+		}
+		$target.replaceWith($container);
+		return $container;
+	}
+
 }
 
 /**
- * @typedef {import('./window/InvestigateHelper.d.ts').IP} IP
- * @typedef {import('./window/InvestigateHelper.d.ts').UserList} UserList
- * @typedef {import('./window/InvestigateHelper.d.ts').UserInfo} UserInfo
- * @typedef {import('./window/InvestigateHelper.d.ts').IpInfo} IpInfo
- * @typedef {import('./window/InvestigateHelper.d.ts').LoadedMessages} LoadedMessages
- * @typedef {import('./window/InvestigateHelper.d.ts').Gender} Gender
- * @typedef {import('./window/InvestigateHelper.d.ts').ApiResponse} ApiResponse
- * @typedef {import('./window/InvestigateHelper.d.ts').UserType} UserType
- * @typedef {import('./window/InvestigateHelper.d.ts').IpInfoLevel} IpInfoLevel
- * @typedef {import('./window/InvestigateHelper.d.ts').ExtendedIpInfo} ExtendedIpInfo
- * @typedef {import('./window/InvestigateHelper.d.ts').CategorizedUsername} CategorizedUsername
- * @typedef {import('./window/InvestigateHelper.d.ts').BlockIdMap} BlockIdMap
- * @typedef {import('./window/InvestigateHelper.d.ts').BlockIdMapValue} BlockIdMapValue
- * @typedef {import('./window/InvestigateHelper.d.ts').BlockLogMap} BlockLogMap
- * @typedef {import('./window/InvestigateHelper.d.ts').BlockLogMapValue} BlockLogMapValue
- * @typedef {import('./window/InvestigateHelper.d.ts').BlockFlags} BlockFlags
- * @typedef {import('./window/InvestigateHelper.d.ts').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
- * @typedef {import('./window/InvestigateHelper.d.ts').BlockLoglineMap} BlockLoglineMap
+ * @typedef {import('./window/InvestigateHelper').IP} IP
+ * @typedef {import('./window/InvestigateHelper').UserList} UserList
+ * @typedef {import('./window/InvestigateHelper').UserInfo} UserInfo
+ * @typedef {import('./window/InvestigateHelper').IpInfo} IpInfo
+ * @typedef {import('./window/InvestigateHelper').OriginalMessages} OriginalMessages
+ * @typedef {import('./window/InvestigateHelper').LoadedMessages} LoadedMessages
+ * @typedef {import('./window/InvestigateHelper').Gender} Gender
+ * @typedef {import('./window/InvestigateHelper').ApiResponse} ApiResponse
+ * @typedef {import('./window/InvestigateHelper').UserType} UserType
+ * @typedef {import('./window/InvestigateHelper').IpInfoLevel} IpInfoLevel
+ * @typedef {import('./window/InvestigateHelper').ExtendedIpInfo} ExtendedIpInfo
+ * @typedef {import('./window/InvestigateHelper').CategorizedUsername} CategorizedUsername
+ * @typedef {import('./window/InvestigateHelper').BlockIdMap} BlockIdMap
+ * @typedef {import('./window/InvestigateHelper').BlockIdMapValue} BlockIdMapValue
+ * @typedef {import('./window/InvestigateHelper').BlockLogMap} BlockLogMap
+ * @typedef {import('./window/InvestigateHelper').BlockLogMapValue} BlockLogMapValue
+ * @typedef {import('./window/InvestigateHelper').BlockFlags} BlockFlags
+ * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
+ * @typedef {import('./window/InvestigateHelper').BlockLoglineMap} BlockLoglineMap
+ * @typedef {import('./window/InvestigateHelper').BlockParamsDetails} BlockParamsDetails
+ * @typedef {import('./window/InvestigateHelper').BlockParamsCore} BlockParamsCore
+ * @typedef {import('./window/InvestigateHelper').BlockParams} BlockParams
+ * @typedef {import('./window/InvestigateHelper').UnblockParams} UnblockParams
  */
 /**
  * @typedef {object} DialogData
