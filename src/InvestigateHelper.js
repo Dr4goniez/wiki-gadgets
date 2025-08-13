@@ -18,331 +18,455 @@ let IP = Object.create(null);
 
 const wgUserLanguage = mw.config.get('wgUserLanguage');
 
-/**
- * Initializes the script.
- */
-async function init() {
+class InvestigateHelper {
 
-	// Run the script only on Special:Investigate
-	if (mw.config.get('wgCanonicalSpecialPageName') !== 'Investigate') {
-		return;
+	/**
+	 * Initializes the script.
+	 */
+	static async init() {
+
+		// Run the script only on Special:Investigate
+		if (mw.config.get('wgCanonicalSpecialPageName') !== 'Investigate') {
+			return;
+		}
+
+		await $.when(
+			this.loadIpWiki(), // This must be called before calling collectUsernames()
+			mw.loader.using(['mediawiki.util', 'mediawiki.api', 'mediawiki.storage']),
+			$.ready
+		);
+
+		// Parse the "IPs & User agents" table
+		const dev = false;
+		const $table = this.getTable();
+		if (!$table.length && !dev) {
+			return;
+		}
+		const names = this.collectUsernames($table, dev);
+		if (!names) {
+			return;
+		}
+
+		/** @type {Record<string, string>} */
+		const i18n = Messages.i18n[wgUserLanguage] || Messages.i18n.en;
+		mw.messages.set(i18n);
+
+		// Initialize a mw.Api instance
+		api = new mw.Api(this.getApiOptions());
+
+		// Wait for dependent modules and messages to get ready
+		await $.when(
+			mw.loader.using([
+				'jquery.makeCollapsible',
+				'oojs-ui',
+				'oojs-ui.styles.icons-movement', // collapse, expand
+				'oojs-ui.styles.icons-moderation', // trash
+				'oojs-ui.styles.icons-editing-core', // edit
+				'oojs-ui.styles.icons-alerts', // success, error
+				'mediawiki.widgets.UsersMultiselectWidget'
+			]),
+			Messages.loadMessagesIfMissing([
+				// For UserListItem
+				'tux-editor-translate-mode',
+				'checkuser-helper-user',
+				'sp-contributions-talk',
+				'contribslink',
+				'sp-contributions-logs',
+				'sp-contributions-blocklog',
+				'abusefilter-log-linkoncontribs',
+				'checkuser-log-checks-on',
+				'centralauth-contribs-link',
+				'checkuser-global-contributions-link',
+				'ooui-copytextlayout-copy',
+				'checkuser-helper-copy-success',
+				'checkuser-helper-copy-failed',
+				// Related to the Investigate table
+				'checkuser-investigate-compare-table-cell-actions',
+				'checkuser-investigate-compare-table-cell-other-actions',
+				// For BlockField
+				'block',
+				'checkuser-investigateblock-target',
+				'mw-widgets-usersmultiselect-placeholder',
+				'checkuser-investigate',
+				'block-expiry',
+				'ipboptions',
+				'ipbother',
+				'checkuser-investigateblock-reason',
+				'ipbreason-dropdown',
+				'htmlform-selectorother-other',
+				'block-details',
+				'ipbcreateaccount',
+				'ipbemailban',
+				'ipb-disableusertalk',
+				'block-options',
+				'htmlform-optional-flag',
+				'ipbenableautoblock',
+				'days',
+				'ipbhidename',
+				'ipb-hardblock',
+				'blocklink',
+				// For BlockDialog
+				'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets',
+				'api-feed-error-title',
+				'block-submit',
+				'block-removal-reason-placeholder',
+				'historyempty',
+				'block-create',
+				'checkuser-investigateblock-reblock-label',
+				'block-removal-confirm-yes',
+				// For BlockLog
+				'logentry-block-block',
+				'logentry-block-block-multi',
+				'logentry-block-reblock',
+				'logentry-partialblock-block',
+				'logentry-partialblock-block-multi',
+				'logentry-partialblock-reblock',
+				'logentry-non-editing-block-block',
+				'logentry-non-editing-block-block-multi',
+				'logentry-non-editing-block-reblock',
+				'block-log-flags-angry-autoblock',
+				'block-log-flags-anononly',
+				'block-log-flags-hiddenname',
+				'block-log-flags-noautoblock',
+				'block-log-flags-nocreate',
+				'block-log-flags-noemail',
+				'block-log-flags-nousertalk',
+				'parentheses',
+				'comma-separator',
+				'and',
+				'word-separator',
+				'blanknamespace',
+				'ipb-action-create',
+				'ipb-action-move',
+				'ipb-action-thanks',
+				'ipb-action-upload',
+				'logentry-partialblock-block-page',
+				'logentry-partialblock-block-ns',
+				'logentry-partialblock-block-action',
+			])
+		);
+		await Messages.parse([
+			'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets'
+		]);
+
+		const $content = $('.mw-body-content');
+		this.createStyleTag();
+		const { users, ips } = names;
+		const /** @type {UserList} */ list = {};
+
+		// Create a list of registered users
+		if (users.length) {
+			const userField = this.collapsibleFieldsetLayout($content, Messages.get('checkuser-helper-user'));
+			list.user = [];
+			for (const { user, ips } of users) {
+				const item = new UserListItem(userField, user, mw.util.isTemporaryUser(user) ? 'temp' : 'user');
+				ips.forEach(({ ip, actions, all }) => {
+					item.addSublistItem($('<li>').append(
+						ip,
+						IPFieldContent.getActionCountText(actions),
+						IPFieldContent.getAllActionCountText(all)
+					));
+				});
+				list.user.push(item);
+			}
+		}
+
+		// Create a list of IP addresses including common IP ranges
+		if (ips.length) {
+			const /** @type {IpInfo[]} */ v4s = [];
+			const /** @type {IpInfo[]} */ v6s = [];
+			for (const info of ips) {
+				if (info.ip.version === 4) {
+					v4s.push(info);
+				} else {
+					v6s.push(info);
+				}
+			}
+			if (v4s.length) {
+				const ipField = this.collapsibleFieldsetLayout($content, 'IPv4');
+				list.ipv4 = new IPFieldContent(ipField, v4s);
+			}
+			if (v6s.length) {
+				const ipField = this.collapsibleFieldsetLayout($content, 'IPv6');
+				list.ipv6 = new IPFieldContent(ipField, v6s);
+			}
+		}
+
+		UserListItem.checkExistence();
+
+		const blockField = this.collapsibleFieldsetLayout($content, Messages.get('block'));
+		new BlockField(blockField, list);
+
+		mw.hook('wikipage.content').fire($content);
 	}
 
-	await $.when(
-		loadIpWiki(), // This must be called before calling collectUsernames()
-		mw.loader.using(['mediawiki.util', 'mediawiki.api', 'mediawiki.storage']),
-		$.ready
-	);
-
-	// Parse the "IPs & User agents" table
-	const dev = false;
-	const $table = getInvestigateTable();
-	if (!$table.length && !dev) {
-		return;
-	}
-	const names = collectUsernames($table, dev);
-	if (!names) {
-		return;
-	}
-
-	/** @type {Record<string, string>} */
-	const i18n = Messages.i18n[wgUserLanguage] || Messages.i18n.en;
-	mw.messages.set(i18n);
-
-	// Initialize a mw.Api instance
-	api = new mw.Api(getApiOptions());
-
-	// Wait for dependent modules and messages to get ready
-	await $.when(
-		mw.loader.using([
-			'jquery.makeCollapsible',
-			'oojs-ui',
-			'oojs-ui.styles.icons-movement', // collapse, expand
-			'oojs-ui.styles.icons-moderation', // trash
-			'oojs-ui.styles.icons-editing-core', // edit
-			'oojs-ui.styles.icons-alerts', // success, error
-			'mediawiki.widgets.UsersMultiselectWidget'
-		]),
-		Messages.loadMessagesIfMissing([
-			// For UserListItem
-			'tux-editor-translate-mode',
-			'checkuser-helper-user',
-			'sp-contributions-talk',
-			'contribslink',
-			'sp-contributions-logs',
-			'sp-contributions-blocklog',
-			'abusefilter-log-linkoncontribs',
-			'checkuser-log-checks-on',
-			'centralauth-contribs-link',
-			'checkuser-global-contributions-link',
-			'ooui-copytextlayout-copy',
-			'checkuser-helper-copy-success',
-			'checkuser-helper-copy-failed',
-			// Related to the Investigate table
-			'checkuser-investigate-compare-table-cell-actions',
-			'checkuser-investigate-compare-table-cell-other-actions',
-			// For BlockField
-			'block',
-			'checkuser-investigateblock-target',
-			'mw-widgets-usersmultiselect-placeholder',
-			'checkuser-investigate',
-			'block-expiry',
-			'ipboptions',
-			'ipbother',
-			'checkuser-investigateblock-reason',
-			'ipbreason-dropdown',
-			'htmlform-selectorother-other',
-			'block-details',
-			'ipbcreateaccount',
-			'ipbemailban',
-			'ipb-disableusertalk',
-			'block-options',
-			'htmlform-optional-flag',
-			'ipbenableautoblock',
-			'days',
-			'ipbhidename',
-			'ipb-hardblock',
-			'blocklink',
-			// For BlockDialog
-			'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets',
-			'api-feed-error-title',
-			'block-submit',
-			'block-removal-reason-placeholder',
-			'historyempty',
-			'block-create',
-			'checkuser-investigateblock-reblock-label',
-			'block-removal-confirm-yes',
-			// For BlockLog
-			'logentry-block-block',
-			'logentry-block-block-multi',
-			'logentry-block-reblock',
-			'logentry-partialblock-block',
-			'logentry-partialblock-block-multi',
-			'logentry-partialblock-reblock',
-			'logentry-non-editing-block-block',
-			'logentry-non-editing-block-block-multi',
-			'logentry-non-editing-block-reblock',
-			'block-log-flags-angry-autoblock',
-			'block-log-flags-anononly',
-			'block-log-flags-hiddenname',
-			'block-log-flags-noautoblock',
-			'block-log-flags-nocreate',
-			'block-log-flags-noemail',
-			'block-log-flags-nousertalk',
-			'parentheses',
-			'comma-separator',
-			'and',
-			'word-separator',
-			'blanknamespace',
-			'ipb-action-create',
-			'ipb-action-move',
-			'ipb-action-thanks',
-			'ipb-action-upload',
-			'logentry-partialblock-block-page',
-			'logentry-partialblock-block-ns',
-			'logentry-partialblock-block-action',
-		])
-	);
-	await Messages.parse([
-		'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets'
-	]);
-
-	const $content = $('.mw-body-content');
-	createStyleTag();
-	const { users, ips } = names;
-	const /** @type {UserList} */ list = {};
-
-	// Create a list of registered users
-	if (users.length) {
-		const userField = collapsibleFieldsetLayout($content, Messages.get('checkuser-helper-user'));
-		list.user = [];
-		for (const { user, ips } of users) {
-			const item = new UserListItem(userField, user, mw.util.isTemporaryUser(user) ? 'temp' : 'user');
-			ips.forEach(({ ip, actions, all }) => {
-				item.addSublistItem($('<li>').append(
-					ip,
-					IPFieldContent.getActionCountText(actions),
-					IPFieldContent.getAllActionCountText(all)
-				));
+	/**
+	 * Loads the `ip-wiki` module from the Japanese Wikipedia.
+	 *
+	 * @returns {JQueryPromise<void>}
+	 */
+	static loadIpWiki() {
+		const moduleName = 'ext.gadget.ip-wiki';
+		const loadModule = () => {
+			return mw.loader.using(moduleName).then((req) => {
+				IP = req(moduleName).IP;
 			});
-			list.user.push(item);
+		};
+		if (!new Set(mw.loader.getModuleNames()).has(moduleName)) { // Module doesn't exist locally
+			return mw.loader.getScript('https://ja.wikipedia.org/w/load.php?modules=' + moduleName).then(loadModule);
+		} else {
+			return loadModule();
 		}
 	}
 
-	// Create a list of IP addresses including common IP ranges
-	if (ips.length) {
-		const /** @type {IpInfo[]} */ v4s = [];
-		const /** @type {IpInfo[]} */ v6s = [];
-		for (const info of ips) {
-			if (info.ip.version === 4) {
-				v4s.push(info);
-			} else {
-				v6s.push(info);
+	/**
+	 * Retrieves the investigate table as a jQuery object.
+	 *
+	 * @param {Document | JQuery<HTMLElement>} [referenceDoc]
+	 * @returns {JQuery<HTMLTableElement>}
+	 */
+	static getTable(referenceDoc = document) {
+		return $('.ext-checkuser-investigate-table', referenceDoc);
+	}
+
+	/**
+	 * Collects user names from the investigate table.
+	 *
+	 * @param {JQuery<HTMLTableElement>} $table
+	 * @param {boolean} [dev=false]
+	 * @returns {{ users: UserInfo[]; ips: IpInfo[]; } | null} `null` if both `users` and `ips` are empty.
+	 * The returned arrays are both sorted by username/IP address.
+	 */
+	static collectUsernames($table, dev = false) {
+		const USER_TARGET = 'td.ext-checkuser-compare-table-cell-user-target';
+		const IP_TARGET = 'td.ext-checkuser-compare-table-cell-ip-target';
+
+		const /** @type {Map<string, InstanceType<IP>>} */ rawIpMap = new Map();
+
+		const /** @type {Map<string, Set<string>>} */ users = new Map();
+		const /** @type {Map<string, IpInfo>} */ ips = new Map();
+
+		$table.children('tbody').children('tr').each((_, tr) => {
+			const $tr = $(tr);
+			const username = $tr.children(USER_TARGET).attr('data-value') || null;
+			const $ipTarget = $tr.children(IP_TARGET);
+			const rawIp = $ipTarget.attr('data-value') || null;
+			const actions = parseInt(/** @type {string} */ ($ipTarget.attr('data-actions')));
+			const all = parseInt(/** @type {string} */ ($ipTarget.attr('data-all-actions')));
+			const ip = rawIp ? (rawIpMap.get(rawIp) || IP.newFromText(rawIp)) : null;
+			if (rawIp && ip && !rawIpMap.has(rawIp)) {
+				rawIpMap.set(rawIp, ip); // Cache parsed IPs
 			}
-		}
-		if (v4s.length) {
-			const ipField = collapsibleFieldsetLayout($content, 'IPv4');
-			list.ipv4 = new IPFieldContent(ipField, v4s);
-		}
-		if (v6s.length) {
-			const ipField = collapsibleFieldsetLayout($content, 'IPv6');
-			list.ipv6 = new IPFieldContent(ipField, v6s);
-		}
-	}
 
-	UserListItem.checkExistence();
-
-	const blockField = collapsibleFieldsetLayout($content, Messages.get('block'));
-	new BlockField(blockField, list);
-
-	mw.hook('wikipage.content').fire($content);
-}
-
-/**
- * Loads the `ip-wiki` module from the Japanese Wikipedia.
- *
- * @returns {JQueryPromise<void>}
- */
-function loadIpWiki() {
-	const moduleName = 'ext.gadget.ip-wiki';
-	const loadModule = () => {
-		return mw.loader.using(moduleName).then((req) => {
-			IP = req(moduleName).IP;
-		});
-	};
-	if (!new Set(mw.loader.getModuleNames()).has(moduleName)) { // Module doesn't exist locally
-		return mw.loader.getScript('https://ja.wikipedia.org/w/load.php?modules=' + moduleName).then(loadModule);
-	} else {
-		return loadModule();
-	}
-}
-
-/**
- * Retrieves the investigate table as a jQuery object.
- *
- * @param {Document | JQuery<HTMLElement>} [referenceDoc]
- * @returns {JQuery<HTMLTableElement>}
- */
-function getInvestigateTable(referenceDoc = document) {
-	return $('.ext-checkuser-investigate-table', referenceDoc);
-}
-
-/**
- * Collects user names from the investigate table.
- *
- * @param {JQuery<HTMLTableElement>} $table
- * @param {boolean} [dev=false]
- * @returns {{ users: UserInfo[]; ips: IpInfo[]; } | null} `null` if both `users` and `ips` are empty.
- * The returned arrays are both sorted by username/IP address.
- */
-function collectUsernames($table, dev = false) {
-	const USER_TARGET = 'td.ext-checkuser-compare-table-cell-user-target';
-	const IP_TARGET = 'td.ext-checkuser-compare-table-cell-ip-target';
-
-	const /** @type {Map<string, InstanceType<IP>>} */ rawIpMap = new Map();
-
-	const /** @type {Map<string, Set<string>>} */ users = new Map();
-	const /** @type {Map<string, IpInfo>} */ ips = new Map();
-
-	$table.children('tbody').children('tr').each((_, tr) => {
-		const $tr = $(tr);
-		const username = $tr.children(USER_TARGET).attr('data-value') || null;
-		const $ipTarget = $tr.children(IP_TARGET);
-		const rawIp = $ipTarget.attr('data-value') || null;
-		const actions = parseInt(/** @type {string} */ ($ipTarget.attr('data-actions')));
-		const all = parseInt(/** @type {string} */ ($ipTarget.attr('data-all-actions')));
-		const ip = rawIp ? (rawIpMap.get(rawIp) || IP.newFromText(rawIp)) : null;
-		if (rawIp && ip && !rawIpMap.has(rawIp)) {
-			rawIpMap.set(rawIp, ip); // Cache parsed IPs
-		}
-
-		if (username && !users.has(username)) {
-			users.set(username, new Set());
-		}
-		if (ip) {
-			const ipStr = ip.abbreviate();
-			if (username) {
-				/** @type {Set<string>} */ (users.get(username)).add(ipStr);
+			if (username && !users.has(username)) {
+				users.set(username, new Set());
 			}
-			const ipInfo = ips.get(ipStr);
-			if (ipInfo) {
-				if (username) ipInfo.users.add(username);
-				ipInfo.actions += actions;
-			} else {
-				const associatedUsers = new Set(username && [username]);
-				ips.set(ipStr, { ip, users: associatedUsers, actions, all });
+			if (ip) {
+				const ipStr = ip.abbreviate();
+				if (username) {
+					/** @type {Set<string>} */ (users.get(username)).add(ipStr);
+				}
+				const ipInfo = ips.get(ipStr);
+				if (ipInfo) {
+					if (username) ipInfo.users.add(username);
+					ipInfo.actions += actions;
+				} else {
+					const associatedUsers = new Set(username && [username]);
+					ips.set(ipStr, { ip, users: associatedUsers, actions, all });
+				}
 			}
+		});
+
+		if (dev) {
+			const ipStr = '192.168.0.1';
+			users.set('DragoTest', new Set([ipStr]));
+			ips.set(ipStr, {
+				ip: /** @type {InstanceType<IP>} */ (IP.newFromText(ipStr)),
+				users: new Set(['DragoTest']),
+				actions: 0,
+				all: 0
+			});
 		}
-	});
-
-	if (dev) {
-		const ipStr = '192.168.0.1';
-		users.set('DragoTest', new Set([ipStr]));
-		ips.set(ipStr, {
-			ip: /** @type {InstanceType<IP>} */ (IP.newFromText(ipStr)),
-			users: new Set(['DragoTest']),
-			actions: 0,
-			all: 0
+		if (!users.size && !ips.size) {
+			return null;
+		}
+		// Sort Map keys
+		const /** @type {NonNullable<ReturnType<typeof InvestigateHelper['collectUsernames']>>} */ ret = {
+			users: [],
+			ips: []
+		};
+		[...users.keys()].sort().forEach((username) => {
+			const ipSet = users.get(username);
+			if (!ipSet) throw new Error(`Unexpected missing user: ${username}`);
+			ret.users.push({
+				user: username,
+				ips: [...ipSet].sort().map((ipStr) => {
+					const info = ips.get(ipStr);
+					if (!info) throw new Error(`Unexpected missing IP: ${ipStr}`);
+					const { actions, all } = info;
+					return { ip: ipStr, actions, all };
+				})
+			});
 		});
-	}
-	if (!users.size && !ips.size) {
-		return null;
-	}
-	// Sort Map keys
-	const /** @type {NonNullable<ReturnType<collectUsernames>>} */ ret = {
-		users: [],
-		ips: []
-	};
-	[...users.keys()].sort().forEach((username) => {
-		const ipSet = users.get(username);
-		if (!ipSet) throw new Error(`Unexpected missing user: ${username}`);
-		ret.users.push({
-			user: username,
-			ips: [...ipSet].sort().map((ipStr) => {
-				const info = ips.get(ipStr);
-				if (!info) throw new Error(`Unexpected missing IP: ${ipStr}`);
-				const { actions, all } = info;
-				return { ip: ipStr, actions, all };
-			})
+		[...ips.keys()].sort().forEach((ipStr) => {
+			const info = ips.get(ipStr);
+			if (!info) throw new Error(`Unexpected missing IP: ${ipStr}`);
+			ret.ips.push(info);
 		});
-	});
-	[...ips.keys()].sort().forEach((ipStr) => {
-		const info = ips.get(ipStr);
-		if (!info) throw new Error(`Unexpected missing IP: ${ipStr}`);
-		ret.ips.push(info);
-	});
-	return ret;
-}
+		return ret;
+	}
 
-/**
- * Gets an options object to initialize a `mw.Api` instance.
- * @returns
- */
-function getApiOptions() {
-	return {
-		ajax: {
+	/**
+	 * Creates a style tag for `InvestigateHelper` in the document header.
+	 */
+	static createStyleTag() {
+		const style = document.createElement('style');
+		style.id = 'ih-styles';
+		style.textContent =
+			// For inline elements that should be displayed as block elements
+			'.ih-inlineblock {' +
+				'display: block;' +
+			'}' +
+			// Allow user list items to have an unlimited width
+			'.ih-username .oo-ui-fieldLayout-body {' +
+				'max-width: initial !important;' +
+			'}' +
+			// Align the usernames of user list items to the first line
+			'.ih-username .oo-ui-fieldLayout-header {' +
+				'display: initial !important;' +
+				'vertical-align: initial !important;' +
+			'}' +
+			// Enclose toollinks for user list items in parentheses
+			'.ih-toollinks::before {' +
+				'content: " (";' +
+			'}' +
+			'.ih-toollinks::after {' +
+				'content: ")";' +
+			'}' +
+			'.ih-toollinks > span:not(:first-child)::before {' +
+				'content: " | ";' +
+			'}' +
+			// For collapsible elements
+			'.ih-userlistitem-collapsed {' +
+				'display: none;' +
+			'}' +
+			'.ih-userlistitem-expanded {' +
+				'display: block;' +
+			'}' +
+			// Left-align the label of FieldsetLayout in a collapsible FieldsetLayout
+			'.ih-collapsible .mw-collapsible-content legend {' +
+				'padding-left: 0 !important;' +
+				'margin-bottom: 0 !important;' +
+			'}' +
+			// <hr> with broader margin
+			'.ih-range-delimiter {' +
+				'margin: 0.5em 0;' +
+			'}' +
+			// Reduce horizontal whitespace between FieldsetLayout instances in a collapsible FieldsetLayout
+			'.ih-collapsible .mw-collapsible-content > .oo-ui-fieldsetLayout:not(:first-child) {' +
+				'margin-top: 12px;' +
+			'}' +
+			'.ih-collapsible .oo-ui-fieldsetLayout-group > div.oo-ui-fieldLayout:not(:first-child) {' +
+				'margin-top: 8px;' +
+			'}' +
+			// For OO.ui.confirm dialogs
+			'.ih-confirm {' +
+				'text-align: justify;' +
+			'}' +
+			// For block confirmation dialogs
+			'.ih-dialog-subrow {' +
+				'margin-left: 1.6em;' +
+			'}' +
+			'.ih-dialog-subrow tr > th:nth-child(-n + 2),' +
+			'.ih-dialog-subrow tr > td:nth-child(-n + 2) {' +
+				'padding-right: 0.5em;' +
+			'}' +
+			'.ih-dialog-addblock {' +
+				'margin-top: 6px !important;' +
+				'margin-bottom: 3px;' +
+			'}' +
+			'';
+		document.head.appendChild(style);
+	}
+
+	/**
+	 * Creates a collapsible fieldset layout.
+	 *
+	 * @param {JQuery<HTMLElement>} $target The element to append the fieldset to.
+	 * @param {string} label The label of the fieldset.
+	 * @returns {OO.ui.FieldsetLayout}
+	 * @link https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/core/+/refs/heads/master/includes/htmlform/CollapsibleFieldsetLayout.php
+	 */
+	static collapsibleFieldsetLayout($target, label) {
+
+		const wrapper = new OO.ui.PanelLayout({
+			classes: ['ih-collapsible'],
+			expanded: false,
+			framed: true,
+			padded: true
+		});
+
+		const fieldset = new OO.ui.FieldsetLayout({
+			classes: ['mw-collapsibleFieldsetLayout', 'mw-collapsible', 'mw-collapsed'],
+			label,
+			icon: 'expand'
+		});
+		fieldset.$element
+			.appendTo(wrapper.$element)
+			// header
+			.children('legend')
+				.attr('role', 'button')
+				.addClass('mw-collapsible-toggle')
+				// Change the icon when the fieldset is expanded/collapsed
+				.off('click').on('click', () => {
+					fieldset.setIcon(fieldset.$element.hasClass('mw-collapsed') ? 'collapse' : 'expand');
+				})
+				// Remove the default space between the icon and the header text
+				.children('.oo-ui-labelElement-label')
+					.css('padding-left', 0)
+					.end()
+			// content
+			.next('div')
+				.addClass('mw-collapsible-content');
+
+		$target.append(wrapper.$element);
+		fieldset.$element.makeCollapsible();
+
+		return fieldset;
+
+	}
+
+	/**
+	 * Gets an options object to initialize a `mw.Api` instance.
+	 * @returns
+	 */
+	static getApiOptions() {
+		return {
+			ajax: {
+				headers: {
+					'Api-User-Agent': 'InvestigateHelper/0.0.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+				}
+			},
+			parameters: {
+				action: 'query',
+				format: 'json',
+				formatversion: '2'
+			}
+		};
+	}
+
+	/**
+	 * Gets a `{ 'Promise-Non-Write-API-Action': '1' }` header for a non-write POST request.
+	 * @returns
+	 */
+	static nonwritePost() {
+		return {
 			headers: {
-				'Api-User-Agent': 'InvestigateHelper/0.0.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+				'Promise-Non-Write-API-Action': '1'
 			}
-		},
-		parameters: {
-			action: 'query',
-			format: 'json',
-			formatversion: '2'
-		}
-	};
-}
+		};
+	}
 
-/**
- * Gets a `{ 'Promise-Non-Write-API-Action': '1' }` header for a non-write POST request.
- * @returns
- */
-function nonwritePost() {
-	return {
-		headers: {
-			'Promise-Non-Write-API-Action': '1'
-		}
-	};
 }
 
 class Messages {
@@ -399,7 +523,7 @@ class Messages {
 			const batch = keys.slice(index, index + 500);
 			const request = batch.length <= 50
 				? (query) => api.get(query)
-				: (query) => api.post(query, nonwritePost());
+				: (query) => api.post(query, InvestigateHelper.nonwritePost());
 
 			return request({
 				action: 'query',
@@ -560,7 +684,7 @@ class Messages {
 			disableeditsection: true,
 			disabletoc: true,
 			contentmodel: 'wikitext'
-		}, nonwritePost()).then((res) => {
+		}, InvestigateHelper.nonwritePost()).then((res) => {
 			const $res = $(res.parse.text);
 			const toCache = Object.create(null);
 
@@ -848,126 +972,6 @@ Messages.userGenderMap = new Map();
 Messages.storageKey = 'mw-InvestigateHelper-messages';
 
 /**
- * Creates a style tag for `InvestigateHelper` in the document header.
- */
-function createStyleTag() {
-	const style = document.createElement('style');
-	style.id = 'ih-styles';
-	style.textContent =
-		// For inline elements that should be displayed as block elements
-		'.ih-inlineblock {' +
-			'display: block;' +
-		'}' +
-		// Allow user list items to have an unlimited width
-		'.ih-username .oo-ui-fieldLayout-body {' +
-			'max-width: initial !important;' +
-		'}' +
-		// Align the usernames of user list items to the first line
-		'.ih-username .oo-ui-fieldLayout-header {' +
-			'display: initial !important;' +
-			'vertical-align: initial !important;' +
-		'}' +
-		// Enclose toollinks for user list items in parentheses
-		'.ih-toollinks::before {' +
-			'content: " (";' +
-		'}' +
-		'.ih-toollinks::after {' +
-			'content: ")";' +
-		'}' +
-		'.ih-toollinks > span:not(:first-child)::before {' +
-			'content: " | ";' +
-		'}' +
-		// For collapsible elements
-		'.ih-userlistitem-collapsed {' +
-			'display: none;' +
-		'}' +
-		'.ih-userlistitem-expanded {' +
-			'display: block;' +
-		'}' +
-		// Left-align the label of FieldsetLayout in a collapsible FieldsetLayout
-		'.ih-collapsible .mw-collapsible-content legend {' +
-			'padding-left: 0 !important;' +
-			'margin-bottom: 0 !important;' +
-		'}' +
-		// <hr> with broader margin
-		'.ih-range-delimiter {' +
-			'margin: 0.5em 0;' +
-		'}' +
-		// Reduce horizontal whitespace between FieldsetLayout instances in a collapsible FieldsetLayout
-		'.ih-collapsible .mw-collapsible-content > .oo-ui-fieldsetLayout:not(:first-child) {' +
-			'margin-top: 12px;' +
-		'}' +
-		'.ih-collapsible .oo-ui-fieldsetLayout-group > div.oo-ui-fieldLayout:not(:first-child) {' +
-			'margin-top: 8px;' +
-		'}' +
-		// For OO.ui.confirm dialogs
-		'.ih-confirm {' +
-			'text-align: justify;' +
-		'}' +
-		// For block confirmation dialogs
-		'.ih-dialog-subrow {' +
-			'margin-left: 1.6em;' +
-		'}' +
-		'.ih-dialog-subrow tr > th:nth-child(-n + 2),' +
-		'.ih-dialog-subrow tr > td:nth-child(-n + 2) {' +
-			'padding-right: 0.5em;' +
-		'}' +
-		'.ih-dialog-addblock {' +
-			'margin-top: 6px !important;' +
-			'margin-bottom: 3px;' +
-		'}' +
-		'';
-	document.head.appendChild(style);
-}
-
-/**
- * Creates a collapsible fieldset layout.
- *
- * @param {JQuery<HTMLElement>} $target The element to append the fieldset to.
- * @param {string} label The label of the fieldset.
- * @returns {OO.ui.FieldsetLayout}
- * @link https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/core/+/refs/heads/master/includes/htmlform/CollapsibleFieldsetLayout.php
- */
-function collapsibleFieldsetLayout($target, label) {
-
-	const wrapper = new OO.ui.PanelLayout({
-		classes: ['ih-collapsible'],
-		expanded: false,
-		framed: true,
-		padded: true
-	});
-
-	const fieldset = new OO.ui.FieldsetLayout({
-		classes: ['mw-collapsibleFieldsetLayout', 'mw-collapsible', 'mw-collapsed'],
-		label,
-		icon: 'expand'
-	});
-	fieldset.$element
-		.appendTo(wrapper.$element)
-		// header
-		.children('legend')
-			.attr('role', 'button')
-			.addClass('mw-collapsible-toggle')
-			// Change the icon when the fieldset is expanded/collapsed
-			.off('click').on('click', () => {
-				fieldset.setIcon(fieldset.$element.hasClass('mw-collapsed') ? 'collapse' : 'expand');
-			})
-			// Remove the default space between the icon and the header text
-			.children('.oo-ui-labelElement-label')
-				.css('padding-left', 0)
-				.end()
-		// content
-		.next('div')
-			.addClass('mw-collapsible-content');
-
-	$target.append(wrapper.$element);
-	fieldset.$element.makeCollapsible();
-
-	return fieldset;
-
-}
-
-/**
  * Class that generates a username label accompanied by a checkbox and toollinks.
  */
 class UserListItem {
@@ -1183,7 +1187,7 @@ class UserListItem {
 				action: 'query',
 				formatversion: '2',
 				titles
-			}, nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
+			}, InvestigateHelper.nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
 				const {
 					normalized = [],
 					pages = []
@@ -1830,7 +1834,7 @@ class BlockField {
 			inputPosition: 'outline',
 			orientation: 'horizontal',
 			placeholder: Messages.get('mw-widgets-usersmultiselect-placeholder'),
-			api: new mw.Api(getApiOptions()),
+			api: new mw.Api(InvestigateHelper.getApiOptions()),
 			ipAllowed: true,
 			ipRangeAllowed: true,
 			selected: presetTargets
@@ -2362,7 +2366,7 @@ class BlockField {
 				params.ususers = registeredUsers.join('|');
 			}
 
-			return api.post(params, nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
+			return api.post(params, InvestigateHelper.nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
 				const blocks = res && res.query && res.query.blocks || [];
 				for (const { id, user, timestamp } of blocks) {
 					const username = mw.util.isIPAddress(user, true) ? user.toLowerCase() : user;
@@ -3643,7 +3647,7 @@ class BlockTarget {
 
 // ********************************************* ENTRY POINT *********************************************
 
-init();
+InvestigateHelper.init();
 
 // *******************************************************************************************************
 })();
