@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.0.0
+ * @version 1.0.1
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -87,6 +87,7 @@ class InvestigateHelper {
 				'checkuser-investigateblock-target',
 				'mw-widgets-usersmultiselect-placeholder',
 				'checkuser-investigate',
+				'apisandbox-reset',
 				'block-expiry',
 				'ipboptions',
 				'ipbother',
@@ -301,7 +302,14 @@ class InvestigateHelper {
 			users: [],
 			ips: []
 		};
-		[...users.keys()].sort().forEach((username) => {
+		[...users.keys()].sort((a, b) => {
+			// "Push" temp users to the bottom of the list
+			const aTemp = mw.util.isTemporaryUser(a);
+			const bTemp = mw.util.isTemporaryUser(b);
+			if (aTemp && !bTemp) return 1; // a goes after b
+			if (!aTemp && bTemp) return -1; // a goes before b
+			return a.localeCompare(b); // same type, normal compare
+		}).forEach((username) => {
 			const userObj = users.get(username);
 			if (!userObj) throw new Error(`Unexpected missing user: ${username}`);
 			ret.users.push({
@@ -572,13 +580,11 @@ class InvestigateHelper {
 				const item = new UserListItem(userField, user, mw.util.isTemporaryUser(user) ? 'temp' : 'user', foreign);
 				ips.forEach(({ ip, actions, all, foreign: i_foreign }) => {
 					item.addSublistItem(
-						$('<li>')
-							.append(
-								ip,
-								IPFieldContent.getActionCountText(actions),
-								IPFieldContent.getAllActionCountText(all)
-							)
-							.toggleClass(UserListItem.CLS_USERNAME_FOREIGN, i_foreign)
+						$('<li>').append(
+							$('<span>').text(ip).toggleClass(UserListItem.CLS_USERNAME_FOREIGN, i_foreign),
+							IPFieldContent.getActionCountText(actions),
+							IPFieldContent.getAllActionCountText(all)
+						)
 					);
 				});
 				list.user.push(item);
@@ -669,7 +675,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/0.0.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.0.1 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -1904,13 +1910,11 @@ class IPFieldContent {
 				if (contains) {
 					for (const { ip: c_ip, actions: c_actions, all: c_all, foreign: c_foreign } of contains) {
 						item.addSublistItem(
-							$('<li>')
-								.append(
-									c_ip.abbreviate(),
-									IPFieldContent.getActionCountText(c_actions),
-									IPFieldContent.getAllActionCountText(c_all)
-								)
-								.toggleClass(UserListItem.CLS_USERNAME_FOREIGN, c_foreign)
+							$('<li>').append(
+								$('<span>').text(c_ip.abbreviate()).toggleClass(UserListItem.CLS_USERNAME_FOREIGN, c_foreign),
+								IPFieldContent.getActionCountText(c_actions),
+								IPFieldContent.getAllActionCountText(c_all)
+							)
 						);
 					}
 				}
@@ -2170,9 +2174,23 @@ class BlockField {
 		this.bindCheckboxesWithTags();
 
 		const investigateButton = this.createInvestigateButton(!presetTargets.length);
+
+		const clearButton = new OO.ui.ButtonWidget({
+			label: Messages.get('apisandbox-reset')
+		});
+		clearButton.off('click').on('click', () => {
+			this.target.setValue('');
+		});
+
+		const buttonRow = new OO.ui.Widget({
+			$element: $('<div>').append(
+				investigateButton.$element,
+				clearButton.$element
+			)
+		});
 		targetField.addItems([
 			new OO.ui.FieldLayout(this.target),
-			new OO.ui.FieldLayout(investigateButton)
+			new OO.ui.FieldLayout(buttonRow)
 		]);
 
 		// Block expiry
@@ -2412,7 +2430,8 @@ class BlockField {
 	createInvestigateButton(disabled = true) {
 		const button = new OO.ui.ButtonWidget({
 			label: Messages.get('checkuser-investigate'),
-			disabled
+			disabled,
+			flags: 'progressive'
 		});
 		button.off('click').on('click', () => {
 			// Open Special:Investigate in a new tab with selected usernames

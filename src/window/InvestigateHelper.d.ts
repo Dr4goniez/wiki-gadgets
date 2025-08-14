@@ -170,6 +170,8 @@ export interface LoadedMessages extends OriginalMessages {
 	'mw-widgets-usersmultiselect-placeholder': string;
 	/** `'Investigate'` */
 	'checkuser-investigate': string;
+	/** `'Clear'` */
+	'apisandbox-reset': string;
 	/** `'Expiration'` */
 	'block-expiry': string;
 	/** `'2 hours:2 hours,1 day:1 day,...'` */
