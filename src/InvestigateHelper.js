@@ -200,71 +200,124 @@ class InvestigateHelper {
 		const USER_TARGET = 'td.ext-checkuser-compare-table-cell-user-target';
 		const IP_TARGET = 'td.ext-checkuser-compare-table-cell-ip-target';
 
-		const /** @type {Map<string, InstanceType<IP>>} */ rawIpMap = new Map();
-		const /** @type {Map<string, Set<string>>} */ users = new Map();
-		const /** @type {Map<string, IpInfo>} */ ips = new Map();
+		/**
+		 * Maps raw IP strings collected from table cells to their corresponding IP instances.
+		 * Used as a cache to avoid re-parsing already known IPs.
+		 *
+		 * @type {Map<string, InstanceType<IP>>}
+		 */
+		const rawIpMap = new Map();
+		/**
+		 * @typedef {{ ips: Set<string>; foreign: boolean; }} UsernameMapValue
+		 *
+		 * Maps non-IP usernames to objects containing:
+		 * - A set of abbreviated IP strings representing their source IPs.
+		 * - Whether the username was collected from a foreign table.
+		 *
+		 * @type {Map<string, UsernameMapValue>}
+		 */
+		const users = new Map();
+		/**
+		 * Maps abbreviated IP strings to objects containing:
+		 * - The IP instance.
+		 * - The associated set of usernames.
+		 * - The total number of actions performed by the IP.
+		 * - Whether the IP was collected from a foreign table.
+		 *
+		 * @type {Map<string, IpInfo>}
+		 */
+		const ips = new Map();
 
 		$table.children('tbody').children('tr').each((_, tr) => {
 			const $tr = $(tr);
-			// const foreign = $tr.closest('table').hasClass(InvestigateHelper.CLS_FOREIGN_TABLE); // TODO
+			const foreign = $tr.closest('table').hasClass(InvestigateHelper.CLS_FOREIGN_TABLE);
+
 			const username = $tr.children(USER_TARGET).attr('data-value') || null;
 			const $ipTarget = $tr.children(IP_TARGET);
 			const rawIp = $ipTarget.attr('data-value') || null;
+
 			const actions = parseInt(/** @type {string} */ ($ipTarget.attr('data-actions')));
 			const all = parseInt(/** @type {string} */ ($ipTarget.attr('data-all-actions')));
+
 			const ip = rawIp ? (rawIpMap.get(rawIp) || IP.newFromText(rawIp)) : null;
 			if (rawIp && ip && !rawIpMap.has(rawIp)) {
 				rawIpMap.set(rawIp, ip); // Cache parsed IPs
 			}
 
-			if (username && !users.has(username)) {
-				users.set(username, new Set());
+			/** @type {UsernameMapValue=} */
+			let userObj;
+			if (username) {
+				userObj = users.get(username);
+				if (!userObj) {
+					userObj = { ips: new Set(), foreign };
+					users.set(username, userObj);
+				} else if (userObj.foreign && !foreign) {
+					// An occurrence in the current tab overrides a previous "foreign" classification
+					userObj.foreign = false;
+				}
 			}
-			if (ip) {
-				const ipStr = ip.abbreviate();
+
+			if (!ip) {
+				return; // Skip further processing if IP is missing or invalid
+			}
+
+			const ipStr = ip.abbreviate();
+			if (userObj) {
+				userObj.ips.add(ipStr);
+			}
+			const ipInfo = ips.get(ipStr);
+			if (ipInfo) {
 				if (username) {
-					/** @type {Set<string>} */ (users.get(username)).add(ipStr);
+					ipInfo.users.add(username);
 				}
-				const ipInfo = ips.get(ipStr);
-				if (ipInfo) {
-					if (username) ipInfo.users.add(username);
-					ipInfo.actions += actions;
-				} else {
-					const associatedUsers = new Set(username && [username]);
-					ips.set(ipStr, { ip, users: associatedUsers, actions, all });
+				ipInfo.actions += actions;
+				if (ipInfo.foreign && !foreign) {
+					ipInfo.foreign = false;
 				}
+			} else {
+				ips.set(ipStr, {
+					ip,
+					users: username ? new Set([username]) : new Set(),
+					actions,
+					all,
+					foreign
+				});
 			}
 		});
 
 		if (dev) {
 			const ipStr = '192.168.0.1';
-			users.set('DragoTest', new Set([ipStr]));
+			users.set('DragoTest', { ips: new Set([ipStr]), foreign: false });
 			ips.set(ipStr, {
 				ip: /** @type {InstanceType<IP>} */ (IP.newFromText(ipStr)),
 				users: new Set(['DragoTest']),
 				actions: 0,
-				all: 0
+				all: 0,
+				foreign: false
 			});
 		}
 		if (!users.size && !ips.size) {
 			return null;
 		}
+
 		// Sort Map keys
-		const /** @type {NonNullable<ReturnType<typeof InvestigateHelper['collectUsernames']>>} */ ret = {
+		/** @type {CollectedUsernames} */
+		const ret = {
 			users: [],
 			ips: []
 		};
 		[...users.keys()].sort().forEach((username) => {
-			const ipSet = users.get(username);
-			if (!ipSet) throw new Error(`Unexpected missing user: ${username}`);
+			const userObj = users.get(username);
+			if (!userObj) throw new Error(`Unexpected missing user: ${username}`);
 			ret.users.push({
 				user: username,
-				ips: [...ipSet].sort().map((ipStr) => {
+				ips: [...userObj.ips].sort().map((ipStr) => {
 					const info = ips.get(ipStr);
 					if (!info) throw new Error(`Unexpected missing IP: ${ipStr}`);
-					const { actions, all } = info;
-					return { ip: ipStr, actions, all };
-				})
+					const { actions, all, foreign } = info;
+					return { ip: ipStr, actions, all, foreign };
+				}),
+				foreign: userObj.foreign
 			});
 		});
 		[...ips.keys()].sort().forEach((ipStr) => {
@@ -329,6 +382,10 @@ class InvestigateHelper {
 			'}' +
 			'.ih-toollinks > span:not(:first-child)::before {' +
 				'content: " | ";' +
+			'}' +
+			// For usernames collected from foreign tables
+			'.ih-userlistitem-foreign {' +
+				'background-color: var(--background-color-destructive-subtle, #ffe9e5);' +
 			'}' +
 			// For collapsible elements
 			'.ih-userlistitem-collapsed {' +
@@ -471,7 +528,7 @@ class InvestigateHelper {
 	}
 
 	/**
-	 * Recursively scrapes pager pages in one direction and collect tables.
+	 * Recursively scrapes pager pages in one direction and collects tables.
 	 *
 	 * @param {string} href The starting page URL.
 	 * @param {'prev' | 'next'} direction Pager direction to follow.
@@ -487,8 +544,7 @@ class InvestigateHelper {
 			return $acc; // Return what we have so far
 		}
 
-		const $html = $(html);
-		const $table = this.getTable($html);
+		const $table = this.getTable($(html));
 		if ($table.length) {
 			$table.addClass(InvestigateHelper.CLS_FOREIGN_TABLE);
 			$acc = $acc.add($table);
@@ -517,14 +573,18 @@ class InvestigateHelper {
 		if (users.length) {
 			const userField = this.collapsibleFieldsetLayout($content, Messages.get('checkuser-helper-user'));
 			list.user = [];
-			for (const { user, ips } of users) {
-				const item = new UserListItem(userField, user, mw.util.isTemporaryUser(user) ? 'temp' : 'user');
-				ips.forEach(({ ip, actions, all }) => {
-					item.addSublistItem($('<li>').append(
-						ip,
-						IPFieldContent.getActionCountText(actions),
-						IPFieldContent.getAllActionCountText(all)
-					));
+			for (const { user, ips, foreign } of users) {
+				const item = new UserListItem(userField, user, mw.util.isTemporaryUser(user) ? 'temp' : 'user', foreign);
+				ips.forEach(({ ip, actions, all, foreign: i_foreign }) => {
+					item.addSublistItem(
+						$('<li>')
+							.append(
+								ip,
+								IPFieldContent.getActionCountText(actions),
+								IPFieldContent.getAllActionCountText(all)
+							)
+							.toggleClass(UserListItem.CLS_USERNAME_FOREIGN, i_foreign)
+					);
 				});
 				list.user.push(item);
 			}
@@ -1113,7 +1173,8 @@ Messages.i18n = {
 			'CheckUser data has been collected from all other Special:Investigate tabs. Note that <b>the collected data ' +
 			'will be lost if you refresh or leave this page</b>, because InvestigateHelper does not cache any sensitive ' +
 			'data for security reasons. If you want to navigate to other tabs on this special page, it is recommended to ' +
-			'open them in a new tab or window to keep the current page intact.',
+			'open them in a new tab or window to keep the current page intact.<br>In the following lists, usernames collected ' +
+			'from other tabs are highlighted with a light pink background.',
 		'investigatehelper-traverser-complete': 'CheckUser data has been collected from all tabs.',
 		'investigatehelper-dialog-button-expand': 'Expand',
 		'investigatehelper-dialog-button-shrink': 'Shrink',
@@ -1132,7 +1193,8 @@ Messages.i18n = {
 		'investigatehelper-traverser-notice':
 			'特別:Investigate の他のすべてのタブからチェックユーザーデータを収集しました。<b>収集したデータは、このページを更新したり離れた' +
 			'場合失われます</b>。これは、セキュリティ上の理由で InvestigateHelper がいかなる機密データもキャッシュしないためです。この特別' +
-			'ページ上の別タブに移動したい場合は、新しいタブまたはウィンドウで開くことを推奨します。',
+			'ページ上の別タブに移動したい場合は、新しいタブまたはウィンドウで開くことを推奨します。<br>以下のリストでは、別のタブから収集した' +
+			'利用者名は薄いピンクの背景色でハイライトされています。',
 		'investigatehelper-traverser-complete': 'すべてのタブからチェックユーザーデータを収集しました。',
 		'investigatehelper-dialog-button-expand': '拡大',
 		'investigatehelper-dialog-button-shrink': '縮小',
@@ -1168,8 +1230,9 @@ class UserListItem {
 	 * @param {OO.ui.FieldsetLayout} fieldset The FieldsetLayout widget to which the list item will be appended.
 	 * @param {string} username The username label. IP addresses must be in abbreviated (normalized) format.
 	 * @param {UserType} type The type of user.
+	 * @param {boolean} foreign Whether the username was collected from a foreign table.
 	 */
-	constructor(fieldset, username, type) {
+	constructor(fieldset, username, type, foreign) {
 		// Ensure IP addresses are in normalized form
 		if (type !== 'user' && (
 			// IPv4: any octet with leading zeros (e.g., 192.168.001.001)
@@ -1201,7 +1264,7 @@ class UserListItem {
 
 		const layout = new OO.ui.FieldLayout(this.checkbox, {
 			classes: ['ih-username'],
-			label: $('<b>').text(username),
+			label: $('<b>').toggleClass(UserListItem.CLS_USERNAME_FOREIGN, foreign).text(username),
 			align: 'inline'
 		});
 
@@ -1503,6 +1566,7 @@ UserListItem.CLS_EXISTENCE_UNKNOWN = 'ih-existence-unknown';
  * Class name for toollinks whose target page existence has been checked via the API.
  */
 UserListItem.CLS_EXISTENCE_CHECKED = 'ih-existence-checked';
+UserListItem.CLS_USERNAME_FOREIGN = 'ih-userlistitem-foreign';
 UserListItem.CLS_TOGGLE = 'ih-userlistitem-toggle';
 UserListItem.CLS_COLLAPSED = 'ih-userlistitem-collapsed';
 UserListItem.CLS_EXPANDED = 'ih-userlistitem-expanded';
@@ -1587,10 +1651,10 @@ class IPFieldContent {
 		const /** @type {Map<string, number>} */ seenV6 = new Map();
 
 		for (let i = 0; i < info.length; i++) {
-			const { ip } = info[i];
+			const { ip, foreign } = info[i];
 
 			// Add each individual IP as a first-level entry
-			firstLevel.push({ ip, covers: new Set([i]) });
+			firstLevel.push({ ip, covers: new Set([i]), foreign });
 
 			// For IPv6, create a /64 CIDR that covers this IP
 			if (!isV6) continue;
@@ -1603,11 +1667,14 @@ class IPFieldContent {
 			const cidrStr = cidr.sanitize();
 			if (!seenV6.has(cidrStr)) {
 				seenV6.set(cidrStr, secondLevel.length);
-				secondLevel.push({ ip: cidr, covers: new Set([i]) });
+				secondLevel.push({ ip: cidr, covers: new Set([i]), foreign });
 			} else {
 				// CIDR already seen: add this IP's index to the covers set
 				const index = /** @type {number} */ (seenV6.get(cidrStr));
 				secondLevel[index].covers.add(i);
+				if (secondLevel[index].foreign && !foreign) {
+					secondLevel[index].foreign = false;
+				}
 			}
 		}
 
@@ -1652,6 +1719,7 @@ class IPFieldContent {
 						}
 					});
 
+					const foreign = source.foreign && goal.foreign;
 					if (level.length) {
 						// Check if this range covers or is covered by existing ranges in level
 
@@ -1669,7 +1737,7 @@ class IPFieldContent {
 						if (containedIdx !== -1) {
 							// Replace the broader range with this narrower range
 							const contained = level[containedIdx];
-							level[containedIdx] = { ip: common, covers: covered };
+							level[containedIdx] = { ip: common, covers: covered, foreign };
 							seen.add(commonStr);
 
 							// Compute overflown ranges for IPs not covered by new narrower range
@@ -1682,7 +1750,7 @@ class IPFieldContent {
 
 					// If no overlap conditions met, add the new range normally
 					seen.add(commonStr);
-					level.push({ ip: common, covers: covered });
+					level.push({ ip: common, covers: covered, foreign });
 				}
 			}
 
@@ -1690,11 +1758,11 @@ class IPFieldContent {
 			if (!level.length) break;
 
 			// Add completely disjoint IPs back in
-			noIntersection.forEach(({ ip, covers }) => {
+			noIntersection.forEach(({ ip, covers, foreign }) => {
 				if (seen.has(ip.sanitize())) return;
 				const completelyDisjoint = !level.some(({ covers: covers2 }) => isSupersetOf(covers2, covers, true));
 				if (completelyDisjoint) {
-					level.push({ ip, covers: new Set(covers) });
+					level.push({ ip, covers: new Set(covers), foreign });
 				}
 			});
 
@@ -1711,7 +1779,7 @@ class IPFieldContent {
 		for (const level of allLevels) {
 			const /** @type {ExtendedIpInfo[]} */ ipInfo = [];
 
-			for (const { ip, covers } of level) {
+			for (const { ip, covers, foreign } of level) {
 				let actions = 0;
 				let all = 0;
 				const /** @type {Set<string>} */ users = new Set();
@@ -1730,7 +1798,7 @@ class IPFieldContent {
 					}
 				}
 
-				const entry = { ip, users, actions, all };
+				const entry = { ip, users, actions, all, foreign };
 				if (canContain) {
 					entry.contains = contains;
 				}
@@ -1749,8 +1817,8 @@ class IPFieldContent {
 		 */
 		this.items = [];
 		for (let i = results.length - 1; i >= 0; i--) {
-			results[i].forEach(({ ip, users, actions, all, contains }, j, arr) => {
-				const item = new UserListItem(ipField, ip.abbreviate(), ip.isCIDR() ? 'cidr' : 'ip');
+			results[i].forEach(({ ip, users, actions, all, contains, foreign }, j, arr) => {
+				const item = new UserListItem(ipField, ip.abbreviate(), ip.isCIDR() ? 'cidr' : 'ip', foreign);
 				item.$body.append(
 					IPFieldContent.getActionCountText(actions),
 					IPFieldContent.getAllActionCountText(all)
@@ -1769,13 +1837,15 @@ class IPFieldContent {
 
 				// Create a list of contained IPs
 				if (contains) {
-					for (const { ip: c_ip, actions: c_actions, all: c_all } of contains) {
+					for (const { ip: c_ip, actions: c_actions, all: c_all, foreign: c_foreign } of contains) {
 						item.addSublistItem(
-							$('<li>').append(
-								c_ip.abbreviate(),
-								IPFieldContent.getActionCountText(c_actions),
-								IPFieldContent.getAllActionCountText(c_all)
-							)
+							$('<li>')
+								.append(
+									c_ip.abbreviate(),
+									IPFieldContent.getActionCountText(c_actions),
+									IPFieldContent.getAllActionCountText(c_all)
+								)
+								.toggleClass(UserListItem.CLS_USERNAME_FOREIGN, c_foreign)
 						);
 					}
 				}
@@ -1824,21 +1894,21 @@ class IPFieldContent {
 		const /** @type {Record<number, IpInfoLevel>} */ overflown = {};
 
 		for (let k = 0; k < allLevels.length; k++) {
-			for (const { ip, covers } of allLevels[k]) {
+			for (const { ip, covers, foreign } of allLevels[k]) {
 				// Skip if `covers` do not completely fall under `diff`
 				if (!isSupersetOf(diff, covers)) continue;
 
 				if (covers.size <= 1) {
 					// Single IP: register directly
 					for (const index of covers) {
-						overflown[index] = { ip, covers };
+						overflown[index] = { ip, covers, foreign };
 					}
 				} else {
 					// Multiple IPs: register at smallest index only, remove others
 					let iter = 0;
 					for (const index of Array.from(covers).sort()) {
 						if (iter === 0) {
-							overflown[index] = { ip, covers };
+							overflown[index] = { ip, covers, foreign };
 						} else {
 							delete overflown[index];
 						}
@@ -1849,11 +1919,11 @@ class IPFieldContent {
 		}
 
 		// Add newly discovered overflown ranges to current level if not already seen
-		for (const { ip, covers } of Object.values(overflown)) {
+		for (const { ip, covers, foreign } of Object.values(overflown)) {
 			const overflownStr = ip.sanitize();
 			if (!seen.has(overflownStr)) {
 				seen.add(overflownStr);
-				level.push({ ip, covers: new Set(covers) });
+				level.push({ ip, covers: new Set(covers), foreign });
 			}
 		}
 	}

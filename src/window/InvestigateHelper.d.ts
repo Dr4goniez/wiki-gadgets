@@ -19,7 +19,7 @@ export interface UserInfo {
 	/**
 	 * Whether the username was collected from a foreign tab.
 	 */
-	// foreign: boolean; // TODO
+	foreign: boolean;
 }
 
 export interface IpInfo {
@@ -39,7 +39,7 @@ export interface IpInfo {
 	/**
 	 * Whether the IP was collected from a foreign tab.
 	 */
-	// foreign: boolean; // TODO
+	foreign: boolean;
 }
 
 export interface CollectedUsernames {
@@ -339,6 +339,10 @@ export interface IpInfoLevel {
 	 * Set of indexes from the original `info` array covered by this CIDR.
 	 */
 	covers: Set<number>;
+	/**
+	 * Whether the IP was collected from a foreign tab.
+	 */
+	foreign: boolean;
 }
 
 export interface ExtendedIpInfo extends IpInfo {
