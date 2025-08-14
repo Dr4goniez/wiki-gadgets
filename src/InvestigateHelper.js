@@ -32,7 +32,7 @@ class InvestigateHelper {
 
 		await $.when(
 			this.loadIpWiki(), // This must be called before calling collectUsernames()
-			mw.loader.using(['mediawiki.util', 'mediawiki.api', 'mediawiki.storage']),
+			mw.loader.using(['mediawiki.util', 'mediawiki.api'/*, 'mediawiki.storage'*/]),
 			$.ready
 		);
 
@@ -106,7 +106,6 @@ class InvestigateHelper {
 				'ipb-hardblock',
 				'blocklink',
 				// For BlockDialog
-				'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets',
 				'api-feed-error-title',
 				'block-submit',
 				'block-removal-reason-placeholder',
@@ -145,9 +144,6 @@ class InvestigateHelper {
 				'logentry-partialblock-block-action',
 			])
 		);
-		await Messages.parse([
-			'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets'
-		]);
 
 		const $content = $('.mw-body-content');
 		this.createStyleTag();
@@ -877,6 +873,8 @@ class Messages {
 	}
 
 	/**
+	 * *[This method is currently not used in any logic.]*
+	 *
 	 * Parses and caches MediaWiki interface messages using the parse API. Cached values are reused via `mw.storage`.
 	 *
 	 * @param {(keyof LoadedMessages)[]} keys List of message keys to parse.
@@ -1161,7 +1159,55 @@ class Messages {
 		});
 	}
 
+	/**
+	 * Takes a list of strings and build a locale-friendly comma-separated list, using the local
+	 * comma-separator message. The last two strings are chained with an "and".
+	 *
+	 * This method is adapted from `Language::listToText` in MediaWiki-core.
+	 *
+	 * @param {string[]} list
+	 * @return {string}
+	 */
+	static listToText(list) {
+		const itemCount = list.length;
+		if (!itemCount) {
+			return '';
+		}
+		let text = /** @type {string} */ (list.pop());
+		if (itemCount > 1) {
+			const and = Messages.get('and');
+			const space = Messages.get('word-separator');
+			let comma = '';
+			if (itemCount > 2) {
+				comma = Messages.get('comma-separator');
+			}
+			text = list.join(comma) + and + space + text;
+		}
+		return text;
+	}
+
 }
+/**
+ * @param {'NDA' | 'TEMP_FAQ'} hrefType
+ * @param {string} text
+ * @returns {string}
+ */
+const rawAnchor = (hrefType, text) => {
+	const anchor = document.createElement('a');
+	anchor.target = '_blank';
+	anchor.textContent = text;
+	switch (hrefType) {
+		case 'NDA':
+			anchor.href = 'https://foundation.wikimedia.org/wiki/Special:MyLanguage/Policy:Wikimedia_Foundation_Access_to_Nonpublic_Personal_Data_Policy';
+			break;
+		case 'TEMP_FAQ':
+			anchor.href = 'https://www.mediawiki.org/wiki/Special:MyLanguage/Trust_and_Safety_Product/Temporary_Accounts/FAQ#Can_we_publicly_document_the_IP_addresses_used_by_suspected_(but_not_confirmed)_bad_actors_who_are_using_temporary_accounts?';
+			break;
+		default:
+			throw new Error('Unrecognized href type: '+ hrefType);
+	}
+	return anchor.outerHTML;
+};
 /**
  * @type {Record<'en' | 'ja', OriginalMessages>}
  */
@@ -1184,6 +1230,16 @@ Messages.i18n = {
 		'investigatehelper-dialog-blocktarget-containedin': 'Contained in: $1',
 		'investigatehelper-dialog-blocktarget-none': 'No block targets have been selected.',
 		'investigatehelper-dialog-blocktarget-unblockonly': 'This will only <b>unblock</b> the targets. Do you want to continue?',
+		'investigatehelper-dialog-blocktarget-mixed':
+			'You are about to block $1 with the same reason at the same time, based on CheckUser data.$2<br>' +
+			`Please double-check the following in accordance with the ${rawAnchor('NDA', 'NDA policy')}:<ul>` +
+			'<li>The IP addresses of registered users should not be disclosed.</li>' +
+			'<li>Temporary accounts should not be associated with registered accounts based on evidence restricted to CheckUsers ' +
+			`(${rawAnchor('TEMP_FAQ', 'details')}).</li>` +
+			'</ul><br>Are you sure you want to continue?',
+		'investigatehelper-dialog-blocktarget-user': 'registered accounts',
+		'investigatehelper-dialog-blocktarget-temp': 'temporary accounts',
+		'investigatehelper-dialog-blocktarget-ip': 'IP addresses',
 		'investigatehelper-dialog-blocktarget-processed':
 			'Processed $1 {{PLURAL:$1|request|requests}}.<ul><li>Success: $2</li><li>Failure: $3</li></ul>'
 	},
@@ -1204,6 +1260,16 @@ Messages.i18n = {
 		'investigatehelper-dialog-blocktarget-containedin': '含有されるIP: $1',
 		'investigatehelper-dialog-blocktarget-none': 'ブロック対象が選択されていません。',
 		'investigatehelper-dialog-blocktarget-unblockonly': '<b>ブロック解除</b>の処理のみが行われます。続行しますか？',
+		'investigatehelper-dialog-blocktarget-mixed':
+			'$1を同じ理由で同時にチェックユーザーブロックしようとしています。$2<br>' +
+			`${rawAnchor('NDA', '秘密保持契約 (NDA) ポリシー')}に基づき、以下の点を確認してください。<ul>` +
+			'<li>登録利用者のIPアドレスは開示すべきではありません。</li>' +
+			'<li>チェックユーザーのみがアクセス可能な情報に基づき、仮アカウントを登録利用者に関連付けるべきではありません ' +
+			`(${rawAnchor('TEMP_FAQ', '詳細')})。</li>` +
+			'</ul><br>本当に続行しますか？',
+		'investigatehelper-dialog-blocktarget-user': '登録利用者',
+		'investigatehelper-dialog-blocktarget-temp': '仮アカウント',
+		'investigatehelper-dialog-blocktarget-ip': 'IPアドレス',
 		'investigatehelper-dialog-blocktarget-processed':
 			'$1{{PLURAL:$1|件}}のリクエストを処理しました。<ul><li>成功: $2</li><li>失敗: $3</li></ul>'
 	}
@@ -2432,13 +2498,6 @@ class BlockField {
 			return;
 		}
 
-		// Ensure users and IPs aren't mixed
-		const userMixConfirmed = await BlockField.confirmUserMix(!!targets.user.length && !!targets.ip.length);
-		if (!userMixConfirmed) {
-			this.block.setDisabled(false);
-			return;
-		}
-
 		// Open the BlockDialog to process the blocks
 		const dialog = new this.BlockDialog(this, { size: 'larger' });
 		this.BlockDialog.windowManager.addWindows([dialog]);
@@ -2459,7 +2518,8 @@ class BlockField {
 	/**
 	 * Gets currently selected usernames, categorized by registered users, temporary users, and IP users.
 	 *
-	 * @returns
+	 * @returns {?Record<Exclude<UserType, 'cidr'>, CategorizedUsername[]>}
+	 * Returns `null` if no block targets are selected.
 	 */
 	getCategorizedUsernames() {
 		const targets = this.target.getSelectedUsernames();
@@ -2553,27 +2613,6 @@ class BlockField {
 		}
 
 		return ret;
-	}
-
-	/**
-	 * Shows a confirmation dialog for blocking users and IPs simultaneously. If `mixed` is not `true`,
-	 * this method returns `true` immediately.
-	 *
-	 * @param {boolean} mixed Whether users and IPs are mixed in the block targets.
-	 * @returns {JQueryPromise<boolean>} Whether the warning was confirmed.
-	 * @private
-	 */
-	static confirmUserMix(mixed) {
-		if (mixed) {
-			return OO.ui.confirm(
-				$('<div>')
-					.addClass('ih-confirm')
-					.html(Messages.get('wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets')),
-				{ size: 'large' }
-			);
-		} else {
-			return $.Deferred().resolve(true);
-		}
 	}
 
 	/**
@@ -2836,7 +2875,7 @@ class BlockLog {
 			if (restrictions) {
 				key = `logentry-partial${type}-${subtype}`;
 				parameters.push(
-					this.listToText(this.formatRestrictions(restrictions))
+					Messages.listToText(this.formatRestrictions(restrictions))
 				);
 			} else {
 				key = `logentry-non-editing-${type}-${subtype}`;
@@ -2890,7 +2929,7 @@ class BlockLog {
 			const msg = mw.format(
 				Messages.parsePlurals(Messages.get('logentry-partialblock-block-page'), num),
 				num,
-				this.listToText(list)
+				Messages.listToText(list)
 			);
 			$7.push(msg);
 		}
@@ -2902,7 +2941,7 @@ class BlockLog {
 			const msg = mw.format(
 				Messages.parsePlurals(Messages.get('logentry-partialblock-block-ns'), num),
 				num,
-				this.listToText(list)
+				Messages.listToText(list)
 			);
 			$7.push(msg);
 		}
@@ -2912,39 +2951,11 @@ class BlockLog {
 			const msg = mw.format(
 				Messages.parsePlurals(Messages.get('logentry-partialblock-block-action'), num),
 				num,
-				this.listToText(list)
+				Messages.listToText(list)
 			);
 			$7.push(msg);
 		}
 		return $7;
-	}
-
-	/**
-	 * Takes a list of strings and build a locale-friendly comma-separated list, using the local
-	 * comma-separator message. The last two strings are chained with an "and".
-	 *
-	 * This method is adapted from `Language::listToText` in MediaWiki-core.
-	 *
-	 * @param {string[]} list
-	 * @return {string}
-	 * @private
-	 */
-	static listToText(list) {
-		const itemCount = list.length;
-		if (!itemCount) {
-			return '';
-		}
-		let text = /** @type {string} */ (list.pop());
-		if (itemCount > 1) {
-			const and = Messages.get('and');
-			const space = Messages.get('word-separator');
-			let comma = '';
-			if (itemCount > 2) {
-				comma = Messages.get('comma-separator');
-			}
-			text = list.join(comma) + and + space + text;
-		}
-		return text;
 	}
 
 	/**
@@ -2997,8 +3008,6 @@ class BlockLog {
  */
 function BlockDialogFactory() {
 
-	const redSpan = () => $('<span>').css('color', 'var(--color-icon-error, #f54739)');
-
 	class BlockDialog extends OO.ui.ProcessDialog {
 
 		/**
@@ -3017,6 +3026,14 @@ function BlockDialogFactory() {
 			 * @type {OO.ui.FieldsetLayout}
 			 */
 			this.fieldset = new OO.ui.FieldsetLayout();
+			/**
+			 * Block reason as raw HTML, initialized in {@link getReadyProcess}.
+			 * The value should be used via {@link formatBlockReason}.
+			 *
+			 * @type {?string}
+			 * @private
+			 */
+			this.parsedBlockReason = null;
 			/**
 			 * @type {OO.ui.TextInputWidget}
 			 */
@@ -3139,7 +3156,7 @@ function BlockDialogFactory() {
 				});
 
 				// Set up top elements on the dialog
-				const parsedSummary = await summaryPromise;
+				this.parsedBlockReason = await summaryPromise;
 
 				this.fieldset.addItems([
 					new OO.ui.Element({
@@ -3157,12 +3174,7 @@ function BlockDialogFactory() {
 							.append(
 								$('<b>').text(Messages.get('checkuser-investigateblock-reason') + ':'),
 								'&nbsp;',
-								parsedSummary !== null
-									? (parsedSummary
-										? $('<span>').html(parsedSummary)
-										: redSpan().text(`(${Messages.get('historyempty')})`)
-									)
-									: redSpan().text('???')
+								this.formatBlockReason()
 							)
 					})
 				]);
@@ -3217,6 +3229,23 @@ function BlockDialogFactory() {
 		}
 
 		/**
+		 * Formats {@link parsedBlockReason} and returns it as a jQuery object.
+		 *
+		 * If the reason is empty, or if parsing failed during start-up, the returned value is displayed in red.
+		 *
+		 * @returns {JQuery<HTMLElement>} The formatted block reason.
+		 */
+		formatBlockReason() {
+			const redSpan = () => $('<span>').css('color', 'var(--color-icon-error, #f54739)');
+			return this.parsedBlockReason !== null
+				? (this.parsedBlockReason
+					? $('<span>').html(this.parsedBlockReason)
+					: redSpan().text(`(${Messages.get('historyempty')})`)
+				)
+				: redSpan().text('???');
+		}
+
+		/**
 		 * @inheritdoc
 		 * @override
 		 */
@@ -3267,11 +3296,20 @@ function BlockDialogFactory() {
 			/** @type {Set<number>} */
 			const unblockIndexes = new Set();
 			let index = -1;
+			const blockCount = {
+				user: 0,
+				temp: 0,
+				ip: 0
+			};
 
 			for (const target of this.targets) {
-				const isUser = ['user', 'temp'].includes(target.getUsertype());
-				const map = target.getParamMap(unblockReason);
-				for (const [checkbox, params] of map) {
+				const userType = (() => {
+					const type = target.getUsertype();
+					return type === 'cidr' ? 'ip' : type;
+				})();
+				let blockScheduled = false;
+
+				for (const [checkbox, params] of target.getParamMap(unblockReason)) {
 					index++;
 					if (!params) {
 						paramMap.set(checkbox, null);
@@ -3283,14 +3321,19 @@ function BlockDialogFactory() {
 						continue;
 					}
 					const blockParams = /** @type {BlockParams} */ (Object.assign({}, params, blockParamsDetails));
-					if (isUser) {
-						delete blockParams.anononly;
-					} else {
+					if (userType === 'ip') {
 						delete blockParams.autoblock;
 						delete blockParams.hidename;
+					} else {
+						delete blockParams.anononly;
 					}
 					paramMap.set(checkbox, blockParams);
 					blockIndexes.add(index);
+					blockScheduled = true;
+				}
+
+				if (blockScheduled) {
+					blockCount[userType]++;
 				}
 			}
 
@@ -3305,24 +3348,44 @@ function BlockDialogFactory() {
 
 			// Start async jobs
 			let confirmed = false;
-			return super.getActionProcess(action).next(() => {
+			// @ts-expect-error
+			return super.getActionProcess(action).next(async () => {
 				// Confirm an unblock-only job if applicable
-				const deferred = $.Deferred();
 				if (!blockIndexes.size) {
-					this.$element.css('z-index', '100');
-					OO.ui.confirm(
+					confirmed = await this.layeredConfirm(
 						$('<div>').html(Messages.get('investigatehelper-dialog-blocktarget-unblockonly')),
 						{ size: 'large' }
-					).then((go) => {
-						this.$element.css('z-index', '');
-						confirmed = go;
-						deferred.resolve();
-					});
+					);
 				} else {
-					confirmed = true;
-					deferred.resolve();
+					/** @type {string[]} */
+					const targetUserTypes = [];
+					const $countList = $('<ul>');
+					for (const [type, count] of Object.entries(blockCount)) {
+						if (count > 0) {
+							// @ts-expect-error
+							const userTypeLocal = Messages.get(`investigatehelper-dialog-blocktarget-${type}`);
+							targetUserTypes.push(userTypeLocal);
+							$countList.append($('<li>').text(`${Messages.ucFirst(userTypeLocal)}: ${count}`));
+						}
+					}
+					if (targetUserTypes.length > 1) {
+						$countList.append($('<li>').append(
+							Messages.get('checkuser-investigateblock-reason') + ':',
+							'&nbsp;',
+							this.formatBlockReason()
+						));
+						const $text = $('<div>').addClass('ih-confirm').html(
+							mw.format(
+								Messages.get('investigatehelper-dialog-blocktarget-mixed'),
+								Messages.listToText(targetUserTypes),
+								$countList.prop('outerHTML')
+							)
+						);
+						confirmed = await this.layeredConfirm($text, { size: 'larger' });
+					} else {
+						confirmed = true;
+					}
 				}
-				return deferred.promise();
 			// @ts-expect-error
 			}).next(async () => {
 				if (!confirmed) {
@@ -3412,6 +3475,22 @@ function BlockDialogFactory() {
 				);
 				this.popPending().setDisabledOnButtons(false, ['', 'resize']);
 				this.actionProcessRunning = false;
+			});
+		}
+
+		/**
+		 * Calls `OO.ui.confirm`, preventing the confirmation prompt from being displayed
+		 * behind the BlockDialog instance.
+		 *
+		 * @param {string | JQuery<HTMLElement>} text
+		 * @param {OO.ui.MessageDialog.SetupDataMap} [options]
+		 * @returns {JQueryPromise<boolean>}
+		 */
+		layeredConfirm(text, options) {
+			this.$element.css('z-index', '100');
+			return OO.ui.confirm(text, options).then((confirmed) => {
+				this.$element.css('z-index', '');
+				return confirmed;
 			});
 		}
 

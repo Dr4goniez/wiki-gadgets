@@ -101,11 +101,30 @@ export interface OriginalMessages {
 	 */
 	'investigatehelper-dialog-blocktarget-unblockonly': string;
 	/**
+	 * Warning text shown when mixed user types are selected as block targets.
+	 *
+	 * * `$1` - A comma-separated list of user types.
+	 * * `$2` - An `<ul>` element listing the number of selected targets for each user type.
+	 */
+	'investigatehelper-dialog-blocktarget-mixed': string;
+	/**
+	 * Label for "registered accounts" (plural form).
+	 */
+	'investigatehelper-dialog-blocktarget-user': string;
+	/**
+	 * Label for "temporary accounts" (plural form).
+	 */
+	'investigatehelper-dialog-blocktarget-temp': string;
+	/**
+	 * Label for "IP addresses" (plural form).
+	 */
+	'investigatehelper-dialog-blocktarget-ip': string;
+	/**
 	 * A `mw.notify` message shown when all block/unblock requests are complete.
 	 *
-	 * `$1` - The total number of requests.
-	 * `$2` - The number of successful requests.
-	 * `$3` - The number of failed requests.
+	 * * `$1` - The total number of requests.
+	 * * `$2` - The number of successful requests.
+	 * * `$3` - The number of failed requests.
 	 */
 	'investigatehelper-dialog-blocktarget-processed': string;
 }
@@ -186,8 +205,6 @@ export interface LoadedMessages extends OriginalMessages {
 	/** `'block'` */
 	'blocklink': string;
 
-	/** `'You are about to block both accounts and IPs with the same reason...'` */
-	'wikimedia-checkuser-investigateblock-warning-ips-and-users-in-targets': string;
 	/** `'Error ($1)'` */
 	'api-feed-error-title': string;
 	/** `'Submit'` */
