@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version pre-release
+ * @version 1.0.0
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -62,7 +62,6 @@ class InvestigateHelper {
 				'oojs-ui.styles.icons-movement', // collapse, expand
 				'oojs-ui.styles.icons-moderation', // trash
 				'oojs-ui.styles.icons-editing-core', // edit
-				'oojs-ui.styles.icons-alerts', // success, error
 				'mediawiki.widgets.UsersMultiselectWidget'
 			]),
 			Messages.loadMessagesIfMissing([
@@ -2142,9 +2141,8 @@ class BlockField {
 			label: Messages.get('checkuser-investigateblock-target')
 		});
 		const presetTargets = [ // For debugging
-			// 'WXYZ-origin',
-			// '220.152.111.0/28',
-			// '220.152.111.0/24',
+			// '192.168.0.0/28',
+			// '192.168.0.0/24',
 			// 'DragoTest',
 		];
 		/**
