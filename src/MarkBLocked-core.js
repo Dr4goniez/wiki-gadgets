@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.10
+ * @version 3.2.11
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -195,7 +195,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.10 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.11 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -548,13 +548,14 @@ class MarkBLocked {
 			};
 			for (const alias in wgNamespaceIds) {
 				const nsId = wgNamespaceIds[alias];
+				const escaped = mw.util.escapeRegExp(alias);
 				switch (nsId) {
 					case -1:
-						nsAliases.special.push(alias);
+						nsAliases.special.push(escaped);
 						break;
 					case 2:
 					case 3:
-						nsAliases.user.push(alias);
+						nsAliases.user.push(escaped);
 				}
 			}
 
@@ -565,10 +566,11 @@ class MarkBLocked {
 				/** @type {string[]} */
 				const aliases = aliasMap[realname];
 				if (Array.isArray(aliases)) {
-					spAliases.push(realname, ...aliases);
+					const escaped = [realname, ...aliases].map(mw.util.escapeRegExp);
+					spAliases.push(...escaped);
 					if (realname === 'CentralAuth') {
 						// The &target= query parameter is overridden by the subpage target on this page
-						spAliasesOverrideTarget.push(realname, ...aliases);
+						spAliasesOverrideTarget.push(...escaped);
 					}
 				}
 			}
