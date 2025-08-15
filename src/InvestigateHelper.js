@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.0.1
+ * @version 1.0.2
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -675,7 +675,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.0.1 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.0.2 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -1773,7 +1773,7 @@ class IPFieldContent {
 					const common = source.ip.intersect(goal.ip, IPFieldContent.intersectOptions);
 					if (!common) {
 						// Remember IPs without any intersection (deduplicated)
-						const failed = [source, goal].filter(({ covers }) => !noIntersection.some(({ covers: covers2 }) => setEqual(covers, covers2)));
+						const failed = [source, goal].filter(({ covers }) => !noIntersection.some(({ covers: covers2 }) => SetUtil.equals(covers, covers2)));
 						failed.forEach((obj) => {
 							noIntersection.push(obj);
 						});
@@ -1795,16 +1795,16 @@ class IPFieldContent {
 						// Check if this range covers or is covered by existing ranges in level
 
 						// Is the new range broader than an existing range? (e.g., this: /35, prev: /39)
-						const contains = level.find(({ covers }) => isSupersetOf(covered, covers, true));
+						const contains = level.find(({ covers }) => SetUtil.isSupersetOf(covered, covers, true));
 						if (contains) {
 							// Compute "overflown" ranges not included in this new broader range
-							const diff = setDifference(covered, contains.covers);
+							const diff = SetUtil.difference(covered, contains.covers);
 							IPFieldContent.computeOverflownRanges(allLevels, diff, seen, level);
 							continue;
 						}
 
 						// Is the new range narrower than an existing one? (e.g., this: /39, prev: /35)
-						const containedIdx = level.findIndex(({ covers }) => isSupersetOf(covers, covered, true));
+						const containedIdx = level.findIndex(({ covers }) => SetUtil.isSupersetOf(covers, covered, true));
 						if (containedIdx !== -1) {
 							// Replace the broader range with this narrower range
 							const contained = level[containedIdx];
@@ -1812,7 +1812,7 @@ class IPFieldContent {
 							seen.add(commonStr);
 
 							// Compute overflown ranges for IPs not covered by new narrower range
-							const diff = setDifference(contained.covers, covered);
+							const diff = SetUtil.difference(contained.covers, covered);
 							IPFieldContent.computeOverflownRanges(allLevels, diff, seen, level);
 							continue;
 						}
@@ -1831,7 +1831,7 @@ class IPFieldContent {
 			// Add completely disjoint IPs back in
 			noIntersection.forEach(({ ip, covers, foreign }) => {
 				if (seen.has(ip.sanitize())) return;
-				const completelyDisjoint = !level.some(({ covers: covers2 }) => isSupersetOf(covers2, covers, true));
+				const completelyDisjoint = !level.some(({ covers: covers2 }) => SetUtil.isSupersetOf(covers2, covers, true));
 				if (completelyDisjoint) {
 					level.push({ ip, covers: new Set(covers), foreign });
 				}
@@ -1965,7 +1965,7 @@ class IPFieldContent {
 		for (let k = 0; k < allLevels.length; k++) {
 			for (const { ip, covers, foreign } of allLevels[k]) {
 				// Skip if `covers` do not completely fall under `diff`
-				if (!isSupersetOf(diff, covers)) continue;
+				if (!SetUtil.isSupersetOf(diff, covers)) continue;
 
 				if (covers.size <= 1) {
 					// Single IP: register directly
@@ -2036,80 +2036,87 @@ IPFieldContent.intersectOptions = {
 };
 
 /**
- * Checks if the first set is a superset of the second.
- *
- * This function generalizes `Set.prototype.isSupersetOf` from ES2024 and adds support for checking
- * **proper supersets** via an optional flag.
- *
- * @template T
- * @param {Set<T>} superset The set that may contain all elements of the other.
- * @param {Set<T>} subset The set to test as a subset of the first.
- * @param {boolean} [proper=false] Whether to require the superset to be strictly larger (i.e. proper).
- * @returns {boolean} `true` if `superset` contains all elements of `subset`. If `proper` is `true`,
- * returns `false` for equal sets.
+ * Provides polyfills for `Set.prototype` methods introduced in ES2025.
  */
-function isSupersetOf(superset, subset, proper = false) {
-	if (!(superset instanceof Set) || !(subset instanceof Set)) {
-		throw new TypeError('Both arguments must be Set instances.');
-	}
-	if (proper && superset.size <= subset.size) {
-		return false;
-	}
-	if (!proper && superset.size < subset.size) {
-		return false;
-	}
-	for (const el of subset) {
-		if (!superset.has(el)) {
+class SetUtil {
+
+	/**
+	 * Checks if the first set is a superset of the second.
+	 *
+	 * This function generalizes `Set.prototype.isSupersetOf` from ES2024 and adds support for checking
+	 * **proper supersets** via an optional flag.
+	 *
+	 * @template T
+	 * @param {Set<T>} superset The set that may contain all elements of the other.
+	 * @param {Set<T>} subset The set to test as a subset of the first.
+	 * @param {boolean} [proper=false] Whether to require the superset to be strictly larger (i.e. proper).
+	 * @returns {boolean} `true` if `superset` contains all elements of `subset`. If `proper` is `true`,
+	 * returns `false` for equal sets.
+	 */
+	static isSupersetOf(superset, subset, proper = false) {
+		if (!(superset instanceof Set) || !(subset instanceof Set)) {
+			throw new TypeError('Both arguments must be Set instances.');
+		}
+		if (proper && superset.size <= subset.size) {
 			return false;
 		}
-	}
-	return true;
-}
-
-/**
- * Returns a new set containing elements from `a` that are not in `b`.
- *
- * Equivalent to `Set.prototype.difference` from ES2024.
- *
- * @template T
- * @param {Set<T>} a The set to subtract from.
- * @param {Set<T>} b The set whose elements will be removed from `a`.
- * @returns {Set<T>} A new set with elements from `a` that are not in `b`.
- */
-function setDifference(a, b) {
-	if (!(a instanceof Set) || !(b instanceof Set)) {
-		throw new TypeError('Both arguments must be Set instances.');
-	}
-	const result = new Set();
-	for (const value of a) {
-		if (!b.has(value)) {
-			result.add(value);
-		}
-	}
-	return result;
-}
-
-/**
- * Checks whether two sets contain exactly the same elements (order-insensitive).
- *
- * @template T
- * @param {Set<T>} a The first set to compare.
- * @param {Set<T>} b The second set to compare.
- * @returns {boolean} `true` if both sets contain the same elements; otherwise, `false`.
- */
-function setEqual(a, b) {
-	if (!(a instanceof Set) || !(b instanceof Set)) {
-		throw new TypeError('Both arguments must be Set instances.');
-	}
-	if (a.size !== b.size) {
-		return false;
-	}
-	for (const el of a) {
-		if (!b.has(el)) {
+		if (!proper && superset.size < subset.size) {
 			return false;
 		}
+		for (const el of subset) {
+			if (!superset.has(el)) {
+				return false;
+			}
+		}
+		return true;
 	}
-	return true;
+
+	/**
+	 * Returns a new set containing elements from `a` that are not in `b`.
+	 *
+	 * Equivalent to `Set.prototype.difference` from ES2024.
+	 *
+	 * @template T
+	 * @param {Set<T>} a The set to subtract from.
+	 * @param {Set<T>} b The set whose elements will be removed from `a`.
+	 * @returns {Set<T>} A new set with elements from `a` that are not in `b`.
+	 */
+	static difference(a, b) {
+		if (!(a instanceof Set) || !(b instanceof Set)) {
+			throw new TypeError('Both arguments must be Set instances.');
+		}
+		const result = new Set();
+		for (const value of a) {
+			if (!b.has(value)) {
+				result.add(value);
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Checks whether two sets contain exactly the same elements (order-insensitive).
+	 *
+	 * @template T
+	 * @param {Set<T>} a The first set to compare.
+	 * @param {Set<T>} b The second set to compare.
+	 * @returns {boolean} `true` if both sets contain the same elements; otherwise, `false`.
+	 */
+	static equals(a, b) {
+		if (!(a instanceof Set) || !(b instanceof Set)) {
+			throw new TypeError('Both arguments must be Set instances.');
+		}
+		if (a.size !== b.size) {
+			return false;
+		}
+		for (const el of a) {
+			if (!b.has(el)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 }
 
 class BlockField {
