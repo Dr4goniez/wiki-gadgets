@@ -7,7 +7,22 @@ export type IP = typeof import('ip-wiki').IP;
 
 export type MultiValue<T> = T | T[];
 
-export interface UserInfo {
+export interface UserInfoBase {
+	/**
+	 * Whether the username was collected from a foreign tab.
+	 */
+	foreign: boolean;
+	/**
+	 * Start of the date range as a UNIX timestamp.
+	 */
+	startUnix: number;
+	/**
+	 * End of the date range as a UNIX timestamp.
+	 */
+	endUnix: number;
+}
+
+export interface UserInfo extends UserInfoBase {
 	/**
 	 * The username.
 	 */
@@ -16,13 +31,10 @@ export interface UserInfo {
 	 * IP addresses associated with the username, if any.
 	 */
 	ips: (Omit<IpInfo, 'ip' | 'users'> & { ip : string })[];
-	/**
-	 * Whether the username was collected from a foreign tab.
-	 */
-	foreign: boolean;
+
 }
 
-export interface IpInfo {
+export interface IpInfo extends UserInfoBase {
 	ip: InstanceType<IP>;
 	/**
 	 * Usernames associated with the IP.
@@ -36,10 +48,6 @@ export interface IpInfo {
 	 * The total number of actions from the respective IP.
 	 */
 	all: number;
-	/**
-	 * Whether the IP was collected from a foreign tab.
-	 */
-	foreign: boolean;
 }
 
 export interface CollectedUsernames {
@@ -349,7 +357,7 @@ type BlockableActions = 'create' | 'move' | 'thanks' | 'upload';
  * - The `covers` property is a Set of numeric indexes referring to entries in the original `info` array
  *   that fall within the CIDR range.
  */
-export interface IpInfoLevel {
+export interface IpInfoLevel extends UserInfoBase {
 	/**
 	 * The IP instance representing the CIDR block.
 	 */
@@ -358,10 +366,6 @@ export interface IpInfoLevel {
 	 * Set of indexes from the original `info` array covered by this CIDR.
 	 */
 	covers: Set<number>;
-	/**
-	 * Whether the IP was collected from a foreign tab.
-	 */
-	foreign: boolean;
 }
 
 export interface ExtendedIpInfo extends IpInfo {

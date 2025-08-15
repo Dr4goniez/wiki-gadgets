@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.0.2
+ * @version 1.0.3
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -195,7 +195,32 @@ class InvestigateHelper {
 	static collectUsernames($table, dev = false) {
 		const USER_TARGET = 'td.ext-checkuser-compare-table-cell-user-target';
 		const IP_TARGET = 'td.ext-checkuser-compare-table-cell-ip-target';
+		const ACTIVITY = 'td.ext-checkuser-compare-table-cell-activity';
 
+		/**
+		 * @param {string} sortValue 16-digit numeric string attached to {@link ACTIVITY} cells
+		 * as `data-sort-value`.
+		 * @returns {{ start: string; end: string; }}
+		 */
+		const parseActivity = (sortValue) => {
+			const [, start, end] = /^(\d{8})(\d{8})$/.exec(sortValue) || [];
+			if (!start || !end) {
+				throw new Error(`Cannot parse "${sortValue}".`);
+			}
+			return { start, end };
+		};
+		/**
+		 * Converts a `'YYYYMMDD'` string to a UNIX timestamp.
+		 *
+		 * @param {string} yyyymmdd
+		 * @returns {number}
+		 */
+		const toUnix = (yyyymmdd) => {
+			const year = +yyyymmdd.slice(0, 4);
+			const month = +yyyymmdd.slice(4, 6) - 1; // JS months are 0-indexed
+			const day = +yyyymmdd.slice(6, 8);
+			return Date.UTC(year, month, day);
+		};
 		/**
 		 * Maps raw IP strings collected from table cells to their corresponding IP instances.
 		 * Used as a cache to avoid re-parsing already known IPs.
@@ -204,7 +229,7 @@ class InvestigateHelper {
 		 */
 		const rawIpMap = new Map();
 		/**
-		 * @typedef {{ ips: Set<string>; foreign: boolean; }} UsernameMapValue
+		 * @typedef {{ ips: Set<string>; } & UserInfoBase} UsernameMapValue
 		 *
 		 * Maps non-IP usernames to objects containing:
 		 * - A set of abbreviated IP strings representing their source IPs.
@@ -235,6 +260,11 @@ class InvestigateHelper {
 			const actions = parseInt(/** @type {string} */ ($ipTarget.attr('data-actions')));
 			const all = parseInt(/** @type {string} */ ($ipTarget.attr('data-all-actions')));
 
+			const { startUnix, endUnix } = (() => {
+				const { start, end } = parseActivity($tr.children(ACTIVITY).attr('data-sort-value') || '');
+				return { startUnix: toUnix(start), endUnix: toUnix(end) };
+			})();
+
 			const ip = rawIp ? (rawIpMap.get(rawIp) || IP.newFromText(rawIp)) : null;
 			if (rawIp && ip && !rawIpMap.has(rawIp)) {
 				rawIpMap.set(rawIp, ip); // Cache parsed IPs
@@ -245,11 +275,15 @@ class InvestigateHelper {
 			if (username) {
 				userObj = users.get(username);
 				if (!userObj) {
-					userObj = { ips: new Set(), foreign };
+					userObj = { ips: new Set(), foreign, startUnix, endUnix };
 					users.set(username, userObj);
-				} else if (userObj.foreign && !foreign) {
-					// An occurrence in the current tab overrides a previous "foreign" classification
-					userObj.foreign = false;
+				} else {
+					if (userObj.foreign && !foreign) {
+						// An occurrence in the current tab overrides a previous "foreign" classification
+						userObj.foreign = false;
+					}
+					userObj.startUnix = Math.min(userObj.startUnix, startUnix);
+					userObj.endUnix = Math.max(userObj.endUnix, endUnix);
 				}
 			}
 
@@ -270,26 +304,37 @@ class InvestigateHelper {
 				if (ipInfo.foreign && !foreign) {
 					ipInfo.foreign = false;
 				}
+				ipInfo.startUnix = Math.min(ipInfo.startUnix, startUnix);
+				ipInfo.endUnix = Math.max(ipInfo.endUnix, endUnix);
 			} else {
 				ips.set(ipStr, {
 					ip,
 					users: username ? new Set([username]) : new Set(),
 					actions,
 					all,
-					foreign
+					foreign,
+					startUnix,
+					endUnix
 				});
 			}
 		});
 
 		if (dev) {
 			const ipStr = '192.168.0.1';
-			users.set('DragoTest', { ips: new Set([ipStr]), foreign: false });
+			users.set('DragoTest', {
+				ips: new Set([ipStr]),
+				foreign: false,
+					startUnix: 1722384000,
+					endUnix: 1722384000
+				});
 			ips.set(ipStr, {
 				ip: /** @type {InstanceType<IP>} */ (IP.newFromText(ipStr)),
 				users: new Set(['DragoTest']),
 				actions: 0,
 				all: 0,
-				foreign: false
+				foreign: false,
+				startUnix: 1722384000,
+				endUnix: 1722384000
 			});
 		}
 		if (!users.size && !ips.size) {
@@ -317,10 +362,12 @@ class InvestigateHelper {
 				ips: [...userObj.ips].sort().map((ipStr) => {
 					const info = ips.get(ipStr);
 					if (!info) throw new Error(`Unexpected missing IP: ${ipStr}`);
-					const { actions, all, foreign } = info;
-					return { ip: ipStr, actions, all, foreign };
+					const { ip: _ip, users: _users, actions, all, foreign, startUnix, endUnix } = info;
+					return { ip: ipStr, actions, all, foreign, startUnix, endUnix };
 				}),
-				foreign: userObj.foreign
+				foreign: userObj.foreign,
+				startUnix: userObj.startUnix,
+				endUnix: userObj.endUnix
 			});
 		});
 		[...ips.keys()].sort().forEach((ipStr) => {
@@ -576,13 +623,22 @@ class InvestigateHelper {
 		if (users.length) {
 			const userField = this.collapsibleFieldsetLayout($content, Messages.get('checkuser-helper-user'));
 			list.user = [];
-			for (const { user, ips, foreign } of users) {
-				const item = new UserListItem(userField, user, mw.util.isTemporaryUser(user) ? 'temp' : 'user', foreign);
+			for (const { user, ips, foreign, startUnix, endUnix } of users) {
+				const item = new UserListItem(
+					userField,
+					user,
+					mw.util.isTemporaryUser(user) ? 'temp' : 'user',
+					foreign,
+					startUnix,
+					endUnix
+				);
 				ips.forEach(({ ip, actions, all, foreign: i_foreign }) => {
 					item.addSublistItem(
 						$('<li>').append(
 							$('<span>').text(ip).toggleClass(UserListItem.CLS_USERNAME_FOREIGN, i_foreign),
+							'&nbsp;',
 							IPFieldContent.getActionCountText(actions),
+							'&nbsp;',
 							IPFieldContent.getAllActionCountText(all)
 						)
 					);
@@ -675,7 +731,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.0.2 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.0.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -1298,12 +1354,14 @@ class UserListItem {
 	/**
 	 * Creates a new `UserListItem` instance.
 	 *
-	 * @param {OO.ui.FieldsetLayout} fieldset The FieldsetLayout widget to which the list item will be appended.
-	 * @param {string} username The username label. IP addresses must be in abbreviated (normalized) format.
+	 * @param {OO.ui.FieldsetLayout} fieldset The `FieldsetLayout` widget to which the list item will be appended.
+	 * @param {string} username The username label. For IP addresses, use the abbreviated (normalized) format.
 	 * @param {UserType} type The type of user.
 	 * @param {boolean} foreign Whether the username was collected from a foreign table.
+	 * @param {number} startUnix The start of the date range in which the user was active, as a UNIX timestamp.
+	 * @param {number} endUnix The end of the date range in which the user was active, as a UNIX timestamp.
 	 */
-	constructor(fieldset, username, type, foreign) {
+	constructor(fieldset, username, type, foreign, startUnix, endUnix) {
 		// Ensure IP addresses are in normalized form
 		if (type !== 'user' && (
 			// IPv4: any octet with leading zeros (e.g., 192.168.001.001)
@@ -1332,28 +1390,36 @@ class UserListItem {
 		 * @readonly
 		 */
 		this.checkbox = new OO.ui.CheckboxInputWidget({ value: username });
-
-		const layout = new OO.ui.FieldLayout(this.checkbox, {
+		/**
+		 * The container for all list item elements.
+		 *
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 */
+		this.container = new OO.ui.FieldLayout(this.checkbox, {
 			classes: ['ih-username'],
 			label: $('<b>').toggleClass(UserListItem.CLS_USERNAME_FOREIGN, foreign).text(username),
 			align: 'inline'
 		});
-
 		/**
+		 * A `<span>` tag situated in the same line as the main toollinks. To add a new text,
+		 * {@link addSubText} should be used.
+		 *
 		 * @type {JQuery<HTMLElement>}
 		 * @readonly
+		 * @private
 		 */
-		this.$body = layout.$body;
+		this.$subText = $('<span>').css('margin-left', '0.5em');
 		/**
 		 * @type {JQuery<HTMLDivElement>}
 		 * @private
 		 */
-		this.$sublistWrapper = Object.create(null);
+		this.$sublistWrapper = $('<div>');
 		/**
 		 * @type {JQuery<HTMLUListElement>}
 		 * @private
 		 */
-		this.$sublist = Object.create(null);
+		this.$sublist = $('<ul>');
 		/**
 		 * @type {JQuery<HTMLElement>}
 		 * @readonly
@@ -1361,8 +1427,17 @@ class UserListItem {
 		 */
 		this.$tools = UserListItem.createToolLinks(username, type);
 
-		layout.$body.append(this.$tools);
-		fieldset.addItems([layout]);
+		this.container.$body.append(this.$tools, this.$subText);
+		fieldset.addItems([this.container]);
+
+		const activity = [startUnix, endUnix].map((timestamp) => {
+			const date = new Date(timestamp); // ms
+			const yyyy = date.getUTCFullYear();
+			const mm   = String(date.getUTCMonth() + 1).padStart(2, '0'); // months are 0-indexed
+			const dd   = String(date.getUTCDate()).padStart(2, '0');
+			return `${yyyy}-${mm}-${dd}`;
+		});
+		this.addSublistItem($('<li>').append($('<i>').text(activity.join(' - '))));
 	}
 
 	/**
@@ -1571,6 +1646,18 @@ class UserListItem {
 	}
 
 	/**
+	 * Inserts contents to {@link $subText}.
+	 *
+	 * @param {Array<JQuery.htmlString | JQuery.TypeOrArray<JQuery.Node | JQuery<JQuery.Node>>>} contents
+	 * Arguments for `jQuery.append`.
+	 * @returns {this}
+	 */
+	addSubText(...contents) {
+		this.$subText.append(...contents);
+		return this;
+	}
+
+	/**
 	 * Prepends a sublist toollink to the set of toollinks.
 	 *
 	 * @returns {this} The current instance for chaining.
@@ -1581,9 +1668,7 @@ class UserListItem {
 		if (this.hasSublist()) {
 			throw new Error('The toollinks already contain a sublist.');
 		}
-		this.$sublistWrapper = $('<div>');
-		this.$sublist = $('<ul>');
-		this.$body.append(
+		this.container.$body.append(
 			this.$sublistWrapper
 				.addClass(UserListItem.CLS_COLLAPSED)
 				.append(this.$sublist)
@@ -1611,7 +1696,7 @@ class UserListItem {
 	 * @private
 	 */
 	hasSublist() {
-		return this.$sublistWrapper instanceof jQuery;
+		return this.$sublistWrapper[0].isConnected;
 	}
 
 	/**
@@ -1722,10 +1807,10 @@ class IPFieldContent {
 		const /** @type {Map<string, number>} */ seenV6 = new Map();
 
 		for (let i = 0; i < info.length; i++) {
-			const { ip, foreign } = info[i];
+			const { ip, foreign, startUnix, endUnix } = info[i];
 
 			// Add each individual IP as a first-level entry
-			firstLevel.push({ ip, covers: new Set([i]), foreign });
+			firstLevel.push(Object.assign({ covers: new Set([i]) }, info[i]));
 
 			// For IPv6, create a /64 CIDR that covers this IP
 			if (!isV6) continue;
@@ -1738,14 +1823,17 @@ class IPFieldContent {
 			const cidrStr = cidr.sanitize();
 			if (!seenV6.has(cidrStr)) {
 				seenV6.set(cidrStr, secondLevel.length);
-				secondLevel.push({ ip: cidr, covers: new Set([i]), foreign });
+				secondLevel.push(Object.assign({}, info[i], { ip: cidr, covers: new Set([i]) }));
 			} else {
 				// CIDR already seen: add this IP's index to the covers set
 				const index = /** @type {number} */ (seenV6.get(cidrStr));
-				secondLevel[index].covers.add(i);
-				if (secondLevel[index].foreign && !foreign) {
-					secondLevel[index].foreign = false;
+				const seenInfo = secondLevel[index];
+				seenInfo.covers.add(i);
+				if (seenInfo.foreign && !foreign) {
+					seenInfo.foreign = false;
 				}
+				seenInfo.startUnix = Math.min(seenInfo.startUnix, startUnix);
+				seenInfo.endUnix = Math.max(seenInfo.endUnix, endUnix);
 			}
 		}
 
@@ -1773,10 +1861,13 @@ class IPFieldContent {
 					const common = source.ip.intersect(goal.ip, IPFieldContent.intersectOptions);
 					if (!common) {
 						// Remember IPs without any intersection (deduplicated)
-						const failed = [source, goal].filter(({ covers }) => !noIntersection.some(({ covers: covers2 }) => SetUtil.equals(covers, covers2)));
-						failed.forEach((obj) => {
-							noIntersection.push(obj);
-						});
+						[source, goal]
+							.filter(({ covers }) => {
+								return !noIntersection.some(({ covers: covers2 }) => SetUtil.equals(covers, covers2));
+							})
+							.forEach((obj) => {
+								noIntersection.push(obj);
+							});
 						continue;
 					}
 					const commonStr = common.sanitize();
@@ -1791,6 +1882,8 @@ class IPFieldContent {
 					});
 
 					const foreign = source.foreign && goal.foreign;
+					const startUnix = Math.min(source.startUnix, goal.startUnix);
+					const endUnix = Math.max(source.endUnix, goal.endUnix);
 					if (level.length) {
 						// Check if this range covers or is covered by existing ranges in level
 
@@ -1808,7 +1901,7 @@ class IPFieldContent {
 						if (containedIdx !== -1) {
 							// Replace the broader range with this narrower range
 							const contained = level[containedIdx];
-							level[containedIdx] = { ip: common, covers: covered, foreign };
+							level[containedIdx] = { ip: common, covers: covered, foreign, startUnix, endUnix };
 							seen.add(commonStr);
 
 							// Compute overflown ranges for IPs not covered by new narrower range
@@ -1821,7 +1914,7 @@ class IPFieldContent {
 
 					// If no overlap conditions met, add the new range normally
 					seen.add(commonStr);
-					level.push({ ip: common, covers: covered, foreign });
+					level.push({ ip: common, covers: covered, foreign, startUnix, endUnix });
 				}
 			}
 
@@ -1829,11 +1922,11 @@ class IPFieldContent {
 			if (!level.length) break;
 
 			// Add completely disjoint IPs back in
-			noIntersection.forEach(({ ip, covers, foreign }) => {
-				if (seen.has(ip.sanitize())) return;
-				const completelyDisjoint = !level.some(({ covers: covers2 }) => SetUtil.isSupersetOf(covers2, covers, true));
+			noIntersection.forEach((obj) => {
+				if (seen.has(obj.ip.sanitize())) return;
+				const completelyDisjoint = !level.some(({ covers }) => SetUtil.isSupersetOf(covers, obj.covers, true));
 				if (completelyDisjoint) {
-					level.push({ ip, covers: new Set(covers), foreign });
+					level.push(Object.assign({}, obj, { covers: new Set(obj.covers) }));
 				}
 			});
 
@@ -1845,31 +1938,34 @@ class IPFieldContent {
 		// console.log(allLevels.map((arr) => arr.map(({ ip, covers }) => ({ ip: ip.abbreviate(), covers }))));
 
 		// Convert `allLevels` (`IpInfoLevel[][]`) to `ExtendedIpInfo[][]`
+		// i.e., add missing properties `users`, `actions`, `all`, and `contains` (optional)
 		const /** @type {ExtendedIpInfo[][]} */ results = [];
 
 		for (const level of allLevels) {
 			const /** @type {ExtendedIpInfo[]} */ ipInfo = [];
 
-			for (const { ip, covers, foreign } of level) {
+			for (const obj of level) {
 				let actions = 0;
 				let all = 0;
 				const /** @type {Set<string>} */ users = new Set();
-				const canContain = ip.isCIDR();
+				const canContain = obj.ip.isCIDR();
 
+				// Calculate all input IPs contained in this CIDR
 				const /** @type {IpInfo[]} */ contains = [];
-				for (const i of covers) {
-					const { users: i_users, actions: i_actions, all: i_all } = info[i];
-					actions += i_actions;
-					all += i_all;
-					for (const user of i_users) {
+				for (const i of obj.covers) {
+					const contained = info[i];
+					actions += contained.actions;
+					all += contained.all;
+					for (const user of contained.users) {
 						users.add(user);
 					}
 					if (canContain) {
-						contains.push(info[i]);
+						contains.push(contained);
 					}
 				}
 
-				const entry = { ip, users, actions, all, foreign };
+				/** @type {ExtendedIpInfo} */
+				const entry = Object.assign({ users, actions, all }, obj);
 				if (canContain) {
 					entry.contains = contains;
 				}
@@ -1888,16 +1984,24 @@ class IPFieldContent {
 		 */
 		this.items = [];
 		for (let i = results.length - 1; i >= 0; i--) {
-			results[i].forEach(({ ip, users, actions, all, contains, foreign }, j, arr) => {
-				const item = new UserListItem(ipField, ip.abbreviate(), ip.isCIDR() ? 'cidr' : 'ip', foreign);
-				item.$body.append(
+			results[i].forEach(({ ip, users, actions, all, contains, foreign, startUnix, endUnix }, j, arr) => {
+				const item = new UserListItem(
+					ipField,
+					ip.abbreviate(),
+					ip.isCIDR() ? 'cidr' : 'ip',
+					foreign,
+					startUnix,
+					endUnix
+				);
+				item.addSubText(
 					IPFieldContent.getActionCountText(actions),
+					'&nbsp;',
 					IPFieldContent.getAllActionCountText(all)
 				);
 
 				if (ip.isCIDR()) {
 					const { first, last } = ip.getRange();
-					item.addSublistItem($('<li>').html(`<i>${first} - ${last}</i>`));
+					item.addSublistItem($('<li>').append($('<i>').text(`${first} - ${last}`)));
 				}
 
 				if (users.size) {
@@ -1912,7 +2016,9 @@ class IPFieldContent {
 						item.addSublistItem(
 							$('<li>').append(
 								$('<span>').text(c_ip.abbreviate()).toggleClass(UserListItem.CLS_USERNAME_FOREIGN, c_foreign),
+								'&nbsp;',
 								IPFieldContent.getActionCountText(c_actions),
+								'&nbsp;',
 								IPFieldContent.getAllActionCountText(c_all)
 							)
 						);
@@ -1920,7 +2026,7 @@ class IPFieldContent {
 				}
 
 				if (j === arr.length - 1 && i !== 0) {
-					item.$body.after($('<hr>').addClass('ih-range-delimiter'));
+					item.container.$body.after($('<hr>').addClass('ih-range-delimiter'));
 				}
 
 				this.items.push(item);
@@ -1956,28 +2062,28 @@ class IPFieldContent {
 	 * @param {IpInfoLevel[][]} allLevels All aggregation levels generated so far.
 	 * @param {Set<number>} diff Set of indexes of IPs/CIDRs excluded from a broader range.
 	 * @param {Set<string>} seen Set of sanitized IP strings already processed in the current level.
-	 * @param {IpInfoLevel[]} level The current aggregation level to add overflown ranges to.
+	 * @param {IpInfoLevel[]} currentLevel The current aggregation level to add overflown ranges to.
 	 * @private
 	 */
-	static computeOverflownRanges(allLevels, diff, seen, level) {
+	static computeOverflownRanges(allLevels, diff, seen, currentLevel) {
 		const /** @type {Record<number, IpInfoLevel>} */ overflown = {};
 
-		for (let k = 0; k < allLevels.length; k++) {
-			for (const { ip, covers, foreign } of allLevels[k]) {
+		for (const arr of allLevels) {
+			for (const level of arr) {
 				// Skip if `covers` do not completely fall under `diff`
-				if (!SetUtil.isSupersetOf(diff, covers)) continue;
+				if (!SetUtil.isSupersetOf(diff, level.covers)) continue;
 
-				if (covers.size <= 1) {
+				if (level.covers.size <= 1) {
 					// Single IP: register directly
-					for (const index of covers) {
-						overflown[index] = { ip, covers, foreign };
+					for (const index of level.covers) {
+						overflown[index] = Object.assign({}, level);
 					}
 				} else {
 					// Multiple IPs: register at smallest index only, remove others
 					let iter = 0;
-					for (const index of Array.from(covers).sort()) {
+					for (const index of Array.from(level.covers).sort()) {
 						if (iter === 0) {
-							overflown[index] = { ip, covers, foreign };
+							overflown[index] = Object.assign({}, level);
 						} else {
 							delete overflown[index];
 						}
@@ -1988,11 +2094,11 @@ class IPFieldContent {
 		}
 
 		// Add newly discovered overflown ranges to current level if not already seen
-		for (const { ip, covers, foreign } of Object.values(overflown)) {
-			const overflownStr = ip.sanitize();
+		for (const level of Object.values(overflown)) {
+			const overflownStr = level.ip.sanitize();
 			if (!seen.has(overflownStr)) {
 				seen.add(overflownStr);
-				level.push({ ip, covers: new Set(covers), foreign });
+				currentLevel.push(Object.assign({ covers: new Set(level.covers) }, level));
 			}
 		}
 	}
@@ -2004,10 +2110,9 @@ class IPFieldContent {
 	 * @returns
 	 */
 	static getActionCountText(count) {
-		let msg = Messages.get('checkuser-investigate-compare-table-cell-actions');
+		const msg = Messages.get('checkuser-investigate-compare-table-cell-actions');
 		const countStr = String(count);
-		msg = mw.format(Messages.parsePlurals(msg, countStr), countStr);
-		return '&nbsp;' + msg;
+		return mw.format(Messages.parsePlurals(msg, countStr), countStr);
 	}
 
 	/**
@@ -2017,10 +2122,9 @@ class IPFieldContent {
 	 * @returns
 	 */
 	static getAllActionCountText(count) {
-		let msg = Messages.get('checkuser-investigate-compare-table-cell-other-actions');
+		const msg = Messages.get('checkuser-investigate-compare-table-cell-other-actions');
 		const countStr = String(count);
-		msg = mw.format(Messages.parsePlurals(msg, countStr), countStr);
-		return '&nbsp;' + msg;
+		return mw.format(Messages.parsePlurals(msg, countStr), countStr);
 	}
 
 }
@@ -3976,7 +4080,7 @@ class BlockTarget {
  * @typedef {import('./window/InvestigateHelper').PagerHref} PagerHref
  * @typedef {import('./window/InvestigateHelper').IP} IP
  * @typedef {import('./window/InvestigateHelper').UserList} UserList
- * @typedef {import('./window/InvestigateHelper').UserInfo} UserInfo
+ * @typedef {import('./window/InvestigateHelper').UserInfoBase} UserInfoBase
  * @typedef {import('./window/InvestigateHelper').IpInfo} IpInfo
  * @typedef {import('./window/InvestigateHelper').CollectedUsernames} CollectedUsernames
  * @typedef {import('./window/InvestigateHelper').OriginalMessages} OriginalMessages
