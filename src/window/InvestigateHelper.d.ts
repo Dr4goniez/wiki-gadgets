@@ -61,13 +61,25 @@ export interface OriginalMessages {
 	 */
 	'investigatehelper-traverser-button': string;
 	/**
-	 * Text shown in the screen overlay when the traverser is running.
+	 * Main text shown in the screen overlay when the traverser is running.
 	 */
-	'investigatehelper-traverser-running': string;
+	'investigatehelper-traverser-running-main': string;
 	/**
-	 * Text shown after the traverser completes, explaining the next steps to the user.
+	 * Label for the traverser counter shown in the screen overlay when the traverser is running.
+	 */
+	'investigatehelper-traverser-running-counter': string;
+	/**
+	 * Text displayed after the traverser completes, explaining the next steps to the user.
 	 */
 	'investigatehelper-traverser-notice': string;
+	/**
+	 * Additional text displayed after `investigatehelper-traverser-notice` if the traverser encountered an HTTP request failure.
+	 */
+	'investigatehelper-traverser-notice-http': string;
+	/**
+	 * Additional text displayed after `investigatehelper-traverser-notice` if the traverser was aborted before completion.
+	 */
+	'investigatehelper-traverser-notice-aborted': string;
 	/**
 	 * A `mw.notify` message shown when the traverser finishes running.
 	 */
@@ -221,6 +233,7 @@ export interface LoadedMessages extends OriginalMessages {
 	'block-submit': string;
 	/** `'Type a reason'` */
 	'block-removal-reason-placeholder': string;
+	/** `'empty'` */
 	'historyempty': string;
 	/** `'Add block'` */
 	'block-create': string;
@@ -228,6 +241,10 @@ export interface LoadedMessages extends OriginalMessages {
 	'checkuser-investigateblock-reblock-label': string;
 	/** `'Remove block'` */
 	'block-removal-confirm-yes': string;
+	/** `'Continue'` */
+	'ooui-dialog-process-continue': string;
+	/** `'Cancel'` */
+	'ooui-dialog-message-reject': string;
 
 	'logentry-block-block': string;
 	'logentry-block-block-multi': string;

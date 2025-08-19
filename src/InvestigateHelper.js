@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.0.3
+ * @version 1.0.4
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -113,6 +113,8 @@ class InvestigateHelper {
 				'block-create',
 				'checkuser-investigateblock-reblock-label',
 				'block-removal-confirm-yes',
+				'ooui-dialog-process-continue',
+				'ooui-dialog-message-reject',
 				// For BlockLog
 				'logentry-block-block',
 				'logentry-block-block-multi',
@@ -402,13 +404,8 @@ class InvestigateHelper {
 				'left: 50%;' +
 				'-webkit-transform: translate(-50%, -50%);' +
 				'transform: translate(-50%, -50%);' +
-			'}' +
-			'#investigatehelper-overlay-inner p {' +
-				'font-size: 140%;' +
-				'font-family: inherit;' +
-			'}' +
-			'#investigatehelper-overlay-inner img {' +
-				'height: 1em;' +
+				'text-align: center;' +
+				'font-size: large;' +
 			'}' +
 			// For inline elements that should be displayed as block elements
 			'.ih-inlineblock {' +
@@ -521,7 +518,17 @@ class InvestigateHelper {
 		});
 		$content.append(traverser.$element);
 
+		const aborter = new OO.ui.ButtonInputWidget({
+			label: Messages.get('ooui-dialog-message-reject')
+		});
+		aborter.off('click').on('click', () => {
+			aborter.setDisabled(true);
+			this.traverserAborted = true;
+		});
+
+		const $traverseCount = $('<span>').text('1');
 		const createOverlay = () => {
+			const src = 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif';
 			const $overlay = $('<div>')
 				.prop('id', 'investigatehelper-overlay')
 				.append(
@@ -529,11 +536,25 @@ class InvestigateHelper {
 						.prop('id', 'investigatehelper-overlay-inner')
 						.append(
 							$('<p>')
+								.css({
+									'font-size': '140%',
+									'font-family': 'inherit'
+								})
 								.append(
-									Messages.get('investigatehelper-traverser-running'),
+									Messages.get('investigatehelper-traverser-running-main'),
+									'&nbsp;',
 									$('<img>')
-										.prop('src', 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif')
-								)
+										.prop('src', src)
+										.css('height', '1em')
+								),
+							$('<br>'),
+							$('<p>').append(
+								Messages.get('investigatehelper-traverser-running-counter'),
+								'&nbsp;',
+								$traverseCount
+							),
+							$('<br>'),
+							aborter.$element
 						)
 				);
 			$('body').append($overlay);
@@ -543,35 +564,63 @@ class InvestigateHelper {
 		traverser.off('click').on('click', async () => {
 			const $overlay = createOverlay();
 
-			/** @type {Promise<JQuery<HTMLTableElement>>[]} */
+			/** @type {ReturnType<typeof InvestigateHelper['traverse']>[]} */
 			const promises = [];
 			if (pager.prev) {
-				promises.push(this.traverse(pager.prev, 'prev'));
+				promises.push(this.traverse($traverseCount, pager.prev, 'prev'));
 			}
 			if (pager.next) {
-				promises.push(this.traverse(pager.next, 'next'));
+				promises.push(this.traverse($traverseCount, pager.next, 'next'));
 			}
 			const result = await Promise.all(promises);
 
-			result.push(this.getTable()); // Add table on the current page
-			const $tables = result.reduce(($acc, $tbl) => $acc.add($tbl), $([]));
-			const names = this.collectUsernames($tables);
+			result.push({ $tables: this.getTable(), complete: true }); // Add table on the current page
+			let isComplete = /** @type {?boolean} */ (true);
+			const $allTables = result.reduce(/** @param {JQuery<HTMLTableElement>} $acc */ ($acc, { $tables, complete }) => {
+				if (isComplete && !complete) {
+					isComplete = complete;
+				}
+				return $acc.add($tables);
+			}, $([]));
+			const names = this.collectUsernames($allTables);
 			if (!names) {
 				mw.notify(mw.format(Messages.get('api-feed-error-title'), 'nodata'), { type: 'error' });
 				$overlay.remove();
 				return;
 			}
 
-			traverser.$element.remove();
-			$('.ih-collapsible').remove();
-			const message = new OO.ui.MessageWidget({
-				label: new OO.ui.HtmlSnippet(Messages.get('investigatehelper-traverser-notice')),
+			const options = {
+				label: Messages.get('investigatehelper-traverser-notice'),
+				/** @type {OO.ui.MessageWidget.ConfigOptions['type']} */
 				type: 'success'
+			};
+			switch (isComplete) {
+				case false:
+					options.label += ' ' + Messages.get('investigatehelper-traverser-notice-aborted');
+					options.type = 'warning';
+					break;
+				case null:
+					options.label += ' ' + Messages.get('investigatehelper-traverser-notice-http');
+					options.type = 'warning';
+					break;
+				default:
+					traverser.$element.remove();
+			}
+			const cls = 'ih-traverser-notice';
+			const message = new OO.ui.MessageWidget({
+				label: new OO.ui.HtmlSnippet(options.label),
+				type: options.type,
+				classes: [cls]
 			});
+
+			$(`.ih-collapsible, .${cls}`).remove();
 			$content.append(message.$element);
 			this.createInterface($content, names);
 			requestAnimationFrame(() => {
 				$overlay.remove();
+				aborter.setDisabled(false);
+				this.traverserAborted = false;
+				$traverseCount.text('1');
 				mw.notify(Messages.get('investigatehelper-traverser-complete'), { type: 'success' });
 			});
 		});
@@ -580,18 +629,24 @@ class InvestigateHelper {
 	/**
 	 * Recursively scrapes pager pages in one direction and collects tables.
 	 *
+	 * @param {JQuery<HTMLElement>} $traverseCount
 	 * @param {string} href The starting page URL.
 	 * @param {'prev' | 'next'} direction Pager direction to follow.
 	 * @param {JQuery<HTMLTableElement>} [$acc] Internal accumulator for recursion.
-	 * @returns {Promise<JQuery<HTMLTableElement>>}
+	 * @returns {Promise<{ $tables: JQuery<HTMLTableElement>; complete: ?boolean; }>}
+	 * A Promise resolving to an object containing:
+	 * * `$tables`: The collected tables as a jQuery object.
+	 * * `complete`: Whether the traversals completed. `true` if they did, `false` if
+	 * aborted, or `null` if the HTTP request failed.
 	 */
-	static async traverse(href, direction, $acc = $([])) {
+	static async traverse($traverseCount, href, direction, $acc = $([])) {
 		let html;
 		try {
 			html = await $.get(href);
+			$traverseCount.text(+$traverseCount.text() + 1);
 		} catch (err) {
 			console.warn(err);
-			return $acc; // Return what we have so far
+			return { $tables: $acc, complete: null }; // Return what we have so far
 		}
 
 		const $table = this.getTable($(html));
@@ -601,12 +656,12 @@ class InvestigateHelper {
 		}
 
 		const pager = this.findPagers($table);
-		if (pager && pager[direction]) {
+		if (!this.traverserAborted && pager[direction]) {
 			// Recurse with the same accumulator
-			return this.traverse(pager[direction], direction, $acc);
+			return this.traverse($traverseCount, pager[direction], direction, $acc);
 		}
 
-		return $acc;
+		return { $tables: $acc, complete: !pager[direction] };
 	}
 
 	/**
@@ -731,7 +786,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.0.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.0.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -756,6 +811,7 @@ class InvestigateHelper {
 
 }
 InvestigateHelper.CLS_FOREIGN_TABLE = 'ih-foreigntable';
+InvestigateHelper.traverserAborted = false;
 
 class Messages {
 
@@ -1275,14 +1331,19 @@ const rawAnchor = (hrefType, text) => {
 Messages.i18n = {
 	en: {
 		'investigatehelper-traverser-button': 'Collect data from other tabs',
-		'investigatehelper-traverser-running': 'Collecting data...',
+		'investigatehelper-traverser-running-main': 'Collecting data',
+		'investigatehelper-traverser-running-counter': 'Traversed pages:',
 		'investigatehelper-traverser-notice':
-			'CheckUser data has been collected from all other Special:Investigate tabs. Note that <b>the collected data ' +
-			'will be lost if you refresh or leave this page</b>, because InvestigateHelper does not cache any sensitive ' +
-			'data for security reasons. If you want to navigate to other tabs on this special page, it is recommended to ' +
-			'open them in a new tab or window to keep the current page intact.<br>In the following lists, usernames collected ' +
-			'from other tabs are highlighted with a light pink background.',
-		'investigatehelper-traverser-complete': 'CheckUser data has been collected from all tabs.',
+			'CheckUser data has been collected from other Special:Investigate tabs. <b>The collected data will be lost ' +
+			'if you refresh or leave this page</b>, because InvestigateHelper does not cache sensitive data for security ' +
+			'reasons. To navigate to other tabs on this special page, it is recommended that you open them in a new tab or ' +
+			'window to preserve the current page.<br>In the lists below, usernames collected from other tabs are highlighted ' +
+			'in light pink.',
+		'investigatehelper-traverser-notice-http':
+			'<b>The data may be incomplete because the process encountered an HTTP request failure.</b>',
+		'investigatehelper-traverser-notice-aborted':
+			'<b>The data may be incomplete because the process was aborted before completion.</b>',
+		'investigatehelper-traverser-complete': 'CheckUser data has been collected from other tabs.',
 		'investigatehelper-dialog-button-expand': 'Expand',
 		'investigatehelper-dialog-button-shrink': 'Shrink',
 		'investigatehelper-dialog-unblockreason': 'Reason for lifting any blocks:',
@@ -1306,13 +1367,18 @@ Messages.i18n = {
 	},
 	ja: {
 		'investigatehelper-traverser-button': '他のタブからデータを収集',
-		'investigatehelper-traverser-running': 'データを収集しています...',
+		'investigatehelper-traverser-running-main': 'データを収集しています',
+		'investigatehelper-traverser-running-counter': '処理したページ数:',
 		'investigatehelper-traverser-notice':
-			'特別:Investigate の他のすべてのタブからチェックユーザーデータを収集しました。<b>収集したデータは、このページを更新したり離れた' +
-			'場合失われます</b>。これは、セキュリティ上の理由で InvestigateHelper がいかなる機密データもキャッシュしないためです。この特別' +
-			'ページ上の別タブに移動したい場合は、新しいタブまたはウィンドウで開くことを推奨します。<br>以下のリストでは、別のタブから収集した' +
-			'利用者名は薄いピンクの背景色でハイライトされています。',
-		'investigatehelper-traverser-complete': 'すべてのタブからチェックユーザーデータを収集しました。',
+			'特別:Investigate の他のタブからチェックユーザーデータを収集しました。<b>収集したデータは、このページを更新したり離れた場合' +
+			'失われます</b>。これは、セキュリティ上の理由で InvestigateHelper が機密データをキャッシュしないためです。この特別ページ内の' +
+			'別タブに移動する場合は、新しいタブまたはウィンドウで開くことを推奨します。<br>以下のリストでは、別のタブから収集した利用者名は' +
+			'薄いピンクでハイライトされています。',
+		'investigatehelper-traverser-notice-http':
+			'<b>処理中に HTTP リクエストエラーが発生したため、データは不完全な可能性があります。</b>',
+		'investigatehelper-traverser-notice-aborted':
+			'<b>完了前に処理が中止されたため、データは不完全な可能性があります。</b>',
+		'investigatehelper-traverser-complete': '他のタブからチェックユーザーデータを収集しました。',
 		'investigatehelper-dialog-button-expand': '拡大',
 		'investigatehelper-dialog-button-shrink': '縮小',
 		'investigatehelper-dialog-unblockreason': 'ブロック解除理由:',
@@ -3614,9 +3680,28 @@ function BlockDialogFactory() {
 		 * @param {OO.ui.MessageDialog.SetupDataMap} [options]
 		 * @returns {JQueryPromise<boolean>}
 		 */
-		layeredConfirm(text, options) {
+		layeredConfirm(text, options = {}) {
 			this.$element.css('z-index', '100');
-			return OO.ui.confirm(text, options).then((confirmed) => {
+			return OO.ui.confirm(
+				text,
+				Object.assign(
+					{
+						actions: [
+							{
+								action: 'accept',
+								label: Messages.get('ooui-dialog-process-continue'),
+								flags: ['primary', 'progressive']
+							},
+							{
+								action: 'reject',
+								label: Messages.get('ooui-dialog-message-reject'),
+								flags: 'safe'
+							}
+						]
+					},
+					options
+				)
+			).then((confirmed) => {
 				this.$element.css('z-index', '');
 				return confirmed;
 			});
