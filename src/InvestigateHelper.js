@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.0.4
+ * @version 1.0.5
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -25,8 +25,8 @@ class InvestigateHelper {
 	 */
 	static async init() {
 
-		// Run the script only on Special:Investigate
-		if (mw.config.get('wgCanonicalSpecialPageName') !== 'Investigate') {
+		// Run the script only on a subpage of Special:Investigate
+		if (mw.config.get('wgCanonicalSpecialPageName') !== 'Investigate' || !mw.config.get('wgTitle').includes('/')) {
 			return;
 		}
 
@@ -786,7 +786,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.0.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.0.5 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -1499,8 +1499,8 @@ class UserListItem {
 		const activity = [startUnix, endUnix].map((timestamp) => {
 			const date = new Date(timestamp); // ms
 			const yyyy = date.getUTCFullYear();
-			const mm   = String(date.getUTCMonth() + 1).padStart(2, '0'); // months are 0-indexed
-			const dd   = String(date.getUTCDate()).padStart(2, '0');
+			const mm = String(date.getUTCMonth() + 1).padStart(2, '0'); // months are 0-indexed
+			const dd = String(date.getUTCDate()).padStart(2, '0');
 			return `${yyyy}-${mm}-${dd}`;
 		});
 		this.addSublistItem($('<li>').append($('<i>').text(activity.join(' - '))));
@@ -1865,18 +1865,21 @@ class IPFieldContent {
 
 		const isV6 = info[0].ip.isIPv6(true);
 
-		// Level 1: Individual IPs, each with a 1-to-1 mapping
-		const /** @type {IpInfoLevel[]} */ firstLevel = [];
-
-		// Level 2 (IPv6 only): Group IPs by their /64 CIDRs
-		const /** @type {IpInfoLevel[]} */ secondLevel = [];
-		const /** @type {Map<string, number>} */ seenV6 = new Map();
+		/** @type {IpInfoLevel[]} */
+		const firstLevel = []; // Individual IPs
+		/** @type {IpInfoLevel[]} */
+		const secondLevel = []; // IPv6 /64 CIDRs
+		/**
+		 * Mapping from sanitized IPv6 /64 CIDRs to their indexes in `secondLevel`.
+		 * @type {Map<string, number>}
+		 */
+		const seenV6 = new Map();
 
 		for (let i = 0; i < info.length; i++) {
-			const { ip, foreign, startUnix, endUnix } = info[i];
+			const { ip } = info[i];
 
 			// Add each individual IP as a first-level entry
-			firstLevel.push(Object.assign({ covers: new Set([i]) }, info[i]));
+			firstLevel.push({ ip, covers: new Set([i]) });
 
 			// For IPv6, create a /64 CIDR that covers this IP
 			if (!isV6) continue;
@@ -1889,35 +1892,31 @@ class IPFieldContent {
 			const cidrStr = cidr.sanitize();
 			if (!seenV6.has(cidrStr)) {
 				seenV6.set(cidrStr, secondLevel.length);
-				secondLevel.push(Object.assign({}, info[i], { ip: cidr, covers: new Set([i]) }));
+				secondLevel.push({ ip: cidr, covers: new Set([i]) });
 			} else {
 				// CIDR already seen: add this IP's index to the covers set
 				const index = /** @type {number} */ (seenV6.get(cidrStr));
 				const seenInfo = secondLevel[index];
 				seenInfo.covers.add(i);
-				if (seenInfo.foreign && !foreign) {
-					seenInfo.foreign = false;
-				}
-				seenInfo.startUnix = Math.min(seenInfo.startUnix, startUnix);
-				seenInfo.endUnix = Math.max(seenInfo.endUnix, endUnix);
 			}
 		}
 
-		// Initialize `allLevels`
 		const allLevels = [IPFieldContent.sortLevel(firstLevel)];
 		if (secondLevel.length) {
 			allLevels.push(IPFieldContent.sortLevel(secondLevel));
 		}
 
-		// Iteratively generate higher-level aggregated CIDR ranges by intersecting existing levels
+		// Iteratively build higher-level CIDRs by intersecting existing ones
+		/** @type {IpInfoLevel[][]} */
+		const intersected = [];
+		/** @type {Set<string>} */
+		const seenIntersected = new Set();
+
 		let current = allLevels[allLevels.length - 1];
-		while (current.length) {
+		while (current.length > 1) {
+			/** @type {IpInfoLevel[]} */
+			const level = [];
 
-			const /** @type {Set<string>} */ seen = new Set();
-			const /** @type {IpInfoLevel[]} */ level = [];
-			const /** @type {IpInfoLevel[]} */ noIntersection = [];
-
-			// Attempt to find broader CIDRs by intersecting every unique pair in current level
 			for (let i = 0; i < current.length; i++) {
 				const source = current[i];
 
@@ -1926,112 +1925,161 @@ class IPFieldContent {
 
 					const common = source.ip.intersect(goal.ip, IPFieldContent.intersectOptions);
 					if (!common) {
-						// Remember IPs without any intersection (deduplicated)
-						[source, goal]
-							.filter(({ covers }) => {
-								return !noIntersection.some(({ covers: covers2 }) => SetUtil.equals(covers, covers2));
-							})
-							.forEach((obj) => {
-								noIntersection.push(obj);
-							});
 						continue;
 					}
 					const commonStr = common.sanitize();
-					if (seen.has(commonStr)) continue; // Already processed this CIDR
+					if (seenIntersected.has(commonStr)) {
+						// Already processed this CIDR
+						continue;
+					}
+					seenIntersected.add(commonStr);
 
 					// Find all original IP indexes covered by the intersection CIDR
-					const covered = new Set();
-					info.forEach(({ ip }, k) => {
-						if (common.contains(ip)) {
-							covered.add(k);
+					/** @type {Set<number>} */
+					const covers = new Set();
+					for (let k = 0; k < info.length; k++) {
+						if (common.contains(info[k].ip)) {
+							covers.add(k);
 						}
-					});
-
-					const foreign = source.foreign && goal.foreign;
-					const startUnix = Math.min(source.startUnix, goal.startUnix);
-					const endUnix = Math.max(source.endUnix, goal.endUnix);
-					if (level.length) {
-						// Check if this range covers or is covered by existing ranges in level
-
-						// Is the new range broader than an existing range? (e.g., this: /35, prev: /39)
-						const contains = level.find(({ covers }) => SetUtil.isSupersetOf(covered, covers, true));
-						if (contains) {
-							// Compute "overflown" ranges not included in this new broader range
-							const diff = SetUtil.difference(covered, contains.covers);
-							IPFieldContent.computeOverflownRanges(allLevels, diff, seen, level);
-							continue;
-						}
-
-						// Is the new range narrower than an existing one? (e.g., this: /39, prev: /35)
-						const containedIdx = level.findIndex(({ covers }) => SetUtil.isSupersetOf(covers, covered, true));
-						if (containedIdx !== -1) {
-							// Replace the broader range with this narrower range
-							const contained = level[containedIdx];
-							level[containedIdx] = { ip: common, covers: covered, foreign, startUnix, endUnix };
-							seen.add(commonStr);
-
-							// Compute overflown ranges for IPs not covered by new narrower range
-							const diff = SetUtil.difference(contained.covers, covered);
-							IPFieldContent.computeOverflownRanges(allLevels, diff, seen, level);
-							continue;
-						}
-
 					}
 
-					// If no overlap conditions met, add the new range normally
-					seen.add(commonStr);
-					level.push({ ip: common, covers: covered, foreign, startUnix, endUnix });
+					level.push({ ip: common, covers });
 				}
 			}
 
-			// No new broader ranges found; aggregation complete
-			if (!level.length) break;
-
-			// Add completely disjoint IPs back in
-			noIntersection.forEach((obj) => {
-				if (seen.has(obj.ip.sanitize())) return;
-				const completelyDisjoint = !level.some(({ covers }) => SetUtil.isSupersetOf(covers, obj.covers, true));
-				if (completelyDisjoint) {
-					level.push(Object.assign({}, obj, { covers: new Set(obj.covers) }));
-				}
-			});
-
-			allLevels.push(IPFieldContent.sortLevel(level));
+			// Further intersect the intersected CIDRs in the next iteration
+			if (level.length) {
+				intersected.push(level);
+			}
 			current = level;
 		}
 
-		// Debug output
-		// console.log(allLevels.map((arr) => arr.map(({ ip, covers }) => ({ ip: ip.abbreviate(), covers }))));
+		// Build minimal covering sets
+		if (intersected.length) {
+			const finalLevel = allLevels[allLevels.length - 1];
+			/** @type {IpInfoLevel[][]} */
+			const combinations = [];
+			const fullIndexes = new Set(info.map((_, i) => i));
+
+			// Flatten `intersected` and sort narrower CIDRs on top (e.g., [/65, /64, /63, ...])
+			const flattened = intersected.reduce((acc, arr) => acc.concat(arr), []);
+			flattened.sort((a, b) => b.ip.getBitLength() - a.ip.getBitLength());
+
+			for (let i = 0; i < flattened.length; i++) {
+				const source = flattened[i];
+				const level = [source];
+				let covered = new Set(source.covers);
+
+				// If this single CIDR already covers all IPs, push it as a combination
+				if (covered.size === info.length) {
+					combinations.push(level);
+					continue;
+				}
+
+				// Attempt to expand this combination by adding additional CIDRs
+				for (let j = i + 1; j < flattened.length; j++) {
+					const goal = flattened[j];
+					const coveredClone = new Set(covered);
+
+					// Skip this goal if it overlaps with any already covered IP
+					let skip = false;
+					for (const n of goal.covers) {
+						if (coveredClone.has(n)) {
+							skip = true;
+							break;
+						}
+						coveredClone.add(n);
+					}
+					if (skip) continue;
+
+					level.push(goal);
+					covered = coveredClone;
+
+					// Stop expanding if all IPs are now covered
+					if (covered.size === fullIndexes.size) break;
+				}
+
+				let missingIndexes = SetUtil.difference(fullIndexes, covered);
+				if (!missingIndexes.size) {
+					// All input IPs are covered
+					combinations.push(level);
+				} else {
+					// Find IPs that are not yet covered by the current level
+					for (const obj of finalLevel) {
+						if (SetUtil.isSupersetOf(missingIndexes, obj.covers)) {
+							missingIndexes = SetUtil.difference(missingIndexes, obj.covers);
+							level.push({ ip: obj.ip, covers: obj.covers });
+						}
+					}
+					if (!missingIndexes.size) {
+						combinations.push(level);
+					}
+				}
+			}
+
+			if (combinations.length) {
+				// Put arrays with more elements on top
+				combinations.sort((a, b) => b.length - a.length);
+
+				for (let i = 0; i < combinations.length; ) {
+					let level = combinations[i];
+					const len = level.length;
+
+					// Compare all consecutive arrays with the same length
+					let j = i + 1;
+					while (j < combinations.length && combinations[j].length === len) {
+						const prevMinBit = Math.min(...level.map(({ ip }) => ip.getBitLength()));
+						const current = combinations[j];
+						const curMinBit = Math.min(...current.map(({ ip }) => ip.getBitLength()));
+						if (prevMinBit < curMinBit) {
+							level = current;
+						}
+						j++;
+					}
+
+					allLevels.push(IPFieldContent.sortLevel(level));
+					i = j; // move i to the next unprocessed index
+				}
+			}
+		}
 
 		// Convert `allLevels` (`IpInfoLevel[][]`) to `ExtendedIpInfo[][]`
-		// i.e., add missing properties `users`, `actions`, `all`, and `contains` (optional)
 		const /** @type {ExtendedIpInfo[][]} */ results = [];
 
 		for (const level of allLevels) {
 			const /** @type {ExtendedIpInfo[]} */ ipInfo = [];
 
-			for (const obj of level) {
+			for (const { ip, covers } of level) {
+				/** @type {Set<string>} */
+				const users = new Set();
 				let actions = 0;
 				let all = 0;
-				const /** @type {Set<string>} */ users = new Set();
-				const canContain = obj.ip.isCIDR();
+				let foreign = true;
+				let startUnix = Infinity;
+				let endUnix = 0;
+				const canContain = ip.isCIDR();
 
 				// Calculate all input IPs contained in this CIDR
 				const /** @type {IpInfo[]} */ contains = [];
-				for (const i of obj.covers) {
+				for (const i of covers) {
 					const contained = info[i];
+
+					SetUtil.addAll(users, contained.users);
 					actions += contained.actions;
 					all += contained.all;
-					for (const user of contained.users) {
-						users.add(user);
+					if (foreign && !contained.foreign) {
+						foreign = false;
 					}
+					startUnix = Math.min(startUnix, contained.startUnix);
+					endUnix = Math.max(endUnix, contained.endUnix);
+
 					if (canContain) {
 						contains.push(contained);
 					}
 				}
 
 				/** @type {ExtendedIpInfo} */
-				const entry = Object.assign({ users, actions, all }, obj);
+				const entry = { ip, users, actions, all, foreign, startUnix, endUnix };
 				if (canContain) {
 					entry.contains = contains;
 				}
@@ -2040,8 +2088,6 @@ class IPFieldContent {
 
 			results.push(ipInfo);
 		}
-
-		// console.log(results.map((arr) => arr.map(({ ip, actions, all }) => ({ ip: ip.abbreviate(), actions, all }))));
 
 		// Create interface
 		/**
@@ -2102,71 +2148,25 @@ class IPFieldContent {
 	}
 
 	/**
-	 * Sorts the given array of `IpInfoLevel` objects in-place by their sanitized IP string.
+	 * Sorts an array of `IpInfoLevel` objects in-place.
 	 *
-	 * @param {IpInfoLevel[]} level Array of IpInfoLevel to sort.
-	 * @returns {IpInfoLevel[]} The same array, sorted in ascending order by IP.
-	 * @private
+	 * Sorting is based on the numeric chunks of the first address (`ip.getProperties().first`).
+	 * If all chunks are equal, the prefix length (`bitLen`) is compared, with shorter prefixes
+	 * ordered first.
+	 *
+	 * @param {IpInfoLevel[]} level Array of objects to sort.
+	 * @returns {IpInfoLevel[]} The same array, sorted.
 	 */
 	static sortLevel(level) {
-		level.sort((a, b) => {
-			const sa = a.ip.sanitize();
-			const sb = b.ip.sanitize();
-			return sa < sb ? -1 : sa > sb ? 1 : 0;
+		return level.sort((a, b) => {
+			const { first: fa, bitLen: la } = a.ip.getProperties();
+			const { first: fb, bitLen: lb } = b.ip.getProperties();
+			for (let i = 0; i < fa.length; i++) {
+				const diff = fa[i] - fb[i];
+				if (diff !== 0) return diff;
+			}
+			return la - lb;
 		});
-		return level;
-	}
-
-	/**
-	 * Registers ranges representing IPs or CIDRs "overflown" (excluded) from a broader range,
-	 * by analyzing the difference `diff` (indexes of IPs/CIDRs outside the broader range).
-	 *
-	 * This method traverses all existing aggregation levels to find IPs or CIDRs
-	 * corresponding to the `diff` indexes, then registers those as separate ranges
-	 * in the current `level`.
-	 *
-	 * @param {IpInfoLevel[][]} allLevels All aggregation levels generated so far.
-	 * @param {Set<number>} diff Set of indexes of IPs/CIDRs excluded from a broader range.
-	 * @param {Set<string>} seen Set of sanitized IP strings already processed in the current level.
-	 * @param {IpInfoLevel[]} currentLevel The current aggregation level to add overflown ranges to.
-	 * @private
-	 */
-	static computeOverflownRanges(allLevels, diff, seen, currentLevel) {
-		const /** @type {Record<number, IpInfoLevel>} */ overflown = {};
-
-		for (const arr of allLevels) {
-			for (const level of arr) {
-				// Skip if `covers` do not completely fall under `diff`
-				if (!SetUtil.isSupersetOf(diff, level.covers)) continue;
-
-				if (level.covers.size <= 1) {
-					// Single IP: register directly
-					for (const index of level.covers) {
-						overflown[index] = Object.assign({}, level);
-					}
-				} else {
-					// Multiple IPs: register at smallest index only, remove others
-					let iter = 0;
-					for (const index of Array.from(level.covers).sort()) {
-						if (iter === 0) {
-							overflown[index] = Object.assign({}, level);
-						} else {
-							delete overflown[index];
-						}
-						iter++;
-					}
-				}
-			}
-		}
-
-		// Add newly discovered overflown ranges to current level if not already seen
-		for (const level of Object.values(overflown)) {
-			const overflownStr = level.ip.sanitize();
-			if (!seen.has(overflownStr)) {
-				seen.add(overflownStr);
-				currentLevel.push(Object.assign({ covers: new Set(level.covers) }, level));
-			}
-		}
 	}
 
 	/**
@@ -2285,6 +2285,46 @@ class SetUtil {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Adds all elements from a source set into a target set, **mutating the target in place**.
+	 *
+	 * For an immutable alternative that does not modify the original sets, use {@link union},
+	 * though it may be slightly slower for large sets due to extra allocations.
+	 *
+	 * @template T
+	 * @param {Set<T>} target The set to be updated with elements from `source`.
+	 * @param {Set<T>} source The set whose elements will be added to `target`.
+	 * @returns {Set<T>} The updated `target` set.
+	 * @throws {TypeError} If either argument is not a Set instance.
+	 */
+	static addAll(target, source) {
+		if (!(target instanceof Set) || !(source instanceof Set)) {
+			throw new TypeError('Both arguments must be Set instances.');
+		}
+		for (const el of source) {
+			target.add(el);
+		}
+		return target;
+	}
+
+	/**
+	 * Returns a new set containing all elements from two sets.
+	 *
+	 * This method provides an ES2025-like polyfill for `Set.prototype.union`.
+	 * Unlike `addAll`, this does **not** mutate the input sets; a new set is created.
+	 *
+	 * @template T
+	 * @param {Set<T>} setA The first set.
+	 * @param {Set<T>} setB The second set.
+	 * @returns {Set<T>} A new set containing every element from `setA` and `setB`.
+	 */
+	static union(setA, setB) {
+		if (!(setA instanceof Set) || !(setB instanceof Set)) {
+			throw new TypeError('Both arguments must be Set instances.');
+		}
+		return new Set([...setA, ...setB]);
 	}
 
 }
@@ -3664,8 +3704,7 @@ function BlockDialogFactory() {
 							String(successCount),
 							String(failureCount)
 						)
-					),
-					{ autoHideSeconds: 'long' }
+					)
 				);
 				this.popPending().setDisabledOnButtons(false, ['', 'resize']);
 				this.actionProcessRunning = false;
@@ -4167,14 +4206,14 @@ class BlockTarget {
  * @typedef {import('./window/InvestigateHelper').UserList} UserList
  * @typedef {import('./window/InvestigateHelper').UserInfoBase} UserInfoBase
  * @typedef {import('./window/InvestigateHelper').IpInfo} IpInfo
+ * @typedef {import('./window/InvestigateHelper').IpInfoLevel} IpInfoLevel
+ * @typedef {import('./window/InvestigateHelper').ExtendedIpInfo} ExtendedIpInfo
  * @typedef {import('./window/InvestigateHelper').CollectedUsernames} CollectedUsernames
  * @typedef {import('./window/InvestigateHelper').OriginalMessages} OriginalMessages
  * @typedef {import('./window/InvestigateHelper').LoadedMessages} LoadedMessages
  * @typedef {import('./window/InvestigateHelper').Gender} Gender
  * @typedef {import('./window/InvestigateHelper').ApiResponse} ApiResponse
  * @typedef {import('./window/InvestigateHelper').UserType} UserType
- * @typedef {import('./window/InvestigateHelper').IpInfoLevel} IpInfoLevel
- * @typedef {import('./window/InvestigateHelper').ExtendedIpInfo} ExtendedIpInfo
  * @typedef {import('./window/InvestigateHelper').CategorizedUsername} CategorizedUsername
  * @typedef {import('./window/InvestigateHelper').BlockIdMap} BlockIdMap
  * @typedef {import('./window/InvestigateHelper').BlockIdMapValue} BlockIdMapValue

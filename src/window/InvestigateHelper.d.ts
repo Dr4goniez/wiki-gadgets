@@ -50,6 +50,21 @@ export interface IpInfo extends UserInfoBase {
 	all: number;
 }
 
+export interface IpInfoLevel {
+	/**
+	 * The IP instance representing the CIDR block.
+	 */
+	ip: InstanceType<IP>;
+	/**
+	 * Set of indexes from the original `info` array covered by this CIDR.
+	 */
+	covers: Set<number>;
+}
+
+export interface ExtendedIpInfo extends IpInfo {
+	contains?: IpInfo[];
+}
+
 export interface CollectedUsernames {
 	users: UserInfo[];
 	ips: IpInfo[];
@@ -367,27 +382,6 @@ interface ApiResponseQueryListLogeventsParamsRestrictionsPages {
 }
 
 type BlockableActions = 'create' | 'move' | 'thanks' | 'upload';
-
-/**
- * Represents a CIDR block along with the set of indexes of `info` entries it covers.
- * - The `ip` property is an IP instance representing the CIDR.
- * - The `covers` property is a Set of numeric indexes referring to entries in the original `info` array
- *   that fall within the CIDR range.
- */
-export interface IpInfoLevel extends UserInfoBase {
-	/**
-	 * The IP instance representing the CIDR block.
-	 */
-	ip: InstanceType<IP>;
-	/**
-	 * Set of indexes from the original `info` array covered by this CIDR.
-	 */
-	covers: Set<number>;
-}
-
-export interface ExtendedIpInfo extends IpInfo {
-	contains?: IpInfo[];
-}
 
 export interface UserList {
 	user?: UserListItem[];
