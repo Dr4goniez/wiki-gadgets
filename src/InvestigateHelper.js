@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.0.5
+ * @version 1.0.6
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -59,7 +59,7 @@ class InvestigateHelper {
 			mw.loader.using([
 				'jquery.makeCollapsible',
 				'oojs-ui',
-				'oojs-ui.styles.icons-movement', // collapse, expand
+				'oojs-ui.styles.icons-movement', // collapse, expand, sortVertical
 				'oojs-ui.styles.icons-moderation', // trash
 				'oojs-ui.styles.icons-editing-core', // edit
 				'mediawiki.widgets.UsersMultiselectWidget'
@@ -83,6 +83,7 @@ class InvestigateHelper {
 				'checkuser-investigate-compare-table-cell-actions',
 				'checkuser-investigate-compare-table-cell-other-actions',
 				// For BlockField
+				'wikieditor-toolbar-tool-table',
 				'block',
 				'checkuser-investigateblock-target',
 				'mw-widgets-usersmultiselect-placeholder',
@@ -154,7 +155,8 @@ class InvestigateHelper {
 		if (!$.isEmptyObject(pager)) {
 			this.createTraverser($content, pager);
 		}
-		this.createInterface($content, names);
+		const ids = this.createInterface($content, names);
+		this.createNavigator($table, ids);
 	}
 
 	/**
@@ -407,6 +409,16 @@ class InvestigateHelper {
 				'text-align: center;' +
 				'font-size: large;' +
 			'}' +
+			// Navigator
+			'#ih-interface-navigation {' +
+				'position: fixed;' +
+				'top: 50%;' +
+				'left: 0.1em;' +
+				'transform: translateY(-50%);' +
+			'}' +
+			'#ih-interface-navigation > a {' +
+				'padding: 1.1em;' +
+			'}' +
 			// For inline elements that should be displayed as block elements
 			'.ih-inlineblock {' +
 				'display: block;' +
@@ -574,7 +586,8 @@ class InvestigateHelper {
 			}
 			const result = await Promise.all(promises);
 
-			result.push({ $tables: this.getTable(), complete: true }); // Add table on the current page
+			const $table = this.getTable();
+			result.push({ $tables: $table, complete: true }); // Add table on the current page
 			let isComplete = /** @type {?boolean} */ (true);
 			const $allTables = result.reduce(/** @param {JQuery<HTMLTableElement>} $acc */ ($acc, { $tables, complete }) => {
 				if (isComplete && !complete) {
@@ -615,7 +628,8 @@ class InvestigateHelper {
 
 			$(`.ih-collapsible, .${cls}`).remove();
 			$content.append(message.$element);
-			this.createInterface($content, names);
+			const ids = this.createInterface($content, names);
+			this.createNavigator($table, ids);
 			requestAnimationFrame(() => {
 				$overlay.remove();
 				aborter.setDisabled(false);
@@ -669,14 +683,20 @@ class InvestigateHelper {
 	 *
 	 * @param {JQuery<HTMLElement>} $content
 	 * @param {CollectedUsernames} names
+	 * @returns {string[]} Array of IDs used for collapsible fieldsets.
 	 */
 	static createInterface($content, names) {
 		const { users, ips } = names;
-		const /** @type {UserList} */ list = {};
+		/** @type {UserList} */
+		const list = {};
+		/** @type {string[]} */
+		const ids = [];
 
 		// Create a list of registered users
 		if (users.length) {
-			const userField = this.collapsibleFieldsetLayout($content, Messages.get('checkuser-helper-user'));
+			const id = 'ih-interface-user';
+			ids.push(id);
+			const userField = this.collapsibleFieldsetLayout($content, Messages.get('checkuser-helper-user'), id);
 			list.user = [];
 			for (const { user, ips, foreign, startUnix, endUnix } of users) {
 				const item = new UserListItem(
@@ -714,21 +734,28 @@ class InvestigateHelper {
 				}
 			}
 			if (v4s.length) {
-				const ipField = this.collapsibleFieldsetLayout($content, 'IPv4');
+				const id = 'ih-interface-ipv4';
+				ids.push(id);
+				const ipField = this.collapsibleFieldsetLayout($content, 'IPv4', id);
 				list.ipv4 = new IPFieldContent(ipField, v4s);
 			}
 			if (v6s.length) {
-				const ipField = this.collapsibleFieldsetLayout($content, 'IPv6');
+				const id = 'ih-interface-ipv6';
+				ids.push(id);
+				const ipField = this.collapsibleFieldsetLayout($content, 'IPv6', id);
 				list.ipv6 = new IPFieldContent(ipField, v6s);
 			}
 		}
 
 		UserListItem.checkExistence();
 
-		const blockField = this.collapsibleFieldsetLayout($content, Messages.get('block'));
+		const id = 'ih-interface-block';
+		ids.push(id);
+		const blockField = this.collapsibleFieldsetLayout($content, Messages.get('block'), id);
 		new BlockField(blockField, list);
 
 		mw.hook('wikipage.content').fire($content);
+		return ids;
 	}
 
 	/**
@@ -736,10 +763,11 @@ class InvestigateHelper {
 	 *
 	 * @param {JQuery<HTMLElement>} $target The element to append the fieldset to.
 	 * @param {string} label The label of the fieldset.
+	 * @param {string} id The ID of the wrapper panel layout.
 	 * @returns {OO.ui.FieldsetLayout}
 	 * @link https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/core/+/refs/heads/master/includes/htmlform/CollapsibleFieldsetLayout.php
 	 */
-	static collapsibleFieldsetLayout($target, label) {
+	static collapsibleFieldsetLayout($target, label, id) {
 
 		const wrapper = new OO.ui.PanelLayout({
 			classes: ['ih-collapsible'],
@@ -747,6 +775,7 @@ class InvestigateHelper {
 			framed: true,
 			padded: true
 		});
+		wrapper.$element.prop('id', id);
 
 		const fieldset = new OO.ui.FieldsetLayout({
 			classes: ['mw-collapsibleFieldsetLayout', 'mw-collapsible', 'mw-collapsed'],
@@ -779,6 +808,53 @@ class InvestigateHelper {
 	}
 
 	/**
+	 * Creates a navigation button on the middle left side of the screen.
+	 *
+	 * @param {JQuery<HTMLTableElement>} $table The Investigate table as a jQuery object.
+	 * @param {string[]} ids Array of IDs used for collapsible fieldsets.
+	 */
+	static createNavigator($table, ids) {
+		const topId = 'ih-interface-top';
+		$table.prop('id', 'ih-interface-top');
+		ids.unshift(topId);
+
+		const labelMap = {
+			top: Messages.get('wikieditor-toolbar-tool-table'),
+			user: Messages.get('checkuser-helper-user'),
+			ipv4: 'IPv4',
+			ipv6: 'IPv6',
+			block: Messages.get('block')
+		};
+
+		const $content = $('<ul>');
+		for (const id of ids) {
+			const key = id.replace(/^ih-interface-/, '');
+			const label = labelMap[key];
+			if (label === undefined) {
+				throw new Error(`${key} is not a valid key for labelMap.`);
+			}
+			$content.append(
+				$('<li>').append(
+					$('<a>').prop('href', `#${id}`).text(label)
+				)
+			);
+		}
+
+		const popupButton = new OO.ui.PopupButtonWidget({
+			icon: 'sortVertical',
+			popup: {
+				$content,
+				padded: true,
+				position: 'after'
+			}
+		});
+		const navId = 'ih-interface-navigation';
+		popupButton.$element.prop('id', navId);
+		$(`#${navId}`).remove();
+		$('body').append(popupButton.$element);
+	}
+
+	/**
 	 * Gets an options object to initialize a `mw.Api` instance.
 	 * @returns
 	 */
@@ -786,7 +862,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.0.5 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.0.6 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {

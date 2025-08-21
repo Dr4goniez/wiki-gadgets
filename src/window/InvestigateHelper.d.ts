@@ -197,6 +197,8 @@ export interface LoadedMessages extends OriginalMessages {
 	/** `'<i>(~$1 from all users)</i>'` */
 	'checkuser-investigate-compare-table-cell-other-actions': string;
 
+	/** `'Table'` */
+	'wikieditor-toolbar-tool-table': string;
 	/** `'Block user'` */
 	'block': string;
 	/** `'Usernames and IP addresses'` */
