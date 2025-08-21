@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.0.7
+ * @version 1.0.8
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -324,18 +324,28 @@ class InvestigateHelper {
 		});
 
 		if (dev) {
-			const ipStr = '192.168.0.1';
+			const ip1 = '192.168.0.1';
+			const ip2 = '192.168.0.240';
 			users.set('DragoTest', {
-				ips: new Set([ipStr]),
+				ips: new Set([ip1, ip2]),
 				foreign: false,
 					startUnix: 1722384000,
 					endUnix: 1722384000
 				});
-			ips.set(ipStr, {
-				ip: /** @type {InstanceType<IP>} */ (IP.newFromText(ipStr)),
+			ips.set(ip1, {
+				ip: /** @type {InstanceType<IP>} */ (IP.newFromText(ip1)),
 				users: new Set(['DragoTest']),
-				actions: 0,
-				all: 0,
+				actions: 2,
+				all: 2,
+				foreign: false,
+				startUnix: 1722384000,
+				endUnix: 1722384000
+			});
+			ips.set(ip2, {
+				ip: /** @type {InstanceType<IP>} */ (IP.newFromText(ip2)),
+				users: new Set(['DragoTest']),
+				actions: 2,
+				all: 4,
 				foreign: false,
 				startUnix: 1722384000,
 				endUnix: 1722384000
@@ -866,7 +876,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.0.7 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.0.8 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
