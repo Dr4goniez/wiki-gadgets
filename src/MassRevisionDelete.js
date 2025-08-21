@@ -1,17 +1,17 @@
-/***************************************************************************\
+/******************************************************************************************************\
 
 	MassRevisionDelete
 
-	Add an interface to delete multiple revisions in one fell swoop to
-	[[Special:Contributions]] and [[Special:DeletedContributions]].
+	Add an interface to delete multiple revisions in one fell swoop to [[Special:Contributions]]
+	and [[Special:DeletedContributions]].
 
-	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
-	@version 3.0.11
+	@version 3.0.12
+	@see https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
+	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/MassRevisionDelete.d.ts
 
-\***************************************************************************/
+\******************************************************************************************************/
 // @ts-check
-/// <reference path="./window/MassRevisionDelete.d.ts" />
 /* global mw, OO */
 //<nowiki>
 (() => {
@@ -85,7 +85,7 @@ function init() {
 		api = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.11 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.12 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
@@ -198,7 +198,7 @@ function createFieldset($contribsList) {
 			// Remove the default space between the icon and the header text
 			.children('.oo-ui-labelElement-label')
 				.css('padding-left', 0)
-				.parent()
+				.end()
 		// content
 		.next('div')
 			.addClass('mw-collapsible-content');
@@ -423,8 +423,7 @@ class MassRevisionDelete {
 					'Promise-Non-Write-API-Action': true
 				},
 				timeout: 0
-			// @ts-expect-error
-			}).then(/** @param {ApiResponseQueryRevids} res */ (res) => {
+			}).then(/** @param {ApiResponse} res */ (res) => {
 				const resPages = res && res.query && res.query.pages || [];
 				resPages.forEach(({ revisions, deletedrevisions }) => {
 					const arr = revisions || deletedrevisions;
@@ -864,7 +863,7 @@ class MassRevisionDelete {
 			$.when(...deferreds, this.initPromise).then((...res) => {
 
 				// Convert the array of result objects to one object
-				/** @type {Record<string, ApiResultRevisionDelete>} */
+				/** @type {Record<string, RevisionDeleteResult>} */
 				const result = Object.assign({}, ...res); // No need to care for initPromise because it's always undefined
 
 				// Update the progress
@@ -998,25 +997,21 @@ class MassRevisionDelete {
 	}
 
 	/**
-	 * @typedef {import('ts-xor').XOR<ApiResultRevisionDeleteSuccess, ApiResultRevisionDeleteFailure>} ApiResultRevisionDelete
-	 */
-	/**
 	 * Perform revision deletion.
 	 * @param {ApiParamsActionRevisionDelete} params
-	 * @returns {JQueryPromise<Record<string, ApiResultRevisionDelete>>}
+	 * @returns {JQueryPromise<Record<string, RevisionDeleteResult>>}
 	 */
 	revdel(params) {
 
 		return api.postWithToken('csrf', /** @type {Record<string, any>} */ (params))
-		// @ts-expect-error
-		.then(/** @param {ApiResponseActionRevisionDelete} res */ (res) => {
+		.then(/** @param {ApiResponse} res */ (res) => {
 
 			const resItems = res && res.revisiondelete && res.revisiondelete.items;
 			if (!resItems || !resItems.length) {
 				return createErrorObject('unknown error');
 			}
 
-			return resItems.reduce(/** @param {Record<string, ApiResultRevisionDelete>} acc */ (acc, obj) => {
+			return resItems.reduce(/** @param {Record<string, RevisionDeleteResult>} acc */ (acc, obj) => {
 				if (obj.errors && obj.errors.length) {
 					const err = obj.errors.reduce(/** @param {string[]} codeArr */ (codeArr, { code }) => {
 						if (codeArr.indexOf(code) === -1) {
@@ -1059,7 +1054,7 @@ class MassRevisionDelete {
 	/**
 	 * Perform experimental revision deletion.
 	 * @param {ApiParamsActionRevisionDelete} params
-	 * @returns {JQueryPromise<Record<string, ApiResultRevisionDelete>>}
+	 * @returns {JQueryPromise<Record<string, RevisionDeleteResult>>}
 	 */
 	testRevdel(params) {
 		const def = $.Deferred();
@@ -1073,7 +1068,7 @@ class MassRevisionDelete {
 			}
 			return acc;
 		}, Object.create(null));
-		const ret = params.ids.split('|').reduce(/** @param {Record<string, ApiResultRevisionDelete>} acc */ (acc, revid) => {
+		const ret = params.ids.split('|').reduce(/** @param {Record<string, RevisionDeleteResult>} acc */ (acc, revid) => {
 			/** @type {Revision=} */
 			let rev;
 			if (Math.random() > 0.1 && (rev = this.list.find((r) => r.getRevid() === revid))) {
@@ -1665,9 +1660,6 @@ Revision.class = {
 Revision.targets = ['content', 'comment', 'user'];
 
 /**
- * @typedef {'doing'|'done'|'failed'} IconType
- */
-/**
  * Get a loading/check/cross image tag.
  * @param {IconType} iconType
  * @returns {HTMLImageElement}
@@ -1715,6 +1707,18 @@ function getMessage(name) {
 	}
 	return ret;
 }
+
+/**
+ * @typedef {import('./window/MassRevisionDelete').RevdelTarget} RevdelTarget
+ * @typedef {import('./window/MassRevisionDelete').RevdelLevel} RevdelLevel
+ * @typedef {import('./window/MassRevisionDelete').DefaultParams} DefaultParams
+ * @typedef {import('./window/MassRevisionDelete').ApiParamsActionRevisionDelete} ApiParamsActionRevisionDelete
+ * @typedef {import('./window/MassRevisionDelete').ApiResponse} ApiResponse
+ * @typedef {import('./window/MassRevisionDelete').ApiResultRevisionDeleteFailure} ApiResultRevisionDeleteFailure
+ * @typedef {import('./window/MassRevisionDelete').RevisionDeleteResult} RevisionDeleteResult
+ * @typedef {import('./window/MassRevisionDelete').MessageName} MessageName
+ * @typedef {import('./window/MassRevisionDelete').IconType} IconType
+ */
 
 //*********************************************************************************************
 

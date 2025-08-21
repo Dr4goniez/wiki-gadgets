@@ -1,32 +1,55 @@
-type RevdelTarget = 'content'|'comment'|'user';
+import type { XOR } from 'ts-xor';
 
-type RevdelLevel = 'nochange'|'show'|'hide';
+export type RevdelTarget = 'content' | 'comment' | 'user';
 
-interface DefaultParams {
+export type RevdelLevel = 'nochange' | 'show' | 'hide';
+
+export interface DefaultParams {
 	action: 'revisiondelete';
 	type: 'revision';
 	reason: string;
 	hide: string;
 	show: string;
-	suppress: 'no'|'nochange'|'yes';
+	suppress: 'no' | 'nochange' | 'yes';
 	tags: string;
 }
 
-interface ApiParamsActionRevisionDelete extends DefaultParams {
+export interface ApiParamsActionRevisionDelete extends DefaultParams {
 	target: string;
 	ids: string;
 }
 
-interface ApiResponseActionRevisionDelete {
-	// Note: We can't tell whether suppression is enabled from the response object
-	revisiondelete: {
-		status: string;
-		target: string;
-		items: ApiResponseActionRevisionDeleteItem[];
-	};
+export interface ApiResponse {
+	query?: ApiResponseQuery;
+	revisiondelete?: ApiResponseRevisionDelete;
 }
 
-interface ApiResponseActionRevisionDeleteItem {
+interface ApiResponseQuery {
+	pages?: ApiResponseQueryPages[];
+}
+
+interface ApiResponseQueryPages {
+	pageid: number;
+	ns: number;
+	title: string;
+	revisions?: ApiResponseQueryPagesRevisions[];
+	deletedrevisions?: ApiResponseQueryPagesRevisions[];
+}
+
+interface ApiResponseQueryPagesRevisions {
+	revid: number;
+	parentid: number;
+	parsedcomment: string;
+}
+
+interface ApiResponseRevisionDelete {
+	// Note: We can't tell whether suppression is enabled from the response object
+	status: string;
+	target: string;
+	items: ApiResponseRevisionDeleteItem[];
+}
+
+interface ApiResponseRevisionDeleteItem {
 	status: string;
 	id: number;
 	timestamp: string;
@@ -36,12 +59,12 @@ interface ApiResponseActionRevisionDeleteItem {
 	userid: number;
 	user: string;
 	comment: boolean;
-	errors?: ApiResponseActionRevisionDeleteItemError[];
-	warnings?: ApiResponseActionRevisionDeleteItemError[];
+	errors?: ApiResponseRevisionDeleteItemError[];
+	warnings?: ApiResponseRevisionDeleteItemError[];
 }
 
-interface ApiResponseActionRevisionDeleteItemError {
-	type: 'error'|'warning';
+interface ApiResponseRevisionDeleteItemError {
+	type: 'error' | 'warning';
 	/** The error code. */
 	code: string;
 	/** The error message. */
@@ -56,37 +79,23 @@ interface ApiResultRevisionDeleteSuccess {
 	user: boolean;
 }
 
-interface ApiResultRevisionDeleteFailure {
+export interface ApiResultRevisionDeleteFailure {
 	code: string;
 }
 
-type MessageName =
-	'revdelete-hide-text'|
-	'revdelete-hide-comment'|
-	'revdelete-hide-user'|
-	'revdelete-otherreason'|
-	'revdelete-reason-dropdown'|
-	'revdelete-reasonotherlist'|
-	'rev-deleted-user-contribs'|
-	'revdelete-hide-restricted'|
-	'rev-deleted-comment'|
-	'changeslist-nocomment'|
-	'empty-username';
+export type RevisionDeleteResult = XOR<ApiResultRevisionDeleteSuccess, ApiResultRevisionDeleteFailure>;
 
-interface ApiResponseQueryRevids {
-	query: {
-		pages: {
-			pageid: number;
-			ns: number;
-			title: string;
-			revisions?: ApiResponseQueryRevidsRevision[];
-			deletedrevisions?: ApiResponseQueryRevidsRevision[];
-		}[];
-	};
-}
+export type MessageName =
+	| 'revdelete-hide-text'
+	| 'revdelete-hide-comment'
+	| 'revdelete-hide-user'
+	| 'revdelete-otherreason'
+	| 'revdelete-reason-dropdown'
+	| 'revdelete-reasonotherlist'
+	| 'rev-deleted-user-contribs'
+	| 'revdelete-hide-restricted'
+	| 'rev-deleted-comment'
+	| 'changeslist-nocomment'
+	| 'empty-username';
 
-interface ApiResponseQueryRevidsRevision {
-	revid: number;
-	parentid: number;
-	parsedcomment: string;
-}
+export type IconType = 'doing' | 'done' | 'failed';
