@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.0.6
+ * @version 1.0.7
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -415,8 +415,9 @@ class InvestigateHelper {
 				'top: 50%;' +
 				'left: 0.1em;' +
 				'transform: translateY(-50%);' +
+				'z-index: 400;' +
 			'}' +
-			'#ih-interface-navigation > a {' +
+			'#ih-interface-navigation > .oo-ui-popupButtonWidget > a.oo-ui-buttonElement-button {' +
 				'padding: 1.1em;' +
 			'}' +
 			// For inline elements that should be displayed as block elements
@@ -840,18 +841,21 @@ class InvestigateHelper {
 			);
 		}
 
+		const navId = 'ih-interface-navigation';
+		$(`#${navId}`).remove();
 		const popupButton = new OO.ui.PopupButtonWidget({
 			icon: 'sortVertical',
 			popup: {
 				$content,
-				padded: true,
-				position: 'after'
+				padded: true
 			}
 		});
-		const navId = 'ih-interface-navigation';
-		popupButton.$element.prop('id', navId);
-		$(`#${navId}`).remove();
-		$('body').append(popupButton.$element);
+
+		$('body').append(
+			$('<div>').prop('id', navId).append(
+				popupButton.$element
+			)
+		);
 	}
 
 	/**
@@ -862,7 +866,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.0.6 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.0.7 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
