@@ -70,6 +70,14 @@ export interface CollectedUsernames {
 	ips: IpInfo[];
 }
 
+/**
+ * Picks method names whose return type extends string.
+ */
+export type StringMethodKeys<T> = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [K in keyof T]: T[K] extends (...args: any[]) => string ? K : never
+}[keyof T];
+
 export interface OriginalMessages {
 	/**
 	 * Label for the button that collects data from other Special:Investigate tabs.
@@ -140,6 +148,8 @@ export interface OriginalMessages {
 	 *
 	 * * `$1` - A comma-separated list of user types.
 	 * * `$2` - An `<ul>` element listing the number of selected targets for each user type.
+	 * * `$3` - URL to the NDA policy.
+	 * * `$4` - URL to the temp account FAQ.
 	 */
 	'investigatehelper-dialog-blocktarget-mixed': string;
 	/**
@@ -293,8 +303,6 @@ export interface LoadedMessages extends OriginalMessages {
 	'logentry-partialblock-block-action': string;
 }
 
-export type Gender = 'male' | 'female' | 'unknown';
-
 export type UserType = 'user' | 'temp' | 'ip' | 'cidr';
 
 export interface ApiResponse {
@@ -313,7 +321,6 @@ interface ApiResponseQuery {
 	normalized?: ApiResponseNormalized[];
 	pages?: ApiResponsePageExistence[];
 	blocks?: ApiResponseQueryListBlocks[];
-	users?: ApiResponseQueryListUsers[];
 	logevents?: ApiResponseQueryListLogevents[];
 }
 
@@ -343,13 +350,7 @@ interface ApiResponseQueryListBlocks {
 	timestamp: string;
 }
 
-interface ApiResponseQueryListUsers {
-	userid: number;
-	name: string;
-	gender: Gender;
-}
-
-interface ApiResponseQueryListLogevents {
+export interface ApiResponseQueryListLogevents {
 	params: ApiResponseQueryListLogeventsParams;
 	type: 'block';
 	action: 'block' | 'reblock' | 'unblock';
@@ -362,7 +363,8 @@ interface ApiResponseQueryListLogeventsParams {
 	duration: string;
 	flags: BlockFlags[];
 	restrictions?: ApiResponseQueryListLogeventsParamsRestrictions;
-	blockId: number;
+	/** This property may be missing in block logs generated before the rollout of multiblocks. */
+	blockId?: number;
 	finalTargetCount?: number;
 	sitewide: boolean;
 	/**
@@ -401,13 +403,9 @@ export type BlockIdMap = Map<string, BlockIdMapValue>;
  */
 export interface BlockIdMapValue {
 	/**
-	 * Set of active block IDs.
+	 * Map of active block IDs to block detail objects.
 	 */
-	ids: Set<number>;
-	/**
-	 * Unix timestamp (in seconds) of the most recent block.
-	 */
-	latestTimestamp: number;
+	ids: Map<number, ApiResponseQueryListBlocks>;
 	/**
 	 * Unix timestamp (in seconds) of the oldest block.
 	 */

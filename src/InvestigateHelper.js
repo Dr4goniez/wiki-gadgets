@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.0.8
+ * @version 1.1.0
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -26,18 +26,21 @@ class InvestigateHelper {
 	static async init() {
 
 		// Run the script only on a subpage of Special:Investigate
-		if (mw.config.get('wgCanonicalSpecialPageName') !== 'Investigate' || !mw.config.get('wgTitle').includes('/')) {
+		const dev = false;
+		if (
+			mw.config.get('wgCanonicalSpecialPageName') !== 'Investigate' ||
+			(!dev && !mw.config.get('wgTitle').includes('/'))
+		) {
 			return;
 		}
 
 		await $.when(
 			this.loadIpWiki(), // This must be called before calling collectUsernames()
-			mw.loader.using(['mediawiki.util', 'mediawiki.api'/*, 'mediawiki.storage'*/]),
+			mw.loader.using(['mediawiki.util', 'mediawiki.api', 'mediawiki.storage']),
 			$.ready
 		);
 
 		// Parse the "IPs & User agents" table
-		const dev = false;
 		const $table = this.getTable();
 		if (!$table.length && !dev) {
 			return;
@@ -48,7 +51,7 @@ class InvestigateHelper {
 		}
 
 		/** @type {Record<string, string>} */
-		const i18n = Messages.i18n[wgUserLanguage] || Messages.i18n.en;
+		const i18n = Messages.i18n[wgUserLanguage.replace(/-.*$/, '')] || Messages.i18n.en;
 		mw.messages.set(i18n);
 
 		// Initialize a mw.Api instance
@@ -58,6 +61,7 @@ class InvestigateHelper {
 		await $.when(
 			mw.loader.using([
 				'jquery.makeCollapsible',
+				'mediawiki.jqueryMsg',
 				'oojs-ui',
 				'oojs-ui.styles.icons-movement', // collapse, expand, sortVertical
 				'oojs-ui.styles.icons-moderation', // trash
@@ -132,7 +136,8 @@ class InvestigateHelper {
 				'block-log-flags-noautoblock',
 				'block-log-flags-nocreate',
 				'block-log-flags-noemail',
-				'block-log-flags-nousertalk',
+				'block-log-flags-nousertalk', // "{{int:Blocklist-nousertalk}}"
+				'blocklist-nousertalk', // Used by block-log-flags-nousertalk
 				'parentheses',
 				'comma-separator',
 				'and',
@@ -195,6 +200,8 @@ class InvestigateHelper {
 	 * @param {boolean} [dev=false]
 	 * @returns {?CollectedUsernames} `null` if both `users` and `ips` are empty.
 	 * The returned arrays are both sorted by username/IP address.
+	 * @requires ip-wiki
+	 * @requires mediawiki.util
 	 */
 	static collectUsernames($table, dev = false) {
 		const USER_TARGET = 'td.ext-checkuser-compare-table-cell-user-target';
@@ -876,7 +883,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.0.8 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.1.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -927,6 +934,13 @@ class Messages {
 		 */
 		const containsInt = new Set();
 
+		// Retrieve cached messages if there's any
+		/** @type {Record<string, string> | false | null} */
+		const cached = mw.storage.getObject(this.storageKey);
+		if (cached && Object.values(cached).every(val => typeof val === 'string')) {
+			mw.messages.set(cached);
+		}
+
 		for (const key of messages) {
 			/** @type {?string} */
 			const msg = mw.messages.get(key);
@@ -944,6 +958,10 @@ class Messages {
 				// Fully missing message
 				missingMessages.add(key);
 			}
+		}
+
+		if (!missingMessages.size) {
+			return $.Deferred().resolve(false).promise();
 		}
 
 		/**
@@ -1003,6 +1021,7 @@ class Messages {
 					} else {
 						keys.push(...containsIntAndMissing);
 					}
+					SetUtil.addAll(missingMessages, containsIntAndMissing);
 				}
 
 				if (keys[index] !== undefined) {
@@ -1011,12 +1030,24 @@ class Messages {
 				}
 
 				// Re-parse original messages that contained unresolved `{{int:...}}`
-				// TODO: Recursively processed messages should be cached
 				for (const key of containsInt) {
 					const msg = mw.messages.get(key);
 					if (msg !== null) {
 						Messages.parseInt(msg, key);
 					}
+				}
+
+				// Save cache
+				const newCache = Object.create(null);
+				for (const key of missingMessages) {
+					/** @type {?string} */
+					const value = mw.messages.get(key);
+					if (value !== null) {
+						newCache[key] = value;
+					}
+				}
+				if (!$.isEmptyObject(newCache)) {
+					mw.storage.setObject(Messages.storageKey, newCache, 24 * 60 * 60); // 1-day expiry
 				}
 
 				return added;
@@ -1042,12 +1073,9 @@ class Messages {
 		const missingKeys = new Set();
 
 		msg = msg.replace(/\{\{\s*int:([^}]+)\}\}/g, /** @param {string} rawKey */ (match, rawKey) => {
-			rawKey = rawKey.trim();
-			const parsedKey = rawKey.charAt(0).toLowerCase() + rawKey.slice(1);
-
+			const parsedKey = this.lcFirst(rawKey.trim());
 			/** @type {?string} */
 			const replacement = mw.messages.get(parsedKey);
-
 			if (replacement !== null) {
 				return replacement;
 			} else {
@@ -1068,13 +1096,39 @@ class Messages {
 	 * Gets an interface message.
 	 *
 	 * @template {keyof LoadedMessages} K
-	 * @param {K} key
-	 * @returns {LoadedMessages[K]}
+	 * @param {K} key Key of the message to retrieve.
+	 * @param {string[]} [params] Positional parameters for replacements.
+	 * @param {object} [options] Additional options.
+	 * @param {import('./window/InvestigateHelper').StringMethodKeys<mw.Message>} [options.method='text']
+	 * Method of `mw.message` to use. Defaults to `text`.
+	 * @param {boolean} [options.restoreTags=false] For `method='parse'`, whether to restore angle brackets
+	 * to use the message as raw HTML. Defaults to `false`.
+	 * @returns {LoadedMessages[K]} The message as a string.
 	 */
-	static get(key) {
-		let ret = mw.messages.get(key);
-		if (ret === null) {
-			throw new ReferenceError(`Message named ${key} is not found.`);
+	static get(key, params = [], options = {}) {
+		const { method = 'text', restoreTags = false } = options;
+		let ret = mw.message(key, ...params)[method]();
+		const unparsable = Array.from(ret.match(/⧼[^⧽]+⧽/g) || []);
+		if (unparsable.length) {
+			throw new Error('Encountered unparsable message(s): ' + unparsable.join(', '));
+		}
+		if (/<a[\s>]/.test(ret)) {
+			// Set `target="_blank"` on all anchors if `ret` contains any links
+			const $html = $('<div>').html(ret);
+			$html.find('a').each((_, a) => {
+				if (a.role !== 'button' && a.href && !a.href.startsWith('#')) {
+					a.target = '_blank';
+				}
+			});
+			ret = $html.html();
+		}
+		if (method === 'parse' && restoreTags) {
+			ret = ret
+				// .replace(/&#039;/g, '\'')
+				// .replace(/&quot;/g, '"')
+				.replace(/&lt;/g, '<')
+				.replace(/&gt;/g, '>');
+				// .replace(/&amp;/g, '&');
 		}
 		return ret;
 	}
@@ -1088,6 +1142,7 @@ class Messages {
 	 * @returns {JQueryPromise<void>} A promise that resolves when parsing and caching are complete.
 	 */
 	static parse(keys) {
+		// FIXME: The storage key may need to be changed if we use this method again
 		/**
 		 * @type {Partial<LoadedMessages>}
 		 */
@@ -1104,11 +1159,11 @@ class Messages {
 				setCount++;
 			}
 			$messages.append(
-				$('<div>').prop('id', key).text(Messages.get(key))
+				$('<div>').prop('id', key).text(this.get(key))
 			);
 		}
 		if (keys.length === setCount) {
-			return $.Deferred().resolve();
+			return $.Deferred().resolve().promise();
 		}
 
 		return api.post({
@@ -1148,51 +1203,11 @@ class Messages {
 	}
 
 	/**
-	 * Parses all `{{PLURAL:$N|...}}` magic words in the text using the provided values.
-	 *
-	 * @param {string} text Input string possibly containing `{{PLURAL:$1|...}}` constructs.
-	 * @param {...string} parameters Positional values used to resolve each $N.
-	 * @returns {string} The processed string with all {{PLURAL}} replaced.
+	 * @param {string} message
+	 * @returns {string}
 	 */
-	static parsePlurals(text, ...parameters) {
-		return text.replace(/\{\{\s*PLURAL:\s*\$(\d+)\s*\|([^}]+?)\}\}/gi, (match, numStr, forms) => {
-			const index = parseInt(numStr, 10) - 1;
-			const value = parseInt(parameters[index], 10);
-			if (Number.isNaN(value)) return match;
-
-			// Split into plural forms
-			const formList = forms.split('|').map((f) => f.trim());
-			// Reuse the first form if there's only one form given
-			const chosenForm = value === 1 ? formList[0] : (formList[1] !== undefined ? formList[1] : formList[0]);
-			return chosenForm;
-		});
-	}
-
-	/**
-	 * Replaces occurrences of the `{{GENDER:...}}` parser function based on a gender map.
-	 *
-	 * @param {string} text The text to parse for occurrences of the `GENDER` parser function.
-	 * @returns {string} The parsed text with `GENDER` magic words replaced.
-	 */
-	static parseGenders(text) {
-		// Match {{ GENDER:username | male | female | neutral }} allowing whitespace and optional parameters
-		return text.replace(/\{\{\s*GENDER:\s*([^}]*)\}\}/g, (_, inner) => {
-			const [usernameRaw, male, female, neutral] = /** @type {[string, string?, string?, string?]} */ (
-				inner.split('|')
-			);
-
-			if (male === undefined) return ''; // No fallback, just username given
-			if (female === undefined || neutral === undefined) return male.trim(); // Only male defined
-
-			const username = usernameRaw.replace(/^[\s_]+|[\s_]+$/g, '');
-			const gender = Messages.userGenderMap.get(username) || 'unknown';
-
-			switch (gender) {
-				case 'male': return male.trim();
-				case 'female': return female.trim();
-				default: return neutral.trim();
-			}
-		});
+	static lcFirst(message) {
+		return message.charAt(0).toLowerCase() + message.slice(1);
 	}
 
 	/**
@@ -1205,7 +1220,7 @@ class Messages {
 		const /** @type {Record<string, string | Record<string, string>>} */ options = {};
 		let /** @type {string | false} */optgroup = false;
 
-		for (const rawOption of Messages.get('ipbreason-dropdown').split('\n')) {
+		for (const rawOption of this.get('ipbreason-dropdown', [], { method: 'plain' }).split('\n')) {
 			const value = rawOption.trim();
 			if (value === '') {
 				continue;
@@ -1262,13 +1277,11 @@ class Messages {
 	 * @returns {string} An `<a>` tag as raw HTML.
 	 */
 	static wikilink(title, display) {
-		return $('<a>')
-			.prop({
-				href: mw.util.getUrl(title, { noredirect: 1 }),
-				target: '_blank'
-			})
-			.text(display || title)
-			.prop('outerHTML');
+		const anchor = document.createElement('a');
+		anchor.href = mw.util.getUrl(title, { noredirect: 1 });
+		anchor.target = '_blank';
+		anchor.textContent = display || title;
+		return anchor.outerHTML;
 	}
 
 	/**
@@ -1303,7 +1316,7 @@ class Messages {
 	 * @returns {OO.ui.MenuOptionWidget[]}
 	 */
 	static getBlockDurations() {
-		const map = this.parseOptionsMessage(this.get('ipboptions'));
+		const map = this.parseOptionsMessage(this.get('ipboptions', [], { method: 'plain' }));
 		/** @type {OO.ui.MenuOptionWidget[]} */
 		const options = [
 			new OO.ui.MenuOptionWidget({
@@ -1395,108 +1408,54 @@ class Messages {
 
 }
 /**
- * @param {'NDA' | 'TEMP_FAQ'} hrefType
- * @param {string} text
- * @returns {string}
- */
-const rawAnchor = (hrefType, text) => {
-	const anchor = document.createElement('a');
-	anchor.target = '_blank';
-	anchor.textContent = text;
-	switch (hrefType) {
-		case 'NDA':
-			anchor.href = 'https://foundation.wikimedia.org/wiki/Special:MyLanguage/Policy:Wikimedia_Foundation_Access_to_Nonpublic_Personal_Data_Policy';
-			break;
-		case 'TEMP_FAQ':
-			anchor.href = 'https://www.mediawiki.org/wiki/Special:MyLanguage/Trust_and_Safety_Product/Temporary_Accounts/FAQ#Can_we_publicly_document_the_IP_addresses_used_by_suspected_(but_not_confirmed)_bad_actors_who_are_using_temporary_accounts?';
-			break;
-		default:
-			throw new Error('Unrecognized href type: '+ hrefType);
-	}
-	return anchor.outerHTML;
-};
-/**
  * @type {Record<'en' | 'ja', OriginalMessages>}
  */
 Messages.i18n = {
 	en: {
-		'investigatehelper-traverser-button': 'Collect data from other tabs',
-		'investigatehelper-traverser-running-main': 'Collecting data',
-		'investigatehelper-traverser-running-counter': 'Traversed pages:',
-		'investigatehelper-traverser-notice':
-			'CheckUser data has been collected from other Special:Investigate tabs. <b>The collected data will be lost ' +
-			'if you refresh or leave this page</b>, because InvestigateHelper does not cache sensitive data for security ' +
-			'reasons. To navigate to other tabs on this special page, it is recommended that you open them in a new tab or ' +
-			'window to preserve the current page.<br>In the lists below, usernames collected from other tabs are highlighted ' +
-			'in light pink.',
-		'investigatehelper-traverser-notice-http':
-			'<b>The data may be incomplete because the process encountered an HTTP request failure.</b>',
-		'investigatehelper-traverser-notice-aborted':
-			'<b>The data may be incomplete because the process was aborted before completion.</b>',
-		'investigatehelper-traverser-complete': 'CheckUser data has been collected from other tabs.',
-		'investigatehelper-dialog-button-expand': 'Expand',
-		'investigatehelper-dialog-button-shrink': 'Shrink',
-		'investigatehelper-dialog-unblockreason': 'Reason for lifting any blocks:',
-		'investigatehelper-dialog-unblockreason-default': 'Remove duplicate block',
-		'investigatehelper-dialog-blocktarget-contains': 'Contains: $1',
-		'investigatehelper-dialog-blocktarget-containedin': 'Contained in: $1',
-		'investigatehelper-dialog-blocktarget-none': 'No block targets have been selected.',
-		'investigatehelper-dialog-blocktarget-unblockonly': 'This will only <b>unblock</b> the targets. Do you want to continue?',
-		'investigatehelper-dialog-blocktarget-mixed':
-			'You are about to block $1 with the same reason at the same time, based on CheckUser data.$2<br>' +
-			`Please double-check the following in accordance with the ${rawAnchor('NDA', 'NDA policy')}:<ul>` +
-			'<li>The IP addresses of registered users should not be disclosed.</li>' +
-			'<li>Temporary accounts should not be associated with registered accounts based on evidence restricted to CheckUsers ' +
-			`(${rawAnchor('TEMP_FAQ', 'details')}).</li>` +
-			'</ul><br>Are you sure you want to continue?',
-		'investigatehelper-dialog-blocktarget-user': 'registered accounts',
-		'investigatehelper-dialog-blocktarget-temp': 'temporary accounts',
-		'investigatehelper-dialog-blocktarget-ip': 'IP addresses',
-		'investigatehelper-dialog-blocktarget-processed':
-			'Processed $1 {{PLURAL:$1|request|requests}}.<ul><li>Success: $2</li><li>Failure: $3</li></ul>'
+		"investigatehelper-traverser-button": "Collect data from other tabs",
+		"investigatehelper-traverser-running-main": "Collecting data",
+		"investigatehelper-traverser-running-counter": "Traversed pages:",
+		"investigatehelper-traverser-notice": "CheckUser data has been collected from other Special:Investigate tabs. <b>The collected data will be lost if you refresh or leave this page</b>, because InvestigateHelper does not cache sensitive data for security reasons. To navigate to other tabs on this special page, it is recommended that you open them in a new tab or window to preserve the current page.<br>In the lists below, usernames collected from other tabs are highlighted in light pink.",
+		"investigatehelper-traverser-notice-http": "<b>The data may be incomplete because the process encountered an HTTP request failure.</b>",
+		"investigatehelper-traverser-notice-aborted": "<b>The data may be incomplete because the process was aborted before completion.</b>",
+		"investigatehelper-traverser-complete": "CheckUser data has been collected from other tabs.",
+		"investigatehelper-dialog-button-expand": "Expand",
+		"investigatehelper-dialog-button-shrink": "Shrink",
+		"investigatehelper-dialog-unblockreason": "Reason for lifting any blocks:",
+		"investigatehelper-dialog-unblockreason-default": "Remove duplicate block",
+		"investigatehelper-dialog-blocktarget-contains": "Contains: $1",
+		"investigatehelper-dialog-blocktarget-containedin": "Contained in: $1",
+		"investigatehelper-dialog-blocktarget-none": "No block targets have been selected.",
+		"investigatehelper-dialog-blocktarget-unblockonly": "This will only <b>unblock</b> the targets. Do you want to continue?",
+		"investigatehelper-dialog-blocktarget-mixed": "You are about to block $1 with the same reason at the same time, based on CheckUser data.$2<br>Please double-check the following in accordance with the [$3 Non-Disclosure Agreement]:<ul><li>The IP addresses of registered users should not be disclosed.</li><li>Temporary accounts should not be associated with registered accounts based on evidence restricted to CheckUsers ([$4 details]).</li></ul><br>Are you sure you want to continue?",
+		"investigatehelper-dialog-blocktarget-user": "registered accounts",
+		"investigatehelper-dialog-blocktarget-temp": "temporary accounts",
+		"investigatehelper-dialog-blocktarget-ip": "IP addresses",
+		"investigatehelper-dialog-blocktarget-processed": "Processed $1 {{PLURAL:$1|request|requests}}.<ul><li>Success: $2</li><li>Failure: $3</li></ul>"
 	},
 	ja: {
-		'investigatehelper-traverser-button': '他のタブからデータを収集',
-		'investigatehelper-traverser-running-main': 'データを収集しています',
-		'investigatehelper-traverser-running-counter': '処理したページ数:',
-		'investigatehelper-traverser-notice':
-			'特別:Investigate の他のタブからチェックユーザーデータを収集しました。<b>収集したデータは、このページを更新したり離れた場合' +
-			'失われます</b>。これは、セキュリティ上の理由で InvestigateHelper が機密データをキャッシュしないためです。この特別ページ内の' +
-			'別タブに移動する場合は、新しいタブまたはウィンドウで開くことを推奨します。<br>以下のリストでは、別のタブから収集した利用者名は' +
-			'薄いピンクでハイライトされています。',
-		'investigatehelper-traverser-notice-http':
-			'<b>処理中に HTTP リクエストエラーが発生したため、データは不完全な可能性があります。</b>',
-		'investigatehelper-traverser-notice-aborted':
-			'<b>完了前に処理が中止されたため、データは不完全な可能性があります。</b>',
-		'investigatehelper-traverser-complete': '他のタブからチェックユーザーデータを収集しました。',
-		'investigatehelper-dialog-button-expand': '拡大',
-		'investigatehelper-dialog-button-shrink': '縮小',
-		'investigatehelper-dialog-unblockreason': 'ブロック解除理由:',
-		'investigatehelper-dialog-unblockreason-default': '重複ブロックを除去',
-		'investigatehelper-dialog-blocktarget-contains': '含有するIP: $1',
-		'investigatehelper-dialog-blocktarget-containedin': '含有されるIP: $1',
-		'investigatehelper-dialog-blocktarget-none': 'ブロック対象が選択されていません。',
-		'investigatehelper-dialog-blocktarget-unblockonly': '<b>ブロック解除</b>の処理のみが行われます。続行しますか？',
-		'investigatehelper-dialog-blocktarget-mixed':
-			'$1を同じ理由で同時にチェックユーザーブロックしようとしています。$2<br>' +
-			`${rawAnchor('NDA', '秘密保持契約 (NDA) ポリシー')}に基づき、以下の点を確認してください。<ul>` +
-			'<li>登録利用者のIPアドレスは開示すべきではありません。</li>' +
-			'<li>チェックユーザーのみがアクセス可能な情報に基づき、仮アカウントを登録利用者に関連付けるべきではありません ' +
-			`(${rawAnchor('TEMP_FAQ', '詳細')})。</li>` +
-			'</ul><br>本当に続行しますか？',
-		'investigatehelper-dialog-blocktarget-user': '登録利用者',
-		'investigatehelper-dialog-blocktarget-temp': '仮アカウント',
-		'investigatehelper-dialog-blocktarget-ip': 'IPアドレス',
-		'investigatehelper-dialog-blocktarget-processed':
-			'$1{{PLURAL:$1|件}}のリクエストを処理しました。<ul><li>成功: $2</li><li>失敗: $3</li></ul>'
+		"investigatehelper-traverser-button": "他のタブからデータを収集",
+		"investigatehelper-traverser-running-main": "データを収集しています",
+		"investigatehelper-traverser-running-counter": "処理したページ数:",
+		"investigatehelper-traverser-notice": "特別:Investigate の他のタブからチェックユーザーデータを収集しました。<b>収集したデータは、このページを更新したり離れた場合失われます</b>。これは、セキュリティ上の理由で InvestigateHelper が機密データをキャッシュしないためです。この特別ページ内の別タブに移動する場合は、新しいタブまたはウィンドウで開くことを推奨します。<br>以下のリストでは、別のタブから収集した利用者名は薄いピンクでハイライトされています。",
+		"investigatehelper-traverser-notice-http": "<b>処理中に HTTP リクエストエラーが発生したため、データは不完全な可能性があります。</b>",
+		"investigatehelper-traverser-notice-aborted": "<b>完了前に処理が中止されたため、データは不完全な可能性があります。</b>",
+		"investigatehelper-traverser-complete": "他のタブからチェックユーザーデータを収集しました。",
+		"investigatehelper-dialog-button-expand": "拡大",
+		"investigatehelper-dialog-button-shrink": "縮小",
+		"investigatehelper-dialog-unblockreason": "ブロック解除理由:",
+		"investigatehelper-dialog-unblockreason-default": "重複ブロックを除去",
+		"investigatehelper-dialog-blocktarget-contains": "含有するIP: $1",
+		"investigatehelper-dialog-blocktarget-containedin": "含有されるIP: $1",
+		"investigatehelper-dialog-blocktarget-none": "ブロック対象が選択されていません。",
+		"investigatehelper-dialog-blocktarget-unblockonly": "<b>ブロック解除</b>の処理のみが行われます。続行しますか？",
+		"investigatehelper-dialog-blocktarget-mixed": "$1を同じ理由で同時にチェックユーザーブロックしようとしています。$2<br>[$3 秘密保持契約]に基づき、以下の点を確認してください。<ul><li>登録利用者のIPアドレスは開示すべきではありません。</li><li>チェックユーザーのみがアクセス可能な情報に基づき、仮アカウントを登録利用者に関連付けるべきではありません ([$4 詳細])。</li></ul><br>本当に続行しますか？",
+		"investigatehelper-dialog-blocktarget-user": "登録利用者",
+		"investigatehelper-dialog-blocktarget-temp": "仮アカウント",
+		"investigatehelper-dialog-blocktarget-ip": "IPアドレス",
+		"investigatehelper-dialog-blocktarget-processed": "$1{{PLURAL:$1|件}}のリクエストを処理しました。<ul><li>成功: $2</li><li>失敗: $3</li></ul>"
 	}
 };
-/**
- * Map of usernames to their genders. This object is updated by {@link BlockField.checkBlocks}.
- *
- * @type {Map<string, Gender>}
- */
-Messages.userGenderMap = new Map();
 /**
  * Key for `mw.storage` to cache some messages.
  */
@@ -1717,7 +1676,7 @@ class UserListItem {
 				linkMap.set(title, [link]);
 			}
 		}
-		if (!linkMap.size) return $.Deferred().resolve();
+		if (!linkMap.size) return $.Deferred().resolve().promise();
 
 		const apilimit = 500;
 		const /** @type {string[][]} */ titleBatches = [];
@@ -2266,9 +2225,7 @@ class IPFieldContent {
 	 * @returns
 	 */
 	static getActionCountText(count) {
-		const msg = Messages.get('checkuser-investigate-compare-table-cell-actions');
-		const countStr = String(count);
-		return mw.format(Messages.parsePlurals(msg, countStr), countStr);
+		return Messages.get('checkuser-investigate-compare-table-cell-actions', [String(count)]);
 	}
 
 	/**
@@ -2278,9 +2235,7 @@ class IPFieldContent {
 	 * @returns
 	 */
 	static getAllActionCountText(count) {
-		const msg = Messages.get('checkuser-investigate-compare-table-cell-other-actions');
-		const countStr = String(count);
-		return mw.format(Messages.parsePlurals(msg, countStr), countStr);
+		return Messages.get('checkuser-investigate-compare-table-cell-other-actions', [String(count)]);
 	}
 
 }
@@ -2624,10 +2579,9 @@ class BlockField {
 					.html(`<b>${Messages.get('block-options')}</b>&nbsp;${Messages.get('htmlform-optional-flag')}`)
 			}),
 			new OO.ui.FieldLayout(this.autoblock, {
-				label: mw.format(
-					Messages.get('ipbenableautoblock'),
-					mw.format(Messages.parsePlurals(Messages.get('days'), '1'), '1')
-				),
+				label: Messages.get('ipbenableautoblock', [
+					Messages.get('days', ['1'])
+				]),
 				align: 'inline'
 			}),
 			(hidename = new OO.ui.FieldLayout(this.hidename, {
@@ -2947,75 +2901,44 @@ class BlockField {
 	 * an API error code as a string on failure.
 	 */
 	static checkBlocks(targets) {
-		/** @type {string[]} */
-		const usernames = [];
-		/** @type {Set<number>} */
-		const userIndexes = new Set();
-
-		Object.values(targets).forEach((arr) => {
-			arr.forEach(({ username, usertype }) => {
-				if (usertype === 'user') {
-					userIndexes.add(usernames.length);
-				}
-				usernames.push(username);
-			});
-		});
-
+		const usernames = Object.values(targets).reduce(/** @param {string[]} acc */ (acc, arr) => {
+			return acc.concat(arr.map(({ username }) => username));
+		}, []);
 		const /** @type {BlockIdMap} */ map = new Map();
+
+		return (
 		/**
 		 * @param {number} index
-		 * @returns {JQueryPromise<?BlockIdMap>}
+		 * @returns {JQueryPromise<BlockIdMap | string>}
 		 */
-		return (function execute(index) {
+		function execute(index) {
 			const allUsers = usernames.slice(index, index + 500);
-			const params = {
-				action: 'query',
-				formatversion: '2',
-				list: ['blocks'],
+			const request = allUsers.length <= 50
+				? (query) => api.get(query)
+				: (query) => api.post(query, InvestigateHelper.nonwritePost());
+			return request({
+				list: 'blocks',
 				bkusers: allUsers.join('|'),
 				bklimit: 'max',
 				bkprop: 'id|user|timestamp'
-			};
-
-			// Add `list=users` params to retrieve users' genders if `usernames` involves registered users
-			const registeredUsers = allUsers.filter((user, i) => userIndexes.has(i + index) && !Messages.userGenderMap.has(user));
-			if (registeredUsers.length) {
-				params.list.push('users');
-				params.usprop = 'gender';
-				params.ususers = registeredUsers.join('|');
-			}
-
-			return api.post(params, InvestigateHelper.nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
+			}).then(/** @param {ApiResponse} res */ (res) => {
 				const blocks = res && res.query && res.query.blocks || [];
-				for (const { id, user, timestamp } of blocks) {
-					const username = mw.util.isIPAddress(user, true) ? user.toLowerCase() : user;
-					const unixTime = Date.parse(timestamp) / 1000;
+				for (const obj of blocks) {
+					const username = mw.util.isIPAddress(obj.user, true) ? obj.user.toLowerCase() : obj.user;
+					const unixTime = Date.parse(obj.timestamp) / 1000;
 					if (!map.has(username)) {
 						map.set(username, {
-							ids: new Set([id]),
-							latestTimestamp: unixTime,
+							ids: new Map([
+								[obj.id, obj]
+							]),
 							earliestTimestamp: unixTime
 						});
 					} else {
 						const entry = /** @type {BlockIdMapValue} */ (map.get(username));
-						entry.ids.add(id);
-						entry.latestTimestamp = Math.max(entry.latestTimestamp, unixTime);
+						entry.ids.set(obj.id, obj);
 						entry.earliestTimestamp = Math.min(entry.earliestTimestamp, unixTime);
 					}
 				}
-
-				const users = res && res.query && res.query.users;
-				if (users) {
-					for (const obj of users) {
-						const { userid, name, gender } = obj;
-						if (!userid || !gender) {
-							console.warn('Unexpected value found in response.query.users', obj);
-							continue;
-						}
-						Messages.userGenderMap.set(name, gender);
-					}
-				}
-
 				index += 500;
 				if (targets[index]) {
 					return execute(index);
@@ -3069,24 +2992,22 @@ class BlockField {
 class BlockLog {
 
 	/**
-	 * Retrieves the detailed log entries of active blocks for the given user,
-	 * based on block IDs and time frames in which the blocks were applied.
+	 * Retrieves detailed log entries for the given user's active blocks.
 	 *
-	 * @param {string} username
-	 * @param {BlockIdMapValue} data
-	 * @returns {JQueryPromise<BlockLogMap | string>} A Promise resolving to a Map of block IDs to log information,
-	 * or an API error code as a string on failure.
+	 * @param {string} username The name of the user whose block logs are being retrieved.
+	 * @param {BlockIdMapValue} data The user's active block data (IDs and earliest block timestamp).
+	 * @returns {JQueryPromise<BlockLogMap | string>} A Promise resolving to a Map of block IDs to block log details,
+	 * or to an API error code string if the request fails.
 	 * @private
 	 */
 	static getEntries(username, data) {
-		const { ids, latestTimestamp, earliestTimestamp } = data;
+		const { ids, earliestTimestamp } = data;
 		return api.get({
 			action: 'query',
 			formatversion: '2',
 			list: 'logevents',
 			leprop: 'user|type|timestamp|parsedcomment|details',
 			letype: 'block',
-			lestart: latestTimestamp + 1,
 			leend: earliestTimestamp,
 			letitle: `User:${username}`,
 			lelimit: 'max',
@@ -3097,14 +3018,78 @@ class BlockLog {
 			 * @type {BlockLogMap}
 			 */
 			const ret = new Map();
-
+			/**
+			 * Given a block log entry, attempts to find its corresponding active block
+			 * by matching the block timestamp.
+			 *
+			 * @param {ApiResponseQueryListLogevents} log A block log entry from the API.
+			 * @returns {number=} The matching block ID, or `undefined` if no match was found.
+			 */
+			const findId = (log) => {
+				for (const [id, block] of ids) {
+					if (block.timestamp === log.timestamp) {
+						return id;
+					}
+				}
+				return void 0;
+			};
 			const rIsoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
-			for (const { params, action, user, timestamp, parsedcomment } of logevents) {
-				const { duration, flags, restrictions, blockId, finalTargetCount, sitewide, 'duration-l10n': duration_l10n } = params;
 
-				if (!ids.has(blockId) || action === 'unblock') {
+			for (let i = 0; i < logevents.length; i++) {
+				let log = logevents[i];
+				let blockId = log.params.blockId;
+
+				// Log entries generated before the rollout of multiblocks lack a `blockId` property
+				// Plus, `list=blocks` returned information about the initial block even if it was
+				// later updated by a reblock (see also [[phab:T313661]])
+				if (typeof blockId !== 'number') {
+					// If the log entry has no `blockId`, try to infer it by matching against
+					// `list=blocks` data or traversing older logs depending on the action
+					switch (log.action) {
+						case 'block':
+							// For a block/block entry: check if it corresponds to an active block
+							// Note that `findId` is designed specifically for the bug mentioned above
+							blockId = findId(log);
+							break;
+						case 'reblock': {
+							// For a block/reblock entry: walk forward through older logs until the
+							// initial block is found. Because logs are anti-chronological, we must
+							// search toward larger indexes.
+							// - If we encounter another "reblock", skip it and keep searching.
+							// - If we encounter a "block", that’s the original → capture its ID.
+							// - If we encounter an "unblock" first, it may correspond to a different
+							//   earlier block, so the chain is ambiguous → stop searching.
+							let j = i + 1;
+							let done = false;
+							while (j < logevents.length && !done) {
+								const laterLog = logevents[j];
+								switch (laterLog.action) {
+									case 'block':
+										blockId = findId(laterLog);
+										done = true;
+										break;
+									case 'reblock':
+										break; // Ignore and keep searching
+									case 'unblock':
+										done = true; // Ambiguous case, stop here
+										break;
+								}
+								j++;
+							}
+							// Skip ahead so the outer loop doesn’t re-process logs we already examined
+							i = j;
+							break;
+						}
+						case 'unblock':
+							// For "unblock" entries: skip, since they cannot represent an active block
+							continue;
+					}
+				}
+				if (typeof blockId !== 'number' || !ids.has(blockId) || log.action === 'unblock') {
 					continue;
 				}
+				const { params, action, user, timestamp, parsedcomment } = log;
+				const { duration, flags, restrictions, finalTargetCount, sitewide, 'duration-l10n': duration_l10n } = params;
 				ret.set(blockId, {
 					subtype: action,
 					timestamp: timestamp.replace(/Z$/, ''),
@@ -3125,6 +3110,7 @@ class BlockLog {
 					parsedcomment
 				});
 			}
+
 			return ret;
 		}).catch((code, err) => {
 			console.warn(err);
@@ -3212,9 +3198,8 @@ class BlockLog {
 		}
 
 		// @ts-expect-error
-		let logline = mw.format(Messages.get(key), ...parameters);
-		logline = Messages.parseGenders(logline);
-		const comment = parsedcomment && mw.format(Messages.get('parentheses'), parsedcomment);
+		const logline = Messages.get(key, parameters);
+		const comment = parsedcomment && Messages.get('parentheses', [parsedcomment]);
 
 		const ret = [timestamp, logline, comment].filter(Boolean);
 		return ret.join('&nbsp;');
@@ -3230,10 +3215,7 @@ class BlockLog {
 	static formatFlags(flags) {
 		const formatted = flags.map((f) => Messages.get(`block-log-flags-${f}`));
 		if (!formatted.length) return '';
-		return mw.format(
-			Messages.get('parentheses'),
-			formatted.join(Messages.get('comma-separator'))
-		);
+		return Messages.get('parentheses', [formatted.join(Messages.get('comma-separator'))]);
 	}
 
 	/**
@@ -3250,11 +3232,7 @@ class BlockLog {
 		if (pages && pages.length) {
 			const num = String(pages.length);
 			const list = pages.map(({ page_title }) => Messages.wikilink(page_title));
-			const msg = mw.format(
-				Messages.parsePlurals(Messages.get('logentry-partialblock-block-page'), num),
-				num,
-				Messages.listToText(list)
-			);
+			const msg = Messages.get('logentry-partialblock-block-page', [num, Messages.listToText(list)]);
 			$7.push(msg);
 		}
 		if (namespaces && namespaces.length) {
@@ -3262,21 +3240,13 @@ class BlockLog {
 			const nsMap = Object.assign({}, mw.config.get('wgFormattedNamespaces'));
 			nsMap[0] = Messages.get('blanknamespace');
 			const list = namespaces.map((ns) => nsMap[ns]);
-			const msg = mw.format(
-				Messages.parsePlurals(Messages.get('logentry-partialblock-block-ns'), num),
-				num,
-				Messages.listToText(list)
-			);
+			const msg = Messages.get('logentry-partialblock-block-ns', [num, Messages.listToText(list)]);
 			$7.push(msg);
 		}
 		if (actions && actions.length) {
 			const num = String(actions.length);
 			const list = actions.map((action) => Messages.get(`ipb-action-${action}`));
-			const msg = mw.format(
-				Messages.parsePlurals(Messages.get('logentry-partialblock-block-action'), num),
-				num,
-				Messages.listToText(list)
-			);
+			const msg = Messages.get('logentry-partialblock-block-action', [num, Messages.listToText(list)]);
 			$7.push(msg);
 		}
 		return $7;
@@ -3293,8 +3263,9 @@ class BlockLog {
 			return entry;
 		}
 		if (!entry.size) {
-			console.warn(`Block log query for ${username} returned an empty response.`);
-			return 'empty';
+			const code = `Block log query for ${username} returned an empty response.`;
+			console.warn(code);
+			return code;
 		}
 
 		/** @type {BlockLoglineMap} */
@@ -3438,9 +3409,10 @@ function BlockDialogFactory() {
 				}
 
 				const params = this.blockField.getBlockDetails();
+				/** @type {JQueryPromise<?string>} */
 				const summaryPromise = params.reason
 					? Messages.parseSummary(params.reason)
-					: $.Deferred().resolve('');
+					: $.Deferred().resolve('').promise();
 
 				/**
 				 * Map of usernames to `BlockLog` instances.
@@ -3543,7 +3515,7 @@ function BlockDialogFactory() {
 		handleSetupError(errorCode) {
 			const error = new OO.ui.MessageWidget({
 				type: 'error',
-				label: mw.format(Messages.get('api-feed-error-title'), errorCode),
+				label: Messages.get('api-feed-error-title', [errorCode]),
 				inline: true
 			});
 			/** @type {OO.ui.PanelLayout} */ (this.content).$element.append(error.$element);
@@ -3694,17 +3666,20 @@ function BlockDialogFactory() {
 					}
 					if (targetUserTypes.length > 1) {
 						$countList.append($('<li>').append(
-							Messages.get('checkuser-investigateblock-reason') + ':',
-							'&nbsp;',
+							Messages.get('checkuser-investigateblock-reason') + ': ',
 							this.formatBlockReason()
 						));
-						const $text = $('<div>').addClass('ih-confirm').html(
-							mw.format(
-								Messages.get('investigatehelper-dialog-blocktarget-mixed'),
+						const msg = Messages.get(
+							'investigatehelper-dialog-blocktarget-mixed',
+							[
 								Messages.listToText(targetUserTypes),
-								$countList.prop('outerHTML')
-							)
+								$countList.prop('outerHTML'),
+								'https://foundation.wikimedia.org/wiki/Special:MyLanguage/Legal:Wikimedia_Foundation_Confidentiality_Agreement_for_Nonpublic_Information',
+								'https://www.mediawiki.org/wiki/Special:MyLanguage/Trust_and_Safety_Product/Temporary_Accounts/FAQ#Can_we_publicly_document_the_IP_addresses_used_by_suspected_(but_not_confirmed)_bad_actors_who_are_using_temporary_accounts?'
+							],
+							{ method: 'parse', restoreTags: true }
 						);
+						const $text = $('<div>').addClass('ih-confirm').append(msg);
 						confirmed = await this.layeredConfirm($text, { size: 'larger' });
 					} else {
 						confirmed = true;
@@ -3785,15 +3760,11 @@ function BlockDialogFactory() {
 				const totalCount = String(successCount + failureCount);
 				mw.notify(
 					$('<div>').html(
-						mw.format(
-							Messages.parsePlurals(
-								Messages.get('investigatehelper-dialog-blocktarget-processed'),
-								totalCount
-							),
+						Messages.get('investigatehelper-dialog-blocktarget-processed', [
 							totalCount,
 							String(successCount),
 							String(failureCount)
-						)
+						])
 					)
 				);
 				this.popPending().setDisabledOnButtons(false, ['', 'resize']);
@@ -3924,20 +3895,14 @@ class BlockTarget {
 		if (covers && covers.length) {
 			this.subrow.$element.append(
 				$('<i>').addClass('ih-inlineblock').text(
-					mw.format(
-						Messages.get('investigatehelper-dialog-blocktarget-contains'),
-						covers.join(Messages.get('comma-separator'))
-					)
+					Messages.get('investigatehelper-dialog-blocktarget-contains', [covers.join(Messages.get('comma-separator'))])
 				)
 			);
 		}
 		if (coveredBy && coveredBy.length) {
 			this.subrow.$element.append(
 				$('<i>').addClass('ih-inlineblock').text(
-					mw.format(
-						Messages.get('investigatehelper-dialog-blocktarget-containedin'),
-						coveredBy.join(Messages.get('comma-separator'))
-					)
+					Messages.get('investigatehelper-dialog-blocktarget-containedin', [coveredBy.join(Messages.get('comma-separator'))])
 				)
 			);
 		}
@@ -4301,8 +4266,8 @@ class BlockTarget {
  * @typedef {import('./window/InvestigateHelper').CollectedUsernames} CollectedUsernames
  * @typedef {import('./window/InvestigateHelper').OriginalMessages} OriginalMessages
  * @typedef {import('./window/InvestigateHelper').LoadedMessages} LoadedMessages
- * @typedef {import('./window/InvestigateHelper').Gender} Gender
  * @typedef {import('./window/InvestigateHelper').ApiResponse} ApiResponse
+ * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogevents} ApiResponseQueryListLogevents
  * @typedef {import('./window/InvestigateHelper').UserType} UserType
  * @typedef {import('./window/InvestigateHelper').CategorizedUsername} CategorizedUsername
  * @typedef {import('./window/InvestigateHelper').BlockIdMap} BlockIdMap
