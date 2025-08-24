@@ -387,12 +387,6 @@ interface ApiResponseQueryListLogeventsParamsRestrictionsPages {
 
 type BlockableActions = 'create' | 'move' | 'thanks' | 'upload';
 
-export interface UserList {
-	user?: UserListItem[];
-	ipv4?: IPFieldContent;
-	ipv6?: IPFieldContent;
-}
-
 /**
  * Map of usernames to block ID data.
  */

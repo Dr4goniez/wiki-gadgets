@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.1.0
+ * @version 1.1.1
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -755,13 +755,13 @@ class InvestigateHelper {
 				const id = 'ih-interface-ipv4';
 				ids.push(id);
 				const ipField = this.collapsibleFieldsetLayout($content, 'IPv4', id);
-				list.ipv4 = new IPFieldContent(ipField, v4s);
+				list.ipv4 = IPFieldContent.new(ipField, v4s);
 			}
 			if (v6s.length) {
 				const id = 'ih-interface-ipv6';
 				ids.push(id);
 				const ipField = this.collapsibleFieldsetLayout($content, 'IPv6', id);
-				list.ipv6 = new IPFieldContent(ipField, v6s);
+				list.ipv6 = IPFieldContent.new(ipField, v6s);
 			}
 		}
 
@@ -883,7 +883,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.1.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.1.1 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -1470,7 +1470,7 @@ class UserListItem {
 	 * Creates a new `UserListItem` instance.
 	 *
 	 * @param {OO.ui.FieldsetLayout} fieldset The `FieldsetLayout` widget to which the list item will be appended.
-	 * @param {string} username The username label. For IP addresses, use the abbreviated (normalized) format.
+	 * @param {string} username The username label. For IP addresses, use the abbreviated format.
 	 * @param {UserType} type The type of user.
 	 * @param {boolean} foreign Whether the username was collected from a foreign table.
 	 * @param {number} startUnix The start of the date range in which the user was active, as a UNIX timestamp.
@@ -1478,7 +1478,7 @@ class UserListItem {
 	 */
 	constructor(fieldset, username, type, foreign, startUnix, endUnix) {
 		// Ensure IP addresses are in normalized form
-		if (type !== 'user' && (
+		if ((type === 'ip' || type === 'cidr') && (
 			// IPv4: any octet with leading zeros (e.g., 192.168.001.001)
 			/\b0\d+\b/.test(username) ||
 			// IPv6: any hextet with leading zeros (e.g., 00ff)
@@ -1486,9 +1486,14 @@ class UserListItem {
 			// IPv6: uncompressed zero run (e.g., :0:0:0:) without "::"
 			/(^|:)0(:0){2,}(:|$)(?!:)/.test(username) && !username.includes('::')
 		)) {
-			throw new Error(`Non-user IP address must be in abbreviated form: ${username}`);
+			throw new Error(`IP address must be in abbreviated form: ${username}`);
 		}
 		/**
+		 * The username label for the the checkbox. IP addresses are in abbreviated form.
+		 *
+		 * To retrieve the value of this property, {@link getUsername} should be used instead of
+		 * directly accessing the property.
+		 *
 		 * @type {string}
 		 * @readonly
 		 * @private
@@ -1732,7 +1737,7 @@ class UserListItem {
 	}
 
 	/**
-	 * Retrieves the username associated with the list item.
+	 * Retrieves the username associated with the list item. IP addresses are in abbreviated form.
 	 *
 	 * @returns {string}
 	 */
@@ -1909,8 +1914,9 @@ class IPFieldContent {
 	 * @param {IpInfo[]} info Array of IP info objects. This array must:
 	 * - Be non-empty.
 	 * - Only contain IPs of the same version (IPv4 or IPv6).
+	 * @returns {UserListItem[]}
 	 */
-	constructor(ipField, info) {
+	static new(ipField, info) {
 
 		const isV6 = info[0].ip.isIPv6(true);
 
@@ -2141,9 +2147,8 @@ class IPFieldContent {
 		// Create interface
 		/**
 		 * @type {UserListItem[]}
-		 * @readonly
 		 */
-		this.items = [];
+		const items = [];
 		for (let i = results.length - 1; i >= 0; i--) {
 			results[i].forEach(({ ip, users, actions, all, contains, foreign, startUnix, endUnix }, j, arr) => {
 				const item = new UserListItem(
@@ -2190,10 +2195,11 @@ class IPFieldContent {
 					item.container.$body.after($('<hr>').addClass('ih-range-delimiter'));
 				}
 
-				this.items.push(item);
+				items.push(item);
 			});
 		}
 
+		return items;
 	}
 
 	/**
@@ -2383,23 +2389,21 @@ class BlockField {
 	constructor(fieldset, list) {
 
 		/**
-		 * Maps from usernames to {@link UserListItem} instances.
+		 * Map from usernames to arrays of {@link UserListItem} instances.
 		 *
 		 * @type {Map<string, UserListItem[]>}
 		 * @readonly
 		 */
 		this.checkboxMap = new Map();
 
-		const /** @type {UserListItem[]} */ userList = [];
-		if (list.user) userList.push(...list.user);
-		if (list.ipv4) userList.push(...list.ipv4.items);
-		if (list.ipv6) userList.push(...list.ipv6.items);
-		for (const item of userList) {
-			const username = item.getUsername();
-			if (!this.checkboxMap.has(username)) {
-				this.checkboxMap.set(username, []);
+		for (const items of Object.values(list)) {
+			for (const item of items) {
+				const username = item.getUsername();
+				if (!this.checkboxMap.has(username)) {
+					this.checkboxMap.set(username, []);
+				}
+				/** @type {UserListItem[]} */ (this.checkboxMap.get(username)).push(item);
 			}
-			/** @type {UserListItem[]} */ (this.checkboxMap.get(username)).push(item);
 		}
 
 		// Block targets
@@ -2613,8 +2617,9 @@ class BlockField {
 			blockButtonLayout
 		]);
 
-		// Define a "change" event listner for `target` in one place for better performance
-		let /** @type {string[]} */ previousItems = [];
+		// Define a "change" event listener for `target` once, to keep checkboxes and tag selector in sync efficiently
+		/** @type {Set<string>} */
+		let prevSet = new Set();
 
 		this.target.on('change', () => {
 			// Enable or disable the investigate button based on selection
@@ -2625,26 +2630,31 @@ class BlockField {
 			// Enable or disable the block button based on selection
 			this.block.setDisabled(!selected.length);
 
-			// Bind changes in the tag selector widget to the checkboxes in the username list,
-			// so that removing a tag unchecks the corresponding box, and adding a tag checks it
-			const currentData = selected;
+			// Synchronize tag selector changes with username checkboxes
+			const currSet = new Set(selected);
 			if (this.inChangeEvent) {
-				previousItems = currentData;
+				prevSet = currSet;
 				return;
 			}
 			this.inChangeEvent = true;
-			const removed = new Set(previousItems.filter((old) => !currentData.includes(old)));
-			const added = new Set(currentData.filter((curr) => !previousItems.includes(curr)));
-			if (removed.size || added.size) {
-				for (const [username, items] of this.checkboxMap) {
-					if (removed.has(username)) {
-						items.forEach((item) => item.checkbox.setSelected(false));
-					} else if (added.has(username)) {
-						items.forEach((item) => item.checkbox.setSelected(true));
-					}
+
+			const removed = [...prevSet].filter(u => !currSet.has(u));
+			const added = [...currSet].filter(u => !prevSet.has(u));
+
+			for (const username of removed) {
+				const items = this.checkboxMap.get(username);
+				if (items) {
+					items.forEach(item => item.checkbox.setSelected(false));
 				}
 			}
-			previousItems = currentData;
+			for (const username of added) {
+				const items = this.checkboxMap.get(username);
+				if (items) {
+					items.forEach(item => item.checkbox.setSelected(true));
+				}
+			}
+
+			prevSet = currSet;
 			this.inChangeEvent = false;
 		});
 
@@ -2655,8 +2665,11 @@ class BlockField {
 	}
 
 	/**
-	 * Binds changes in checkboxes in username lists with the tag selector widget,
-	 * so that unchecking triggers tag removal and checking triggers tag addition.
+	 * Binds checkbox states in username lists to the tag selector widget.
+	 *
+	 * When a checkbox is checked, the corresponding tag is added; when unchecked,
+	 * the tag is removed. All checkboxes associated with the same username are
+	 * kept in sync so that toggling one affects the others.
 	 *
 	 * @private
 	 */
@@ -2669,7 +2682,13 @@ class BlockField {
 						return;
 					}
 					this.inChangeEvent = true;
-					if (selected) {
+					const isChecked = !!selected;
+					items.forEach((i) => {
+						if (i !== item) {
+							i.checkbox.setSelected(isChecked);
+						}
+					});
+					if (isChecked) {
 						this.target.addTag(username, username);
 					} else {
 						this.target.removeTagByData(username);
@@ -2725,7 +2744,7 @@ class BlockField {
 		// Find IPs covered by broader CIDRs
 		const /** @type {Set<number>} */ nonIpIndexes = new Set();
 		const /** @type {Map<number, InstanceType<IP>>} */ cidrs = new Map();
-		outer: for (let i = 0; i < selected.length; i++) {
+		for (let i = 0; i < selected.length; i++) {
 			const username = selected[i];
 			const seen = ipsSeen.get(username);
 			let /** @type {InstanceType<IP>?} */ ip = null;
@@ -2745,12 +2764,19 @@ class BlockField {
 				continue;
 			}
 
+			let cont = false;
 			for (const [j, cidr] of cidrs) {
 				// Covered by already collected CIDRs?
-				if (cidr.contains(ip)) continue outer;
+				if (cidr.contains(ip)) {
+					cont = true;
+					break;
+				}
 
 				// Covers any of already collected CIDRs?
 				if (ip.contains(cidr)) cidrs.delete(j);
+			}
+			if (cont) {
+				continue;
 			}
 
 			cidrs.set(i, ip);
@@ -4258,7 +4284,6 @@ class BlockTarget {
 /**
  * @typedef {import('./window/InvestigateHelper').PagerHref} PagerHref
  * @typedef {import('./window/InvestigateHelper').IP} IP
- * @typedef {import('./window/InvestigateHelper').UserList} UserList
  * @typedef {import('./window/InvestigateHelper').UserInfoBase} UserInfoBase
  * @typedef {import('./window/InvestigateHelper').IpInfo} IpInfo
  * @typedef {import('./window/InvestigateHelper').IpInfoLevel} IpInfoLevel
@@ -4283,6 +4308,8 @@ class BlockTarget {
  * @typedef {import('./window/InvestigateHelper').UnblockParams} UnblockParams
  */
 /**
+ * @typedef {Record<'user' | 'ipv4' | 'ipv6', UserListItem[]>} UserList
+ *
  * @typedef {object} DialogData
  * @property {NonNullable<ReturnType<BlockField['getCategorizedUsernames']>>} targets
  *
