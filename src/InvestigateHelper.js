@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.1.1
+ * @version 1.2.0
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -155,6 +155,7 @@ class InvestigateHelper {
 
 		const $content = $('.mw-body-content');
 		this.createStyleTag();
+		BlockTarget.preloadIcons();
 
 		const pager = this.findPagers($table);
 		if (!$.isEmptyObject(pager)) {
@@ -502,6 +503,9 @@ class InvestigateHelper {
 			'.ih-dialog-addblock {' +
 				'margin-top: 6px !important;' +
 				'margin-bottom: 3px;' +
+			'}' +
+			'.ih-dialog-error {' +
+				'color: var(--color-icon-error, #f54739);' +
 			'}' +
 			'';
 		document.head.appendChild(style);
@@ -883,7 +887,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.1.1 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.2.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -3585,6 +3589,7 @@ function BlockDialogFactory() {
 		 */
 		getActionProcess(action) {
 			if (action === 'resize') {
+				// UI-only: toggle dialog size and update button label
 				const isExpanded = this.getSize() === 'full';
 				const resizeButton = this.getActions().get({ actions: action })[0];
 				if (isExpanded) {
@@ -3597,7 +3602,7 @@ function BlockDialogFactory() {
 				return new OO.ui.Process(() => true);
 			}
 
-			// Ensure no duplicate runs
+			// Prevent duplicate async runs
 			if (this.actionProcessRunning) {
 				return new OO.ui.Process(() => true);
 			}
@@ -3611,18 +3616,14 @@ function BlockDialogFactory() {
 			// Construct (un)block params in batches
 			const blockParamsDetails = this.blockField.getBlockDetails();
 			const unblockReason = this.unblockReason.getValue();
-			/** @type {Map<OO.ui.CheckboxInputWidget, BlockParams | UnblockParams | null>} */
-			const paramMap = new Map();
-			/** @type {Set<number>} */
-			const blockIndexes = new Set();
-			/** @type {Set<number>} */
-			const unblockIndexes = new Set();
-			let index = -1;
+			/** @type {Map<OO.ui.CheckboxInputWidget, PresaveParamObject>} */
+			const presaveParamMap = new Map();
 			const blockCount = {
 				user: 0,
 				temp: 0,
 				ip: 0
 			};
+			let unblockCount = 0;
 
 			for (const target of this.targets) {
 				const userType = (() => {
@@ -3631,15 +3632,14 @@ function BlockDialogFactory() {
 				})();
 				let blockScheduled = false;
 
-				for (const [checkbox, params] of target.getParamMap(unblockReason)) {
-					index++;
+				for (const [checkbox, { params, $line, newline, blockId }] of target.getParamMap(unblockReason)) {
 					if (!params) {
-						paramMap.set(checkbox, null);
+						presaveParamMap.set(checkbox, { params: null, $line, newline, blockId });
 						continue;
 					}
 					if (params.action === 'unblock') {
-						paramMap.set(checkbox, params);
-						unblockIndexes.add(index);
+						presaveParamMap.set(checkbox, { params, $line, newline, blockId });
+						unblockCount++;
 						continue;
 					}
 					const blockParams = /** @type {BlockParams} */ (Object.assign({}, params, blockParamsDetails));
@@ -3649,9 +3649,8 @@ function BlockDialogFactory() {
 					} else {
 						delete blockParams.anononly;
 					}
-					paramMap.set(checkbox, blockParams);
-					blockIndexes.add(index);
 					blockScheduled = true;
+					presaveParamMap.set(checkbox, { params: blockParams, $line, newline, blockId });
 				}
 
 				if (blockScheduled) {
@@ -3660,7 +3659,8 @@ function BlockDialogFactory() {
 			}
 
 			// Do nothing if no targets are selected
-			if (!blockIndexes.size && !unblockIndexes.size) {
+			const blockScheduled = !!Object.values(blockCount).reduce((acc, num) => acc + num, 0);
+			if (!blockScheduled && !unblockCount) {
 				return new OO.ui.Process(() => {
 					mw.notify(Messages.get('investigatehelper-dialog-blocktarget-none'), { type: 'error' });
 					this.actionProcessRunning = false;
@@ -3673,7 +3673,7 @@ function BlockDialogFactory() {
 			// @ts-expect-error
 			return super.getActionProcess(action).next(async () => {
 				// Confirm an unblock-only job if applicable
-				if (!blockIndexes.size) {
+				if (!blockScheduled) {
 					confirmed = await this.layeredConfirm(
 						$('<div>').html(Messages.get('investigatehelper-dialog-blocktarget-unblockonly')),
 						{ size: 'large' }
@@ -3726,62 +3726,89 @@ function BlockDialogFactory() {
 				this.pushPending().setDisabledOnButtons(true).updateSize();
 
 				// Replace checked boxes with spinner icons
-				/** @type {Map<JQuery<HTMLElement>, BlockParams | UnblockParams>} */
-				const iconMap = new Map();
-				for (const [checkbox, params] of paramMap) {
-					if (!params) {
+				/** @type {Map<JQuery<HTMLElement>, PostsaveParamObject>} */
+				const postsaveParamMap = new Map();
+
+				for (const [checkbox, obj] of presaveParamMap) {
+					if (!obj.params) {
 						checkbox.setDisabled(true);
-						continue;
+					} else {
+						const $icon = BlockTarget.replaceWithIcon(checkbox.$element, 'doing');
+						// @ts-expect-error - TS can't infer `obj.params` isn't null here
+						postsaveParamMap.set($icon, obj);
 					}
-					const $icon = BlockTarget.replaceWithIcon(checkbox.$element, 'doing');
-					iconMap.set($icon, params);
 				}
 
 				// Perform blocks
-				/** @type {JQueryPromise<void>[]} */
-				let promises = [];
+				/** @type {Set<number>} */
+				const failedBlocks = new Set();
 				let successCount = 0;
 				let failureCount = 0;
-				/**
-				 * @param {JQuery<HTMLElement>} $icon
-				 * @param {?string} err
-				 * @returns {void}
-				 */
-				const postProcess = ($icon, err) => {
-					/** @type {'done' | 'failed'} */
-					let iconType;
-					if (err) {
-						iconType = 'failed';
-						failureCount++;
-					} else {
-						iconType = 'done';
-						successCount++;
+				const resize = () => {
+					const size = 'larger';
+					if (this.getSize() === size) {
+						this.setSize(size);
 					}
-					BlockTarget.replaceWithIcon($icon, iconType, err || undefined);
 				};
 				/**
+				 * Executes a batch of block or unblock requests.
+				 *
+				 * - Groups requests by action type ('block' or 'unblock').
+				 * - Enforces a max concurrency of 50 to avoid flooding the API.
+				 * - Marks dependent unblocks as failed if their corresponding block failed.
+				 *
 				 * @param {'block' | 'unblock'} action
+				 * @returns {Promise<void>}
 				 */
 				const execute = async (action) => {
-					for (const [$icon, params] of iconMap) {
-						if (params.action === action) {
-							const req = BlockTarget.doBlock(params).then((err) => postProcess($icon, err));
-							promises.push(req);
-							if (promises.length === 50) {
-								await Promise.all(promises);
-								promises = [];
+					/** @type {JQueryPromise<void>[]} */
+					let promises = [];
+					for (const [$icon, { params, $line, newline, blockId }] of postsaveParamMap) {
+						if (params.action !== action) {
+							continue;
+						}
+
+						// Skip unblock if its related block failed
+						if (action === 'unblock' && typeof blockId === 'number' && failedBlocks.has(blockId)) {
+							BlockTarget.replaceWithIcon($icon, 'warning', { code: 'aborted', $line, newline });
+							failureCount++;
+							continue;
+						}
+
+						const req = BlockTarget.doBlock(params).then((code) => {
+							/** @type {'done' | 'failed'} */
+							let iconType;
+							let options;
+							if (code) {
+								iconType = 'failed';
+								if (typeof blockId === 'number') {
+									failedBlocks.add(blockId);
+								}
+								options = { code, $line, newline };
+								failureCount++;
+							} else {
+								iconType = 'done';
+								successCount++;
 							}
+							BlockTarget.replaceWithIcon($icon, iconType, options);
+						});
+
+						promises.push(req);
+						if (promises.length === 50) {
+							await Promise.all(promises);
+							resize();
+							promises = [];
 						}
 					}
 					if (promises.length) {
 						await Promise.all(promises);
-						promises = [];
+						resize();
 					}
 				};
 
-				// Process blocks first and then unblocks to ensure sanity in the generated block logs
 				await execute('block');
 				await execute('unblock');
+				resize();
 
 				const totalCount = String(successCount + failureCount);
 				mw.notify(
@@ -3936,15 +3963,21 @@ class BlockTarget {
 		/**
 		 * Map of block IDs to checkboxes whose values indicate how the associated existing blocks should be handled.
 		 *
-		 * @type {Map<number, { override: OO.ui.CheckboxInputWidget; lift: OO.ui.CheckboxInputWidget; }>}
+		 * @type {Map<number, {
+		 * 	override: OO.ui.CheckboxInputWidget;
+		 * 	lift: OO.ui.CheckboxInputWidget;
+		 * 	$line: JQuery<HTMLElement>;
+		 * }>}
 		 */
 		this.existingBlocks = new Map();
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 */
 		this.addBlock = new OO.ui.CheckboxInputWidget();
-
-		const addBlockLayout = new OO.ui.FieldLayout(this.addBlock, {
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 */
+		this.addBlockLayout = new OO.ui.FieldLayout(this.addBlock, {
 			label: Messages.get('block-create'),
 			align: 'inline',
 			classes: ['ih-dialog-addblock']
@@ -3978,12 +4011,14 @@ class BlockTarget {
 			for (const [id, logline] of logs.loglineMap) {
 				const override = new OO.ui.CheckboxInputWidget();
 				const lift = new OO.ui.CheckboxInputWidget();
+				/** @type {JQuery<HTMLTableCellElement>} */
+				const $line = $('<td>');
 
 				$tbody.append(
 					$('<tr>').append(
 						$('<td>').append(override.$element),
 						$('<td>').append(lift.$element),
-						$('<td>').html(logline)
+						$line.html(logline)
 					)
 				);
 
@@ -3994,11 +4029,11 @@ class BlockTarget {
 				} else {
 					override.setDisabled(true);
 				}
-				this.existingBlocks.set(id, { override, lift });
+				this.existingBlocks.set(id, { override, lift, $line });
 			}
 
 			this.subrow.$element.append(
-				addBlockLayout.$element,
+				this.addBlockLayout.$element,
 				$table
 			);
 		}
@@ -4089,40 +4124,53 @@ class BlockTarget {
 	}
 
 	/**
-	 * Creates a mapping from a `OO.ui.CheckboxInputWidget` to (un)block parameter objects or `null`,
-	 * where `null` values indicate the corresponding checkbox is not checked or irrelevant.
+	 * Builds a mapping between `OO.ui.CheckboxInputWidget`s and objects containing block/unblock parameters
+	 * along with their corresponding logline elements.
 	 *
-	 * @param {string} unblockReason Reason used for `action=unblock`.
-	 * @returns {Map<OO.ui.CheckboxInputWidget, BlockParamsCore | UnblockParams | null>}
+	 * - `params` is `null` if the checkbox is unchecked or not applicable.
+	 * - `$log` is present only when the box is checked for a reblock or unblock, and `params` is non-`null`.
+	 *
+	 * @param {string} unblockReason Reason string used for `action=unblock`.
+	 * @returns {Map<OO.ui.CheckboxInputWidget, DialogLine & {
+	 *   params: BlockParamsCore | UnblockParams | null;
+	 * }>}
 	 */
 	getParamMap(unblockReason) {
-		/** @type {Map<OO.ui.CheckboxInputWidget, BlockParamsCore | UnblockParams | null>} */
+		/** @type {ReturnType<BlockTarget['getParamMap']>} */
 		const ret = new Map();
 
 		const hasSubrow = this.addBlock.$element[0].isConnected;
 		const rowEnabled = this.blockToggle.isSelected();
 		if (!hasSubrow) {
-			ret.set(this.blockToggle, rowEnabled ? this.generateBlockParams() : null);
+			ret.set(this.blockToggle, {
+				params: rowEnabled ? this.generateBlockParams() : null,
+				$line: this.row.$header
+			});
 			return ret;
 		}
 
 		// If `subrow` is attached (i.e., the user has active blocks), the main toggle only serves as a label
 		// and doesn't determine which of the active blocks to modify
-		ret.set(this.blockToggle, null);
+		ret.set(this.blockToggle, { params: null, $line: this.row.$header });
 
 		const addBlock = rowEnabled && !this.addBlock.isDisabled() && this.addBlock.isSelected();
-		ret.set(
-			this.addBlock,
-			addBlock ? this.generateBlockParams({ blockType: 'newblock' }) : null
-		);
+		const addBlockParams = addBlock ? this.generateBlockParams({ blockType: 'newblock' }) : null;
+		// If `addBlockParams` is set, fabricate a block ID because there's no relevant IDs here
+		// Note that negative numbers would never conflict with actual block IDs
+		let blockId = addBlockParams ? -Date.now(): void 0;
+		ret.set(this.addBlock,{
+			params: addBlockParams,
+			$line: this.addBlockLayout.$header,
+			blockId
+		});
 
 		let reblockScheduled = false;
-		for (const [id, { override, lift }] of this.existingBlocks) {
+		for (const [id, { override, lift, $line }] of this.existingBlocks) {
 			const reblock = rowEnabled && !override.isDisabled() && override.isSelected();
 			const unblock = rowEnabled && !lift.isDisabled() && lift.isSelected();
 			if (!reblock && !unblock) {
-				ret.set(override, null);
-				ret.set(lift, null);
+				ret.set(override, { params: null, $line, newline: true });
+				ret.set(lift, { params: null, $line, newline: true });
 				continue;
 			} else if (reblock && unblock) {
 				throw new Error(`Invalid state for block ID ${id}: both "reblock" and "unblock" are selected.`);
@@ -4140,12 +4188,23 @@ class BlockTarget {
 						`reblock was already scheduled. Only one reblock action can be sent at a time.`
 					);
 				}
-				ret.set(override, this.generateBlockParams({ id }));
-				ret.set(lift, null);
+				blockId = id; // Before this substitution `blockId` is always undefined
+				ret.set(override, { params: this.generateBlockParams({ id }), $line, newline: true, blockId });
+				ret.set(lift, { params: null, $line, newline: true });
 				reblockScheduled = true;
 			} else { // !reblock && unblock
-				ret.set(override, null);
-				ret.set(lift, this.generateUnblockParams(id, unblockReason));
+				ret.set(override, { params: null, $line, newline: true });
+				ret.set(lift, { params: this.generateUnblockParams(id, unblockReason), $line, newline: true });
+			}
+		}
+
+		// If `blockId` is defined at this point, propagate it to all unblock entries. This ensures that unblock requests
+		// correctly reference the actual block they depend on, even if they were parsed before the blockId was known.
+		if (typeof blockId === 'number') {
+			for (const obj of ret.values()) {
+				if (obj.params && obj.params.action === 'unblock') {
+					obj.blockId = blockId;
+				}
 			}
 		}
 
@@ -4200,16 +4259,12 @@ class BlockTarget {
 	 * Performs an `action=block` or `action=unblock` request.
 	 *
 	 * @param {BlockParams | UnblockParams} params
-	 * @returns {JQueryPromise<?string>} A Promise resolving to `null` on success or an error code on failure.
+	 * @returns {JQueryPromise<string | undefined>} A Promise resolving to `undefined` on success,
+	 * or an error code on failure.
 	 */
 	static doBlock(params) {
 		return api.postWithEditToken(/** @type {Record<string, any>} */ (params))
-			.then((res) => {
-				if (res.block || res.unblock) {
-					return null;
-				}
-				return 'empty';
-			})
+			.then((res) => res.block || res.unblock ? void 0 : 'empty')
 			.catch(/** @param {string} code */ (code, err) => {
 				console.warn(err);
 				return code;
@@ -4218,7 +4273,7 @@ class BlockTarget {
 
 	/**
 	 * @param {BlockParams | UnblockParams} _params
-	 * @returns {JQueryPromise<?string>}
+	 * @returns {JQueryPromise<string | undefined>}
 	 */
 	static doFakeBlock(_params) {
 		const def = $.Deferred();
@@ -4228,7 +4283,7 @@ class BlockTarget {
 				def.resolve('http');
 				return;
 			}
-			def.resolve(null);
+			def.resolve();
 		}, 800 + rand * 1000);
 		return def.promise();
 	}
@@ -4237,27 +4292,18 @@ class BlockTarget {
 	 * Replaces an jQuery object with an icon element.
 	 *
 	 * @param {JQuery<HTMLElement>} $target The target object to replace with the icon.
-	 * @param {'doing' | 'done' | 'failed'} iconType The icon type.
-	 * @param {string} [additionalText] Additional text to show on the right of the icon in parentheses.
+	 * @param {IconTypes} iconType The icon type.
+	 * @param {object} [options]
+	 * @param {string} options.code Additional error code to show on the right of the icon, enclosed
+	 * in parentheses. If `$log` is provided, the code is appended instead as a span element.
+	 * @param {JQuery<HTMLElement>} options.$line
+	 * @param {boolean} [options.newline]
 	 * @returns {JQuery<HTMLElement>} The inserted icon.
 	 */
-	static replaceWithIcon($target, iconType, additionalText) {
-		let href, color;
-		switch (iconType) {
-			case 'doing':
-				href = 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif';
-				color = '';
-				break;
-			case 'done':
-				href = 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Antu_mail-mark-notjunk.svg/30px-Antu_mail-mark-notjunk.svg.png';
-				color = 'var(--color-icon-success, #099979)';
-				break;
-			case 'failed':
-				href = 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Cross_reject.svg/30px-Cross_reject.svg.png';
-				color = 'var(--color-icon-error, #f54739)';
-				break;
-			default:
-				throw new Error('Invalid icon type: ' + iconType);
+	static replaceWithIcon($target, iconType, options) {
+		const href = this.iconMap.get(iconType);
+		if (!href) {
+			throw new Error('Invalid icon type: ' + iconType);
 		}
 		/** @type {JQuery<HTMLImageElement>} */
 		const $icon = $('<img>');
@@ -4269,17 +4315,33 @@ class BlockTarget {
 			});
 		const $container = $('<span>').css('display', 'inline-block');
 		$container.append($icon);
-		if (additionalText) {
-			$container.append($('<span>')
-				.css('color', color)
-				.html(`&nbsp;(${additionalText})`)
+		if (options) {
+			options.$line.append(
+				options.newline ? $('<br>') : '&nbsp;&nbsp;',
+				$('<b>')
+					.addClass('ih-dialog-error')
+					.text(Messages.get('api-feed-error-title', [options.code]))
 			);
 		}
 		$target.replaceWith($container);
 		return $container;
 	}
 
+	static preloadIcons() {
+		for (const src of this.iconMap.values()) {
+			const img = new Image();
+			img.src = src;
+		}
+	}
+
 }
+/** @type {Map<IconTypes, string>} */
+BlockTarget.iconMap = new Map([
+	['doing', 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif'],
+	['done', 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Antu_mail-mark-notjunk.svg/30px-Antu_mail-mark-notjunk.svg.png'],
+	['failed', 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Cross_reject.svg/30px-Cross_reject.svg.png'],
+	['warning', 'https://upload.wikimedia.org/wikipedia/commons/3/38/Imbox_content.png'],
+]);
 
 /**
  * @typedef {import('./window/InvestigateHelper').PagerHref} PagerHref
@@ -4306,6 +4368,10 @@ class BlockTarget {
  * @typedef {import('./window/InvestigateHelper').BlockParamsCore} BlockParamsCore
  * @typedef {import('./window/InvestigateHelper').BlockParams} BlockParams
  * @typedef {import('./window/InvestigateHelper').UnblockParams} UnblockParams
+ * @typedef {import('./window/InvestigateHelper').DialogLine} DialogLine
+ * @typedef {import('./window/InvestigateHelper').PresaveParamObject} PresaveParamObject
+ * @typedef {import('./window/InvestigateHelper').PostsaveParamObject} PostsaveParamObject
+ * @typedef {import('./window/InvestigateHelper').IconTypes} IconTypes
  */
 /**
  * @typedef {Record<'user' | 'ipv4' | 'ipv6', UserListItem[]>} UserList

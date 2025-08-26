@@ -535,3 +535,35 @@ export interface UnblockParams {
 	id: number;
 	reason: string;
 }
+
+/**
+ * Represents whether a block/unblock error should be displayed.
+ */
+export interface DialogLine {
+	/**
+	 * The element in which the request error code should be displayed.
+	 */
+	$line: JQuery<HTMLElement>;
+	/**
+	 * Whether to append a `<br>` when inserting an error code into {@link $line}.
+	 */
+	newline?: boolean;
+	/**
+	 * Present if the target is already blocked.
+	 *
+	 * - For `action=block` parameters, this ID acts as a reference token.
+	 * - For `action=unblock` parameters, this ID specifies that the corresponding
+	 *   `action=block` request must succeed before the unblock request can proceed.
+	 */
+	blockId?: number;
+}
+
+export interface PresaveParamObject extends DialogLine {
+	params: BlockParams | UnblockParams | null;
+}
+
+export interface PostsaveParamObject extends DialogLine {
+	params: BlockParams | UnblockParams;
+}
+
+export type IconTypes = 'doing' | 'done' | 'failed' | 'warning';
