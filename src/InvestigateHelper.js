@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.2.0
+ * @version 1.2.1
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -887,7 +887,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.2.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.2.1 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -3740,10 +3740,38 @@ function BlockDialogFactory() {
 				}
 
 				// Perform blocks
-				/** @type {Set<number>} */
-				const failedBlocks = new Set();
 				let successCount = 0;
 				let failureCount = 0;
+				const MAX_CONCURRENCY = 50;
+				const RETRY_DELAY = 500;
+
+				/**
+				 * A set of block IDs that failed to be processed. Used to abort sequential unblock requests.
+				 * @type {Set<number>}
+				 */
+				const failedBlocks = new Set();
+				/**
+				 * Updates the UI after a block/unblock attempt.
+				 *
+				 * @param {JQuery<HTMLElement>} $icon
+				 * @param {JQuery<HTMLElement>} $line
+				 * @param {boolean} [newline]
+				 * @param {number} [blockId]
+				 * @param {string} [code] Error code if failed, otherwise undefined for success.
+				 */
+				const postProcess = ($icon, $line, newline, blockId, code) => {
+					if (code) {
+						if (typeof blockId === 'number') {
+							failedBlocks.add(blockId);
+						}
+						BlockTarget.replaceWithIcon($icon, 'failed', { code, $line, newline });
+						failureCount++;
+						return;
+					}
+					BlockTarget.replaceWithIcon($icon, 'done');
+					successCount++;
+				};
+				/** Adjusts the dialog size if needed */
 				const resize = () => {
 					const size = 'larger';
 					if (this.getSize() === size) {
@@ -3751,18 +3779,26 @@ function BlockDialogFactory() {
 					}
 				};
 				/**
+				 * Collects block requests that need a retry (due to DB deadlock).
+				 * Keyed by the icon element to preserve one-to-one mapping.
+				 *
+				 * @type {Map<JQuery<HTMLElement>, PostsaveParamObject>}
+				 */
+				const retryQueue = new Map();
+				/**
 				 * Executes a batch of block or unblock requests.
 				 *
 				 * - Groups requests by action type ('block' or 'unblock').
 				 * - Enforces a max concurrency of 50 to avoid flooding the API.
-				 * - Marks dependent unblocks as failed if their corresponding block failed.
+				 * - Skips dependent unblocks if their corresponding block failed.
 				 *
 				 * @param {'block' | 'unblock'} action
 				 * @returns {Promise<void>}
 				 */
 				const execute = async (action) => {
 					/** @type {JQueryPromise<void>[]} */
-					let promises = [];
+					let batch = [];
+
 					for (const [$icon, { params, $line, newline, blockId }] of postsaveParamMap) {
 						if (params.action !== action) {
 							continue;
@@ -3776,45 +3812,52 @@ function BlockDialogFactory() {
 						}
 
 						const req = BlockTarget.doBlock(params).then((code) => {
-							/** @type {'done' | 'failed'} */
-							let iconType;
-							let options;
-							if (code) {
-								iconType = 'failed';
-								if (typeof blockId === 'number') {
-									failedBlocks.add(blockId);
-								}
-								options = { code, $line, newline };
-								failureCount++;
+							if (code === 'internal_api_error_DBQueryError' && action === 'block') {
+								// Save for sequential retry
+								retryQueue.set($icon, { params, $line, newline, blockId });
 							} else {
-								iconType = 'done';
-								successCount++;
+								postProcess($icon, $line, newline, blockId, code);
 							}
-							BlockTarget.replaceWithIcon($icon, iconType, options);
 						});
 
-						promises.push(req);
-						if (promises.length === 50) {
-							await Promise.all(promises);
+						batch.push(req);
+
+						if (batch.length === MAX_CONCURRENCY) {
+							await Promise.all(batch);
 							resize();
-							promises = [];
+							batch = [];
 						}
 					}
-					if (promises.length) {
-						await Promise.all(promises);
+
+					if (batch.length) {
+						await Promise.all(batch);
 						resize();
 					}
 				};
 
+				// First pass: try all blocks
 				await execute('block');
+
+				// Massblock in parallel might encounter a DB deadlock ([[phab:T260838]])
+				// In this case, sequentially retry failed requests once for each
+				if (retryQueue.size) {
+					await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+					for (const [$icon, { params, $line, newline, blockId }] of retryQueue) {
+						const code = await BlockTarget.doBlock(params);
+						postProcess($icon, $line, newline, blockId, code);
+					}
+					resize();
+				}
+
+				// Process unblocks after blocks are resolved
 				await execute('unblock');
 				resize();
 
-				const totalCount = String(successCount + failureCount);
+				const totalCount = successCount + failureCount;
 				mw.notify(
 					$('<div>').html(
 						Messages.get('investigatehelper-dialog-blocktarget-processed', [
-							totalCount,
+							String(totalCount),
 							String(successCount),
 							String(failureCount)
 						])
