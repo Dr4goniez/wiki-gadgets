@@ -4,7 +4,7 @@
 
 	@see https://ja.wikipedia.org/wiki/Help:MassRollback
 	@author [[User:Dragoniez]]
-	@version 2.0.0
+	@version 2.0.1
 
 \*************************************************************/
 // @ts-check
@@ -109,9 +109,7 @@ class MassRollback {
 	 */
 	static getIcon(iconName, subtext) {
 		const href = this.iconMap.get(iconName);
-		if (!href) {
-			throw new Error('Invalid icon name: ' + iconName);
-		}
+		if (!href) throw new Error('Invalid icon name: ' + iconName);
 
 		const icon = new Image();
 		icon.classList.add('mr-icon');
@@ -143,24 +141,31 @@ class MassRollback {
 	 * @param {string} title
 	 * @param {string} user
 	 * @param {RollbackParams} params
-	 * @param {boolean} debug
 	 * @returns {JQueryPromise<string | undefined>} Error code on failure; otherwise, undefined.
 	 */
-	static execute(api, title, user, params, debug) {
-		if (debug) {
-			const def = $.Deferred();
-			const rand = Math.random();
-			setTimeout(() => {
-				def.resolve(rand > 0.5 ? void 0 : 'debug');
-			}, 800 + rand * 1000);
-			return def.promise();
-		}
+	static execute(api, title, user, params) {
 		return api.rollback(title, user, /** @type {Record<string, any>} */ (params))
 			.then(() => void 0)
 			.catch(/** @param {string} code */ (code, err) => {
 				console.warn(err);
 				return code;
 			});
+	}
+
+	/**
+	 * @param {mw.Api} _api
+	 * @param {string} _title
+	 * @param {string} _user
+	 * @param {RollbackParams} _params
+	 * @returns {JQueryPromise<string | undefined>} Error code on failure; otherwise, undefined.
+	 */
+	static executeDev(_api, _title, _user, _params) {
+		const def = $.Deferred();
+		const rand = Math.random();
+		setTimeout(() => {
+			def.resolve(rand > 0.5 ? void 0 : 'debug');
+		}, 800 + rand * 1000);
+		return def.promise();
 	}
 
 }
@@ -324,7 +329,13 @@ function MassRollbackDialogFactory() {
 					rbspan.replaceChildren(MassRollback.getIcon('failed', code));
 					batch.push($.Deferred().resolve(false).promise());
 				};
-				const api = new mw.Api();
+				const api = new mw.Api({
+					ajax: {
+						headers: {
+							'Api-User-Agent': 'MassRollback/2.0.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRollback.js)'
+						}
+					}
+				});
 
 				this.$rbspans.each((_, rbspan) => {
 					// Get anchor in the rollback span
@@ -354,8 +365,7 @@ function MassRollbackDialogFactory() {
 
 					// Execute rollback on this link
 					batch.push(
-						MassRollback.execute(api, title, user, params, false).then((code) => {
-							console.log(code);
+						MassRollback.execute(api, title, user, params).then((code) => {
 							const iconTyle = code ? 'failed' : 'done';
 							rbspan.replaceChildren(MassRollback.getIcon(iconTyle, code));
 							rbspan.classList.remove('mw-rollback-link');
