@@ -2,11 +2,10 @@
 
 	MassRevisionDelete
 
-	Add an interface to delete multiple revisions in one fell swoop to [[Special:Contributions]]
-	and [[Special:DeletedContributions]].
+	Adds functionality to delete multiple revisions in one fell swoop on a user's contributions.
 
 	@author [[User:Dragoniez]]
-	@version 3.0.12
+	@version 3.0.13
 	@see https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/MassRevisionDelete.d.ts
 
@@ -27,11 +26,12 @@ const debuggingMode = false;
  */
 const feignSuppressor = false;
 
-// Run the script only on [[Special:Contributions]] and [[Special:DeletedContributions]]
+// Run the script only on a user's contributions
 /** @type {boolean} */
 let isDeletedContribs;
 switch (mw.config.get('wgCanonicalSpecialPageName')) {
 	case 'Contributions':
+	case 'IPContributions':
 		isDeletedContribs = false;
 		break;
 	case 'DeletedContributions':
@@ -85,7 +85,7 @@ function init() {
 		api = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.12 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.13 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
