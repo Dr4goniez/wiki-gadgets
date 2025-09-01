@@ -5,7 +5,7 @@
 	special page.
 
 	@author [[User:Dragoniez]]
-	@version 1.1.10
+	@version 1.1.11
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock
 
 \**********************************************************************/
@@ -2871,7 +2871,7 @@ function initializeBlockLinks() {
 
 			// Get href
 			var href = a.href;
-			if (!href) return acc;
+			if (!href || a.role === 'button') return acc;
 
 			// Create a mw.Uri instance
 			var /** @type {mw.Uri} */ uri;

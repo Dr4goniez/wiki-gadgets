@@ -2,7 +2,7 @@
 /*********************************************************************************\
     AN Reporter
     @author [[User:Dragoniez]]
-    @version 8.2.1
+    @version 8.2.2
     @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -1309,7 +1309,7 @@
                 .then((Wkt, vipList, ltaList) => {
                 // Initialize the ANS section dropdown
                 if (Wkt) {
-                    const exclude = [
+                    const exclude = new Set([
                         'top',
                         '系列が立てられていないもの',
                         '著作権侵害・犯罪予告',
@@ -1330,12 +1330,13 @@
                         '休止中D',
                         'N. 未分類',
                         'サブページなし',
-                        '休止中N'
-                    ];
+                        '休止中N',
+                        '関連項目'
+                    ]);
                     const optgroup = document.createElement('optgroup');
                     optgroup.label = 'LTA';
                     Wkt.parseSections().forEach(({ title }) => {
-                        if (!exclude.includes(title)) {
+                        if (!exclude.has(title)) {
                             const option = document.createElement('option');
                             option.textContent = title;
                             optgroup.appendChild(option);
@@ -1365,7 +1366,10 @@
                     Reporter.toggle(R.$vipWrapper, true);
                 }
                 // Initialize the LTA copier dropdown
-                ltaList = ltaList.filter((el) => !/^(SANNET|HEXAGON|MOPERA|AU ONE NET)($|\/)/.test(el));
+                const abandoned = new Set([
+                    'SANNET', 'HEXAGON', 'MOPERA', 'AU ONE NET', 'ASPE', 'Asperger'
+                ]);
+                ltaList = ltaList.filter((el) => !abandoned.has(el));
                 if (ltaList.length) {
                     const optgroup = document.createElement('optgroup');
                     optgroup.style.display = 'none'; // Wrap with optgroup to adjust font size

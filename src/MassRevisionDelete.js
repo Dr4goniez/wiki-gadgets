@@ -1,17 +1,16 @@
-/***************************************************************************\
+/******************************************************************************************************\
 
 	MassRevisionDelete
 
-	Add an interface to delete multiple revisions in one fell swoop to
-	[[Special:Contributions]] and [[Special:DeletedContributions]].
+	Adds functionality to delete multiple revisions in one fell swoop on a user's contributions.
 
-	@link https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
 	@author [[User:Dragoniez]]
-	@version 3.0.10
+	@version 3.0.13
+	@see https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
+	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/MassRevisionDelete.d.ts
 
-\***************************************************************************/
+\******************************************************************************************************/
 // @ts-check
-/// <reference path="./window/MassRevisionDelete.d.ts" />
 /* global mw, OO */
 //<nowiki>
 (() => {
@@ -27,11 +26,12 @@ const debuggingMode = false;
  */
 const feignSuppressor = false;
 
-// Run the script only on [[Special:Contributions]] and [[Special:DeletedContributions]]
+// Run the script only on a user's contributions
 /** @type {boolean} */
 let isDeletedContribs;
 switch (mw.config.get('wgCanonicalSpecialPageName')) {
 	case 'Contributions':
+	case 'IPContributions':
 		isDeletedContribs = false;
 		break;
 	case 'DeletedContributions':
@@ -43,12 +43,12 @@ switch (mw.config.get('wgCanonicalSpecialPageName')) {
 
 // Run the script only when the current user has the 'deleterevision' user right
 const rights = (() => {
-	// @ts-ignore
+	// @ts-expect-error
 	const userGroups = (mw.config.get('wgUserGroups') || []).concat(mw.config.get('wgGlobalGroups', []));
 	const revdel = userGroups.some((group) => ['sysop', 'eliminator', 'suppress'].indexOf(group) !== -1);
 	const suppress = userGroups.indexOf('suppress') !== -1;
 	const AHL = userGroups.some((group) => ['sysop', 'apihighlimits-requestor'].indexOf(group) !== -1);
-	return {revdel, suppress, AHL};
+	return { revdel, suppress, AHL };
 })();
 if (!rights.revdel) {
 	return;
@@ -83,9 +83,9 @@ function init() {
 
 		// Set up a mw.Api instance
 		api = new mw.Api({
-				ajax: {
+			ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.10 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
+					'Api-User-Agent': 'MassRevisionDelete/3.0.13 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
 				}
 			},
 			parameters: {
@@ -198,7 +198,7 @@ function createFieldset($contribsList) {
 			// Remove the default space between the icon and the header text
 			.children('.oo-ui-labelElement-label')
 				.css('padding-left', 0)
-				.parent()
+				.end()
 		// content
 		.next('div')
 			.addClass('mw-collapsible-content');
@@ -217,10 +217,10 @@ class VisibilityLevel {
 	 * Create horizontally-aligned radio options for revdel visibility levels and append them to a FieldsetLayout widget.
 	 * @param {OO.ui.FieldsetLayout} fieldset The FieldsetLayout widget to which to append the RadioSelect widget.
 	 * @param {string} labelText The label text for the RadioSelect widget.
-	 * @param {{show?: string; hide?: string; visible?: boolean;}} [options]
+	 * @param {{ show?: string; hide?: string; visible?: boolean; }} [options]
 	 * Optional object to specify the "show" and "hide" radio labels, and the visibility of the widget (`true` by default).
 	 */
-	constructor(fieldset, labelText, options = {visible: true}) {
+	constructor(fieldset, labelText, options = { visible: true }) {
 
 		// Create radio options
 		/** @type {OO.ui.RadioOptionWidget} */
@@ -364,7 +364,7 @@ class MassRevisionDelete {
 		MassRevisionDelete.initializeReasonDropdowns([this.reason1, this.reason2]);
 
 		// Create utility buttons to select revdel target revisions
-		const {$wrapper, $revisionCounter} = MassRevisionDelete.createRevisionSelector($contribsList, this.list);
+		const { $wrapper, $revisionCounter } = MassRevisionDelete.createRevisionSelector($contribsList, this.list);
 		/**
 		 * The container of the revision selector buttons.
 		 * @type {JQuery<HTMLDivElement>}
@@ -417,23 +417,20 @@ class MassRevisionDelete {
 					prop: 'revisions',
 					rvprop: 'ids|parsedcomment'
 				};
-			// @ts-ignore
 			return api.post(params, {
-				ajax: {
-					headers: {
-						'Promise-Non-Write-API-Action': true
-					},
-					timeout: 0
-				}
-			// @ts-ignore
-			}).then(/** @param {ApiResponseQueryRevids} res */ (res) => {
+				headers: {
+					// @ts-expect-error
+					'Promise-Non-Write-API-Action': true
+				},
+				timeout: 0
+			}).then(/** @param {ApiResponse} res */ (res) => {
 				const resPages = res && res.query && res.query.pages || [];
-				resPages.forEach(({revisions, deletedrevisions}) => {
+				resPages.forEach(({ revisions, deletedrevisions }) => {
 					const arr = revisions || deletedrevisions;
 					if (!arr) {
 						return;
 					}
-					arr.forEach(({revid, parsedcomment}) => {
+					arr.forEach(({ revid, parsedcomment }) => {
 						const rev = this.list.find((r) => r.getRevid() === String(revid));
 						if (rev) {
 							rev.parsedComment = parsedcomment;
@@ -462,7 +459,7 @@ class MassRevisionDelete {
 	static initializeReasonDropdowns(dropdowns) {
 
 		const reasons = getMessage('revdelete-reason-dropdown');
-		/** @type {{optgroup?:string; data?: string; label?: string;}[]} */
+		/** @type {{ optgroup?:string; data?: string; label?: string; }[]} */
 		const options = [{
 			data: '',
 			label: getMessage('revdelete-reasonotherlist')
@@ -487,7 +484,7 @@ class MassRevisionDelete {
 		}
 
 		if (options.length < 2) {
-			mw.notify('MassRevisionDelete: 削除理由の取得に失敗しました。', {type: 'error'});
+			mw.notify('MassRevisionDelete: 削除理由の取得に失敗しました。', { type: 'error' });
 		}
 		dropdowns.forEach((dd) => {
 			dd.setOptions(options);
@@ -499,7 +496,7 @@ class MassRevisionDelete {
 	 * Create utility buttons to select revdel target revisions.
 	 * @param {JQuery<HTMLUListElement>} $contribsList
 	 * @param {MassRevisionDelete['list']} list
-	 * @returns {{$wrapper: JQuery<HTMLDivElement>; $revisionCounter: JQuery<HTMLElement>;}}
+	 * @returns {{ $wrapper: JQuery<HTMLDivElement>; $revisionCounter: JQuery<HTMLElement>; }}
 	 * @private
 	 */
 	static createRevisionSelector($contribsList, list) {
@@ -576,7 +573,7 @@ class MassRevisionDelete {
 				)
 		);
 
-		return {$wrapper, $revisionCounter};
+		return { $wrapper, $revisionCounter };
 
 	}
 
@@ -679,7 +676,7 @@ class MassRevisionDelete {
 		// We don't collect IDs here because we'll have to loop MassRevisionDelete.list later, before sending API requests
 		const revisionCount = this.list.filter((rev) => rev.isSelected()).length;
 		if (!revisionCount) {
-			return mw.notify('版指定削除の対象版が選択されていません。', {type: 'error'}).then(() => false);
+			return mw.notify('版指定削除の対象版が選択されていません。', { type: 'error' }).then(() => false);
 		}
 
 		// Get visibility levels
@@ -705,19 +702,18 @@ class MassRevisionDelete {
 			}
 		});
 		if (!vis.hide.length && !vis.show.length) {
-			return mw.notify('版指定削除の対象項目が選択されていません。', {type: 'error'}).then(() => false);
+			return mw.notify('版指定削除の対象項目が選択されていません。', { type: 'error' }).then(() => false);
 		}
 
 		// Get reason
 		const reason = [this.reason1.getValue(), this.reason2.getValue(), this.reasonC.getValue().trim()].filter(Boolean).join(': ');
 		return (() => {
 			if (reason) {
-				return $.Deferred().resolve(true);
+				return $.Deferred().resolve(true).promise();
 			} else {
-				return OO.ui.confirm('版指定削除の理由が指定されていません。このまま実行しますか？', {size: 'medium'});
+				return OO.ui.confirm('版指定削除の理由が指定されていません。このまま実行しますか？', { size: 'medium' });
 			}
 		})()
-		// @ts-ignore
 		.then(/** @param {boolean} confirmed */ (confirmed) => {
 
 			if (!confirmed) {
@@ -754,7 +750,7 @@ class MassRevisionDelete {
 				),
 				'よろしいですか？'
 			);
-			return OO.ui.confirm($confirm, {size: 'medium'});
+			return OO.ui.confirm($confirm, { size: 'medium' });
 
 		}).then((confirmed) => {
 
@@ -850,6 +846,7 @@ class MassRevisionDelete {
 			 * @type {ReturnType<MassRevisionDelete['revdel']>[]}
 			 */
 			const deferreds = [];
+			const request = debuggingMode ? this.testRevdel.bind(this) : this.revdel.bind(this);
 			Object.keys(revisions).forEach((pagename) => {
 				const ids = revisions[pagename].slice();
 				while (ids.length) {
@@ -857,7 +854,7 @@ class MassRevisionDelete {
 						target: pagename,
 						ids: ids.splice(0, apilimit).join('|'),
 					}, defaultParams);
-					deferreds.push(debuggingMode ? this.testRevdel(params) : this.revdel(params));
+					deferreds.push(request(params));
 				}
 			});
 
@@ -866,7 +863,7 @@ class MassRevisionDelete {
 			$.when(...deferreds, this.initPromise).then((...res) => {
 
 				// Convert the array of result objects to one object
-				/** @type {Record<string, ApiResultRevisionDelete>} */
+				/** @type {Record<string, RevisionDeleteResult>} */
 				const result = Object.assign({}, ...res); // No need to care for initPromise because it's always undefined
 
 				// Update the progress
@@ -902,7 +899,7 @@ class MassRevisionDelete {
 					this.setDisabled(false);
 					mw.notify(
 						$('<span>').html(`<b>計${allRevs.length}版</b>の版指定削除を実行しました。`),
-						{type: 'success'}
+						{ type: 'success' }
 					);
 					setTimeout(() => {
 						allRevs.forEach((rev) => rev.setProgress(null));
@@ -929,7 +926,7 @@ class MassRevisionDelete {
 					// Error index dropdown
 					const indexDropdown = new OO.ui.DropdownWidget({
 						menu: {
-							items: failedRevs.map((_, i) => new OO.ui.MenuOptionWidget({data: i, label: String(i + 1)}))
+							items: failedRevs.map((_, i) => new OO.ui.MenuOptionWidget({ data: i, label: String(i + 1) }))
 						}
 					});
 					indexDropdown.getMenu().on('select', (selectedItem) => {
@@ -983,7 +980,7 @@ class MassRevisionDelete {
 									})
 							)
 							.css('text-align', 'justify'),
-						{type: 'warn', autoHide: false}
+						{ type: 'warn', autoHide: false }
 					).then((notif) => {
 						// Detect when the notification is closed using a custom event
 						notif.$notification.off('mrd-notif-close').on('mrd-notif-close', () => {
@@ -1000,28 +997,23 @@ class MassRevisionDelete {
 	}
 
 	/**
-	 * @typedef {import('ts-xor').XOR<ApiResultRevisionDeleteSuccess, ApiResultRevisionDeleteFailure>} ApiResultRevisionDelete
-	 */
-	/**
 	 * Perform revision deletion.
 	 * @param {ApiParamsActionRevisionDelete} params
-	 * @returns {JQueryPromise<Record<string, ApiResultRevisionDelete>>}
+	 * @returns {JQueryPromise<Record<string, RevisionDeleteResult>>}
 	 */
 	revdel(params) {
 
-		// @ts-ignore
-		return api.postWithToken('csrf', params)
-		// @ts-ignore
-		.then(/** @param {ApiResponseActionRevisionDelete} res */ (res) => {
+		return api.postWithToken('csrf', /** @type {Record<string, any>} */ (params))
+		.then(/** @param {ApiResponse} res */ (res) => {
 
 			const resItems = res && res.revisiondelete && res.revisiondelete.items;
 			if (!resItems || !resItems.length) {
 				return createErrorObject('unknown error');
 			}
 
-			return resItems.reduce(/** @param {Record<string, ApiResultRevisionDelete>} acc */ (acc, obj) => {
+			return resItems.reduce(/** @param {Record<string, RevisionDeleteResult>} acc */ (acc, obj) => {
 				if (obj.errors && obj.errors.length) {
-					const err = obj.errors.reduce(/** @param {string[]} codeArr */ (codeArr, {code}) => {
+					const err = obj.errors.reduce(/** @param {string[]} codeArr */ (codeArr, { code }) => {
 						if (codeArr.indexOf(code) === -1) {
 							codeArr.push(code);
 						}
@@ -1052,7 +1044,7 @@ class MassRevisionDelete {
 		 */
 		function createErrorObject(code) {
 			return params.ids.split('|').reduce(/** @param {Record<string, ApiResultRevisionDeleteFailure>} acc */ (acc, revid) => {
-				acc[revid] = {code};
+				acc[revid] = { code };
 				return acc;
 			}, Object.create(null));
 		}
@@ -1062,7 +1054,7 @@ class MassRevisionDelete {
 	/**
 	 * Perform experimental revision deletion.
 	 * @param {ApiParamsActionRevisionDelete} params
-	 * @returns {JQueryPromise<Record<string, ApiResultRevisionDelete>>}
+	 * @returns {JQueryPromise<Record<string, RevisionDeleteResult>>}
 	 */
 	testRevdel(params) {
 		const def = $.Deferred();
@@ -1076,7 +1068,7 @@ class MassRevisionDelete {
 			}
 			return acc;
 		}, Object.create(null));
-		const ret = params.ids.split('|').reduce(/** @param {Record<string, ApiResultRevisionDelete>} acc */ (acc, revid) => {
+		const ret = params.ids.split('|').reduce(/** @param {Record<string, RevisionDeleteResult>} acc */ (acc, revid) => {
 			/** @type {Revision=} */
 			let rev;
 			if (Math.random() > 0.1 && (rev = this.list.find((r) => r.getRevid() === revid))) {
@@ -1116,7 +1108,7 @@ class MassRevisionDelete {
 $.event.special['mrd-notif-close'] = {
 	remove: (o) => {
 		if (o.handler) {
-			// @ts-ignore
+			// @ts-expect-error
 			o.handler();
 		}
 	}
@@ -1311,7 +1303,7 @@ class Revision {
 		this.$li[0].scrollIntoView();
 		this.$li.css('background-color', 'var(background-color-error-subtle--active,#ffc8bd)');
 		setTimeout(() => {
-			this.$li.animate({backgroundColor: ''}, 500, function() {
+			this.$li.animate({ backgroundColor: '' }, 500, function() {
 				$(this).css('background-color', '');
 			});
 		}, 500);
@@ -1668,9 +1660,6 @@ Revision.class = {
 Revision.targets = ['content', 'comment', 'user'];
 
 /**
- * @typedef {'doing'|'done'|'failed'} IconType
- */
-/**
  * Get a loading/check/cross image tag.
  * @param {IconType} iconType
  * @returns {HTMLImageElement}
@@ -1718,6 +1707,18 @@ function getMessage(name) {
 	}
 	return ret;
 }
+
+/**
+ * @typedef {import('./window/MassRevisionDelete').RevdelTarget} RevdelTarget
+ * @typedef {import('./window/MassRevisionDelete').RevdelLevel} RevdelLevel
+ * @typedef {import('./window/MassRevisionDelete').DefaultParams} DefaultParams
+ * @typedef {import('./window/MassRevisionDelete').ApiParamsActionRevisionDelete} ApiParamsActionRevisionDelete
+ * @typedef {import('./window/MassRevisionDelete').ApiResponse} ApiResponse
+ * @typedef {import('./window/MassRevisionDelete').ApiResultRevisionDeleteFailure} ApiResultRevisionDeleteFailure
+ * @typedef {import('./window/MassRevisionDelete').RevisionDeleteResult} RevisionDeleteResult
+ * @typedef {import('./window/MassRevisionDelete').MessageName} MessageName
+ * @typedef {import('./window/MassRevisionDelete').IconType} IconType
+ */
 
 //*********************************************************************************************
 

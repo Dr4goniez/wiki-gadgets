@@ -1,122 +1,129 @@
 /************************************************************************\
  * ShortPagesForDeletion
+ *
  * Visualize which pages are AfD-ed or SD-ed on [[Special:Shortpages]].
  *
- * @version 1.0.3
- * @author Dragoniez
+ * @version 1.1.0
+ * @author [[User:Dragoniez]]
 \************************************************************************/
 /* global mw */
 //<nowiki>
 (() => {
 //***********************************************************************
 
-if (mw.config.get('wgCanonicalSpecialPageName') !== 'Shortpages') {
-	return;
-}
+if (mw.config.get('wgCanonicalSpecialPageName') !== 'Shortpages') return;
 
 /** @type {mw.Api} */
 let api;
+
 $.when($.ready, mw.loader.using('mediawiki.api')).then(() => {
 	api = new mw.Api();
-	init();
-});
 
-//***********************************************************************
+	const /** @type {JQuery<HTMLOListElement>} */ $ol = $('ol.special');
+	if (!$ol.length) return;
 
-function init() {
+	const titleBatches = getTitles($ol);
+	if (!titleBatches.length) return;
 
-	/** @type {JQuery<HTMLOListElement>} */
-	const $ol = $('ol.special');
-	if (!$ol.length) {
-		return;
-	}
+	/**
+	 * Depending on the `&limit=` query parameter and whether the user has `apihighlimits`,
+	 * we may need to perform several continued API requests. Waiting for all of these to
+	 * finish may take time, and users without the permission would find the script execution
+	 * slow. For better user experience, we reflect the result to the DOM each time we get
+	 * a renponse from the API.
+	 *
+	 * @param {TitleMap[]} titleMap Array of title → <li> mappings, split by batch.
+	 * @param {number} iter Current batch index.
+	 */
+	(function execute(titleMap, iter) {
+		const batch = titleMap[iter];
+		queryCategories([...batch.keys()]).then((map) => {
+			if (map) {
+				for (const [title, { afd, csd }] of map) {
+					const $li = batch.get(title);
+					if (!$li) continue;
 
-	const pages = getTitles($ol);
-	if (!pages.length) {
-		return;
-	}
-
-	$.when(
-		getCatMembers('削除依頼中のページ'),
-		getCatMembers('即時削除対象のページ'),
-	).then((afd, sd) => {
-
-		if (!afd.length && !sd.length) {
-			return;
-		}
-
-		pages.forEach(({$li, title}) => {
-			const states = [];
-			if (afd.indexOf(title) !== -1) {
-				states.push('削除依頼中');
+					const /** @type {string[]} */ states = [];
+					if (afd) states.push('削除依頼中');
+					if (csd) states.push('即時削除依頼中');
+					if (states.length) $li.append(` (${states.join(', ')})`);
+				}
 			}
-			if (sd.indexOf(title) !== -1) {
-				states.push('即時削除依頼中');
-			}
-			if (states.length) {
-				$li.append(` (${states.join(', ')})`);
+			if (titleMap[++iter]) {
+				execute(titleMap, iter);
 			}
 		});
-
-	});
-
-}
+	})(titleBatches, 0);
+});
 
 /**
- * @typedef {{$li: JQuery<HTMLLIElement>; title: string;}} TitleObject
+ * @typedef {Map<string, JQuery<HTMLLIElement>>} TitleMap
  */
 /**
- * Extract titles from the list of short pages.
+ * Extracts page titles from the short pages list and chunks them by API limit.
+ *
  * @param {JQuery<HTMLOListElement>} $ol
- * @returns {TitleObject[]}
+ * @returns {TitleMap[]} Array of maps: title => list item element
  */
 function getTitles($ol) {
 	const articleRegex = new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)'));
-	return Array.from($ol.children('li')).reduce(/** @param {TitleObject[]} acc */ (acc, li) => {
-		const $li = $(li);
+	const apilimit = (mw.config.get('wgUserGroups') || []).includes('sysop') ? 500 : 50;
+
+	const /** @type {TitleMap[]} */ ret = [];
+	$ol.children('li').each(function() {
+		const $li = $(this);
 		const href = $li.children('bdi').children('a').attr('href');
 		let m;
 		if (href && (m = articleRegex.exec(href))) {
 			const title = decodeURIComponent(m[1]).replace(/_/g, ' ');
-			acc.push({$li, title});
+			if (!ret.length || ret[ret.length - 1].size === apilimit) {
+				ret.push(new Map());
+			}
+			ret[ret.length - 1].set(title, $li);
 		}
-		return acc;
-	}, []);
+	});
+	return ret;
 }
 
+const CAT_AFD = 'Category:削除依頼中のページ';
+const CAT_CSD = 'Category:即時削除対象のページ';
+
 /**
- * Get all pages in a given category.
- * @param {string} cat Which category to enumerate, without prefix.
- * @param {object} [cont]
- * @returns {JQueryPromise<string[]>}
+ * @typedef {Map<string, { afd: boolean; csd: boolean; }>} CategoryMap
  */
-function getCatMembers(cat, cont = {}) {
-	/** @type {string[]} */
-	const ret = [];
-	return api.get({
+/**
+ * Checks which of the given titles are in AFD or CSD categories.
+ *
+ * @param {string[]} titles Page titles to query.
+ * @returns {JQueryPromise<CategoryMap?>} A map of title → status object, or `null` on failure.
+ */
+function queryCategories(titles) {
+	return api.post({
 		action: 'query',
-		formatversion: '2',
-		list: 'categorymembers',
-		cmtitle: 'Category:' + cat,
-		cmprop: 'title',
-		cmlimit: 'max',
-		...cont
+		titles: titles.join('|'),
+		prop: 'categories',
+		clprop: '',
+		clcategories: [CAT_AFD, CAT_CSD].join('|'),
+		formatversion: '2'
 	}).then((res) => {
-		const resCm = res && res.query && res.query.categorymembers;
-		if (resCm) {
-			ret.push(...resCm.map((obj) => obj.title));
-		}
-		if (res && res.continue) {
-			return getCatMembers(cat, res.continue).then((result) => {
-				ret.push(...result);
-				return ret;
+		/** @type {{ title: string; categories: { ns: number; title: string; }[] | undefined; }[]=} */
+		const pages = res && res.query && res.query.pages;
+		if (!pages) return null;
+
+		const /** @type {CategoryMap} */ ret = new Map();
+		pages.forEach(({ title, categories }) => {
+			if (!categories) return;
+			let afd = false, csd = false;
+			categories.forEach(({ title: cat }) => {
+				afd = afd || cat === CAT_AFD;
+				csd = csd || cat === CAT_CSD;
 			});
-		} else {
-			return ret;
-		}
+			if (afd || csd) ret.set(title, { afd, csd });
+		});
+		return ret;
 	}).catch((_, err) => {
 		console.error(err);
-		return ret;
+		return null;
 	});
 }
 
