@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.2.1
+ * @version 1.2.2
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -887,7 +887,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.2.1 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.2.2 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -2013,76 +2013,135 @@ class IPFieldContent {
 			current = level;
 		}
 
+		/**
+		 * @overload
+		 * @param {IpInfoLevel[]} levels
+		 * @returns {IpInfoLevelStringified[]}
+		 */
+		/**
+		 * @overload
+		 * @param {IpInfoLevel[][]} levels
+		 * @returns {IpInfoLevelStringified[][]}
+		 */
+		/**
+		 * @overload
+		 * @param {IpInfoLevel[][]} levels
+		 * @param {true} flat
+		 * @returns {IpInfoLevelStringified[]}
+		 */
+		/**
+		 * @typedef {{ ip: string; covers: number[]; }} IpInfoLevelStringified
+		 * @param {IpInfoLevel[] | IpInfoLevel[][]} levels
+		 * @param {boolean} [flat]
+		 * @returns {IpInfoLevelStringified[] | IpInfoLevelStringified[][]}
+		 */
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const dump = (levels, flat = false) => {
+			const isArrayOfArrays = levels.every(el => Array.isArray(el));
+			if (flat && isArrayOfArrays) {
+				return levels.reduce(/** @param {IpInfoLevelStringified[]} acc */ (acc, arr) => {
+					acc = acc.concat(
+						arr.map(({ ip, covers }) => ({ ip: ip.abbreviate(), covers: [...covers] }))
+					);
+					return acc;
+				}, []);
+			} else if (isArrayOfArrays) {
+				return levels.reduce(/** @param {IpInfoLevelStringified[][]} acc */ (acc, arr) => {
+					acc.push(
+						arr.map(({ ip, covers }) => ({ ip: ip.abbreviate(), covers: [...covers] }))
+					);
+					return acc;
+				}, []);
+			} else {
+				return levels.map(({ ip, covers }) => ({ ip: ip.abbreviate(), covers: [...covers] }));
+			}
+		};
+
 		// Build minimal covering sets
 		if (intersected.length) {
-			const finalLevel = allLevels[allLevels.length - 1];
+
+			/**
+			 * Recursively explores all combinations of IP ranges and individual IPs that together cover
+			 * the full set of indices.
+			 *
+			 * The recursion attempts to build combinations by greedily including non-overlapping candidates
+			 * from `flattened`. If the recursive branch cannot reach full coverage, the algorithm falls back
+			 * to padding with entries from `finalLevel` (the smallest unaggregated ranges, typically single
+			 * IPs or IPv6 /64 CIDRs).
+			 *
+			 * This ensures that:
+			 * - All valid aggregated groupings are explored.
+			 * - No incomplete combination is added to the result.
+			 *
+			 * @param {number} startIndex Index in `flattened` to continue the search from.
+			 * @param {Set<number>} covered Indices already covered by the current combination.
+			 * @param {IpInfoLevel[]} chosen The current partial combination of ranges/IPs.
+			 * @param {IpInfoLevel[][]} combinations Accumulator for storing valid full-cover combinations.
+			 * @param {IpInfoLevel[]} flattened All CIDRs and individual IPs with their `covers`.
+			 * @param {IpInfoLevel[]} finalLevel The bottom-most level of minimal ranges used as a fallback.
+			 * @param {Set<number>} fullIndexes The complete set of indices that must be covered.
+			 * @returns {void}
+			 */
+			const dfsWithFallback = (startIndex, covered, chosen, combinations, flattened, finalLevel, fullIndexes) => {
+				// Base case: all indices are covered
+				if (covered.size === fullIndexes.size) {
+					combinations.push([...chosen]);
+					return;
+				}
+
+				for (let i = startIndex; i < flattened.length; i++) {
+					const candidate = flattened[i];
+					const hasOverlap = [...candidate.covers].some(idx => covered.has(idx));
+					if (hasOverlap) continue;
+
+					chosen.push(candidate);
+					dfsWithFallback(i + 1, SetUtil.union(covered, candidate.covers), chosen, combinations, flattened, finalLevel, fullIndexes);
+					chosen.pop(); // backtrack
+				}
+
+				// After DFS branch, attempt to pad with `finalLevel` for missing indices
+				const missing = SetUtil.difference(fullIndexes, covered);
+				if (missing.size) {
+					const padded = [...chosen];
+					const paddedCovered = new Set(covered);
+
+					for (const obj of finalLevel) {
+						const contributes = [...obj.covers].some(idx => missing.has(idx));
+						if (contributes) {
+							padded.push(obj);
+							SetUtil.addAll(paddedCovered, obj.covers);
+						}
+					}
+
+					// Only add if everything is now covered
+					if (paddedCovered.size === fullIndexes.size) {
+						combinations.push(padded);
+					}
+				}
+			};
+
 			/** @type {IpInfoLevel[][]} */
 			const combinations = [];
+			const flattened = intersected.reduce((acc, arr) => acc.concat(arr), []);
+			flattened.sort((a, b) => b.ip.getBitLength() - a.ip.getBitLength()); // e.g., [/65, /64, /63, ...]
+			const finalLevel = allLevels[allLevels.length - 1];
 			const fullIndexes = new Set(info.map((_, i) => i));
 
-			// Flatten `intersected` and sort narrower CIDRs on top (e.g., [/65, /64, /63, ...])
-			const flattened = intersected.reduce((acc, arr) => acc.concat(arr), []);
-			flattened.sort((a, b) => b.ip.getBitLength() - a.ip.getBitLength());
-
-			for (let i = 0; i < flattened.length; i++) {
-				const source = flattened[i];
-				const level = [source];
-				let covered = new Set(source.covers);
-
-				// If this single CIDR already covers all IPs, push it as a combination
-				if (covered.size === info.length) {
-					combinations.push(level);
-					continue;
-				}
-
-				// Attempt to expand this combination by adding additional CIDRs
-				for (let j = i + 1; j < flattened.length; j++) {
-					const goal = flattened[j];
-					const coveredClone = new Set(covered);
-
-					// Skip this goal if it overlaps with any already covered IP
-					let skip = false;
-					for (const n of goal.covers) {
-						if (coveredClone.has(n)) {
-							skip = true;
-							break;
-						}
-						coveredClone.add(n);
-					}
-					if (skip) continue;
-
-					level.push(goal);
-					covered = coveredClone;
-
-					// Stop expanding if all IPs are now covered
-					if (covered.size === fullIndexes.size) break;
-				}
-
-				let missingIndexes = SetUtil.difference(fullIndexes, covered);
-				if (!missingIndexes.size) {
-					// All input IPs are covered
-					combinations.push(level);
-				} else {
-					// Find IPs that are not yet covered by the current level
-					for (const obj of finalLevel) {
-						if (SetUtil.isSupersetOf(missingIndexes, obj.covers)) {
-							missingIndexes = SetUtil.difference(missingIndexes, obj.covers);
-							level.push({ ip: obj.ip, covers: obj.covers });
-						}
-					}
-					if (!missingIndexes.size) {
-						combinations.push(level);
-					}
-				}
-			}
+			dfsWithFallback(0, new Set(), [], combinations, flattened, finalLevel, fullIndexes);
 
 			if (combinations.length) {
 				// Put arrays with more elements on top
 				combinations.sort((a, b) => b.length - a.length);
+				const initialLen = allLevels.length;
 
 				for (let i = 0; i < combinations.length; ) {
 					let level = combinations[i];
 					const len = level.length;
+					if (len >= finalLevel.length) {
+						// Skip non-aggregated combinations
+						i++;
+						continue;
+					}
 
 					// Compare all consecutive arrays with the same length
 					let j = i + 1;
@@ -2094,6 +2153,24 @@ class IPFieldContent {
 							level = current;
 						}
 						j++;
+					}
+
+					// Check whether the last element of `allLevels` contains a CIDR that is
+					// itself contained within a CIDR in the current level. If such a containment
+					// exists, the last element represents a meaningful intermediate step in
+					// the aggregation hierarchy and should be preserved.
+					// If no containment relation is found, then the last element does not
+					// contribute any unique aggregation and can safely be dropped as redundant.
+					let hasContainment = true;
+					if (allLevels.length > initialLen) {
+						hasContainment = level.some(({ ip }) => {
+							return ip.isCIDR() && allLevels[allLevels.length - 1].some(parent => {
+								return parent.ip.isCIDR() && ip.contains(parent.ip, { excludeEquivalent: true });
+							});
+						});
+					}
+					if (!hasContainment) {
+						allLevels.pop();
 					}
 
 					allLevels.push(IPFieldContent.sortLevel(level));
