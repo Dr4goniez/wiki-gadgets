@@ -37,15 +37,19 @@
 	padding: 4px;
 }
 
-/* General */
-.mbl-userlink {
+/**
+ * General
+ *
+ * The `body a` selector overrides the `div.content a` rule on Minerva.
+ */
+body a.mbl-userlink {
 	opacity: 1;
 }
 
 /**
  * Classes for locally blocked users. These classes are mutually exclusive.
  */
-.mbl-blocked-indef {
+body a.mbl-blocked-indef {
 	opacity: 0.6;
 	text-decoration: line-through;
 	/**
@@ -54,10 +58,10 @@
 	 */
 	text-decoration-style: double;
 }
-.mbl-blocked-temp {
+body a.mbl-blocked-temp {
 	text-decoration: line-through;
 }
-.mbl-blocked-partial {
+body a.mbl-blocked-partial {
 	text-decoration: underline;
 	text-decoration-style: dotted;
 }
@@ -66,30 +70,30 @@
  * Classes for globally (b)locked users. The classes for global block can
  * overlap with the class for global lock.
  */
-.mbl-globally-locked {
+body a.mbl-globally-locked {
 	opacity: 0.6;
 	border-bottom: red double;
 }
-.mbl-globally-blocked-indef:not(.mbl-globally-locked) {
+body a.mbl-globally-blocked-indef:not(.mbl-globally-locked) {
 	opacity: 0.6;
 	border-bottom: 2px red dashed;
 }
-.mbl-globally-blocked-temp:not(.mbl-globally-locked) {
+body a.mbl-globally-blocked-temp:not(.mbl-globally-locked) {
 	border-bottom: 2px red dashed;
 }
 
 /* Increase opacity on dark mode for better readability */
 @media screen {
-	html.skin-theme-clientpref-night .mbl-blocked-indef,
-	html.skin-theme-clientpref-night .mbl-globally-locked,
-	html.skin-theme-clientpref-night .mbl-globally-blocked-indef:not(.mbl-globally-locked) {
+	html.skin-theme-clientpref-night body a.mbl-blocked-indef,
+	html.skin-theme-clientpref-night body a.mbl-globally-locked,
+	html.skin-theme-clientpref-night body a.mbl-globally-blocked-indef:not(.mbl-globally-locked) {
 		opacity: 0.8;
 	}
 }
 @media screen and (prefers-color-scheme: dark) {
-	html.skin-theme-clientpref-os .mbl-blocked-indef,
-	html.skin-theme-clientpref-os .mbl-globally-locked,
-	html.skin-theme-clientpref-os .mbl-globally-blocked-indef:not(.mbl-globally-locked) {
+	html.skin-theme-clientpref-os body a.mbl-blocked-indef,
+	html.skin-theme-clientpref-os body a.mbl-globally-locked,
+	html.skin-theme-clientpref-os body a.mbl-globally-blocked-indef:not(.mbl-globally-locked) {
 		opacity: 0.8;
 	}
 }
