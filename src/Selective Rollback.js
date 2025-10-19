@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.3.3
+	@version 4.3.4
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -59,7 +59,7 @@
 			api = new mw.Api({
 				ajax: {
 					headers: {
-						'Api-User-Agent': 'Selective_Rollback/4.3.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+						'Api-User-Agent': 'Selective_Rollback/4.3.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 					}
 				}
 			});
@@ -378,34 +378,34 @@
 				'rbstatus-notify-success': '成功', // v4.0.0
 				'rbstatus-notify-failure': '失败' // v4.0.0
 			},
-			/** @author [[User:64andtim]] */
+			/** @author [[User:Codename Noreste]] */
 			es: {
-				'portletlink-tooltip': 'Abrir el diálogo Selective Rollback',
+				'portletlink-tooltip': 'Abrir el cuadro de diálogo para Selective Rollback',
 				'summary-label-primary': 'Resumen de edición',
-				'summary-option-default': 'Resumen de edición automática',
-				'summary-option-custom': 'Manual',
-				'summary-label-custom': 'Resumen de edición manual',
-				'summary-tooltip-$0': '($0 será reemplazada con la resumen de reversión automática.)',
-				'summary-tooltip-$0-error': '($0 será reemplazada con la resumen de reversión automática <b>en inglés</b>.)',
+				'summary-option-default': 'Resumen de edición predeterminado',
+				'summary-option-custom': 'Personalizado',
+				'summary-label-custom': 'Resumen de edición personalizada',
+				'summary-tooltip-$0': '($0 será reemplazado con el resumen de edición predeterminado.)',
+				'summary-tooltip-$0-error': '($0 será reemplazado con él resumen de edición predeterminado <b>en inglés</b>.)',
 				'summary-tooltip-specialexpressions': 'Expresiones de reemplazo',
-				'summary-label-preview': 'Previsualización del resumen de edición', // v4.0.0
+				'summary-label-preview': 'Vista previa del resumen', // v4.0.0
 				'summary-tooltip-preview': '(Las palabras mágicas serán reemplazadas.)', // v4.0.0
-				'markbot-label': 'Marcar las reversiones cómo ediciones de un bot',
-				'watchlist-label': 'Vigilar las páginas en tu lista de seguimiento',
-				'watchlist-expiry-label': 'Tiempo',
-				'watchlist-expiry-indefinite': 'Permanente',
+				'markbot-label': 'Marcar las reversiones como ediciones del bot',
+				'watchlist-label': 'Añadir las páginas de destino a la lista de seguimiento',
+				'watchlist-expiry-label': 'Expiración',
+				'watchlist-expiry-indefinite': 'Siempre',
 				'watchlist-expiry-1week': '1 semana',
 				'watchlist-expiry-1month': '1 mes',
 				'watchlist-expiry-3months': '3 meses',
 				'watchlist-expiry-6months': '6 meses',
-				'watchlist-expiry-1year': '1 año',
+				'watchlist-expiry-1year': '1 años',
 				'watchlist-expiry-3years': '3 años', // Not used
-				'button-rollbackchecked': 'Revertir elegidos',
-				'button-checkall': 'Elegir todos',
+				'button-rollbackchecked': 'Reversión marcada',
+				'button-checkall': 'Marcar todo',
 				'button-close': 'Cerrar',
-				'msg-nonechecked': 'Ningún casilla fue elegida.',
-				'msg-linksresolved': 'Todos los enlaces de reversión en esta página se han resuelto.',
-				'msg-confirm': '¿Estás seguro que quieres revertir este edición?',
+				'msg-nonechecked': 'No hay ninguna casilla de verificación marcada.',
+				'msg-linksresolved': 'Los enlaces de reversión en esta página se han resuelto todos.',
+				'msg-confirm': '¿Estás seguro de que quieres revertir esta edición?',
 				'rbstatus-reverted': 'revertido',
 				'rbstatus-failed': 'la reversión falló',
 				'rbstatus-notify-success': 'Éxito', // v4.0.0
@@ -1097,7 +1097,7 @@
 		var /** @type {mw.Api} @readonly */ previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective Rollback/4.3.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
+					'Api-User-Agent': 'Selective Rollback/4.3.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
