@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.11
+ * @version 3.2.12
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -195,7 +195,7 @@ class MarkBLocked {
 		const ret = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.11 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
+					'Api-User-Agent': 'MarkBLocked-core/3.2.12 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
 				}
 			},
 			parameters: {
@@ -1294,15 +1294,17 @@ class MarkBLocked {
 	/**
 	 * @param {UserLinks} userLinks
 	 * @param {string[]} users
-	 * @returns {JQueryPromise<Set<string>?>} An array of marked users' names or `null` if aborted
+	 * @param {boolean} [isRetry]
+	 * @returns {JQueryPromise<?Set<string>>} A set of marked users' names or `null` if aborted.
 	 * @private
 	 */
-	bulkMarkupLocal(userLinks, users) {
+	bulkMarkupLocal(userLinks, users, isRetry = false) {
 		return this.readApi.post({ // This MUST be a POST request because the parameters can exceed the word count limit of URI
 			list: 'blocks',
 			bklimit: 'max',
 			bkusers: users.join('|'),
-			bkprop: 'user|by|expiry|reason|flags'
+			bkprop: 'user|by|expiry|reason|flags',
+			errorformat: 'raw'
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resBlk = res && res.query && res.query.blocks || [];
 			const /** @type {Set<string>} */ ret = new Set();
@@ -1324,13 +1326,43 @@ class MarkBLocked {
 				}
 			}
 			return ret;
-		}).catch(/** @param {object} err */ (_, err) => {
+		}).catch(/** @param {Record<string, any>} err */ (_, err) => {
 			if (err.exception === 'abort') {
 				return null;
-			} else {
-				console.error(err);
-				return new Set();
 			}
+
+			// Check whether we've unexpectedly encountered unparsable usernames
+			/** @type {{ code: string; params: { plaintext: string; }[]; }[]=} */
+			const errors = err.errors;
+			if (!isRetry && errors) {
+				/** @type {Set<string>} */
+				const badusers = new Set();
+
+				// Collect unparsable usernames
+				for (let i = 0; i < errors.length; i++) {
+					const { code, params } = errors[i];
+					if (code === 'baduser') {
+						// Each error contains at most one actual bad username
+						const baduser = params.find(p => p.plaintext !== 'bkusers');
+						if (baduser && baduser.plaintext) {
+							badusers.add(baduser.plaintext);
+						}
+					}
+				}
+
+				// Remove the unparsable usernames and retry, or fall through
+				// TODO: Cache the unparsable usernames?
+				if (badusers.size) {
+					const filtered = users.filter(u => !badusers.has(u));
+					if (filtered.length) {
+						console.warn('Retrying query without unparsable username(s):', [...badusers]);
+						return this.bulkMarkupLocal(userLinks, filtered, true);
+					}
+				}
+			}
+
+			console.error(err);
+			return new Set();
 		});
 	}
 
