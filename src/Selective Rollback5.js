@@ -13,7 +13,7 @@
 \*******************************************************************************/
 
 // @ts-check
-/// <reference path="./window/Selective Rollback.d.ts" />
+/// <reference path="./window/Selective Rollback5.d.ts" />
 /* global mw, OO */
 //<nowiki>
 (() => {
