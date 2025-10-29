@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.3.5
+	@version 4.3.6
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -59,7 +59,7 @@
 			api = new mw.Api({
 				ajax: {
 					headers: {
-						'Api-User-Agent': 'Selective_Rollback/4.3.5 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+						'Api-User-Agent': 'Selective_Rollback/4.3.6 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 					}
 				}
 			});
@@ -545,7 +545,7 @@
 	 */
 	/**
 	 * Get the default rollback summary and the current user's user rights on the local wiki.
-	 * @returns {JQueryPromise<MetaInfo>}
+	 * @returns {JQuery.Promise<MetaInfo>}
 	 */
 	function getMetaInfo() {
 		return api.get({
@@ -1099,7 +1099,7 @@
 		var /** @type {mw.Api} @readonly */ previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective Rollback/4.3.5 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
+					'Api-User-Agent': 'Selective Rollback/4.3.6 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-expect-error
 					'Promise-Non-Write-API-Action': true
@@ -1294,35 +1294,67 @@
 		/**
 		 * Perform AJAX rollback on a rollback link.
 		 * @param {HTMLSpanElement} rbspan The wrapper span of the rollback link.
-		 * @param {SRBox?} box The SR checkbox object. (**Note: this method removes the box unconditionally.**)
+		 * @param {?SRBox} box The SR checkbox object. (**Note: this method removes the box unconditionally.**)
 		 * @param {RollbackParams} [params] Parameters to `action=rollback`. If none is passed, obtained from the dialog.
-		 * @returns {JQueryPromise<boolean>} Whether the rollback succeeded.
+		 * @returns {JQuery.Promise<boolean>} Whether the rollback succeeded.
 		 */
 		SR.prototype.ajaxRollback = function(rbspan, box, params) {
 
-			var _this = this;
 			if (box) box.$wrapper.remove();
 			params = params || dialog.getParams();
 
 			// Collect required parameters to action=rollback from the rollback link internal to the rbspan
 			var rblink = rbspan.querySelector('a');
 			var href = rblink && rblink.href;
-			var title = href && mw.util.getParamValue('title', href);
-			var user = href && mw.util.getParamValue('from', href);
-			if (!rblink || !title || !user) {
-				var info =
-					!rblink ? '[SR] Error: Anchor tag is missing in the rollback link for some reason.' :
-					!title ? '[SR] Error: The rollback link does not have a "title" query parameter.' :
-					'[SR] Error: The rollback link does not have a "from" query parameter.';
-				var code = !rblink ? 'linkmissing' : !title ? 'titlemissing' : 'usermissing';
-				console.error(info, rbspan);
-				this.processRollbackLink(rbspan, code);
-				return $.Deferred().resolve(false);
+			var /** @type {?string} */ title = null;
+			var /** @type {?string} */ user = null;
+			if (href) {
+				title = mw.util.getParamValue('title', href);
+				if (!title) {
+					var article = (new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')).exec(href) || [])[1] || null;
+					if (article) {
+						try {
+							title = decodeURIComponent(article);
+						} catch (_) { /**/ }
+					}
+				}
+				user = mw.util.getParamValue('from', href);
+			}
+
+			var /** @type {?[string, string]} */ error = null;
+			if (!rblink) {
+				error = [
+					'[SR] Error: Anchor tag is missing in the rollback link for some reason.',
+					'linkmissing'
+				];
+			} else if (!href) {
+				error = [
+					'[SR] Error: The rollback link lacks an href attribute.',
+					'hrefmissing'
+				];
+			} else if (!title) {
+				error = [
+					'[SR] Error: The rollback link does not have a "title" query parameter.',
+					'titlemissing'
+				];
+			} else if (!user) {
+				error = [
+					'[SR] Error: The rollback link does not have a "from" query parameter.',
+					'usermissing'
+				];
+			}
+			if (error) {
+				console.error(error[0], rbspan);
+				this.processRollbackLink(rbspan, error[1]);
+				return $.Deferred().resolve(false).promise();
 			}
 
 			// Perform AJAX rollback
 			this.processRollbackLink(rbspan, null);
-			return rollback(title, user, params).then(function(err) {
+			var _this = this;
+			var safeTitle = /** @type {string} */ (title);
+			var safeUser = /** @type {string} */ (user);
+			return rollback(safeTitle, safeUser, params).then(function(err) {
 				_this.processRollbackLink(rbspan, err);
 				return !err;
 			});
@@ -1385,7 +1417,7 @@
 		 * @param {string} title
 		 * @param {string} user
 		 * @param {RollbackParams} params
-		 * @returns {JQueryPromise<string|undefined>} Error code or `undefined`.
+		 * @returns {JQuery.Promise<string|undefined>} Error code or `undefined`.
 		 */
 		function rollback(title, user, params) {
 			return api.rollback(title, user, params)
@@ -1404,7 +1436,7 @@
 		SR.prototype.selectiveRollback = function() {
 
 			// Perform AJAX rollback on links whose associated SR checkboxes are checked
-			var /** @type {JQueryPromise<boolean>[]} */ deferreds = [];
+			var /** @type {JQuery.Promise<boolean>[]} */ deferreds = [];
 			var params = dialog.getParams();
 			for (var key in this.links) {
 				var obj = this.links[key];
