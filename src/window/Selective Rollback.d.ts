@@ -1,23 +1,25 @@
-interface Window {
-	selectiveRollbackConfig?: Partial<SelectiveRollbackConfig>;
+declare global {
+	interface Window {
+		selectiveRollbackConfig?: Partial<SelectiveRollbackConfig>;
+	}
 }
 
-interface SelectiveRollbackConfig {
+export interface SelectiveRollbackConfig {
 	lang: string;
 	editSummaries: Record<string, string>;
 	showKeys: boolean;
 	specialExpressions: Record<string, string>;
 	markBot: boolean;
 	watchPage: boolean;
-	watchExpiry: 'indefinite'|'infinite'|'infinity'|'never'|'1 week'|'1 month'|'3 months'|'6 months'|'1 year';
+	watchExpiry: 'indefinite' | 'infinite' | 'infinity' | 'never' | '1 week' | '1 month' | '3 months' | '6 months' | '1 year';
 	confirm: SRConfirm;
 	mobileConfirm: SRConfirm;
 	checkboxLabelColor: string;
 }
 
-type SRConfirm = 'always'|'never'|'RCW'|'nonRCW';
+export type SRConfirm = 'always' | 'never' | 'RCW' | 'nonRCW';
 
-interface Messages {
+export interface Messages {
 	/** Tooltip for the portlet link used to open the SR dialog. */
 	'portletlink-tooltip': string;
 	/** The label for the edit summary dropdown. */
@@ -80,7 +82,7 @@ interface Messages {
 	'rbstatus-notify-failure': string;
 }
 
-type IsOfType = <T extends 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function' | 'null'>(
+export type IsOfType = <T extends 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function' | 'null'>(
 	expectedType: T,
 	val: unknown,
 	key: string

@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.3.6
+	@version 4.3.7
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -11,9 +11,7 @@
 	@link https://en.wikipedia.org/wiki/User:DannyS712/AjaxRollback.js
 
 \***************************************************************************************************/
-
 // @ts-check
-/// <reference path="./window/Selective Rollback.d.ts" />
 /* global mw, OO */
 /* eslint-disable @typescript-eslint/no-this-alias */
 //<nowiki>
@@ -59,7 +57,7 @@
 			api = new mw.Api({
 				ajax: {
 					headers: {
-						'Api-User-Agent': 'Selective_Rollback/4.3.6 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+						'Api-User-Agent': 'Selective_Rollback/4.3.7 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 					}
 				}
 			});
@@ -1099,7 +1097,7 @@
 		var /** @type {mw.Api} @readonly */ previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective Rollback/4.3.6 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
+					'Api-User-Agent': 'Selective Rollback/4.3.7 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-expect-error
 					'Promise-Non-Write-API-Action': true
@@ -1483,4 +1481,10 @@
 	}
 
 })();
+/**
+ * @typedef {import('./window/Selective Rollback.d.ts').SelectiveRollbackConfig} SelectiveRollbackConfig
+ * @typedef {import('./window/Selective Rollback.d.ts').SRConfirm} SRConfirm
+ * @typedef {import('./window/Selective Rollback.d.ts').Messages} Messages
+ * @typedef {import('./window/Selective Rollback.d.ts').IsOfType} IsOfType
+ */
 //</nowiki>
