@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.3.4
+	@version 4.3.5
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -59,7 +59,7 @@
 			api = new mw.Api({
 				ajax: {
 					headers: {
-						'Api-User-Agent': 'Selective_Rollback/4.3.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+						'Api-User-Agent': 'Selective_Rollback/4.3.5 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 					}
 				}
 			});
@@ -99,7 +99,7 @@
 								.text('Report the error'),
 							')'
 						),
-						{type: 'error', autoHideSeconds: 'long'}
+						{ type: 'error', autoHideSeconds: 'long' }
 					);
 					throw new Error(err);
 				}
@@ -190,10 +190,7 @@
 		// Sanitize and merge user config
 		/**
 		 * Check whether a config value is of the expected type.
-		 * @param {"string"|"number"|"bigint"|"boolean"|"symbol"|"undefined"|"object"|"function"|"null"} expectedType
-		 * @param {any} val
-		 * @param {string} key
-		 * @returns {boolean}
+		 * @type {IsOfType}
 		 */
 		var isOfType = function(expectedType, val, key) {
 			var valType = val === null ? 'null' : typeof val;
@@ -209,7 +206,7 @@
 			for (var key in userCfg) {
 
 				key = key.replace(rUnicodeBidi, '').trim();
-				var val = userCfg[key];
+				var val = userCfg[/** @type {keyof SelectiveRollbackConfig} */ (key)];
 
 				// Strict type check
 				var v;
@@ -245,7 +242,7 @@
 
 				if (key === 'watchExpiry') { // Some typo fix
 					var m;
-					val = val.replace(rUnicodeBidi, '').trim();
+					val = String(val).replace(rUnicodeBidi, '').trim();
 					if (/^in|^never/.test(key)) {
 						val = 'indefinite';
 					} else if ((m = /^1\s*(week|month|year)/.exec(val))) {
@@ -258,9 +255,10 @@
 						console.error('[SR] "' + val + '" is not a valid watch-page expiry.');
 						continue;
 					}
+					// @ts-expect-error
 					userCfg[key] = val;
 				}
-				// @ts-ignore
+				// @ts-expect-error
 				cfg[key] = userCfg[key];
 
 			}
@@ -481,7 +479,7 @@
 
 		var langSwitch = (cfg.lang || mw.config.get('wgUserLanguage')).replace(/-.*$/, ''); // Fall back to the user's language in preferences
 		if (Object.keys(i18n).indexOf(langSwitch) !== -1) {
-			return i18n[langSwitch];
+			return i18n[/** @type {Languages} */ (langSwitch)];
 		} else {
 			if (cfg.lang) {
 				console.error('[SR] Sorry, "' + cfg.lang + '" is unavaiable as the interface language.');
@@ -572,7 +570,7 @@
 				summary: void 0,
 				rights: []
 			};
-		}).then(/** @param {{summary: string|undefined; rights: string[];}} res */ function(res) {
+		}).then(/** @param {{ summary: string|undefined; rights: string[]; }} res */ function(res) {
 
 			var fetched = !!res.summary;
 			var summary = res.summary || 'Reverted edits by [[Special:Contributions/$2|$2]] ([[User talk:$2|talk]]) to last revision by [[User:$1|$1]]';
@@ -596,7 +594,7 @@
 	}
 
 	/**
-	 * @typedef {{$label: JQuery<HTMLLabelElement>; $checkbox: JQuery<HTMLInputElement>;}} Box
+	 * @typedef {{ $label: JQuery<HTMLLabelElement>; $checkbox: JQuery<HTMLInputElement>; }} Box
 	 */
 	/**
 	 * Create a labeled checkbox.
@@ -617,13 +615,13 @@
 			.addClass('sr-checkbox-wrapper')
 			.append(
 				($checkbox = $('<input>'))
-					.prop({type: 'checkbox'})
+					.prop({ type: 'checkbox' })
 					.addClass('sr-checkbox'),
 				$('<span>')
 					.text(labelText)
 					.addClass(textClassNames || '')
 			);
-		return {$label: $label, $checkbox: $checkbox};
+		return { $label: $label, $checkbox: $checkbox };
 	}
 
 	/**
@@ -654,7 +652,7 @@
 			 */
 			this.$dialog = $('<div>');
 			this.$dialog
-				.prop({title: 'Selective Rollback'})
+				.prop({ title: 'Selective Rollback' })
 				.css({
 					padding: '1em',
 					maxWidth: '580px'
@@ -689,14 +687,14 @@
 			this.$dialog.append(
 				// Preset summary wrapper
 				$('<div>')
-					.prop({id: 'sr-presetsummary-wrapper'})
-					.css({marginBottom: '0.5em'})
+					.prop({ id: 'sr-presetsummary-wrapper' })
+					.css({ marginBottom: '0.5em' })
 					.append(
 						$('<label>')
-							.prop({htmlFor: psId})
+							.prop({ htmlFor: psId })
 							.text(msg['summary-label-primary']),
 						($summaryList = $('<select>'))
-							.prop({id: psId})
+							.prop({ id: psId })
 							.addClass('sr-dialog-borderbox')
 							.append(
 								$('<option>')
@@ -712,7 +710,7 @@
 										Object.keys(cfg.editSummaries).forEach(function(key) {
 											$options = $options.add(
 												$('<option>')
-													.prop({value: cfg.editSummaries[key]})
+													.prop({ value: cfg.editSummaries[key] })
 													.text(cfg.showKeys ? key : cfg.editSummaries[key])
 											);
 										});
@@ -732,14 +730,14 @@
 					),
 				// Custom summary wrapper
 				$('<div>')
-					.prop({id: 'sr-customsummary-wrapper'})
-					.css({marginBottom: '0.3em'})
+					.prop({ id: 'sr-customsummary-wrapper' })
+					.css({ marginBottom: '0.3em' })
 					.append(
 						$('<label>')
-							.prop({htmlFor: csId})
+							.prop({ htmlFor: csId })
 							.text(msg['summary-label-custom']),
 						($summary = $('<input>'))
-							.prop({id: csId})
+							.prop({ id: csId })
 							.addClass('sr-dialog-borderbox')
 							.off('focus').on('focus', function() {
 								// When the custom summary field is focused, set the dropdown option to "other"
@@ -774,22 +772,22 @@
 					),
 				// Summary preview wrapper
 				$('<div>')
-					.prop({id: 'sr-summarypreview-wrapper'})
+					.prop({ id: 'sr-summarypreview-wrapper' })
 					.append(
 						document.createTextNode(msg['summary-label-preview']),
 						($summaryPreview = $('<div>'))
-							.prop({id: 'sr-summarypreview'})
+							.prop({ id: 'sr-summarypreview' })
 							.addClass('sr-dialog-borderbox'),
 						($summaryPreviewTooltip =  $('<p>'))
-							.prop({id: 'sr-summarypreview-tooltip'})
+							.prop({ id: 'sr-summarypreview-tooltip' })
 							.text(msg['summary-tooltip-preview'])
 							.addClass('sr-dialog-tooltip')
 							.hide()
 					)
-					.css({marginBottom: '0.8em'}),
+					.css({ marginBottom: '0.8em' }),
 				// Markbot option wrapper
 				$('<div>')
-					.prop({id: 'sr-bot-wrapper'})
+					.prop({ id: 'sr-bot-wrapper' })
 					.append(botBox.$label)
 					.css('display', function() {
 						if (meta.rights.indexOf('markbotedits') !== -1) {
@@ -803,29 +801,29 @@
 					}),
 				// Watchlist option wrapper
 				$('<div>')
-					.prop({id: 'sr-watchlist-wrapper'})
+					.prop({ id: 'sr-watchlist-wrapper' })
 					.append(
 						watchBox.$label,
 						($watchUl = $('<ul>'))
-							.prop({id: 'sr-watchlist-expiry'})
-							.css({marginTop: '0.2em'})
+							.prop({ id: 'sr-watchlist-expiry' })
+							.css({ marginTop: '0.2em' })
 							.hide()
 							.append(
 								$('<li>')
 									.append(
 										document.createTextNode(msg['watchlist-expiry-label']),
 										($watchExpiry = $('<select>'))
-											.prop({id: 'sr-watchlist-expiry-dropdown'})
-											.css({marginLeft: '0.5em'})
+											.prop({ id: 'sr-watchlist-expiry-dropdown' })
+											.css({ marginLeft: '0.5em' })
 											.append(
 												[
-													{value: 'indefinite', text: msg['watchlist-expiry-indefinite']},
-													{value: '1 week', text: msg['watchlist-expiry-1week']},
-													{value: '1 month', text: msg['watchlist-expiry-1month']},
-													{value: '3 months', text: msg['watchlist-expiry-3months']},
-													{value: '6 months', text: msg['watchlist-expiry-6months']},
-													{value: '1 year', text: msg['watchlist-expiry-1year']}//,
-													// {value: '3 years', text: msg['watchlist-expiry-3years']} // 1y is the max ATM; phab:T336142
+													{ value: 'indefinite', text: msg['watchlist-expiry-indefinite'] },
+													{ value: '1 week', text: msg['watchlist-expiry-1week'] },
+													{ value: '1 month', text: msg['watchlist-expiry-1month'] },
+													{ value: '3 months', text: msg['watchlist-expiry-3months'] },
+													{ value: '6 months', text: msg['watchlist-expiry-6months'] },
+													{ value: '1 year', text: msg['watchlist-expiry-1year'] }//,
+													// { value: '3 years', text: msg['watchlist-expiry-3years'] } // 1y is the max ATM; phab:T336142
 												]
 												.map(function(obj) {
 													return $('<option>').prop('value', obj.value).text(obj.text);
@@ -925,6 +923,10 @@
 					$.when(lib.getVipList('wikilink'), lib.getLtaList('wikilink')).then(function(vipList, ltaList) {
 						var list = vipList.concat(ltaList);
 						$summary.autocomplete({
+							/**
+							 * @param {{ term: string; }} req
+							 * @param {(data: any) => void} res
+							 */
 							source: function(req, res) {
 								// Limit the list to the maximum number of 10, or it can stick out of the viewport
 								var results = $.ui.autocomplete.filter(list, req.term);
@@ -979,7 +981,7 @@
 							return acc;
 						}, 0);
 						if (!cnt) {
-							mw.notify(msg['msg-linksresolved'], {type: 'warn'});
+							mw.notify(msg['msg-linksresolved'], { type: 'warn' });
 						}
 					}
 				},
@@ -991,7 +993,7 @@
 				}
 			];
 			if (!parentNode) btns.splice(0, 2); // Only leave the "Close" button if parentNode is a falsy value
-			this.$dialog.dialog({buttons: btns});
+			this.$dialog.dialog({ buttons: btns });
 			return this;
 		};
 
@@ -1097,9 +1099,9 @@
 		var /** @type {mw.Api} @readonly */ previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective Rollback/4.3.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
+					'Api-User-Agent': 'Selective Rollback/4.3.5 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)',
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
-					// @ts-ignore
+					// @ts-expect-error
 					'Promise-Non-Write-API-Action': true
 				}
 			}
@@ -1132,7 +1134,7 @@
 					formatversion: '2'
 				}).then(function(res) {
 					return res && res.parse && typeof res.parse.parsedsummary === 'string' ? res.parse.parsedsummary : null;
-				}).catch(/** @param {object} err */ function(_, err) {
+				}).catch(/** @param {Record<string, any>} err */ function(_, err) {
 					if (err && err.exception !== 'abort') {
 						console.log(err);
 					}
@@ -1151,11 +1153,11 @@
 
 	/**
 	 * Object that stores elements related to the SR checkbox.
-	 * @typedef {{$wrapper: JQuery<HTMLSpanElement>;} & Box} SRBox
+	 * @typedef {{ $wrapper: JQuery<HTMLSpanElement>; } & Box} SRBox
 	 */
 	/**
 	 * Object that stores rollback links and their associated SR checkboxes.
-	 * @typedef {Record<string, {rbspan: HTMLSpanElement; box: SRBox?;}>} Link
+	 * @typedef {Record<string, { rbspan: HTMLSpanElement; box: SRBox?; }>} Link
 	 */
 	/**
 	 * Return the SR class.
@@ -1285,8 +1287,8 @@
 					box.$label,
 					$('<b>').text(']')
 				);
-			box.$checkbox.css({margin: '0 0.3em 0 0.2em'});
-			return {$wrapper: $wrapper, $label: box.$label, $checkbox: box.$checkbox};
+			box.$checkbox.css({ margin: '0 0.3em 0 0.2em' });
+			return { $wrapper: $wrapper, $label: box.$label, $checkbox: box.$checkbox };
 		};
 
 		/**
@@ -1340,10 +1342,10 @@
 			if (result === null) {
 				// Replace the innerHTML of the rbspan with a loading spinner
 				$rbspan
-					.prop({'innerHTML': ''})
+					.empty()
 					.append(
 						$('<img>')
-							.prop({src: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif'})
+							.prop({ src: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif' })
 							.css({
 								verticalAlign: 'middle',
 								height: '1em',
@@ -1354,12 +1356,12 @@
 
 				// Replace the innerHTML of the rbspan with a rollback result
 				$rbspan
-					.prop({'innerHTML': ''})
+					.empty()
 					.append(
 						document.createTextNode('['),
 						$('<span>')
 							.text(result ? msg['rbstatus-failed'] + ' (' + result + ')' : msg['rbstatus-reverted'])
-							.css({backgroundColor: result ? 'lightpink' : 'lightgreen'}),
+							.css({ backgroundColor: result ? 'lightpink' : 'lightgreen' }),
 						document.createTextNode(']')
 					)
 					.removeClass('mw-rollback-link')
@@ -1414,7 +1416,7 @@
 			// Post-procedures
 			if (!deferreds.length) {
 				// Show a message if no SR checkbox is checked
-				mw.notify(msg['msg-nonechecked'], {type: 'warn'});
+				mw.notify(msg['msg-nonechecked'], { type: 'warn' });
 			} else {
 				dialog.close();
 				$.when.apply($, deferreds).then(function() {
@@ -1437,7 +1439,7 @@
 								$('<li>').text(msg['rbstatus-notify-failure'] + ': ' + failed)
 							)
 						),
-						{type: 'success'}
+						{ type: 'success' }
 					);
 				});
 			}

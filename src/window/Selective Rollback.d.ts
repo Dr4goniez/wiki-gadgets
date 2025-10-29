@@ -79,3 +79,20 @@ interface Messages {
 	/** Internal text ("Failure") for a mw.notify message that shows how many rollbacks failed. */
 	'rbstatus-notify-failure': string;
 }
+
+type IsOfType = <T extends 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function' | 'null'>(
+	expectedType: T,
+	val: unknown,
+	key: string
+) => val is (
+	T extends 'string' ? string :
+	T extends 'number' ? number :
+	T extends 'bigint' ? bigint :
+	T extends 'boolean' ? boolean :
+	T extends 'symbol' ? symbol :
+	T extends 'undefined' ? undefined :
+	T extends 'object' ? object :
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	T extends 'function' ? (...args: any[]) => any :
+	T extends 'null' ? null : never
+);
