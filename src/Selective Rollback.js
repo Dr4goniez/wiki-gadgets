@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.4.3
+	@version 4.4.4
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -155,7 +155,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/4.4.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/4.4.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -360,7 +360,7 @@ class SelectiveRollback {
 				const formList = /** @type {string} */ (forms).split('|').map((f) => f.trim());
 				for (let i = formList.length - 1; i >= 0; i--) {
 					const form = formList[i];
-					if (!/^\d\s*=/.test(form)) {
+					if (!/^\d+\s*=/.test(form)) {
 						return form;
 					}
 				}
