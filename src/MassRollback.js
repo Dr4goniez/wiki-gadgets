@@ -4,7 +4,7 @@
 
 	@see https://ja.wikipedia.org/wiki/Help:MassRollback
 	@author [[User:Dragoniez]]
-	@version 2.0.1
+	@version 2.0.2
 
 \*************************************************************/
 // @ts-check
@@ -286,6 +286,7 @@ function MassRollbackDialogFactory() {
 		 * @override
 		 */
 		initialize() {
+			// @ts-expect-error
 			super.initialize.apply(this, arguments);
 
 			this.content = new OO.ui.PanelLayout({
@@ -332,10 +333,11 @@ function MassRollbackDialogFactory() {
 				const api = new mw.Api({
 					ajax: {
 						headers: {
-							'Api-User-Agent': 'MassRollback/2.0.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRollback.js)'
+							'Api-User-Agent': 'MassRollback/2.0.2 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRollback.js)'
 						}
 					}
 				});
+				const rArticle = new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)'));
 
 				this.$rbspans.each((_, rbspan) => {
 					// Get anchor in the rollback span
@@ -353,7 +355,15 @@ function MassRollbackDialogFactory() {
 					if (!href) {
 						return markAsFailed(rbspan, 'hrefmissing');
 					}
-					const title = mw.util.getParamValue('title', href);
+					let title = mw.util.getParamValue('title', href);
+					if (!title) {
+						const articleMatch = rArticle.exec(href);
+						if (articleMatch && articleMatch[1]) {
+							try {
+								title = decodeURIComponent(articleMatch[1]);
+							} catch (_) { /**/ }
+						}
+					}
 					if (!title) {
 						return markAsFailed(rbspan, 'titlemissing');
 					}
