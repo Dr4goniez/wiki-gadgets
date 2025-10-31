@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.4.1
+	@version 4.4.2
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -30,7 +30,7 @@ class SelectiveRollback {
 
 	static async init() {
 		await $.when(
-			mw.loader.using(['mediawiki.api', 'mediawiki.util', 'jquery.ui', 'oojs-ui-windows']),
+			mw.loader.using(['mediawiki.api', 'mediawiki.storage', 'mediawiki.util', 'jquery.ui', 'oojs-ui-windows']),
 			$.ready
 		);
 
@@ -156,7 +156,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/4.4.1 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/4.4.2 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -327,48 +327,89 @@ class SelectiveRollback {
 
 	/**
 	 * Retrieves the default rollback summary and the current user's user rights on the local wiki.
-	 * @returns {JQuery.Promise<MetaInfo>}
+	 * @returns {Promise<MetaInfo>}
 	 * @private
 	 */
-	static getMetaInfo() {
-		// TODO: Use storage
-		return api.get({
-			meta: 'allmessages|userinfo',
-			ammessages: 'revertpage',
-			amlang: mw.config.get('wgContentLanguage'), // the language of the wiki
-			uiprop: 'rights'
-		}).then(/** @param {ApiResponse} res */ ({ query }) => {
-			const { allmessages = [], userinfo } = query || {};
-			let summary;
-			if (allmessages[0] && typeof allmessages[0].content === 'string') {
-				summary = allmessages[0].content;
-			}
-			const rights = new Set(userinfo && userinfo.rights || []);
-			return { summary, rights };
-		}).catch((_, err) => {
-			console.warn(err);
+	static async getMetaInfo() {
+		const prefix = 'mw-SelectiveRollback-';
+		const keys = {
+			summary: `${prefix}summary`,
+			rights: `${prefix}rights`
+		};
+		const params = Object.create(null);
+		params.meta = [];
+
+		let summary = mw.storage.get(keys.summary);
+		if (typeof summary !== 'string') {
+			params.meta.push('allmessages');
+			Object.assign(params, {
+				ammessages: 'revertpage',
+				amlang: mw.config.get('wgContentLanguage') // the language of the wiki
+			});
+		}
+
+		/** @type {string[] | null | false} */
+		let rights = mw.storage.getObject(keys.rights);
+		if (!Array.isArray(rights) || !rights.every(v => typeof v === 'string')) {
+			params.meta.push('userinfo');
+			params.uiprop = 'rights';
+		}
+
+		/**
+		 * Extracts the fallback ("other") form from a `'{{PLURAL:$7|...}}'` expression.
+		 * Only the last non-numeric form is used.
+		 * @param {string} str
+		 * @returns {string}
+		 */
+		const parsePluralOther = (str) => {
+			return str.replace(/\{\{\s*PLURAL:\s*\$7\s*\|([^}]+?)\}\}/gi, (match, forms) => {
+				const formList = /** @type {string} */ (forms).split('|').map((f) => f.trim());
+				for (let i = formList.length - 1; i >= 0; i--) {
+					const form = formList[i];
+					if (!/^\d\s*=/.test(form)) {
+						return form;
+					}
+				}
+				return match;
+			});
+		};
+		if (typeof summary === 'string' && rights) {
 			return {
-				summary: void 0,
-				rights: new Set()
+				summary,
+				parsedsummary: parsePluralOther(summary),
+				fetched: true,
+				rights: new Set(rights)
 			};
-		}).then(/** @param {{ summary?: string; rights: Set<string>; }} res */ ({ summary, rights }) => {
-			let fetched = false;
-			if (typeof summary === 'string') {
-				fetched = true;
-			} else {
-				summary = 'Reverted edits by [[Special:Contributions/$2|$2]] ([[User talk:$2|talk]]) to last revision by [[User:$1|$1]]';
-			}
-			let parsedsummary = summary;
+		}
 
-			// Parse {{PLURAL}}
-			const rPlural = /\{\{PLURAL:\$7\|(.+?)(?:\|(.*?))\}\}/gi;
-			let m;
-			while ((m = rPlural.exec(parsedsummary))) {
-				parsedsummary = parsedsummary.replace(m[0], m[2] || m[1]);
-			}
-
-			return { summary, parsedsummary, fetched, rights };
+		/** @type {ApiResponse} */
+		const { query } = await api.get(params).catch((_, err) => {
+			console.warn(err);
+			return /** @type {ApiResponse} */ ({ query: void 0 });
 		});
+
+		const { allmessages = [], userinfo } = query || {};
+		if (allmessages[0] && typeof allmessages[0].content === 'string') {
+			summary = allmessages[0].content;
+			mw.storage.set(keys.summary, summary, 3 * 24 * 60 * 60); // 3 days
+		}
+		if (userinfo && userinfo.rights) {
+			rights = userinfo.rights;
+			mw.storage.setObject(keys.rights, rights, 24 * 60 * 60); // 1 day
+		}
+
+		let fetched = false;
+		if (typeof summary === 'string') {
+			fetched = true;
+		} else {
+			summary = 'Reverted edits by [[Special:Contributions/$2|$2]] ([[User talk:$2|talk]]) to last revision by [[User:$1|$1]]';
+		}
+		return {
+			summary,
+			parsedsummary: parsePluralOther(summary),
+			fetched,
+			rights: rights ? new Set(rights) : new Set()
+		};
 	}
 
 	/**
