@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.4.2
+	@version 4.4.3
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -34,16 +34,7 @@ class SelectiveRollback {
 			$.ready
 		);
 
-		// Stop running the script if there're no visible rollback links
-		// However, keep it running on RCW even when this condition is met, since rollback links may not
-		// exist at page load but can be added dynamically later through AJAX updates
-		const $rbspans = this.collectLinks();
-		if (!$rbspans.length && !isOnRCW) {
-			return;
-		}
-
 		// Set up variables
-		const parentNode = this.getParentNode();
 		api = new mw.Api(this.apiOptions());
 		const cfg = this.getConfig();
 		this.appendStyleTag(cfg);
@@ -63,13 +54,21 @@ class SelectiveRollback {
 			msg = this.i18n.en;
 		}
 
-		// Create a SelectiveRollbackDialog instance
+		// Fetch metadata for script initialization
 		const meta = await this.getMetaInfo();
-		if (!meta.rights.has('rollback')) {
+		this.createCachePurger(msg);
+
+		// Stop running the script if the user doesn't have rollback rights or there're no visible rollback links
+		// However, keep it running on RCW even when the no-link condition is met, since rollback links may not
+		// exist at page load but can be added dynamically later through AJAX updates
+		if (!meta.rights.has('rollback') || (!this.collectLinks().length && !isOnRCW)) {
 			return;
 		}
+
+		// Create a SelectiveRollbackDialog instance
 		const SelectiveRollbackDialog = SelectiveRollbackDialogFactory(cfg, msg, meta);
 		const dialog = new SelectiveRollbackDialog();
+		const parentNode = this.getParentNode();
 		const sr = new this(dialog, cfg, msg, parentNode);
 		dialog.initializeButtons(sr, parentNode);
 
@@ -156,7 +155,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/4.4.2 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/4.4.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -331,15 +330,10 @@ class SelectiveRollback {
 	 * @private
 	 */
 	static async getMetaInfo() {
-		const prefix = 'mw-SelectiveRollback-';
-		const keys = {
-			summary: `${prefix}summary`,
-			rights: `${prefix}rights`
-		};
 		const params = Object.create(null);
 		params.meta = [];
 
-		let summary = mw.storage.get(keys.summary);
+		let summary = mw.storage.get(this.storageKeys.summary);
 		if (typeof summary !== 'string') {
 			params.meta.push('allmessages');
 			Object.assign(params, {
@@ -349,7 +343,7 @@ class SelectiveRollback {
 		}
 
 		/** @type {string[] | null | false} */
-		let rights = mw.storage.getObject(keys.rights);
+		let rights = mw.storage.getObject(this.storageKeys.rights);
 		if (!Array.isArray(rights) || !rights.every(v => typeof v === 'string')) {
 			params.meta.push('userinfo');
 			params.uiprop = 'rights';
@@ -391,11 +385,11 @@ class SelectiveRollback {
 		const { allmessages = [], userinfo } = query || {};
 		if (allmessages[0] && typeof allmessages[0].content === 'string') {
 			summary = allmessages[0].content;
-			mw.storage.set(keys.summary, summary, 3 * 24 * 60 * 60); // 3 days
+			mw.storage.set(this.storageKeys.summary, summary, 3 * 24 * 60 * 60); // 3 days
 		}
 		if (userinfo && userinfo.rights) {
 			rights = userinfo.rights;
-			mw.storage.setObject(keys.rights, rights, 24 * 60 * 60); // 1 day
+			mw.storage.setObject(this.storageKeys.rights, rights, 24 * 60 * 60); // 1 day
 		}
 
 		let fetched = false;
@@ -410,6 +404,38 @@ class SelectiveRollback {
 			fetched,
 			rights: rights ? new Set(rights) : new Set()
 		};
+	}
+
+	/**
+	 * Generates a portlet link that triggers a process of purging `mw.storage` cache.
+	 * @param {Messages} msg
+	 * @returns {void}
+	 * @private
+	 */
+	static createCachePurger(msg) {
+		if (!Object.values(this.storageKeys).some(key => mw.storage.get(key))) {
+			// Don't generate the portlet link if no cache exists
+			return;
+		}
+		const portlet = mw.util.addPortletLink(
+			mw.config.get('skin') === 'minerva' ? 'p-personal' : 'p-cactions',
+			'#',
+			msg['portletlink-uncacher-label'],
+			'ca-sr-uncache',
+			msg['portletlink-uncacher-label'],
+			void 0,
+			'#ca-move'
+		);
+		if (!portlet) {
+			return;
+		}
+		portlet.addEventListener('click', (e) => {
+			e.preventDefault();
+			for (const key of Object.values(this.storageKeys)) {
+				mw.storage.remove(key);
+			}
+			location.reload();
+		});
 	}
 
 	/**
@@ -737,13 +763,14 @@ class SelectiveRollback {
 /** @type {Record<Languages, Messages>} */
 SelectiveRollback.i18n = {
 	ja: {
-		'portletlink-tooltip': 'Selective Rollbackのダイアログを開く',
+		'portletlink-main-tooltip': 'Selective Rollbackのダイアログを開く',
+		'portletlink-uncacher-label': 'Selective Rollbackのキャッシュを破棄', // v4.4.3
 		'summary-label-primary': '編集要約',
-		'summary-option-default': '標準の編集要約',
+		'summary-option-default': '既定の編集要約',
 		'summary-option-custom': 'カスタム',
 		'summary-label-custom': 'カスタム編集要約',
-		'summary-tooltip-$0': '($0は標準の編集要約に置換されます。)',
-		'summary-tooltip-$0-error': '($0は<b>英語の</b>標準編集要約に置換されます。)',
+		'summary-tooltip-$0': '($0は既定の編集要約に置換されます。)',
+		'summary-tooltip-$0-error': '($0は<b>英語の</b>既定編集要約に置換されます。)',
 		'summary-tooltip-specialexpressions': '置換表現',
 		'summary-label-preview': '要約プレビュー', // v4.0.0
 		'summary-tooltip-preview': '(マジックワードは置換されます。)', // v4.0.0
@@ -769,7 +796,8 @@ SelectiveRollback.i18n = {
 		'rbstatus-notify-failure': '失敗' // v4.0.0
 	},
 	en: {
-		'portletlink-tooltip': 'Open the Selective Rollback dialog',
+		'portletlink-main-tooltip': 'Open the Selective Rollback dialog',
+		'portletlink-uncacher-label': 'Purge cache for Selective Rollback', // v4.4.3
 		'summary-label-primary': 'Edit summary',
 		'summary-option-default': 'Default edit summary',
 		'summary-option-custom': 'Custom',
@@ -801,7 +829,8 @@ SelectiveRollback.i18n = {
 		'rbstatus-notify-failure': 'Failure' // v4.0.0
 	},
 	zh: {
-		'portletlink-tooltip': '打开Selective Rollback日志',
+		'portletlink-main-tooltip': '打开Selective Rollback日志',
+		'portletlink-uncacher-label': '清除Selective Rollback缓存', // v4.4.3
 		'summary-label-primary': '编辑摘要',
 		'summary-option-default': '默认编辑摘要',
 		'summary-option-custom': '自定义',
@@ -834,7 +863,8 @@ SelectiveRollback.i18n = {
 	},
 	/** @author [[User:Codename Noreste]] */
 	es: {
-		'portletlink-tooltip': 'Abrir el cuadro de diálogo para Selective Rollback',
+		'portletlink-main-tooltip': 'Abrir el cuadro de diálogo para Selective Rollback',
+		'portletlink-uncacher-label': 'Vaciar caché de Selective Rollback', // v4.4.3
 		'summary-label-primary': 'Resumen de edición',
 		'summary-option-default': 'Resumen de edición predeterminado',
 		'summary-option-custom': 'Personalizado',
@@ -867,7 +897,8 @@ SelectiveRollback.i18n = {
 	},
 	/** @author [[User:NGC 54]] */
 	ro: {
-		'portletlink-tooltip': 'Deschide dialogul Selective Rollback',
+		'portletlink-main-tooltip': 'Deschide dialogul Selective Rollback',
+		'portletlink-uncacher-label': 'Șterge memoria cache pentru Selective Rollback', // v4.4.3
 		'summary-label-primary': 'Descrierea modificării',
 		'summary-option-default': 'Descrierea implicită a modificării',
 		'summary-option-custom': 'Personalizat',
@@ -900,7 +931,8 @@ SelectiveRollback.i18n = {
 	},
 	/** @author [[User:Hide on Rosé]] */
 	vi: {
-		'portletlink-tooltip': 'Mở hộp thoại Lùi sửa theo lựa chọn',
+		'portletlink-main-tooltip': 'Mở hộp thoại Lùi sửa theo lựa chọn',
+		'portletlink-uncacher-label': 'Xóa bộ nhớ đệm cho Lùi sửa theo lựa chọn', // v4.4.3
 		'summary-label-primary': 'Tóm lược sửa đổi',
 		'summary-option-default': 'Tóm lược sửa đổi mặc định',
 		'summary-option-custom': 'Tuỳ chỉnh',
@@ -963,6 +995,13 @@ SelectiveRollback.regex = {
  * Index assigned to each rollback link.
  */
 SelectiveRollback.index = -1;
+/**
+ * Keys for `mw.storage`.
+ */
+SelectiveRollback.storageKeys = {
+	summary: 'mw-SelectiveRollback-summary',
+	rights: 'mw-SelectiveRollback-rights'
+};
 
 /**
  * Removes unicode bidirectional characters from the given string and trims it.
@@ -1256,9 +1295,9 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta) {
 				'#',
 				'Selective Rollback',
 				'ca-sr',
-				msg['portletlink-tooltip'],
+				msg['portletlink-main-tooltip'],
 				void 0,
-				'#ca-move'
+				document.getElementById('ca-sr-uncache') || '#ca-move'
 			);
 			if (this.portlet) {
 				this.portlet.addEventListener('click', (e) => {

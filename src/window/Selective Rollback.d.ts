@@ -48,7 +48,9 @@ export type Languages = 'ja' | 'en' | 'zh' | 'es' | 'ro' | 'vi';
 
 export interface Messages {
 	/** Tooltip for the portlet link used to open the SR dialog. */
-	'portletlink-tooltip': string;
+	'portletlink-main-tooltip': string;
+	/** Label (and tooltip) for the portlet link used to purge cache for Selective Rollback. */
+	'portletlink-uncacher-label': string;
 	/** The label for the edit summary dropdown. */
 	'summary-label-primary': string;
 	/** The text for the default edit summary dropdown option. */
