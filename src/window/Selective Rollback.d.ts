@@ -1,3 +1,11 @@
+/**
+ * The parent node that rollback links should look for to generate SR checkboxes.
+ * * `string` - The CSS selector of the parent node.
+ * * `false` - No checkboxes should be generated.
+ * * `null` - The current page is Recentchanges or Watchlist.
+ */
+export type ParentNode = 'li' | '#mw-diff-ntitle2' | false | null;
+
 declare global {
 	interface Window {
 		selectiveRollbackConfig?: Partial<SelectiveRollbackConfig>;
@@ -18,6 +26,25 @@ export interface SelectiveRollbackConfig {
 }
 
 export type SRConfirm = 'always' | 'never' | 'RCW' | 'nonRCW';
+
+export type IsOfType = <T extends 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function' | 'null'>(
+	expectedType: T,
+	value: unknown,
+	key: string
+) => val is (
+	T extends 'string' ? string :
+	T extends 'number' ? number :
+	T extends 'bigint' ? bigint :
+	T extends 'boolean' ? boolean :
+	T extends 'symbol' ? symbol :
+	T extends 'undefined' ? undefined :
+	T extends 'object' ? object :
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	T extends 'function' ? (...args: any[]) => any :
+	T extends 'null' ? null : never
+);
+
+export type Languages = 'ja' | 'en' | 'zh' | 'es' | 'ro' | 'vi';
 
 export interface Messages {
 	/** Tooltip for the portlet link used to open the SR dialog. */
@@ -82,19 +109,70 @@ export interface Messages {
 	'rbstatus-notify-failure': string;
 }
 
-export type IsOfType = <T extends 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function' | 'null'>(
-	expectedType: T,
-	val: unknown,
-	key: string
-) => val is (
-	T extends 'string' ? string :
-	T extends 'number' ? number :
-	T extends 'bigint' ? bigint :
-	T extends 'boolean' ? boolean :
-	T extends 'symbol' ? symbol :
-	T extends 'undefined' ? undefined :
-	T extends 'object' ? object :
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	T extends 'function' ? (...args: any[]) => any :
-	T extends 'null' ? null : never
-);
+export interface MetaInfo {
+	/** The raw `revertpage` message. */
+	summary: string;
+	/** The `revertpage` message with {{PLURAL}} magic words parsed. */
+	parsedsummary: string;
+	/** Whether the default rollback summary was fetched. */
+	fetched: boolean;
+	/** The current user's user rights. */
+	rights: Set<string>;
+}
+
+export interface ApiResponse {
+	parse?: ApiResponseParse;
+	query?: ApiResponseQuery;
+}
+
+interface ApiResponseParse {
+	title: 'API';
+	pageid: number;
+	parsedsummary: string;
+}
+
+interface ApiResponseQuery {
+	allmessages?: ApiResponseQueryMetaAllmessages[];
+	userinfo?: ApiResponseQueryMetaUserinfo;
+}
+
+interface ApiResponseQueryMetaAllmessages {
+	name: string;
+	normalizedname: string;
+	missing?: true;
+	content?: string; // Missing if "missing" is true
+}
+
+interface ApiResponseQueryMetaUserinfo {
+	id: number;
+	name: string;
+	rights?: string[];
+}
+
+export interface Box {
+	$label: JQuery<HTMLLabelElement>;
+	$checkbox: JQuery<HTMLInputElement>;
+}
+
+export interface SRBox extends Box {
+	$wrapper: JQuery<HTMLSpanElement>;
+}
+
+export interface RollbackLink {
+	[index: string]: {
+		rbspan: HTMLSpanElement;
+		box: SRBox?;
+	};
+}
+
+/**
+ * Additional parameters to `action=rollback`.
+ */
+export interface RollbackParams {
+	/** An empty string will be altered with the default summary by the mediawiki software. */
+	summary: string;
+	markbot: boolean;
+	/** Default: `'preferences'` */
+	watchlist: 'nochange' | 'preferences' | 'unwatch' | 'watch';
+	watchlistexpiry?: string;
+}
