@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.4.0
+	@version 4.4.1
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -21,6 +21,10 @@
  * @type {mw.Api}
  */
 let api;
+/**
+ * Whether the user is on Recentchanges or Watchlist.
+ */
+const isOnRCW = ['Recentchanges', 'Watchlist'].includes(mw.config.get('wgCanonicalSpecialPageName') || '');
 
 class SelectiveRollback {
 
@@ -31,8 +35,10 @@ class SelectiveRollback {
 		);
 
 		// Stop running the script if there're no visible rollback links
+		// However, keep it running on RCW even when this condition is met, since rollback links may not
+		// exist at page load but can be added dynamically later through AJAX updates
 		const $rbspans = this.collectLinks();
-		if (!$rbspans.length) { // TODO: Handle RCW
+		if (!$rbspans.length && !isOnRCW) {
 			return;
 		}
 
@@ -58,7 +64,10 @@ class SelectiveRollback {
 		}
 
 		// Create a SelectiveRollbackDialog instance
-		const meta = await this.getMetaInfo(); // TODO: Check for rollback rights here
+		const meta = await this.getMetaInfo();
+		if (!meta.rights.has('rollback')) {
+			return;
+		}
 		const SelectiveRollbackDialog = SelectiveRollbackDialogFactory(cfg, msg, meta);
 		const dialog = new SelectiveRollbackDialog();
 		const sr = new this(dialog, cfg, msg, parentNode);
@@ -96,7 +105,7 @@ class SelectiveRollback {
 	static getParentNode() {
 		const spName = mw.config.get('wgCanonicalSpecialPageName');
 		let /** @type {ParentNode} */ parentNode;
-		if (spName && ['Recentchanges', 'Watchlist'].includes(spName)) {
+		if (isOnRCW) {
 			parentNode = null;
 		} else if (
 			mw.config.get('wgAction') === 'history' ||
@@ -147,7 +156,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/4.4.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/4.4.1 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -388,12 +397,6 @@ class SelectiveRollback {
 		 */
 		this.parentNode = parentNode;
 		/**
-		 * @type {boolean}
-		 * @readonly
-		 * @private
-		 */
-		this.onRCW = parentNode === null;
-		/**
 		 * @type {SRConfirm}
 		 * @readonly
 		 * @private
@@ -499,8 +502,8 @@ class SelectiveRollback {
 			// Confirm rollback per config
 			!e.shiftKey && (
 				this.confirmation === 'always' ||
-				this.onRCW && this.confirmation === 'RCW' ||
-				!this.onRCW && this.confirmation === 'nonRCW'
+				isOnRCW && this.confirmation === 'RCW' ||
+				!isOnRCW && this.confirmation === 'nonRCW'
 			)
 		) {
 			$rbspan.css({ border: '1px dotted black' }); // Visualize which rollback link has been clicked
@@ -631,7 +634,7 @@ class SelectiveRollback {
 
 			// If no rbspan is bound to the instance any longer, remove the dialog and the portlet link
 			// unless the user is on RCW, where new rollback links may be generated on page content updates
-			if (!this.onRCW && $.isEmptyObject(this.links)) {
+			if (!isOnRCW && $.isEmptyObject(this.links)) {
 				this.dialog.destroy();
 			}
 		}
