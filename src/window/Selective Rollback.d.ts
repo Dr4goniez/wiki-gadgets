@@ -153,13 +153,10 @@ interface ApiResponseQueryMetaUserinfo {
 	rights?: string[];
 }
 
-export interface Box {
+export interface SRBox {
+	$wrapper: JQuery<HTMLSpanElement>;
 	$label: JQuery<HTMLLabelElement>;
 	$checkbox: JQuery<HTMLInputElement>;
-}
-
-export interface SRBox extends Box {
-	$wrapper: JQuery<HTMLSpanElement>;
 }
 
 export interface RollbackLink {

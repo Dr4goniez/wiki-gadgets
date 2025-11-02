@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.2
+	@version 5.0.3
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -164,7 +164,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/5.0.2 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/5.0.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -295,16 +295,16 @@ class SelectiveRollback {
 	static appendStyleTag(cfg) {
 		const style = document.createElement('style');
 		style.textContent =
+			'.sr-rollback {' +
+				'display: inline-block;' +
+				'margin: 0 0.5em;' +
+			'}' +
 			'.sr-checkbox-wrapper {' +
 				'display: inline-block;' +
 			'}' +
 			'.sr-checkbox {' +
-				'margin-right: 0.5em;' +
+				'margin: 0 4px 2px;' +
 				'vertical-align: middle;' +
-			'}' +
-			'.sr-rollback {' +
-				'display: inline-block;' +
-				'margin: 0 0.5em;' +
 			'}' +
 			'.sr-rollback-label {' +
 				'font-weight: bold;' +
@@ -556,15 +556,25 @@ class SelectiveRollback {
 	 * @returns {SRBox}
 	 */
 	static createCheckbox() {
-		const { $label, $checkbox } = createCheckbox('SR', 'sr-rollback-label');
-		const /** @type {JQuery<HTMLSpanElement>} */ $wrapper = $('<span>')
+		const /** @type {JQuery<HTMLSpanElement>} */ $wrapper = $('<span>');
+		const /** @type {JQuery<HTMLLabelElement>} */ $label = $('<label>');
+		const /** @type {JQuery<HTMLInputElement>} */ $checkbox = $('<input>');
+		$wrapper
 			.addClass('sr-rollback')
 			.append(
 				$('<b>').text('['),
-				$label,
-				$('<b>').text(']')
+				$label
+					.addClass('sr-checkbox-wrapper')
+					.append(
+						$checkbox
+							.prop({ type: 'checkbox' })
+							.addClass('sr-checkbox'),
+						$('<span>')
+							.text('SR')
+							.addClass('sr-rollback-label')
+					),
+				$('<b>').html('&nbsp;]')
 			);
-		$checkbox.css({ margin: '0 0.3em 0 0.2em' });
 		return { $wrapper, $label, $checkbox };
 	}
 
@@ -1110,34 +1120,6 @@ function clean(str) {
 }
 
 /**
- * Creates a labeled checkbox.
- * ```html
- * <label class="sr-checkbox-wrapper">
- * 	<input class="sr-checkbox" type="checkbox">
- * 	<span>LABELTEXT</span>
- * </label>
- * ```
- * @param {string} labelText
- * @param {string} [textClassNames] Optional class names to apply to the text of the label.
- * @returns {Box}
- */
-function createCheckbox(labelText, textClassNames) {
-	const /** @type {JQuery<HTMLLabelElement>} */ $label = $('<label>');
-	const /** @type {JQuery<HTMLInputElement>} */ $checkbox = $('<input>');
-	$label
-		.addClass('sr-checkbox-wrapper')
-		.append(
-			$checkbox
-				.prop({ type: 'checkbox' })
-				.addClass('sr-checkbox'),
-			$('<span>')
-				.text(labelText)
-				.addClass(textClassNames || '')
-		);
-	return { $label, $checkbox };
-}
-
-/**
  * Returns the SelectiveRollbackDialog class.
  * @param {SelectiveRollbackConfig} cfg
  * @param {Messages} msg
@@ -1611,7 +1593,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
-	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.2)`;
+	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.3)`;
 	SelectiveRollbackDialog.static.actions = [
 		{
 			action: 'execute',
@@ -1655,7 +1637,6 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
  * @typedef {import('./window/Selective Rollback.d.ts').Messages} Messages
  * @typedef {import('./window/Selective Rollback.d.ts').MetaInfo} MetaInfo
  * @typedef {import('./window/Selective Rollback.d.ts').ApiResponse} ApiResponse
- * @typedef {import('./window/Selective Rollback.d.ts').Box} Box
  * @typedef {import('./window/Selective Rollback.d.ts').SRBox} SRBox
  * @typedef {import('./window/Selective Rollback.d.ts').RollbackLink} RollbackLink
  @typedef {import('./window/Selective Rollback.d.ts').RollbackLinkMap} RollbackLinkMap
