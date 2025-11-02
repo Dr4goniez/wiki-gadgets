@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.3
+	@version 5.0.4
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -164,7 +164,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/5.0.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/5.0.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -1132,7 +1132,9 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	const previewApi = new mw.Api(SelectiveRollback.apiOptions(true));
 	let /** @type {NodeJS.Timeout} */ previewTimeout;
 
-	const dirMismatch = document.dir === 'ltr' && dir === 'rtl';
+	const dirMismatch = document.dir !== dir;
+	const uiStart = dir === 'rtl' ? 'right' : 'left';
+	const uiEnd = dir === 'rtl' ? 'left' : 'right';
 
 	/**
 	 * @param {OO.ui.DropdownWidget} dropdown
@@ -1383,28 +1385,31 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 				return this;
 			}
 
-			// If a right-to-left language is used as SR's interface language but the document direction
-			// is left-to-right, set up style overrides because MW doesn't handle them
+			// If the interface language direction differs from the document direction
+			// (e.g., SR uses an RTL interface on an LTR wiki or vice versa), apply
+			// manual style overrides for layout elements that MediaWiki's OOUI doesn't
+			// automatically mirror. This remaps left/right-related properties to logical
+			// "start" and "end" positions based on the interface direction.
 			const $el = this.$element;
 			$el.find('.oo-ui-processDialog-actions-safe').css({
-				left: 'unset',
-				right: '0'
+				[uiStart]: '0',
+				[uiEnd]: 'unset'
 			});
 			$el.find('.oo-ui-processDialog-actions-primary').css({
-				left: '0',
-				right: 'unset'
+				[uiStart]: 'unset',
+				[uiEnd]: '0'
 			});
 			$el.find('.oo-ui-comboBoxInputWidget .oo-ui-inputWidget-input').css({
-				'border-top-right-radius': 'unset',
-				'border-bottom-right-radius': 'unset',
-				'border-right-width': '1px',
-				'border-top-left-radius': '0',
-				'border-bottom-left-radius': '0',
-				'border-left-width': '0'
+				[`border-top-${uiStart}-radius`]: 'unset',
+				[`border-bottom-${uiStart}-radius`]: 'unset',
+				[`border-${uiStart}-width`]: '1px',
+				[`border-top-${uiEnd}-radius`]: '0',
+				[`border-bottom-${uiEnd}-radius`]: '0',
+				[`border-${uiEnd}-width`]: '0'
 			});
 			$el.find('.oo-ui-fieldLayout.oo-ui-labelElement.oo-ui-fieldLayout-align-inline > .oo-ui-fieldLayout-body > .oo-ui-fieldLayout-header').css({
-				'padding-left': 'unset',
-				'padding-right': '6px'
+				[`padding-${uiStart}`]: '6px',
+				[`padding-${uiEnd}`]: 'unset'
 			});
 
 			return this;
@@ -1428,8 +1433,8 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 			return super.getReadyProcess().next(() => {
 				if (dirMismatch) {
 					this.$element.find('.oo-ui-processDialog-actions-other .oo-ui-actionWidget > .oo-ui-buttonElement-button').css({
-						'border-right-color': 'transparent',
-						'border-left-color': 'var(--border-color-subtle,#c8ccd1)'
+						[`border-${uiStart}-color`]: 'transparent',
+						[`border-${uiEnd}-color`]: 'var(--border-color-subtle,#c8ccd1)'
 					});
 				}
 			});
@@ -1593,7 +1598,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
-	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.3)`;
+	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.4)`;
 	SelectiveRollbackDialog.static.actions = [
 		{
 			action: 'execute',
