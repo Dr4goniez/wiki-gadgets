@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.5
+	@version 5.0.6
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -164,7 +164,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/5.0.5 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/5.0.6 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -850,7 +850,7 @@ SelectiveRollback.i18n = {
 		'summary-help-$0-error': '<code>$0</code>は<b>英語の</b>既定編集要約に置換されます。',
 		'summary-help-specialexpressions': '置換表現', // Deprecated since v5.0.0
 		'summary-label-preview': '要約プレビュー', // v4.0.0
-		'summary-help-preview': '<code>{{PLURAL}}</code>は置換されます。', // Updated in v5.0.0
+		'summary-help-preview': '<code>{{PLURAL:$7}}</code>は置換されます。', // Updated in v5.0.0
 		'markbot-label': 'ボット編集として巻き戻し',
 		'watchlist-label': '対象ページをウォッチリストに追加',
 		'watchlist-expiry-label': '期間', // Deprecated since v5.0.0
@@ -884,7 +884,7 @@ SelectiveRollback.i18n = {
 		'summary-help-$0-error': '<code>$0</code> will be replaced with the default rollback summary <b>in English</b>.',
 		'summary-help-specialexpressions': 'Replacement expressions', // Deprecated since v5.0.0
 		'summary-label-preview': 'Summary preview', // v4.0.0
-		'summary-help-preview': '<code>{{PLURAL}}</code> will be replaced.', // Updated in v5.0.0
+		'summary-help-preview': '<code>{{PLURAL:$7}}</code> will be replaced.', // Updated in v5.0.0
 		'markbot-label': 'Mark rollbacks as bot edits',
 		'watchlist-label': 'Add the target pages to watchlist',
 		'watchlist-expiry-label': 'Expiry', // Deprecated since v5.0.0
@@ -922,7 +922,7 @@ SelectiveRollback.i18n = {
 		'summary-help-$0-error': '<code>$0</code>将会被默认编辑摘要为<b>英文</b>替代。',
 		'summary-help-specialexpressions': '替换表达', // Deprecated since v5.0.0
 		'summary-label-preview': '编辑摘要的预览', // v4.0.0
-		'summary-help-preview': '<code>{{PLURAL}}</code>将被替换。', // Updated in v5.0.0
+		'summary-help-preview': '<code>{{PLURAL:$7}}</code>将被替换。', // Updated in v5.0.0
 		'markbot-label': '标记为机器人编辑',
 		'watchlist-label': '将目标页面加入监视页面',
 		'watchlist-expiry-label': '时间', // Deprecated since v5.0.0
@@ -960,7 +960,7 @@ SelectiveRollback.i18n = {
 		'summary-help-$0-error': '<code>$0</code> será reemplazado con él resumen de edición predeterminado <b>en inglés</b>.',
 		'summary-help-specialexpressions': 'Expresiones de reemplazo', // Deprecated since v5.0.0
 		'summary-label-preview': 'Vista previa del resumen', // v4.0.0
-		'summary-help-preview': '<code>{{PLURAL}}</code> será reemplazado.', // Updated in v5.0.0
+		'summary-help-preview': '<code>{{PLURAL:$7}}</code> será reemplazado.', // Updated in v5.0.0
 		'markbot-label': 'Marcar las reversiones como ediciones del bot',
 		'watchlist-label': 'Añadir las páginas de destino a la lista de seguimiento',
 		'watchlist-expiry-label': 'Expiración', // Deprecated since v5.0.0
@@ -998,7 +998,7 @@ SelectiveRollback.i18n = {
 		'summary-help-$0-error': '<code>$0</code> va fi înlocuit cu descrierea implicită a revenirii <b>în engleză</b>.',
 		'summary-help-specialexpressions': 'Expresii de înlocuire', // Deprecated since v5.0.0
 		'summary-label-preview': 'Previzualizare descriere', // v4.0.0
-		'summary-help-preview': '<code>{{PLURAL}}</code> va fi înlocuit.', // Updated in v5.0.0
+		'summary-help-preview': '<code>{{PLURAL:$7}}</code> va fi înlocuit.', // Updated in v5.0.0
 		'markbot-label': 'Marchează revenirile drept modificări făcute de robot',
 		'watchlist-label': 'Adaugă paginile țintă la pagini urmărite',
 		'watchlist-expiry-label': 'Expiră', // Deprecated since v5.0.0
@@ -1036,7 +1036,7 @@ SelectiveRollback.i18n = {
 		'summary-help-$0-error': '<code>$0</code> sẽ được thay bằng tóm lược sửa đổi mặc định <b>trong tiếng Anh</b>.',
 		'summary-help-specialexpressions': 'Thay thế biểu thức', // Deprecated since v5.0.0
 		'summary-label-preview': 'Xem trước tóm lược', // v4.0.0
-		'summary-help-preview': '<code>{{PLURAL}}</code> sẽ được thay thế.', // Updated in v5.0.0
+		'summary-help-preview': '<code>{{PLURAL:$7}}</code> sẽ được thay thế.', // Updated in v5.0.0
 		'markbot-label': 'Đánh dấu là sửa đổi bot',
 		'watchlist-label': 'Thêm trang mục tiêu vào danh sách theo dõi',
 		'watchlist-expiry-label': 'Thời hạn', // Deprecated since v5.0.0
@@ -1074,7 +1074,7 @@ SelectiveRollback.i18n = {
 		'summary-help-$0-error': '<code>$0</code> سيتم استبداله بملخص التراجع الافتراضي <b>باللغة الإنجليزية</b>.',
 		'summary-help-specialexpressions': 'عبارات الاستبدال', // Deprecated since v5.0.0
 		'summary-label-preview': 'معاينة الملخص', // v4.0.0
-		'summary-help-preview': 'سيتم استبدال الكلمات السحرية (مثل <code>{{PLURAL}}</code>).', // Updated in v5.0.0
+		'summary-help-preview': 'سيتم استبدال الكلمات السحرية (مثل <code>{{PLURAL:$7}}</code>).', // Updated in v5.0.0
 		'markbot-label': 'تمييز التراجعات كتحريرات بوت',
 		'watchlist-label': 'إضافة الصفحات المستهدفة إلى قائمة المراقبة',
 		'watchlist-expiry-label': 'مدة الصلاحية', // Deprecated since v5.0.0
@@ -1625,7 +1625,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
-	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.5)`;
+	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.6)`;
 	SelectiveRollbackDialog.static.actions = [
 		{
 			action: 'execute',
