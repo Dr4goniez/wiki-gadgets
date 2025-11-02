@@ -44,9 +44,11 @@ export type IsOfType = <T extends 'string' | 'number' | 'bigint' | 'boolean' | '
 	T extends 'null' ? null : never
 );
 
-export type Languages = 'ja' | 'en' | 'zh' | 'es' | 'ro' | 'vi';
+export type Languages = 'ja' | 'en' | 'zh' | 'es' | 'ro' | 'vi' | 'ar';
 
 export interface Messages {
+	/** Optional translation for "Selective Rollback". */
+	'scriptname': string;
 	/** Tooltip for the portlet link used to open the SR dialog. */
 	'portletlink-main-tooltip': string;
 	/** Label (and tooltip) for the portlet link used to purge cache for Selective Rollback. */

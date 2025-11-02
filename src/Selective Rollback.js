@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.0
+	@version 5.0.1
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -41,7 +41,7 @@ class SelectiveRollback {
 
 		// Get localized message object
 		let /** @type {Messages} */ msg;
-		const langSwitch = /** @type {Languages} */ (
+		let langSwitch = /** @type {Languages} */ (
 			// Fall back to the user's language in preferences
 			(cfg.lang || mw.config.get('wgUserLanguage')).replace(/-.*$/, '')
 		);
@@ -52,7 +52,10 @@ class SelectiveRollback {
 				console.error(`[SR] Sorry, Selective Rollback does not support ${cfg.lang} as its interface language.`);
 			}
 			msg = this.i18n.en;
+			langSwitch = 'en';
 		}
+		/** @type {'ltr' | 'rtl'} */
+		const dir = langSwitch === 'ar' ? 'rtl' : 'ltr';
 
 		// Fetch metadata for script initialization
 		const meta = await this.getMetaInfo();
@@ -67,9 +70,13 @@ class SelectiveRollback {
 
 		// Create a SelectiveRollbackDialog instance
 		const parentNode = this.getParentNode();
-		const SelectiveRollbackDialog = SelectiveRollbackDialogFactory(cfg, msg, meta, parentNode);
+		const SelectiveRollbackDialog = SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode);
 		const autocompleteSources = await this.getAutocompleteSourcesForJawiki();
-		const dialog = new SelectiveRollbackDialog({ size: 'large', classes: ['sr-dialog'] }, autocompleteSources);
+		const dialog = new SelectiveRollbackDialog({
+			$element: $('<div>').attr({ dir }),
+			classes: ['sr-dialog'],
+			size: 'large'
+		}, autocompleteSources);
 		SelectiveRollbackDialog.windowManager.addWindows([dialog]);
 		const sr = new this(dialog, cfg, msg, parentNode);
 		dialog.bindSR(sr);
@@ -157,7 +164,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/5.0.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/5.0.1 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -795,6 +802,7 @@ class SelectiveRollback {
 /** @type {Record<Languages, Messages>} */
 SelectiveRollback.i18n = {
 	ja: {
+		'scriptname': 'Selective Rollback', // Added in v5.0.1
 		'portletlink-main-tooltip': 'Selective Rollbackのダイアログを開く',
 		'portletlink-uncacher-label': 'Selective Rollbackのキャッシュを破棄', // v4.4.3
 		'summary-label-primary': '編集要約',
@@ -828,6 +836,7 @@ SelectiveRollback.i18n = {
 		'rbstatus-notify-failure': '失敗' // v4.0.0
 	},
 	en: {
+		'scriptname': 'Selective Rollback', // Added in v5.0.1
 		'portletlink-main-tooltip': 'Open the Selective Rollback dialog',
 		'portletlink-uncacher-label': 'Purge cache for Selective Rollback', // v4.4.3
 		'summary-label-primary': 'Edit summary',
@@ -860,7 +869,12 @@ SelectiveRollback.i18n = {
 		'rbstatus-notify-success': 'Success', // v4.0.0
 		'rbstatus-notify-failure': 'Failure' // v4.0.0
 	},
+	/**
+	 * @author [[User:User xyBW847toYwJSYpc]] (formerly known as PAVLOV)
+	 * @since 1.2.3
+	 */
 	zh: {
+		'scriptname': 'Selective Rollback', // Added in v5.0.1
 		'portletlink-main-tooltip': '打开Selective Rollback日志',
 		'portletlink-uncacher-label': '清除Selective Rollback缓存', // v4.4.3
 		'summary-label-primary': '编辑摘要',
@@ -893,8 +907,12 @@ SelectiveRollback.i18n = {
 		'rbstatus-notify-success': '成功', // v4.0.0
 		'rbstatus-notify-failure': '失败' // v4.0.0
 	},
-	/** @author [[User:Codename Noreste]] */
+	/**
+	 * @author [[User:Codename Noreste]]
+	 * @since 3.2.0
+	 */
 	es: {
+		'scriptname': 'Selective Rollback', // Added in v5.0.1
 		'portletlink-main-tooltip': 'Abrir el cuadro de diálogo para Selective Rollback',
 		'portletlink-uncacher-label': 'Vaciar caché de Selective Rollback', // v4.4.3
 		'summary-label-primary': 'Resumen de edición',
@@ -927,8 +945,12 @@ SelectiveRollback.i18n = {
 		'rbstatus-notify-success': 'Éxito', // v4.0.0
 		'rbstatus-notify-failure': 'Falla' // v4.0.0
 	},
-	/** @author [[User:NGC 54]] */
+	/**
+	 * @author [[User:NGC 54]]
+	 * @since 3.3.0
+	 */
 	ro: {
+		'scriptname': 'Selective Rollback', // Added in v5.0.1
 		'portletlink-main-tooltip': 'Deschide dialogul Selective Rollback',
 		'portletlink-uncacher-label': 'Șterge memoria cache pentru Selective Rollback', // v4.4.3
 		'summary-label-primary': 'Descrierea modificării',
@@ -961,8 +983,12 @@ SelectiveRollback.i18n = {
 		'rbstatus-notify-success': 'Succes', // v4.0.0
 		'rbstatus-notify-failure': 'Eșec' // v4.0.0
 	},
-	/** @author [[User:Hide on Rosé]] */
+	/**
+	 * @author [[User:Hide on Rosé]]
+	 * @since 4.1.0
+	 */
 	vi: {
+		'scriptname': 'Lùi sửa theo lựa chọn', // Added in v5.0.1
 		'portletlink-main-tooltip': 'Mở hộp thoại Lùi sửa theo lựa chọn',
 		'portletlink-uncacher-label': 'Xóa bộ nhớ đệm cho Lùi sửa theo lựa chọn', // v4.4.3
 		'summary-label-primary': 'Tóm lược sửa đổi',
@@ -994,6 +1020,44 @@ SelectiveRollback.i18n = {
 		'rbstatus-failed': 'lùi lại không thành công',
 		'rbstatus-notify-success': 'Thành công', // v4.0.0
 		'rbstatus-notify-failure': 'Không thành công' // v4.0.0
+	},
+	/**
+	 * @author [[User:Gerges]]
+	 * @since 5.0.1
+	 */
+	ar: {
+		'scriptname': 'للتراجع الانتقائي', // Added in v5.0.1
+		'portletlink-main-tooltip': 'فتح نافذة التراجع الانتقائي',
+		'portletlink-uncacher-label': 'تطهير ذاكرة التخزين المؤقت للتراجع الانتقائي', // v4.4.3
+		'summary-label-primary': 'ملخص التعديل',
+		'summary-option-default': 'ملخص التعديل الافتراضي',
+		'summary-option-custom': 'مخصص',
+		'summary-label-custom': 'ملخص تعديل مخصص',
+		'summary-help-$0': '<code>$0</code> سيتم استبداله بملخص التراجع الافتراضي.',
+		'summary-help-$0-error': '<code>$0</code> سيتم استبداله بملخص التراجع الافتراضي <b>باللغة الإنجليزية</b>.',
+		'summary-help-specialexpressions': 'عبارات الاستبدال', // Deprecated since v5.0.0
+		'summary-label-preview': 'معاينة الملخص', // v4.0.0
+		'summary-help-preview': 'سيتم استبدال الكلمات السحرية (مثل <code>{{PLURAL}}</code>).', // Updated in v5.0.0
+		'markbot-label': 'تمييز التراجعات كتحريرات بوت',
+		'watchlist-label': 'إضافة الصفحات المستهدفة إلى قائمة المراقبة',
+		'watchlist-expiry-label': 'مدة الصلاحية', // Deprecated since v5.0.0
+		'watchlist-expiry-indefinite': 'غير محددة',
+		'watchlist-expiry-1week': 'أسبوع واحد',
+		'watchlist-expiry-1month': 'شهر واحد',
+		'watchlist-expiry-3months': '3 أشهر',
+		'watchlist-expiry-6months': '6 أشهر',
+		'watchlist-expiry-1year': 'سنة واحدة',
+		'button-rollback': 'تراجع عن العناصر المحددة', // Updated in v5.0.0
+		'button-documentation': 'التوثيق', // Added in v5.0.0
+		'button-selectall': 'تحديد الكل', // Updated in v5.0.0; TODO: Reflect "Select all"
+		'button-close': 'إغلاق', // Deprecated since v5.0.0
+		'msg-nonechecked': 'لم يتم تحديد أي مربع اختيار.',
+		'msg-linksresolved': 'تم حل جميع روابط التراجع في هذه الصفحة.',
+		'msg-confirm': 'هل أنت متأكد أنك تريد التراجع عن هذا التعديل؟',
+		'rbstatus-reverted': 'تم التراجع',
+		'rbstatus-failed': 'فشل التراجع',
+		'rbstatus-notify-success': 'تم بنجاح', // v4.0.0
+		'rbstatus-notify-failure': 'فشل' // v4.0.0
 	}
 };
 SelectiveRollback.regex = {
@@ -1077,13 +1141,16 @@ function createCheckbox(labelText, textClassNames) {
  * Returns the SelectiveRollbackDialog class.
  * @param {SelectiveRollbackConfig} cfg
  * @param {Messages} msg
+ * @param {'ltr' | 'rtl'} dir
  * @param {MetaInfo} meta
  * @param {ParentNode} parentNode
  * @returns
  */
-function SelectiveRollbackDialogFactory(cfg, msg, meta, parentNode) {
+function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	const previewApi = new mw.Api(SelectiveRollback.apiOptions(true));
 	let /** @type {NodeJS.Timeout} */ previewTimeout;
+
+	const dirMismatch = document.dir === 'ltr' && dir === 'rtl';
 
 	/**
 	 * @param {OO.ui.DropdownWidget} dropdown
@@ -1128,7 +1195,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta, parentNode) {
 			this.portlet = mw.util.addPortletLink(
 				mw.config.get('skin') === 'minerva' ? 'p-personal' : 'p-cactions',
 				'#',
-				'Selective Rollback',
+				msg.scriptname,
 				'ca-sr',
 				msg['portletlink-main-tooltip'],
 				void 0,
@@ -1154,7 +1221,10 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta, parentNode) {
 				});
 				selectAll.on('click', () => this.sr.selectAll());
 				const saLayout = new OO.ui.FieldLayout(selectAll);
-				saLayout.$element.css({ 'margin': '0 0 -1em auto', 'width': 'min-content' });
+				saLayout.$element.css({
+					margin: dir === 'ltr' ? '0 0 -1em auto' : '0 auto -1em 0',
+					width: 'min-content'
+				});
 				items.push(saLayout);
 			}
 
@@ -1327,6 +1397,34 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta, parentNode) {
 			// @ts-expect-error
 			this.$body.append(this.content.$element);
 
+			if (!dirMismatch) {
+				return this;
+			}
+
+			// If a right-to-left language is used as SR's interface language but the document direction
+			// is left-to-right, set up style overrides because MW doesn't handle them
+			const $el = this.$element;
+			$el.find('.oo-ui-processDialog-actions-safe').css({
+				left: 'unset',
+				right: '0'
+			});
+			$el.find('.oo-ui-processDialog-actions-primary').css({
+				left: '0',
+				right: 'unset'
+			});
+			$el.find('.oo-ui-comboBoxInputWidget .oo-ui-inputWidget-input').css({
+				'border-top-right-radius': 'unset',
+				'border-bottom-right-radius': 'unset',
+				'border-right-width': '1px',
+				'border-top-left-radius': '0',
+				'border-bottom-left-radius': '0',
+				'border-left-width': '0'
+			});
+			$el.find('.oo-ui-fieldLayout.oo-ui-labelElement.oo-ui-fieldLayout-align-inline > .oo-ui-fieldLayout-body > .oo-ui-fieldLayout-header').css({
+				'padding-left': 'unset',
+				'padding-right': '6px'
+			});
+
 			return this;
 		}
 
@@ -1337,6 +1435,21 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta, parentNode) {
 		getSetupProcess() {
 			return super.getSetupProcess().next(() => {
 				this.getActions().setMode(parentNode ? 'nonRCW' : 'RCW');
+			});
+		}
+
+		/**
+		 * @inheritdoc
+		 * @override
+		 */
+		getReadyProcess() {
+			return super.getReadyProcess().next(() => {
+				if (dirMismatch) {
+					this.$element.find('.oo-ui-processDialog-actions-other .oo-ui-actionWidget > .oo-ui-buttonElement-button').css({
+						'border-right-color': 'transparent',
+						'border-left-color': 'var(--border-color-subtle,#c8ccd1)'
+					});
+				}
 			});
 		}
 
@@ -1498,7 +1611,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta, parentNode) {
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
-	SelectiveRollbackDialog.static.title = 'Selective Rollback (v5.0.0)';
+	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.1)`;
 	SelectiveRollbackDialog.static.actions = [
 		{
 			action: 'execute',
