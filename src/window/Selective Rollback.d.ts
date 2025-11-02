@@ -31,7 +31,7 @@ export type IsOfType = <T extends 'string' | 'number' | 'bigint' | 'boolean' | '
 	expectedType: T,
 	value: unknown,
 	key: string
-) => val is (
+) => value is (
 	T extends 'string' ? string :
 	T extends 'number' ? number :
 	T extends 'bigint' ? bigint :
@@ -59,16 +59,16 @@ export interface Messages {
 	'summary-option-custom': string;
 	/** The label for the custom edit summary inputbox. */
 	'summary-label-custom': string;
-	/** Tooltip that says $0 will be replaced with the default edit summary. */
-	'summary-tooltip-$0': string;
-	/** [Contains a \<b> tag]: Tooltip that says $0 will be replaced with the default edit summary **in English**. */
-	'summary-tooltip-$0-error': string;
+	/** Help text saying $0 will be replaced with the default edit summary. */
+	'summary-help-$0': string;
+	/** [Contains a \<b> tag]: Help text saying $0 will be replaced with the default edit summary **in English**. */
+	'summary-help-$0-error': string;
 	/** The leading text for replacement expressions. */
-	'summary-tooltip-specialexpressions': string;
+	'summary-help-specialexpressions': string;
 	/** The label for the summary preview div. */
 	'summary-label-preview': string;
-	/** Tooltip that says magic words in previewed summary will be replaced. */
-	'summary-tooltip-preview': string;
+	/** Help text for summary preview saying {{PLURAL}} will be parsed. */
+	'summary-help-preview': string;
 	/** The label for the markbot checkbox. */
 	'markbot-label': string;
 	/** The label for the watch-page checkbox. */
@@ -87,12 +87,12 @@ export interface Messages {
 	'watchlist-expiry-6months': string;
 	/** The text for the 1-year expiry dropdown option. */
 	'watchlist-expiry-1year': string;
-	/** The text for the 3-year expiry dropdown option. */
-	'watchlist-expiry-3years': string;
-	/** The text for the "Rollback checked" dialog button. */
-	'button-rollbackchecked': string;
-	/** The text for the "Check all" dialog button. */
-	'button-checkall': string;
+	/** The text for the "Rollback" dialog button. */
+	'button-rollback': string;
+	/** The text for the "Docs" dialog button. */
+	'button-documentation': string;
+	/** The text for the "Select all" dialog button. */
+	'button-selectall': string;
 	/** The text for the "Close" dialog button. */
 	'button-close': string;
 	/** A mw.notify message for when no checkbox is checked for selective rollback. */
@@ -161,10 +161,12 @@ export interface SRBox extends Box {
 }
 
 export interface RollbackLink {
-	[index: string]: {
-		rbspan: HTMLSpanElement;
-		box: SRBox?;
-	};
+	rbspan: HTMLSpanElement;
+	box: SRBox?;
+}
+
+export interface RollbackLinkMap {
+	[index: string]: RollbackLink;
 }
 
 /**

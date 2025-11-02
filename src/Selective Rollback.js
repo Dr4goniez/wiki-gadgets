@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 4.4.4
+	@version 5.0.0
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -30,7 +30,7 @@ class SelectiveRollback {
 
 	static async init() {
 		await $.when(
-			mw.loader.using(['mediawiki.api', 'mediawiki.storage', 'mediawiki.util', 'jquery.ui', 'oojs-ui-windows']),
+			mw.loader.using(['mediawiki.api', 'mediawiki.storage', 'mediawiki.util', 'oojs-ui']),
 			$.ready
 		);
 
@@ -66,11 +66,13 @@ class SelectiveRollback {
 		}
 
 		// Create a SelectiveRollbackDialog instance
-		const SelectiveRollbackDialog = SelectiveRollbackDialogFactory(cfg, msg, meta);
-		const dialog = new SelectiveRollbackDialog();
 		const parentNode = this.getParentNode();
+		const SelectiveRollbackDialog = SelectiveRollbackDialogFactory(cfg, msg, meta, parentNode);
+		const autocompleteSources = await this.getAutocompleteSourcesForJawiki();
+		const dialog = new SelectiveRollbackDialog({ size: 'large', classes: ['sr-dialog'] }, autocompleteSources);
+		SelectiveRollbackDialog.windowManager.addWindows([dialog]);
 		const sr = new this(dialog, cfg, msg, parentNode);
-		dialog.initializeButtons(sr, parentNode);
+		dialog.bindSR(sr);
 
 		// Set up a hook for page content updates
 		const hook = mw.hook('wikipage.content');
@@ -155,7 +157,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/4.4.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/5.0.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -301,26 +303,26 @@ class SelectiveRollback {
 				'font-weight: bold;' +
 				`color: ${cfg.checkboxLabelColor};` +
 			'}' +
-			'.sr-dialog-borderbox {' +
-				'display: block;' +
-				'width: 100%;' +
-				'box-sizing: border-box;' +
-				'border: 1px solid #777;' +
-				'border-radius: 1%;' +
-				'padding: 2px 4px;' +
-			'}' +
-			'.sr-dialog-tooltip {' +
-				'font-size: smaller;' +
-				'margin: 0;' +
+			'.sr-dialog .oo-ui-inline-help code {' +
+				'color: inherit;' +
 			'}' +
 			'#sr-summarypreview {' +
-				'max-height: 5em;' +
-				'overflow: auto;' +
-				'overflow-wrap: break-word;' +
-				'word-wrap: break-word;' +
-				'color: var(--color-base, white);' +
-				'background-color: var(--background-color-neutral, #54595d);' +
-			'}';
+				'background-color: var(--background-color-neutral-subtle, #f8f9fa);' +
+				'color: var(--color-emphasized, #000);' +
+				'margin: 0;' +
+				'border: 1px solid var(--border-color-base, #a2a9b1);' +
+				'border-radius: 2px;' +
+				'padding: 5px 8px;' +
+				'font-size: inherit;' +
+				'font-family: inherit;' +
+				'line-height: 1.42857143em;' +
+				'width: 100%;' +
+				'box-sizing: border-box;' +
+				'vertical-align: middle;' +
+				'max-width: 50em;' +
+				'min-height: 2.2857143em;' +
+			'}' +
+			'';
 		document.head.appendChild(style);
 	}
 
@@ -439,6 +441,32 @@ class SelectiveRollback {
 	}
 
 	/**
+	 * @returns {JQuery.Promise<string[]>}
+	 * @private
+	 */
+	static getAutocompleteSourcesForJawiki() {
+		const moduleName = 'ext.gadget.WpLibExtra';
+		if (mw.config.get('wgWikiID') !== 'jawiki' || !new Set(mw.loader.getModuleNames()).has(moduleName)) {
+			return $.Deferred().resolve([]).promise();
+		}
+
+		/** @type {string[] | false | null} */
+		const cache = mw.storage.getObject(this.storageKeys.autocomplete);
+		if (Array.isArray(cache) && cache.every(el => typeof el === 'string')) {
+			return $.Deferred().resolve(cache).promise();
+		}
+
+		return mw.loader.using(moduleName).then((require) => {
+			const /** @type {WpLibExtra} */ lib = require(moduleName);
+			return $.when(lib.getVipList('wikilink'), lib.getLtaList('wikilink')).then((vipList, ltaList) => {
+				const list = vipList.concat(ltaList);
+				mw.storage.setObject(this.storageKeys.autocomplete, list, 24 * 60 * 60); // 1 day
+				return list;
+			});
+		});
+	}
+
+	/**
 	 * @param {InstanceType<ReturnType<typeof SelectiveRollbackDialogFactory>>} dialog
 	 * @param {SelectiveRollbackConfig} cfg
 	 * @param {Messages} msg
@@ -481,7 +509,7 @@ class SelectiveRollback {
 		 * The actual (un)binding happens via {@link initializeLinks}, which should be called each time
 		 * when the `wikipage_content` hook is fired.
 		 *
-		 * @type {RollbackLink}
+		 * @type {RollbackLinkMap}
 		 */
 		this.links = Object.create(null);
 	}
@@ -722,41 +750,45 @@ class SelectiveRollback {
 	}
 
 	/**
-	 * Performs selective rollback.
+	 * Performs selective rollback on the given links.
+	 * @param {RollbackLink[]} selectedLinks
 	 * @returns {Promise<void>}
 	 */
-	async selectiveRollback() {
-		// Perform AJAX rollback on links whose associated SR checkboxes are checked
-		const /** @type {Promise<boolean>[]} */ batches = [];
+	async selectiveRollback(selectedLinks) {
 		const params = this.dialog.getParams();
-		for (const { box, rbspan } of Object.values(this.links)) {
-			if (box && box.$checkbox.is(':checked')) {
-				batches.push(this.ajaxRollback(rbspan, box, params));
-			}
-		}
+		this.dialog.close();
+		const batches = selectedLinks.map(({ box, rbspan }) => {
+			return this.ajaxRollback(rbspan, box, params);
+		});
 
-		// Post-procedures
-		if (!batches.length) {
-			// Show a message if no SR checkbox is checked
-			mw.notify(this.msg['msg-nonechecked'], { type: 'warn' });
-		} else {
-			this.dialog.close();
-			const results = await Promise.all(batches);
-			let success = 0, fail = 0;
-			for (const bool of results) {
-				bool ? success++ : fail++;
-			}
-			mw.notify(
-				$('<div>').append(
-					`Selective Rollback (${success + fail})`,
-					$('<ul>').append(
-						$('<li>').text(`${this.msg['rbstatus-notify-success']}: ${success}`),
-						$('<li>').text(`${this.msg['rbstatus-notify-failure']}: ${fail}`)
-					)
-				),
-				{ type: 'success' }
-			);
+		const results = await Promise.all(batches);
+		let success = 0, fail = 0;
+		for (const bool of results) {
+			bool ? success++ : fail++;
 		}
+		mw.notify(
+			$('<div>').append(
+				`Selective Rollback (${success + fail})`,
+				$('<ul>').append(
+					$('<li>').text(`${this.msg['rbstatus-notify-success']}: ${success}`),
+					$('<li>').text(`${this.msg['rbstatus-notify-failure']}: ${fail}`)
+				)
+			),
+			{ type: 'success' }
+		);
+	}
+
+	/**
+	 * Retrieves selected RollbackLink objects as an array.
+	 * @returns {RollbackLink[]}
+	 */
+	getSelected() {
+		return Object.values(this.links).reduce((acc, obj) => {
+			if (obj.box && obj.box.$checkbox.is(':checked')) {
+				acc.push(obj);
+			}
+			return acc;
+		}, /** @type {RollbackLink[]} */ ([]));
 	}
 
 }
@@ -769,24 +801,24 @@ SelectiveRollback.i18n = {
 		'summary-option-default': '既定の編集要約',
 		'summary-option-custom': 'カスタム',
 		'summary-label-custom': 'カスタム編集要約',
-		'summary-tooltip-$0': '($0は既定の編集要約に置換されます。)',
-		'summary-tooltip-$0-error': '($0は<b>英語の</b>既定編集要約に置換されます。)',
-		'summary-tooltip-specialexpressions': '置換表現',
+		'summary-help-$0': '<code>$0</code>は既定の編集要約に置換されます。',
+		'summary-help-$0-error': '<code>$0</code>は<b>英語の</b>既定編集要約に置換されます。',
+		'summary-help-specialexpressions': '置換表現', // Deprecated since v5.0.0
 		'summary-label-preview': '要約プレビュー', // v4.0.0
-		'summary-tooltip-preview': '(マジックワードは置換されます。)', // v4.0.0
+		'summary-help-preview': '<code>{{PLURAL}}</code>は置換されます。', // Updated in v5.0.0
 		'markbot-label': 'ボット編集として巻き戻し',
 		'watchlist-label': '対象ページをウォッチリストに追加',
-		'watchlist-expiry-label': '期間',
+		'watchlist-expiry-label': '期間', // Deprecated since v5.0.0
 		'watchlist-expiry-indefinite': '無期限',
 		'watchlist-expiry-1week': '1週間',
 		'watchlist-expiry-1month': '1か月',
 		'watchlist-expiry-3months': '3か月',
 		'watchlist-expiry-6months': '6か月',
 		'watchlist-expiry-1year': '1年',
-		'watchlist-expiry-3years': '3年', // Not used
-		'button-rollbackchecked': 'チェック項目を巻き戻し',
-		'button-checkall': '全てチェック',
-		'button-close': '閉じる',
+		'button-rollback': '巻き戻し', // Updated in v5.0.0
+		'button-documentation': '解説', // Added in v5.0.0
+		'button-selectall': '全選択', // Updated in v5.0.0
+		'button-close': '閉じる', // Deprecated since v5.0.0
 		'msg-nonechecked': 'チェックボックスがチェックされていません。',
 		'msg-linksresolved': 'このページの巻き戻しリンクは全て解消済みです。',
 		'msg-confirm': '巻き戻しを実行しますか？',
@@ -802,24 +834,24 @@ SelectiveRollback.i18n = {
 		'summary-option-default': 'Default edit summary',
 		'summary-option-custom': 'Custom',
 		'summary-label-custom': 'Custom edit summary',
-		'summary-tooltip-$0': '($0 will be replaced with the default rollback summary.)',
-		'summary-tooltip-$0-error': '($0 will be replaced with the default rollback summary <b>in English</b>.)',
-		'summary-tooltip-specialexpressions': 'Replacement expressions',
+		'summary-help-$0': '<code>$0</code> will be replaced with the default rollback summary.',
+		'summary-help-$0-error': '<code>$0</code> will be replaced with the default rollback summary <b>in English</b>.',
+		'summary-help-specialexpressions': 'Replacement expressions', // Deprecated since v5.0.0
 		'summary-label-preview': 'Summary preview', // v4.0.0
-		'summary-tooltip-preview': '(Magic words will be replaced.)', // v4.0.0
+		'summary-help-preview': '<code>{{PLURAL}}</code> will be replaced.', // Updated in v5.0.0
 		'markbot-label': 'Mark rollbacks as bot edits',
 		'watchlist-label': 'Add the target pages to watchlist',
-		'watchlist-expiry-label': 'Expiry',
+		'watchlist-expiry-label': 'Expiry', // Deprecated since v5.0.0
 		'watchlist-expiry-indefinite': 'Indefinite',
 		'watchlist-expiry-1week': '1 week',
 		'watchlist-expiry-1month': '1 month',
 		'watchlist-expiry-3months': '3 months',
 		'watchlist-expiry-6months': '6 months',
 		'watchlist-expiry-1year': '1 year',
-		'watchlist-expiry-3years': '3 years', // Not used
-		'button-rollbackchecked': 'Rollback checked',
-		'button-checkall': 'Check all',
-		'button-close': 'Close',
+		'button-rollback': 'Rollback', // Updated in v5.0.0
+		'button-documentation': 'Docs', // Added in v5.0.0
+		'button-selectall': 'Select all', // Updated in v5.0.0
+		'button-close': 'Close', // Deprecated since v5.0.0
 		'msg-nonechecked': 'No checkbox is checked.',
 		'msg-linksresolved': 'Rollback links on this page have all been resolved.',
 		'msg-confirm': 'Are you sure you want to rollback this edit?',
@@ -835,24 +867,24 @@ SelectiveRollback.i18n = {
 		'summary-option-default': '默认编辑摘要',
 		'summary-option-custom': '自定义',
 		'summary-label-custom': '自定义编辑摘要',
-		'summary-tooltip-$0': '($0将会被默认编辑摘要替代。)',
-		'summary-tooltip-$0-error': '($0将会被默认编辑摘要为<b>英文</b>替代。)',
-		'summary-tooltip-specialexpressions': '替换表达',
+		'summary-help-$0': '<code>$0</code>将会被默认编辑摘要替代。',
+		'summary-help-$0-error': '<code>$0</code>将会被默认编辑摘要为<b>英文</b>替代。',
+		'summary-help-specialexpressions': '替换表达', // Deprecated since v5.0.0
 		'summary-label-preview': '编辑摘要的预览', // v4.0.0
-		'summary-tooltip-preview': '(魔术字将被替换。)', // v4.0.0
+		'summary-help-preview': '<code>{{PLURAL}}</code>将被替换。', // Updated in v5.0.0
 		'markbot-label': '标记为机器人编辑',
 		'watchlist-label': '将目标页面加入监视页面',
-		'watchlist-expiry-label': '时间',
+		'watchlist-expiry-label': '时间', // Deprecated since v5.0.0
 		'watchlist-expiry-indefinite': '不限期',
 		'watchlist-expiry-1week': '1周',
 		'watchlist-expiry-1month': '1个月',
 		'watchlist-expiry-3months': '3个月',
 		'watchlist-expiry-6months': '6个月',
 		'watchlist-expiry-1year': '1年',
-		'watchlist-expiry-3years': '3年', // Not used
-		'button-rollbackchecked': '勾选回退',
-		'button-checkall': '全选',
-		'button-close': '关闭',
+		'button-rollback': '回退', // Updated in v5.0.0
+		'button-documentation': '文档', // Added in v5.0.0
+		'button-selectall': '全选', // Updated in v5.0.0
+		'button-close': '关闭', // Deprecated since v5.0.0
 		'msg-nonechecked': '未选择任何勾选框。',
 		'msg-linksresolved': '与该页面相关的回退全部完成。',
 		'msg-confirm': '您确定要回退该编辑吗?',
@@ -869,24 +901,24 @@ SelectiveRollback.i18n = {
 		'summary-option-default': 'Resumen de edición predeterminado',
 		'summary-option-custom': 'Personalizado',
 		'summary-label-custom': 'Resumen de edición personalizada',
-		'summary-tooltip-$0': '($0 será reemplazado con el resumen de edición predeterminado.)',
-		'summary-tooltip-$0-error': '($0 será reemplazado con él resumen de edición predeterminado <b>en inglés</b>.)',
-		'summary-tooltip-specialexpressions': 'Expresiones de reemplazo',
+		'summary-help-$0': '<code>$0</code> será reemplazado con el resumen de edición predeterminado.',
+		'summary-help-$0-error': '<code>$0</code> será reemplazado con él resumen de edición predeterminado <b>en inglés</b>.',
+		'summary-help-specialexpressions': 'Expresiones de reemplazo', // Deprecated since v5.0.0
 		'summary-label-preview': 'Vista previa del resumen', // v4.0.0
-		'summary-tooltip-preview': '(Las palabras mágicas serán reemplazadas.)', // v4.0.0
+		'summary-help-preview': '<code>{{PLURAL}}</code> será reemplazado.', // Updated in v5.0.0
 		'markbot-label': 'Marcar las reversiones como ediciones del bot',
 		'watchlist-label': 'Añadir las páginas de destino a la lista de seguimiento',
-		'watchlist-expiry-label': 'Expiración',
+		'watchlist-expiry-label': 'Expiración', // Deprecated since v5.0.0
 		'watchlist-expiry-indefinite': 'Siempre',
 		'watchlist-expiry-1week': '1 semana',
 		'watchlist-expiry-1month': '1 mes',
 		'watchlist-expiry-3months': '3 meses',
 		'watchlist-expiry-6months': '6 meses',
 		'watchlist-expiry-1year': '1 años',
-		'watchlist-expiry-3years': '3 años', // Not used
-		'button-rollbackchecked': 'Reversión marcada',
-		'button-checkall': 'Marcar todo',
-		'button-close': 'Cerrar',
+		'button-rollback': 'Revertir', // Updated in v5.0.0
+		'button-documentation': 'Documentación', // Added in v5.0.0
+		'button-selectall': 'Seleccionar todo', // Updated in v5.0.0
+		'button-close': 'Cerrar', // Deprecated since v5.0.0
 		'msg-nonechecked': 'No hay ninguna casilla de verificación marcada.',
 		'msg-linksresolved': 'Los enlaces de reversión en esta página se han resuelto todos.',
 		'msg-confirm': '¿Estás seguro de que quieres revertir esta edición?',
@@ -903,24 +935,24 @@ SelectiveRollback.i18n = {
 		'summary-option-default': 'Descrierea implicită a modificării',
 		'summary-option-custom': 'Personalizat',
 		'summary-label-custom': 'Descriere personalizată a modificării',
-		'summary-tooltip-$0': '($0 va fi înlocuit cu descrierea implicită a revenirii.)',
-		'summary-tooltip-$0-error': '($0 va fi înlocuit cu descrierea implicită a revenirii <b>în engleză</b>.)',
-		'summary-tooltip-specialexpressions': 'Expresii de înlocuire',
+		'summary-help-$0': '<code>$0</code> va fi înlocuit cu descrierea implicită a revenirii.',
+		'summary-help-$0-error': '<code>$0</code> va fi înlocuit cu descrierea implicită a revenirii <b>în engleză</b>.',
+		'summary-help-specialexpressions': 'Expresii de înlocuire', // Deprecated since v5.0.0
 		'summary-label-preview': 'Previzualizare descriere', // v4.0.0
-		'summary-tooltip-preview': '(Cuvintele magice vor fi înlocuite.)', // v4.0.0
+		'summary-help-preview': '<code>{{PLURAL}}</code> va fi înlocuit.', // Updated in v5.0.0
 		'markbot-label': 'Marchează revenirile drept modificări făcute de robot',
 		'watchlist-label': 'Adaugă paginile țintă la pagini urmărite',
-		'watchlist-expiry-label': 'Expiră',
+		'watchlist-expiry-label': 'Expiră', // Deprecated since v5.0.0
 		'watchlist-expiry-indefinite': 'Nelimitat',
 		'watchlist-expiry-1week': '1 săptămână',
 		'watchlist-expiry-1month': '1 lună',
 		'watchlist-expiry-3months': '3 luni',
 		'watchlist-expiry-6months': '6 luni',
 		'watchlist-expiry-1year': '1 an',
-		'watchlist-expiry-3years': '3 ani', // Not used
-		'button-rollbackchecked': 'Revino asupra celor bifate',
-		'button-checkall': 'Bifează tot',
-		'button-close': 'Închide',
+		'button-rollback': 'Revino', // Updated in v5.0.0
+		'button-documentation': 'Documentație', // Added in v5.0.0
+		'button-selectall': 'Selectează tot', // Updated in v5.0.0
+		'button-close': 'Închide', // Deprecated since v5.0.0
 		'msg-nonechecked': 'Nu este bifată nicio căsuță bifabilă.',
 		'msg-linksresolved': 'Toate legăturile de revenire de pe această pagină au fost utilizate.',
 		'msg-confirm': 'Ești sigur(ă) că vrei să revii asupra acestei modificări?',
@@ -937,24 +969,24 @@ SelectiveRollback.i18n = {
 		'summary-option-default': 'Tóm lược sửa đổi mặc định',
 		'summary-option-custom': 'Tuỳ chỉnh',
 		'summary-label-custom': 'Tóm lược tuỳ chỉnh',
-		'summary-tooltip-$0': '($0 sẽ được thay bằng tóm lược sửa đổi mặc định.)',
-		'summary-tooltip-$0-error': '($0 sẽ được thay bằng tóm lược sửa đổi mặc định <b>trong tiếng Anh</b>.)',
-		'summary-tooltip-specialexpressions': 'Thay thế biểu thức',
+		'summary-help-$0': '<code>$0</code> sẽ được thay bằng tóm lược sửa đổi mặc định.',
+		'summary-help-$0-error': '<code>$0</code> sẽ được thay bằng tóm lược sửa đổi mặc định <b>trong tiếng Anh</b>.',
+		'summary-help-specialexpressions': 'Thay thế biểu thức', // Deprecated since v5.0.0
 		'summary-label-preview': 'Xem trước tóm lược', // v4.0.0
-		'summary-tooltip-preview': '(Từ ma thuật sẽ được thay thế.)', // v4.0.0
+		'summary-help-preview': '<code>{{PLURAL}}</code> sẽ được thay thế.', // Updated in v5.0.0
 		'markbot-label': 'Đánh dấu là sửa đổi bot',
 		'watchlist-label': 'Thêm trang mục tiêu vào danh sách theo dõi',
-		'watchlist-expiry-label': 'Hết hạn',
+		'watchlist-expiry-label': 'Hết hạn', // Deprecated since v5.0.0
 		'watchlist-expiry-indefinite': 'Vô hạn',
 		'watchlist-expiry-1week': '1 tuần',
 		'watchlist-expiry-1month': '1 tháng',
 		'watchlist-expiry-3months': '3 tháng',
 		'watchlist-expiry-6months': '6 tháng',
 		'watchlist-expiry-1year': '1 năm',
-		'watchlist-expiry-3years': '3 năm', // Not used
-		'button-rollbackchecked': 'Đã chọn để lùi sửa',
-		'button-checkall': 'Chọn tất cả',
-		'button-close': 'Đóng',
+		'button-rollback': 'Lùi sửa', // Updated in v5.0.0
+		'button-documentation': 'Tài liệu', // Added in v5.0.0
+		'button-selectall': 'Chọn tất cả', // Updated in v5.0.0
+		'button-close': 'Đóng', // Deprecated since v5.0.0
 		'msg-nonechecked': 'Chưa chọn sửa đổi.',
 		'msg-linksresolved': 'Đã xử lý tất cả liên kết lùi sửa.',
 		'msg-confirm': 'Bạn có muốn lùi sửa sửa đổi này không?',
@@ -999,6 +1031,7 @@ SelectiveRollback.index = -1;
  * Keys for `mw.storage`.
  */
 SelectiveRollback.storageKeys = {
+	autocomplete: 'mw-SelectiveRollback-autocomplete',
 	summary: 'mw-SelectiveRollback-summary',
 	rights: 'mw-SelectiveRollback-rights'
 };
@@ -1045,248 +1078,50 @@ function createCheckbox(labelText, textClassNames) {
  * @param {SelectiveRollbackConfig} cfg
  * @param {Messages} msg
  * @param {MetaInfo} meta
+ * @param {ParentNode} parentNode
  * @returns
  */
-function SelectiveRollbackDialogFactory(cfg, msg, meta) {
+function SelectiveRollbackDialogFactory(cfg, msg, meta, parentNode) {
 	const previewApi = new mw.Api(SelectiveRollback.apiOptions(true));
 	let /** @type {NodeJS.Timeout} */ previewTimeout;
 
-	return class SelectiveRollbackDialog {
+	/**
+	 * @param {OO.ui.DropdownWidget} dropdown
+	 * @returns {string}
+	 */
+	const getDropdownValue = (dropdown) => {
+		return /** @type {string} */ (
+			/** @type {OO.ui.OptionWidget} */ (dropdown.getMenu().findSelectedItem()).getData()
+		);
+	};
 
-		constructor() {
-			/**
-			 * @type {JQuery<HTMLDivElement>}
-			 * @readonly
-			 * @private
-			 */
-			this.$dialog = $('<div>');
-			this.$dialog
-				.prop({ title: 'Selective Rollback' })
-				.css({
-					padding: '1em',
-					maxWidth: '580px'
-				})
-				.dialog({
-					dialogClass: 'sr-dialog',
-					height: 'auto',
-					width: 'auto',
-					minWidth: 515,
-					minHeight: 175,
-					resizable: false,
-					autoOpen: false,
-					modal: true
-				});
+	class SelectiveRollbackDialog extends OO.ui.ProcessDialog {
 
-			let /** @type {JQuery<HTMLSelectElement>} */ $summaryList;
-			let /** @type {JQuery<HTMLInputElement>} */ $summary;
-			let /** @type {JQuery<HTMLDivElement>} */ $summaryPreview;
-			let /** @type {JQuery<HTMLParagraphElement>} */ $summaryPreviewTooltip;
-			const botBox = createCheckbox(msg['markbot-label']);
-			const watchBox = createCheckbox(msg['watchlist-label']);
-			let /** @type {JQuery<HTMLUListElement>} */ $watchUl;
-			let /** @type {JQuery<HTMLSelectElement>} */ $watchExpiry;
-			const psId = 'sr-presetsummary';
-			const csId = 'sr-customsummary';
-			let /** @type {JQuery<HTMLOptionElement>} */ $psOptCustom;
-
-			// Create dialog contents
-			this.$dialog.append(
-				// Preset summary wrapper
-				$('<div>')
-					.prop({ id: 'sr-presetsummary-wrapper' })
-					.css({ marginBottom: '0.5em' })
-					.append(
-						$('<label>')
-							.prop({ htmlFor: psId })
-							.text(msg['summary-label-primary']),
-						($summaryList = $('<select>'))
-							.prop({ id: psId })
-							.addClass('sr-dialog-borderbox')
-							.append(
-								$('<option>')
-									.prop({
-										id: 'sr-presetsummary-default',
-										value: ''
-									})
-									.text(msg['summary-option-default']),
-								// Append user-defined edit summaries if there's any
-								...Object.entries(cfg.editSummaries).map(([key, value]) => {
-									return new Option(cfg.showKeys ? key : value, value);
-								}),
-								($psOptCustom = $('<option>'))
-									.prop({
-										id: 'sr-presetsummary-custom',
-										value: 'other'
-									})
-									.text(msg['summary-option-custom'])
-							)
-							.off('change').on('change', () => this.previewSummary())
-					),
-				// Custom summary wrapper
-				$('<div>')
-					.prop({ id: 'sr-customsummary-wrapper' })
-					.css({ marginBottom: '0.3em' })
-					.append(
-						$('<label>')
-							.prop({ htmlFor: csId })
-							.text(msg['summary-label-custom']),
-						($summary = $('<input>'))
-							.prop({ id: csId })
-							.addClass('sr-dialog-borderbox')
-							.off('focus').on('focus', () => {
-								// When the custom summary field is focused, set the dropdown option to "other"
-								const initiallySelected = $psOptCustom.is(':selected');
-								$psOptCustom.prop('selected', true);
-								if (!initiallySelected) {
-									$summaryList.trigger('change');
-								}
-							})
-							.off('input').on('input', () => this.previewSummary()),
-						$('<p>')
-							.prop({
-								id: 'sr-customsummary-$0',
-								innerHTML: msg[meta.fetched ? 'summary-tooltip-$0' : 'summary-tooltip-$0-error']
-							})
-							.addClass('sr-dialog-tooltip'),
-						$('<p>')
-							.prop({ id: 'sr-customsummary-$SE' })
-							.addClass('sr-dialog-tooltip')
-							.text(function() {
-								// Show a list of special expressions if defined by the user
-								if (!$.isEmptyObject(cfg.specialExpressions)) {
-									const seTooltip = Object.keys(cfg.specialExpressions).join(', ');
-									return `(${msg['summary-tooltip-specialexpressions']}: ${seTooltip})`;
-								} else {
-									$(this).hide();
-									return '';
-								}
-							})
-					),
-				// Summary preview wrapper
-				$('<div>')
-					.prop({ id: 'sr-summarypreview-wrapper' })
-					.append(
-						document.createTextNode(msg['summary-label-preview']),
-						($summaryPreview = $('<div>'))
-							.prop({ id: 'sr-summarypreview' })
-							.addClass('sr-dialog-borderbox'),
-						($summaryPreviewTooltip = $('<p>'))
-							.prop({ id: 'sr-summarypreview-tooltip' })
-							.text(msg['summary-tooltip-preview'])
-							.addClass('sr-dialog-tooltip')
-							.hide()
-					)
-					.css({ marginBottom: '0.8em' }),
-				// Markbot option wrapper
-				$('<div>')
-					.prop({ id: 'sr-bot-wrapper' })
-					.append(botBox.$label)
-					.css('display', () => {
-						if (meta.rights.has('markbotedits')) {
-							// If the current user has the "markbotedits" user right, show the checkbox
-							// and initialize its checked state in accordance with the config
-							botBox.$checkbox.prop('checked', cfg.markBot);
-							return 'block';
-						} else {
-							return 'none'; // Hide the box if not
-						}
-					}),
-				// Watchlist option wrapper
-				$('<div>')
-					.prop({ id: 'sr-watchlist-wrapper' })
-					.append(
-						watchBox.$label,
-						($watchUl = $('<ul>'))
-							.prop({ id: 'sr-watchlist-expiry' })
-							.css({ marginTop: '0.2em' })
-							.hide()
-							.append(
-								$('<li>')
-									.append(
-										document.createTextNode(msg['watchlist-expiry-label']),
-										($watchExpiry = $('<select>'))
-											.prop({ id: 'sr-watchlist-expiry-dropdown' })
-											.css({ marginLeft: '0.5em' })
-											.append(
-												[
-													{ value: 'indefinite', text: msg['watchlist-expiry-indefinite'] },
-													{ value: '1 week', text: msg['watchlist-expiry-1week'] },
-													{ value: '1 month', text: msg['watchlist-expiry-1month'] },
-													{ value: '3 months', text: msg['watchlist-expiry-3months'] },
-													{ value: '6 months', text: msg['watchlist-expiry-6months'] },
-													{ value: '1 year', text: msg['watchlist-expiry-1year'] }
-												]
-												.map(({ value, text }) => $('<option>').prop({ value }).text(text))
-											)
-											.val(cfg.watchExpiry)
-									)
-							)
-					)
-			);
-
-			// Initialize the watchlist checkbox
-			watchBox.$checkbox
-				.off('change').on('change', function() {
-					// Show/hide the expiry dropdown when the checkbox is (un)checked
-					$watchUl.toggle($(this).is(':checked'));
-				})
-				.prop('checked', cfg.watchPage)
-				.trigger('change');
-
-			// Define properties
-			/**
-			 * The summary dropdown.
-			 * @type {JQuery<HTMLSelectElement>}
-			 * @readonly
-			 * @private
-			 */
-			this.$summaryList = $summaryList;
-			/**
-			 * The summary input.
-			 * @type {JQuery<HTMLInputElement>}
-			 * @readonly
-			 * @private
-			 */
-			this.$summary = $summary;
-			/**
-			 * The div for summary preview.
-			 * @type {JQuery<HTMLDivElement>}
-			 * @readonly
-			 * @private
-			 */
-			this.$summaryPreview = $summaryPreview;
-			/**
-			 * The div for summary preview tooltip (which says "Magic words will be replaced").
-			 * @type {JQuery<HTMLDivElement>}
-			 * @readonly
-			 * @private
-			 */
-			this.$summaryPreviewTooltip = $summaryPreviewTooltip;
-			/**
-			 * The markbox checkbox.
-			 * @type {JQuery<HTMLInputElement>}
-			 * @readonly
-			 * @private
-			 */
-			this.$markbot = botBox.$checkbox;
-			/**
-			 * The watch-page checkbox.
-			 * @type {JQuery<HTMLInputElement>}
-			 * @readonly
-			 * @private
-			 */
-			this.$watch = watchBox.$checkbox;
-			/**
-			 * The watch-expiry dropdown.
-			 * @type {JQuery<HTMLSelectElement>}
-			 * @readonly
-			 * @private
-			 */
-			this.$watchExpiry = $watchExpiry;
+		/**
+		 * @param {OO.ui.ProcessDialog.ConfigOptions} [config]
+		 * @param {string[]} [autocompleteSources]
+		 */
+		constructor(config, autocompleteSources = []) {
+			super(config);
 
 			/**
-			 * The portlet link to open the SR dialog.
-			 * @type {HTMLLIElement?}
+			 * A {@link SelectiveRollback} instance for the dialog instance.
+			 *
+			 * Must be lazy-bound via {@link bindSR} because the SR class's constructor
+			 * also requires a dialog instance for initialization.
+			 * @type {SelectiveRollback}
+			 * @private
+			 */
+			this.sr = Object.create(null);
+
+			/**
+			 * @type {boolean}
+			 * @private
+			 */
+			this.destroyed = false;
+
+			/**
+			 * @type {?HTMLLIElement}
 			 * @readonly
 			 * @private
 			 */
@@ -1299,6 +1134,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta) {
 				void 0,
 				document.getElementById('ca-sr-uncache') || '#ca-move'
 			);
+
 			if (this.portlet) {
 				this.portlet.addEventListener('click', (e) => {
 					e.preventDefault();
@@ -1308,108 +1144,252 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta) {
 				console.error('[SR] Failed to create a portlet link.');
 			}
 
+			/** @type {OO.ui.Element[]} */
+			const items = [];
+
+			if (parentNode) {
+				const selectAll = new OO.ui.ButtonWidget({
+					flags: ['progressive'],
+					label: msg['button-selectall']
+				});
+				selectAll.on('click', () => this.sr.selectAll());
+				const saLayout = new OO.ui.FieldLayout(selectAll);
+				saLayout.$element.css({ 'margin': '0 0 -1em auto', 'width': 'min-content' });
+				items.push(saLayout);
+			}
+
 			/**
-			 * Whether the dialog has been destroyed.
-			 * @type {boolean}
+			 * @type {OO.ui.DropdownWidget}
+			 * @readonly
 			 * @private
 			 */
-			this.destroyed = false;
-
-			// On jawp, set up autocomplete for the custom summary textbox
-			const moduleName = 'ext.gadget.WpLibExtra';
-			if (mw.config.get('wgWikiID') === 'jawiki' && new Set(mw.loader.getModuleNames()).has(moduleName)) {
-				mw.loader.using(moduleName).then((require) => {
-					const /** @type {WpLibExtra} */ lib = require(moduleName);
-					$.when(lib.getVipList('wikilink'), lib.getLtaList('wikilink')).then((vipList, ltaList) => {
-						const list = vipList.concat(ltaList);
-						$summary.autocomplete({
-							/**
-							 * @param {{ term: string; }} req
-							 * @param {(data: any) => void} res
-							 */
-							source: (req, res) => {
-								// Limit the list to the maximum number of 10, or it can stick out of the viewport
-								const results = $.ui.autocomplete.filter(list, req.term);
-								res(results.slice(0, 10));
-							},
-							select: (_, ui) => {
-								// When the event is triggered, getSummary picks up the value before selection
-								// Because of this, pick up the autocompleted value and pass it to previewSummary
-								const /** @type {string?} */ val = ui.item && ui.item.value;
-								if (val) this.previewSummary(val);
-							},
-							position: {
-								my: 'left bottom',
-								at: 'left top'
-							}
-						});
-					});
-				});
-			}
-
-			// Initialize summary preview
-			this.$summary.trigger('input');
-		}
-
-		/**
-		 * Intializes the dialog's buttons by binding a SelectiveRollback instance to
-		 * the current SelectiveRollbackDialog instance.
-		 * @param {SelectiveRollback} sr
-		 * @param {ParentNode} parentNode
-		 * @returns {this}
-		 */
-		initializeButtons(sr, parentNode) {
-			const buttons = [
-				{	// "Rollback checked" button
-					text: msg['button-rollbackchecked'],
-					click: () => sr.selectiveRollback()
-				},
-				{	// "Check all" button
-					text: msg['button-checkall'],
-					click: () => sr.selectAll()
-				},
-				{	// "Close" button
-					text: msg['button-close'],
-					click: () => this.close()
+			this.summaryList = new OO.ui.DropdownWidget({
+				$overlay: this.$overlay,
+				menu: {
+					items: [
+						new OO.ui.MenuOptionWidget({ data: '', label: msg['summary-option-default'] }),
+						...Object.entries(cfg.editSummaries).map(([key, value]) => {
+							return new OO.ui.MenuOptionWidget({ data: value, label: cfg.showKeys ? key : value });
+						}),
+						new OO.ui.MenuOptionWidget({ data: 'other', label: msg['summary-option-custom'] }),
+					]
 				}
-			];
-			if (!parentNode) {
-				buttons.splice(0, 2); // Only leave the "Close" button if parentNode is a falsy value
+			});
+
+			this.summaryList.on('labelChange', () => this.previewSummary());
+			this.summaryList.getMenu().selectItemByData(''); // Select default summary
+			items.push(
+				new OO.ui.FieldLayout(this.summaryList, {
+					align: 'top',
+					label: $('<b>').text(msg['summary-label-primary'])
+				})
+			);
+
+			/**
+			 * @type {OO.ui.ComboBoxInputWidget}
+			 * @readonly
+			 * @private
+			 */
+			this.summary = new OO.ui.ComboBoxInputWidget({
+				$overlay: this.$overlay,
+				menu: {
+					filterFromInput: true,
+					items: Object.keys(cfg.specialExpressions).concat(autocompleteSources).map((source) => {
+						return new OO.ui.MenuOptionWidget({ data: source, label: source });
+					})
+				},
+				placeholder: msg['summary-label-custom']
+			});
+
+			let /** @type {NodeJS.Timeout} */ summaryTimeout;
+			this.summary.on('change', (value) => {
+				this.previewSummary();
+				clearTimeout(summaryTimeout);
+				summaryTimeout = setTimeout(() => {
+					value = clean(value);
+					this.summaryList.getMenu().selectItemByData(value ? 'other' : '');
+				}, 100);
+			});
+
+			items.push(
+				new OO.ui.FieldLayout(this.summary, {
+					align: 'top',
+					help: new OO.ui.HtmlSnippet(msg[meta.fetched ? 'summary-help-$0' : 'summary-help-$0-error']),
+					helpInline: true,
+					invisibleLabel: true
+				})
+			);
+
+			/**
+			 * @type {OO.ui.Element}
+			 * @readonly
+			 * @private
+			 */
+			this.summaryPreview = new OO.ui.Element({
+				$element: $('<div>'),
+				id: 'sr-summarypreview'
+			});
+
+			items.push(
+				new OO.ui.LabelWidget({
+					$element: $('<div>').css({ 'margin-top': '8px', 'margin-bottom': '4px' }),
+					label: $('<b>').text(msg['summary-label-preview'])
+				}),
+				this.summaryPreview,
+				new OO.ui.LabelWidget({
+					$element: $('<div>').css({ 'margin-top': '4px' }),
+					classes: ['oo-ui-inline-help'],
+					label: new OO.ui.HtmlSnippet(msg['summary-help-preview'])
+				})
+			);
+
+			/**
+			 * @type {OO.ui.CheckboxInputWidget}
+			 * @readonly
+			 */
+			this.markBot = new OO.ui.CheckboxInputWidget();
+
+			if (meta.rights.has('markbotedits')) {
+				items.push(
+					new OO.ui.FieldLayout(this.markBot, {
+						label: msg['markbot-label'],
+						align: 'inline'
+					})
+				);
+				this.markBot.setSelected(cfg.markBot);
 			}
-			this.$dialog.dialog({ buttons });
-			return this;
+
+			/**
+			 * @type {OO.ui.CheckboxInputWidget}
+			 * @readonly
+			 */
+			this.watch = new OO.ui.CheckboxInputWidget({
+				selected: cfg.watchPage
+			});
+
+			items.push(
+				new OO.ui.FieldLayout(this.watch, {
+					label: msg['watchlist-label'],
+					align: 'inline'
+				}),
+			);
+
+			/**
+			 * @type {OO.ui.DropdownWidget}
+			 * @readonly
+			 */
+			this.watchExpiry = new OO.ui.DropdownWidget({
+				$overlay: this.$overlay,
+				menu: {
+					items: [
+						new OO.ui.MenuOptionWidget({ data: 'indefinite', label: msg['watchlist-expiry-indefinite'] }),
+						new OO.ui.MenuOptionWidget({ data: '1 week', label: msg['watchlist-expiry-1week'] }),
+						new OO.ui.MenuOptionWidget({ data: '1 month', label: msg['watchlist-expiry-1month'] }),
+						new OO.ui.MenuOptionWidget({ data: '3 months', label: msg['watchlist-expiry-3months'] }),
+						new OO.ui.MenuOptionWidget({ data: '6 months', label: msg['watchlist-expiry-6months'] }),
+						new OO.ui.MenuOptionWidget({ data: '1 year', label: msg['watchlist-expiry-1year'] })
+					]
+				}
+			});
+			this.watchExpiry.getMenu().selectItemByData(cfg.watchExpiry);
+
+			const weLayout = new OO.ui.FieldLayout(this.watchExpiry);
+			weLayout.$element.css({ 'margin-left': '1.8em', 'margin-top': '8px' });
+			items.push(weLayout);
+			this.watch.on('change', (selected) => {
+				weLayout.toggle(!!selected);
+				this.updateSize();
+			});
+			weLayout.toggle(this.watch.isSelected());
+
+			/**
+			 * @type {OO.ui.FieldsetLayout}
+			 * @readonly
+			 * @private
+			 */
+			this.fieldset = new OO.ui.FieldsetLayout();
+			this.fieldset.addItems(items);
 		}
 
 		/**
-		 * Opens the SelectiveRollbackDialog dialog.
-		 * @returns {this}
+		 * @inheritdoc
+		 * @override
 		 */
-		open() {
-			this.$dialog.dialog('open');
+		initialize() {
+			// @ts-expect-error
+			super.initialize.apply(this, arguments);
+
+			this.content = new OO.ui.PanelLayout({
+				padded: true,
+				expanded: false
+			});
+			this.content.$element.append(this.fieldset.$element);
+			// @ts-expect-error
+			this.$body.append(this.content.$element);
+
 			return this;
 		}
 
 		/**
-		 * Closes the SelectiveRollbackDialog dialog.
-		 * @returns {this}
+		 * @inheritdoc
+		 * @override
 		 */
-		close() {
-			this.$dialog.dialog('close');
-			return this;
+		getSetupProcess() {
+			return super.getSetupProcess().next(() => {
+				this.getActions().setMode(parentNode ? 'nonRCW' : 'RCW');
+			});
 		}
 
 		/**
-		 * Destroys the dialog. This method also removes the portlet link.
-		 * @returns {void}
+		 * @inheritdoc
+		 * @param {string} [action]
+		 * @override
+		 */
+		getActionProcess(action) {
+			return new OO.ui.Process(() => {
+				switch (action) {
+					case 'execute': {
+						const selectedLinks = this.sr.getSelected();
+						if (!selectedLinks.length) {
+							mw.notify(msg['msg-nonechecked'], { type: 'warn' });
+							return;
+						}
+						this.close();
+						this.sr.selectiveRollback(selectedLinks);
+						break;
+					}
+					case 'documentation':
+						window.open('https://meta.wikimedia.org/wiki/Special:MyLanguage/User:Dragoniez/Selective_Rollback', '_blank');
+						break;
+					case 'selectall':
+						this.sr.selectAll();
+						break;
+					default: this.close();
+				}
+			});
+		}
+
+		/**
+		 * Lazy-binds a SelectiveRollback instance.
+		 * @param {SelectiveRollback} sr
+		 */
+		bindSR(sr) {
+			this.sr = sr;
+		}
+
+		/**
+		 * Destroys the dialog.
 		 */
 		destroy() {
-			this.$dialog.empty().dialog('destroy');
+			SelectiveRollbackDialog.windowManager.destroy();
+			if (this.portlet) {
+				this.portlet.remove();
+			}
 			this.destroyed = true;
-			if (this.portlet) this.portlet.remove();
 		}
 
 		/**
-		 * Checks whether the dialog has been destroyed via {@link destroy}.
+		 * Checks whether the dialog has been destroyed.
 		 * @returns {boolean}
 		 */
 		isDestroyed() {
@@ -1427,9 +1407,8 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta) {
 		 * * it is specified as an empty string.
 		 */
 		getSummary() {
-			let summary = this.$summaryList.val() === 'other'
-				? clean(this.$summary[0].value)
-				: this.$summaryList[0].value;
+			const dropdownValue = getDropdownValue(this.summaryList);
+			let summary = dropdownValue === 'other' ? clean(this.summary.getValue()) : dropdownValue;
 
 			// Process $0
 			if (summary === '$0') {
@@ -1456,7 +1435,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta) {
 		 * @returns {boolean}
 		 */
 		getMarkBot() {
-			return this.$markbot.is(':checked');
+			return this.markBot.isSelected();
 		}
 
 		/**
@@ -1464,7 +1443,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta) {
 		 * @returns {'watch' | 'nochange'}
 		 */
 		getWatchlist() {
-			return this.$watch.is(':checked') ? 'watch' : 'nochange';
+			return this.watch.isSelected() ? 'watch' : 'nochange';
 		}
 
 		/**
@@ -1472,7 +1451,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta) {
 		 * @returns {string | undefined} `undefined` if the watch-page box isn't checked.
 		 */
 		getWatchlistExpiry() {
-			return this.$watch.is(':checked') && this.$watchExpiry[0].value || void 0;
+			return this.watch.isSelected() && getDropdownValue(this.watchExpiry) || void 0;
 		}
 
 		/**
@@ -1490,21 +1469,11 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta) {
 
 		/**
 		 * Previews the summary.
-		 * @param {string} [summary] Falls back to the value from {@link getSummary}.
-		 * @returns {void}
 		 * @private
 		 */
-		previewSummary(summary = this.getSummary()) {
+		previewSummary() {
 			clearTimeout(previewTimeout);
-
-			// Get summary to preview
-			let containsMagicWords = false;
-			if (!summary) { // If the obtained summary is an empty string, preview the default summary
-				summary = meta.summary; // Might contain magic words
-				containsMagicWords = /\{\{plural:/i.test(summary);
-			}
-
-			// Preview
+			const summary = this.getSummary() || meta.summary;
 			previewTimeout = setTimeout(() => {
 				previewApi.abort();
 				previewApi.post({
@@ -1520,13 +1489,46 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta) {
 					return null;
 				}).then(/** @param {?string} parsedsummary */ (parsedsummary) => {
 					parsedsummary = parsedsummary !== null ? parsedsummary : '???';
-					this.$summaryPreview.html(parsedsummary);
-					this.$summaryPreviewTooltip.toggle(containsMagicWords);
+					this.summaryPreview.$element.html(parsedsummary);
+					this.updateSize();
 				});
 			}, 500);
 		}
 
-	};
+	}
+
+	SelectiveRollbackDialog.static.name = 'Selective Rollback';
+	SelectiveRollbackDialog.static.title = 'Selective Rollback (v5.0.0)';
+	SelectiveRollbackDialog.static.actions = [
+		{
+			action: 'execute',
+			label: msg['button-rollback'],
+			flags: ['primary', 'progressive'],
+			modes: ['nonRCW']
+		},
+		{
+			action: 'documentation',
+			label: msg['button-documentation'],
+			modes: ['RCW', 'nonRCW']
+		},
+		{
+			action: 'selectall',
+			label: msg['button-selectall'],
+			flags: ['progressive'],
+			modes: ['nonRCW']
+		},
+		{
+			flags: ['safe', 'close'],
+			modes: ['RCW', 'nonRCW']
+		}
+	];
+	SelectiveRollbackDialog.windowManager = (() => {
+		const windowManager = new OO.ui.WindowManager();
+		$(document.body).append(windowManager.$element);
+		return windowManager;
+	})();
+
+	return SelectiveRollbackDialog;
 }
 
 //**************************************************************************************************
@@ -1543,6 +1545,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, meta) {
  * @typedef {import('./window/Selective Rollback.d.ts').Box} Box
  * @typedef {import('./window/Selective Rollback.d.ts').SRBox} SRBox
  * @typedef {import('./window/Selective Rollback.d.ts').RollbackLink} RollbackLink
+ @typedef {import('./window/Selective Rollback.d.ts').RollbackLinkMap} RollbackLinkMap
  * @typedef {import('./window/Selective Rollback.d.ts').RollbackParams} RollbackParams
  */
 
