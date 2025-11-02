@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.4
+	@version 5.0.5
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -164,7 +164,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/5.0.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/5.0.5 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -328,6 +328,32 @@ class SelectiveRollback {
 				'vertical-align: middle;' +
 				'max-width: 50em;' +
 				'min-height: 2.2857143em;' +
+			'}' +
+			'.sr-rollback-link-success {' +
+				'background-color: lightgreen;' +
+			'}' +
+			'@media screen {' +
+				'html.skin-theme-clientpref-night .sr-rollback-link-success {' +
+					'background-color: #099979;' +
+				'}' +
+			'}' +
+			'@media screen and (prefers-color-scheme: dark) {' +
+				'html.skin-theme-clientpref-os .sr-rollback-link-success {' +
+					'background-color: #099979;' +
+				'}' +
+			'}' +
+			'.sr-rollback-link-fail {' +
+				'background-color: lightpink;' +
+			'}' +
+			'@media screen {' +
+				'html.skin-theme-clientpref-night .sr-rollback-link-fail {' +
+					'background-color: #f54739;' +
+				'}' +
+			'}' +
+			'@media screen and (prefers-color-scheme: dark) {' +
+				'html.skin-theme-clientpref-os .sr-rollback-link-fail {' +
+					'background-color: #f54739;' +
+				'}' +
 			'}' +
 			'';
 		document.head.appendChild(style);
@@ -618,7 +644,8 @@ class SelectiveRollback {
 				!isOnRCW && this.confirmation === 'nonRCW'
 			)
 		) {
-			$rbspan.css({ border: '1px dotted black' }); // Visualize which rollback link has been clicked
+			// Visualize which rollback link has been clicked
+			$rbspan.css({ border: '1px dotted var(--color-emphasized, #000)' });
 			const confirmed = await OO.ui.confirm(this.msg['msg-confirm'], { size: 'medium' });
 			$rbspan.css({ border: '' });
 			if (!confirmed) return;
@@ -734,7 +761,7 @@ class SelectiveRollback {
 					document.createTextNode('['),
 					$('<span>')
 						.text(isFailure ? `${this.msg['rbstatus-failed']} (${result})` : this.msg['rbstatus-reverted'])
-						.css({ backgroundColor: isFailure ? 'lightpink' : 'lightgreen' }),
+						.addClass(isFailure ? 'sr-rollback-link-fail' : 'sr-rollback-link-success'),
 					document.createTextNode(']')
 				)
 				.removeClass('mw-rollback-link')
@@ -1059,7 +1086,7 @@ SelectiveRollback.i18n = {
 		'watchlist-expiry-1year': 'سنة واحدة',
 		'button-rollback': 'تراجع عن العناصر المحددة', // Updated in v5.0.0
 		'button-documentation': 'التوثيق', // Added in v5.0.0
-		'button-selectall': 'تحديد الكل', // Updated in v5.0.0; TODO: Reflect "Select all"
+		'button-selectall': 'تحديد الكل', // Updated in v5.0.0
 		'button-close': 'إغلاق', // Deprecated since v5.0.0
 		'msg-nonechecked': 'لم يتم تحديد أي مربع اختيار.',
 		'msg-linksresolved': 'تم حل جميع روابط التراجع في هذه الصفحة.',
@@ -1598,7 +1625,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
-	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.4)`;
+	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.5)`;
 	SelectiveRollbackDialog.static.actions = [
 		{
 			action: 'execute',
