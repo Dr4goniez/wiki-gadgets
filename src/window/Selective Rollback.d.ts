@@ -1,29 +1,58 @@
-interface Window {
-	selectiveRollbackConfig?: Partial<SelectiveRollbackOptions>;
+/**
+ * The parent node that rollback links should look for to generate SR checkboxes.
+ * * `string` - The CSS selector of the parent node.
+ * * `false` - No checkboxes should be generated.
+ * * `null` - The current page is Recentchanges or Watchlist.
+ */
+export type ParentNode = 'li' | '#mw-diff-ntitle2' | false | null;
+
+declare global {
+	interface Window {
+		selectiveRollbackConfig?: Partial<SelectiveRollbackConfig>;
+	}
 }
 
-type Languages = 'ja'|'en'|'zh'|'es'|'ro'|'vi';
-
-interface SelectiveRollbackOptions {
+export interface SelectiveRollbackConfig {
 	lang: string;
 	editSummaries: Record<string, string>;
 	showKeys: boolean;
 	specialExpressions: Record<string, string>;
 	markBot: boolean;
 	watchPage: boolean;
-	watchExpiry: SRWatchExpiry;
+	watchExpiry: 'indefinite' | 'infinite' | 'infinity' | 'never' | '1 week' | '1 month' | '3 months' | '6 months' | '1 year';
 	confirm: SRConfirm;
 	mobileConfirm: SRConfirm;
 	checkboxLabelColor: string;
 }
 
-type SRWatchExpiry = 'indefinite'|'infinite'|'infinity'|'never'|'1 week'|'1 month'|'3 months'|'6 months'|'1 year';
+export type SRConfirm = 'always' | 'never' | 'RCW' | 'nonRCW';
 
-type SRConfirm = 'always'|'never'|'RCW'|'nonRCW';
+export type IsOfType = <T extends 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function' | 'null'>(
+	expectedType: T,
+	value: unknown,
+	key: string
+) => value is (
+	T extends 'string' ? string :
+	T extends 'number' ? number :
+	T extends 'bigint' ? bigint :
+	T extends 'boolean' ? boolean :
+	T extends 'symbol' ? symbol :
+	T extends 'undefined' ? undefined :
+	T extends 'object' ? object :
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	T extends 'function' ? (...args: any[]) => any :
+	T extends 'null' ? null : never
+);
 
-interface Messages {
+export type Languages = 'ja' | 'en' | 'zh' | 'es' | 'ro' | 'vi' | 'ar';
+
+export interface Messages {
+	/** Optional translation for "Selective Rollback". */
+	'scriptname': string;
 	/** Tooltip for the portlet link used to open the SR dialog. */
-	'portletlink-tooltip': string;
+	'portletlink-main-tooltip': string;
+	/** Label (and tooltip) for the portlet link used to purge cache for Selective Rollback. */
+	'portletlink-uncacher-label': string;
 	/** The label for the edit summary dropdown. */
 	'summary-label-primary': string;
 	/** The text for the default edit summary dropdown option. */
@@ -32,16 +61,16 @@ interface Messages {
 	'summary-option-custom': string;
 	/** The label for the custom edit summary inputbox. */
 	'summary-label-custom': string;
-	/** Tooltip that says $0 will be replaced with the default edit summary. */
-	'summary-tooltip-$0': string;
-	/** [Contains a \<b> tag]: Tooltip that says $0 will be replaced with the default edit summary **in English**. */
-	'summary-tooltip-$0-error': string;
+	/** Help text saying $0 will be replaced with the default edit summary. */
+	'summary-help-$0': string;
+	/** [Contains a \<b> tag]: Help text saying $0 will be replaced with the default edit summary **in English**. */
+	'summary-help-$0-error': string;
 	/** The leading text for replacement expressions. */
-	'summary-tooltip-specialexpressions': string;
+	'summary-help-specialexpressions': string;
 	/** The label for the summary preview div. */
 	'summary-label-preview': string;
-	/** Tooltip that says magic words in previewed summary will be replaced. */
-	'summary-tooltip-preview': string;
+	/** Help text for summary preview saying {{PLURAL}} will be parsed. */
+	'summary-help-preview': string;
 	/** The label for the markbot checkbox. */
 	'markbot-label': string;
 	/** The label for the watch-page checkbox. */
@@ -60,12 +89,12 @@ interface Messages {
 	'watchlist-expiry-6months': string;
 	/** The text for the 1-year expiry dropdown option. */
 	'watchlist-expiry-1year': string;
-	/** The text for the 3-year expiry dropdown option. */
-	'watchlist-expiry-3years': string;
-	/** The text for the "Rollback checked" dialog button. */
-	'button-rollbackchecked': string;
-	/** The text for the "Check all" dialog button. */
-	'button-checkall': string;
+	/** The text for the "Rollback" dialog button. */
+	'button-rollback': string;
+	/** The text for the "Docs" dialog button. */
+	'button-documentation': string;
+	/** The text for the "Select all" dialog button. */
+	'button-selectall': string;
 	/** The text for the "Close" dialog button. */
 	'button-close': string;
 	/** A mw.notify message for when no checkbox is checked for selective rollback. */
@@ -82,13 +111,71 @@ interface Messages {
 	'rbstatus-notify-success': string;
 	/** Internal text ("Failure") for a mw.notify message that shows how many rollbacks failed. */
 	'rbstatus-notify-failure': string;
-	// v5.0.0
-	'config-load-failed': string;
 }
 
-interface MultiInputTableRow {
-	$row: JQuery<HTMLTableRowElement>;
-	checkbox: OO.ui.CheckboxInputWidget;
-	keyInput: OO.ui.TextInputWidget;
-	valueInput: OO.ui.TextInputWidget;
+export interface MetaInfo {
+	/** The raw `revertpage` message. */
+	summary: string;
+	/** The `revertpage` message with {{PLURAL}} magic words parsed. */
+	parsedsummary: string;
+	/** Whether the default rollback summary was fetched. */
+	fetched: boolean;
+	/** The current user's user rights. */
+	rights: Set<string>;
+}
+
+export interface ApiResponse {
+	parse?: ApiResponseParse;
+	query?: ApiResponseQuery;
+}
+
+interface ApiResponseParse {
+	title: 'API';
+	pageid: number;
+	parsedsummary: string;
+}
+
+interface ApiResponseQuery {
+	allmessages?: ApiResponseQueryMetaAllmessages[];
+	userinfo?: ApiResponseQueryMetaUserinfo;
+}
+
+interface ApiResponseQueryMetaAllmessages {
+	name: string;
+	normalizedname: string;
+	missing?: true;
+	content?: string; // Missing if "missing" is true
+}
+
+interface ApiResponseQueryMetaUserinfo {
+	id: number;
+	name: string;
+	rights?: string[];
+}
+
+export interface SRBox {
+	$wrapper: JQuery<HTMLSpanElement>;
+	$label: JQuery<HTMLLabelElement>;
+	$checkbox: JQuery<HTMLInputElement>;
+}
+
+export interface RollbackLink {
+	rbspan: HTMLSpanElement;
+	box: SRBox?;
+}
+
+export interface RollbackLinkMap {
+	[index: string]: RollbackLink;
+}
+
+/**
+ * Additional parameters to `action=rollback`.
+ */
+export interface RollbackParams {
+	/** An empty string will be altered with the default summary by the mediawiki software. */
+	summary: string;
+	markbot: boolean;
+	/** Default: `'preferences'` */
+	watchlist: 'nochange' | 'preferences' | 'unwatch' | 'watch';
+	watchlistexpiry?: string;
 }
