@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.1
+	@version 5.0.2
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionalities of this script are adapted from:
@@ -164,7 +164,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/5.0.1 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/5.0.2 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -988,9 +988,9 @@ SelectiveRollback.i18n = {
 	 * @since 4.1.0
 	 */
 	vi: {
-		'scriptname': 'Lùi sửa theo lựa chọn', // Added in v5.0.1
-		'portletlink-main-tooltip': 'Mở hộp thoại Lùi sửa theo lựa chọn',
-		'portletlink-uncacher-label': 'Xóa bộ nhớ đệm cho Lùi sửa theo lựa chọn', // v4.4.3
+		'scriptname': 'Selective Rollback', // Added in v5.0.1
+		'portletlink-main-tooltip': 'Mở hộp thoại Selective Rollback',
+		'portletlink-uncacher-label': 'Xóa bộ nhớ đệm Selective Rollback', // v4.4.3
 		'summary-label-primary': 'Tóm lược sửa đổi',
 		'summary-option-default': 'Tóm lược sửa đổi mặc định',
 		'summary-option-custom': 'Tuỳ chỉnh',
@@ -1002,7 +1002,7 @@ SelectiveRollback.i18n = {
 		'summary-help-preview': '<code>{{PLURAL}}</code> sẽ được thay thế.', // Updated in v5.0.0
 		'markbot-label': 'Đánh dấu là sửa đổi bot',
 		'watchlist-label': 'Thêm trang mục tiêu vào danh sách theo dõi',
-		'watchlist-expiry-label': 'Hết hạn', // Deprecated since v5.0.0
+		'watchlist-expiry-label': 'Thời hạn', // Deprecated since v5.0.0
 		'watchlist-expiry-indefinite': 'Vô hạn',
 		'watchlist-expiry-1week': '1 tuần',
 		'watchlist-expiry-1month': '1 tháng',
@@ -1611,7 +1611,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
-	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.1)`;
+	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.2)`;
 	SelectiveRollbackDialog.static.actions = [
 		{
 			action: 'execute',
