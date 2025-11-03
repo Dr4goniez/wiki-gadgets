@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.9
+	@version 5.0.10
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionality in this script is adapted from:
@@ -167,7 +167,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/5.0.9 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/5.0.10 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -1264,6 +1264,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 				saLayout.$element.css({ marginBottom: '-1em' });
 				saLayout.$header.css({ textAlign: uiEnd }); // Align the label in the same way as the button
 				saLayout.$field.css({ width: 'unset' }); // Remove space leading the button
+				saLayout.$label.off('click'); // Prevent label from interacting with the button
 
 				items.push(saLayout);
 			}
@@ -1664,7 +1665,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
-	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.9)`;
+	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.10)`;
 	SelectiveRollbackDialog.static.actions = [
 		{
 			action: 'execute',
