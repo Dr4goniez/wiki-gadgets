@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.7
+	@version 5.0.8
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionality in this script is adapted from:
@@ -167,7 +167,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/5.0.7 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/5.0.8 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -192,9 +192,9 @@ class SelectiveRollback {
 		/** @type {SelectiveRollbackConfig} */
 		const cfg = {
 			lang: '',
-			editSummaries: {},
+			editSummaries: Object.create(null),
 			showKeys: false,
-			specialExpressions: {},
+			specialExpressions: Object.create(null),
 			markBot: true,
 			watchPage: false,
 			watchExpiry: 'indefinite',
@@ -1664,7 +1664,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
-	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.7)`;
+	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.8)`;
 	SelectiveRollbackDialog.static.actions = [
 		{
 			action: 'execute',
