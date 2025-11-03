@@ -3,12 +3,15 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.6
+	@version 5.0.7
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
-	Some functionalities of this script are adapted from:
+	Some functionality in this script is adapted from:
 	@link https://meta.wikimedia.org/wiki/User:Hoo_man/smart_rollback.js
 	@link https://en.wikipedia.org/wiki/User:DannyS712/AjaxRollback.js
+
+	See also the type definitions at:
+	@link https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/Selective%20Rollback.d.ts
 
 \***************************************************************************************************/
 // @ts-check
@@ -164,7 +167,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/5.0.6 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/5.0.7 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -312,6 +315,9 @@ class SelectiveRollback {
 			'}' +
 			'.sr-dialog .oo-ui-inline-help code {' +
 				'color: inherit;' +
+			'}' +
+			'.sr-selected-count {' +
+				'padding-top: 6px !important;' +
 			'}' +
 			'#sr-summarypreview {' +
 				'background-color: var(--background-color-neutral-subtle, #f8f9fa);' +
@@ -606,7 +612,7 @@ class SelectiveRollback {
 
 	/**
 	 * Selects all the SR checkboxes.
-	 * @returns {this}
+	 * @returns {number}
 	 */
 	selectAll() {
 		let count = 0;
@@ -619,7 +625,7 @@ class SelectiveRollback {
 		if (!count) {
 			mw.notify(this.msg['msg-linksresolved'], { type: 'warn' });
 		}
-		return this;
+		return count;
 	}
 
 	/**
@@ -863,6 +869,7 @@ SelectiveRollback.i18n = {
 		'button-rollback': '巻き戻し', // Updated in v5.0.0
 		'button-documentation': '解説', // Added in v5.0.0
 		'button-selectall': '全選択', // Updated in v5.0.0
+		'button-selectall-count-label': '選択済み:', // Added in v5.0.7
 		'button-close': '閉じる', // Deprecated since v5.0.0
 		'msg-nonechecked': 'チェックボックスがチェックされていません。',
 		'msg-linksresolved': 'このページの巻き戻しリンクは全て解消済みです。',
@@ -897,6 +904,7 @@ SelectiveRollback.i18n = {
 		'button-rollback': 'Rollback', // Updated in v5.0.0
 		'button-documentation': 'Docs', // Added in v5.0.0
 		'button-selectall': 'Select all', // Updated in v5.0.0
+		'button-selectall-count-label': 'Selected:', // Added in v5.0.7
 		'button-close': 'Close', // Deprecated since v5.0.0
 		'msg-nonechecked': 'No checkbox is checked.',
 		'msg-linksresolved': 'Rollback links on this page have all been resolved.',
@@ -935,6 +943,7 @@ SelectiveRollback.i18n = {
 		'button-rollback': '回退', // Updated in v5.0.0
 		'button-documentation': '文档', // Added in v5.0.0
 		'button-selectall': '全选', // Updated in v5.0.0
+		'button-selectall-count-label': '已选择:', // Added in v5.0.7
 		'button-close': '关闭', // Deprecated since v5.0.0
 		'msg-nonechecked': '未选择任何勾选框。',
 		'msg-linksresolved': '与该页面相关的回退全部完成。',
@@ -973,6 +982,7 @@ SelectiveRollback.i18n = {
 		'button-rollback': 'Revertir', // Updated in v5.0.0
 		'button-documentation': 'Documentación', // Added in v5.0.0
 		'button-selectall': 'Seleccionar todo', // Updated in v5.0.0
+		'button-selectall-count-label': 'Seleccionado:', // Added in v5.0.7
 		'button-close': 'Cerrar', // Deprecated since v5.0.0
 		'msg-nonechecked': 'No hay ninguna casilla de verificación marcada.',
 		'msg-linksresolved': 'Los enlaces de reversión en esta página se han resuelto todos.',
@@ -1011,6 +1021,7 @@ SelectiveRollback.i18n = {
 		'button-rollback': 'Revino', // Updated in v5.0.0
 		'button-documentation': 'Documentație', // Added in v5.0.0
 		'button-selectall': 'Selectează tot', // Updated in v5.0.0
+		'button-selectall-count-label': 'Selectat:', // Added in v5.0.7
 		'button-close': 'Închide', // Deprecated since v5.0.0
 		'msg-nonechecked': 'Nu este bifată nicio căsuță bifabilă.',
 		'msg-linksresolved': 'Toate legăturile de revenire de pe această pagină au fost utilizate.',
@@ -1049,6 +1060,7 @@ SelectiveRollback.i18n = {
 		'button-rollback': 'Lùi sửa', // Updated in v5.0.0
 		'button-documentation': 'Tài liệu', // Added in v5.0.0
 		'button-selectall': 'Chọn tất cả', // Updated in v5.0.0
+		'button-selectall-count-label': 'Đã chọn:', // Added in v5.0.7
 		'button-close': 'Đóng', // Deprecated since v5.0.0
 		'msg-nonechecked': 'Chưa chọn sửa đổi.',
 		'msg-linksresolved': 'Đã xử lý tất cả liên kết lùi sửa.',
@@ -1087,6 +1099,7 @@ SelectiveRollback.i18n = {
 		'button-rollback': 'تراجع عن العناصر المحددة', // Updated in v5.0.0
 		'button-documentation': 'التوثيق', // Added in v5.0.0
 		'button-selectall': 'تحديد الكل', // Updated in v5.0.0
+		'button-selectall-count-label': 'المحدد:', // Added in v5.0.7
 		'button-close': 'إغلاق', // Deprecated since v5.0.0
 		'msg-nonechecked': 'لم يتم تحديد أي مربع اختيار.',
 		'msg-linksresolved': 'تم حل جميع روابط التراجع في هذه الصفحة.',
@@ -1225,13 +1238,29 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 			/** @type {OO.ui.Element[]} */
 			const items = [];
 
+			/**
+			 * @type {JQuery<HTMLSpanElement>}
+			 * @readonly
+			 * @private
+			 */
+			this.$selectedCount = $('<span>');
 			if (parentNode) {
 				const selectAll = new OO.ui.ButtonWidget({
 					flags: ['progressive'],
 					label: msg['button-selectall']
 				});
-				selectAll.on('click', () => this.sr.selectAll());
-				const saLayout = new OO.ui.FieldLayout(selectAll);
+				selectAll.on('click', () => {
+					const count = this.sr.selectAll();
+					this.$selectedCount.text(count);
+				});
+				const $label = $('<span>').addClass('sr-selected-count');
+				const saLayout = new OO.ui.FieldLayout(selectAll, {
+					$label,
+					align: dir === 'ltr' ? 'right' : 'left',
+					label: $('<span>')
+						.html(msg['button-selectall-count-label'] + '&nbsp;')
+						.append(this.$selectedCount),
+				});
 				saLayout.$element.css({
 					margin: dir === 'ltr' ? '0 0 -1em auto' : '0 auto -1em 0',
 					width: 'min-content'
@@ -1426,6 +1455,13 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 				[uiStart]: 'unset',
 				[uiEnd]: '0'
 			});
+			$el.find(
+				'.oo-ui-fieldLayout.oo-ui-labelElement.oo-ui-fieldLayout-align-left > .oo-ui-fieldLayout-body > .oo-ui-fieldLayout-header > .sr-selected-count.oo-ui-labelElement-label,' +
+				'.oo-ui-fieldLayout.oo-ui-labelElement.oo-ui-fieldLayout-align-right > .oo-ui-fieldLayout-body > .oo-ui-fieldLayout-header > .sr-selected-count.oo-ui-labelElement-label'
+			).css({
+				[`margin-${uiStart}`]: 'unset',
+				[`margin-${uiEnd}`]: '6px'
+			});
 			$el.find('.oo-ui-comboBoxInputWidget .oo-ui-inputWidget-input').css({
 				[`border-top-${uiStart}-radius`]: 'unset',
 				[`border-bottom-${uiStart}-radius`]: 'unset',
@@ -1448,6 +1484,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 		 */
 		getSetupProcess() {
 			return super.getSetupProcess().next(() => {
+				this.$selectedCount.text(this.sr.getSelected().length);
 				this.getActions().setMode(parentNode ? 'nonRCW' : 'RCW');
 			});
 		}
@@ -1488,9 +1525,11 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 					case 'documentation':
 						window.open('https://meta.wikimedia.org/wiki/Special:MyLanguage/User:Dragoniez/Selective_Rollback', '_blank');
 						break;
-					case 'selectall':
-						this.sr.selectAll();
+					case 'selectall': {
+						const count = this.sr.selectAll();
+						this.$selectedCount.text(count);
 						break;
+					}
 					default: this.close();
 				}
 			});
@@ -1625,7 +1664,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
-	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.6)`;
+	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.7)`;
 	SelectiveRollbackDialog.static.actions = [
 		{
 			action: 'execute',
@@ -1671,7 +1710,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
  * @typedef {import('./window/Selective Rollback.d.ts').ApiResponse} ApiResponse
  * @typedef {import('./window/Selective Rollback.d.ts').SRBox} SRBox
  * @typedef {import('./window/Selective Rollback.d.ts').RollbackLink} RollbackLink
- @typedef {import('./window/Selective Rollback.d.ts').RollbackLinkMap} RollbackLinkMap
+ * @typedef {import('./window/Selective Rollback.d.ts').RollbackLinkMap} RollbackLinkMap
  * @typedef {import('./window/Selective Rollback.d.ts').RollbackParams} RollbackParams
  */
 

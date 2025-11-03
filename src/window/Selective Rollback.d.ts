@@ -95,6 +95,8 @@ export interface Messages {
 	'button-documentation': string;
 	/** The text for the "Select all" dialog button. */
 	'button-selectall': string;
+	/** The text for "Selected: n", displayed on the side of the "Select all" button. */
+	'button-selectall-count-label': string;
 	/** The text for the "Close" dialog button. */
 	'button-close': string;
 	/** A mw.notify message for when no checkbox is checked for selective rollback. */
