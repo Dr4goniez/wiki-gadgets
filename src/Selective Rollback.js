@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.8
+	@version 5.0.9
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionality in this script is adapted from:
@@ -167,7 +167,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/5.0.8 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': 'Selective_Rollback/5.0.9 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
 				}
 			},
 			parameters: {
@@ -1253,18 +1253,18 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 					const count = this.sr.selectAll();
 					this.$selectedCount.text(count);
 				});
-				const $label = $('<span>').addClass('sr-selected-count');
+
 				const saLayout = new OO.ui.FieldLayout(selectAll, {
-					$label,
+					$label: $('<span>').addClass('sr-selected-count'), // Increase padding-top via class CSS
 					align: dir === 'ltr' ? 'right' : 'left',
 					label: $('<span>')
 						.html(msg['button-selectall-count-label'] + '&nbsp;')
 						.append(this.$selectedCount),
 				});
-				saLayout.$element.css({
-					margin: dir === 'ltr' ? '0 0 -1em auto' : '0 auto -1em 0',
-					width: 'min-content'
-				});
+				saLayout.$element.css({ marginBottom: '-1em' });
+				saLayout.$header.css({ textAlign: uiEnd }); // Align the label in the same way as the button
+				saLayout.$field.css({ width: 'unset' }); // Remove space leading the button
+
 				items.push(saLayout);
 			}
 
@@ -1664,7 +1664,7 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
-	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.8)`;
+	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.9)`;
 	SelectiveRollbackDialog.static.actions = [
 		{
 			action: 'execute',
