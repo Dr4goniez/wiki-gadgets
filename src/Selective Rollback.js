@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.10
+	@version 5.0.11
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionality in this script is adapted from:
@@ -20,6 +20,7 @@
 (() => {
 //**************************************************************************************************
 
+const version = '5.0.11';
 /**
  * @type {mw.Api}
  */
@@ -167,7 +168,7 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'Selective_Rollback/5.0.10 (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)'
+					'Api-User-Agent': `Selective_Rollback/${version} (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)`
 				}
 			},
 			parameters: {
@@ -1665,7 +1666,16 @@ function SelectiveRollbackDialogFactory(cfg, msg, dir, meta, parentNode) {
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
-	SelectiveRollbackDialog.static.title = `${msg.scriptname} (v5.0.10)`;
+	SelectiveRollbackDialog.static.title = $('<label>').append(
+		`${msg.scriptname} (`,
+		$('<a>')
+			.prop({
+				target: '_blank',
+				href: 'https://meta.wikimedia.org/w/index.php?title=User:Dragoniez/Selective_Rollback.js&action=history'
+			})
+			.text(`v${version}`),
+		')'
+	);
 	SelectiveRollbackDialog.static.actions = [
 		{
 			action: 'execute',
