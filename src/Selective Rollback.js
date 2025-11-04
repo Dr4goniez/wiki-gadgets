@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.0.11
+	@version 5.0.12
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionality in this script is adapted from:
@@ -20,7 +20,11 @@
 (() => {
 //**************************************************************************************************
 
-const version = '5.0.11';
+if (mw.config.get('wgUserName') === null || mw.config.get('wgUserIsTemp')) {
+	return;
+}
+
+const version = '5.0.12';
 /**
  * @type {mw.Api}
  */
