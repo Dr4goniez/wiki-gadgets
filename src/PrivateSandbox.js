@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.0.22
+	@version 1.1.0
 
 \**************************************************************************************************/
 
@@ -23,6 +23,8 @@
 /* global mw, OO */
 //<nowiki>
 (() => {
+
+const version = '1.1.0';
 
 // Initialize configs
 /** @type {PrivateSandboxConfig} */
@@ -270,9 +272,9 @@ const i18n = {
 		'label-profiles-select': 'Select profile:',
 		'label-profiles-edit': 'Edit profile:',
 		'label-profiles-edit-placeholder': 'Enter a profile name',
-		'label-profiles-edit-help': 'The profile name must consist only of alphanumeric characters, underscores, and hyphens (<code>a-zA-Z0-9_-</code>).',
+		'label-profiles-edit-help': 'The profile name must consist only of alphanumeric characters, underscores, or hyphens (<code>a-zA-Z0-9_-</code>).',
 		'title-profiles-empty': 'Enter a profile name.',
-		'title-profiles-invalidchars': 'The profile name must consist only of alphanumeric characters, underscores, and hyphens.',
+		'title-profiles-invalidchars': 'The profile name must consist only of alphanumeric characters, underscores, or hyphens.',
 		'title-profiles-toomanychars': 'The byte length of the profile name must be 255 or less.',
 		'label-profiles-button-create': 'Create',
 		'label-profiles-button-rename': 'Rename',
@@ -369,6 +371,65 @@ const i18n = {
 		'title-preview-expand': 'プレビュータブを展開',
 		'title-preview-collapse': 'プレビュータブを格納',
 		'title-preview-disabled': 'プレビュータブを使用するにはプロファイルを作成してください。'
+	},
+	/**
+	 * @author [[User:Nvdtn19]]
+	 * @since 1.1.0
+	 */
+	vi: {
+		'message-load-interface': 'Đang tải giao diện...',
+		'message-load-failed': 'Không thể tải giao diện.',
+		'message-load-welcome': 'Chào mừng đến với chỗ thử riêng tư! Hãy tạo hồ sơ đầu tiên của bạn để bắt đầu.',
+		'message-load-updated': 'Chào mừng đến với chỗ thử riêng tư mới! Chỗ thử riêng tư hiện hỗ trợ quản lý hồ sơ và dữ liệu cũ của bạn đã được lưu dưới dạng hồ sơ "1".',
+		'message-unload': 'Bạn có các thay đổi chưa lưu. Bạn có chắc chắn muốn rời khỏi trang?',
+		'label-profiles': 'Hồ sơ',
+		'label-profiles-select': 'Chọn hồ sơ:',
+		'label-profiles-edit': 'Sửa hồ sơ:',
+		'label-profiles-edit-placeholder': 'Nhập tên hồ sơ',
+		'label-profiles-edit-help': 'Tên hồ sơ chỉ được phép chứa ký tự chữ và số, dấu gạch dưới và dấu gạch ngang (<code>a-zA-Z0-9_-</code>).',
+		'title-profiles-empty': 'Nhập tên hồ sơ.',
+		'title-profiles-invalidchars': 'Tên hồ sơ chỉ được phép chứa ký tự chữ và số, dấu gạch dưới và dấu gạch ngang.',
+		'title-profiles-toomanychars': 'Độ dài byte của tên hồ sơ phải nhỏ hơn hoặc bằng 255.',
+		'label-profiles-button-create': 'Tạo',
+		'label-profiles-button-rename': 'Đổi tên',
+		'label-profiles-button-delete': 'Xóa',
+		'message-profiles-create-done': 'Đã tạo hồ sơ "$1".',
+		'message-profiles-rename-done': 'Đã đổi tên hồ sơ "$1" thành "$2".',
+		'message-profiles-rename-confirm': 'Bạn có chắc chắn muốn đổi tên hồ sơ "$1" thành "$2"?',
+		'message-profiles-delete-done': 'Đã xóa hồ sơ "$1".',
+		'message-profiles-delete-confirm': 'Bạn có chắc chắn muốn xóa hồ sơ "$1"?',
+		'label-profiles-save-help': 'Các thay đổi cần được lưu thủ công.',
+		'title-editor-disabled': 'Tạo hồ sơ để sử dụng trình soạn thảo.',
+		'label-profiles-save': 'Lưu',
+		'title-profiles-save': 'Lưu hồ sơ này',
+		'label-profiles-saveall': 'Lưu tất cả',
+		'title-profiles-saveall': 'Lưu tất cả hồ sơ',
+		'label-profiles-listunsaved': 'Liệt kê chưa lưu',
+		'title-profiles-listunsaved': 'Hiển thị danh sách các hồ sơ chưa lưu',
+		'label-deletedata': 'Xóa dữ liệu',
+		'title-deletedata': 'Xóa tất cả dữ liệu được quản lý bởi chỗ thử riêng tư',
+		'message-deletedata-confirm': 'Bạn không thể hoàn tác hành động này. Bạn có chắc chắn muốn xóa tất cả dữ liệu?',
+		'message-deletedata-doing': 'Đang xóa tất cả dữ liệu...',
+		'message-deletedata-done': 'Đã xóa tất cả dữ liệu. Vui lòng đóng trang này một lần.',
+		'message-deletedata-failed': 'Xóa dữ liệu thất bại. Vui lòng thử lại.',
+		'message-predeletedata-failed': 'Thao tác đã bị hủy vì chỗ thử riêng tư không thể tải các hồ sơ mới nhất trong quá trình trước khi xóa. Vui lòng thử lại sau vài phút. (Xem console trình duyệt để biết chi tiết lỗi.)',
+		'title-dialog-listunsaved': 'Các hồ sơ chưa lưu',
+		'label-dialog-listunsaved-deleteditem': 'đã xóa',
+		'message-presave-failed': 'Thao tác đã bị hủy vì chỗ thử riêng tư không thể tải các hồ sơ mới nhất trong quá trình trước khi lưu. Vui lòng thử lại sau vài phút. (Xem console trình duyệt để biết chi tiết lỗi.)',
+		'message-conflict-created': 'Đã tạo ở nơi khác',
+		'message-conflict-modified': 'Đã sửa đổi ở nơi khác',
+		'message-conflict-deleted': 'Đã xóa ở nơi khác',
+		'message-conflict-alert1': 'Chỗ thử riêng tư đã phát hiện sửa đổi mâu thuẫn trong các hồ sơ sau:',
+		'message-conflict-alert2': 'Điều này xảy ra khi các thay đổi mới được lưu trong tab khác sau khi mở chỗ thử riêng tư trong tab hiện tại. Để ngăn ngừa hỏng dữ liệu tiềm ẩn, bạn nên nhấn "Hủy", chuyển các thay đổi trong tab này sang tab mà các thay đổi trên được thực hiện, và đóng chỗ thử riêng tư trong tab này. Nếu bạn đồng ý ghi đè các hồ sơ mới nhất bằng dữ liệu trên trang này, hãy đóng tất cả các tab khác đã mở chỗ thử riêng tư và nhấn "OK". Tab hiện tại sẽ được làm mới khi quá trình lưu hoàn tất.',
+		'title-conflict': 'Sửa đổi mâu thuẫn',
+		'message-save-doing': 'Đang lưu...',
+		'message-save-done': 'Đã lưu hồ sơ.',
+		'message-save-failed': 'Không thể lưu hồ sơ. Vui lòng xem console trình duyệt để biết thêm chi tiết.',
+		'label-preview': 'Xem trước',
+		'message-preview-failed': 'Không thể tải bản xem trước.',
+		'title-preview-expand': 'Mở rộng tab xem trước',
+		'title-preview-collapse': 'Thu gọn tab xem trước',
+		'title-preview-disabled': 'Tạo hồ sơ để sử dụng tab xem trước.'
 	}
 };
 /**
@@ -921,7 +982,7 @@ class PrivateSandbox {
 		this.previewApi = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'PrivateSandbox/1.0.22 (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)',
+					'Api-User-Agent': `PrivateSandbox/${version} (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)`,
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					// @ts-ignore
 					'Promise-Non-Write-API-Action': true
