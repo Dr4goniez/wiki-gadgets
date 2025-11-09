@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.1.1
+	@version 1.1.2
 
 \**************************************************************************************************/
 // @ts-check
@@ -23,7 +23,7 @@
 (() => {
 //*************************************************************************************************
 
-const version = '1.1.1';
+const version = '1.1.2';
 
 // Initialize configs
 /** @type {PrivateSandboxConfig} */
@@ -653,7 +653,7 @@ class PrivateSandbox {
 					const ps = new PrivateSandbox(mwString, processed, sco, $content);
 					ps.welcomeOnFirstVisit();
 					if (cfg.debug) {
-						// @ts-ignore
+						// @ts-expect-error
 						mw.libs.PrivateSandbox = ps;
 					}
 				});
@@ -983,7 +983,7 @@ class PrivateSandbox {
 				headers: {
 					'Api-User-Agent': `PrivateSandbox/${version} (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)`,
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
-					// @ts-ignore
+					// @ts-expect-error
 					'Promise-Non-Write-API-Action': true
 				}
 			}
@@ -1099,7 +1099,7 @@ class PrivateSandbox {
 		);
 
 		// Set up wikiEditor
-		// @ts-ignore
+		// @ts-expect-error
 		const addWikiEditor = mw.addWikiEditor;
 		if (typeof addWikiEditor === 'function') {
 
@@ -1129,8 +1129,6 @@ class PrivateSandbox {
 
 			// Copy the profile name into the input, or clear the input if there's no selectable profile
 			this.prfInput.setValue(profileName || '');
-			// @ts-ignore
-			this.prfInput.emit('change'); // Change the disabled states of the buttons per the input value
 
 			// Set the profile content to the textarea
 			this.setEditorValue(profileName && this.getProfileContent(profileName) || '');
@@ -1142,7 +1140,7 @@ class PrivateSandbox {
 		});
 
 		// When the value of the input is changed, change the disabled states of the buttons
-		this.prfInput.off('change').on('change', () => {
+		this.prfInput.on('change', () => {
 			this.getValidatedValue().then((v) => {
 				if (!v) { // Invalid input value
 					this.setDisabled({
@@ -1170,8 +1168,10 @@ class PrivateSandbox {
 					}
 				}
 			});
-		}).off('enter').on('enter', () => {
-			// If Enter is pressed when the input is focused, simulate a click on the "Create" button
+		});
+
+		// If Enter is pressed when the input is focused, simulate a click on the "Create" button
+		this.prfInput.on('enter', () => {
 			if (!this.btnCreate.isDisabled()) {
 				this.btnCreate.emit('click');
 			}
@@ -1253,12 +1253,10 @@ class PrivateSandbox {
 	 */
 	static objectifySavedOptions(options) {
 		return Object.keys(options).reduce(/** @param {Record<string, string[]>} acc */ (acc, key) => {
-			const m = key.match(/^userjs-pvtsand-(.+?)-(\d+)$/); // $1: profile name, $2: index
-			if (m) {
-				if (!acc[m[1]]) {
-					acc[m[1]] = [];
-				}
-				acc[m[1]][m[2]] = options[key];
+			const [_, profile, index] = key.match(/^userjs-pvtsand-(.+?)-(\d+)$/) || [];
+			if (profile && index) {
+				acc[profile] = acc[profile] || [];
+				acc[profile][parseInt(index)] = options[key];
 			}
 			return acc;
 		}, Object.create(null));
@@ -1330,9 +1328,7 @@ class PrivateSandbox {
 			}
 		} else if (selected instanceof OO.ui.OptionWidget) {
 			// If some option is selected (i.e. there's at least one option)
-			// @ts-ignore
-			const /** @type {string} */ v = selected.getData();
-			return v;
+			return /** @type {string} */ (selected.getData());
 		} else { // OO.ui.OptionWidget[]
 			console.error(selected);
 			throw new Error('Expected items are selected in the dropdown.');
@@ -1344,8 +1340,7 @@ class PrivateSandbox {
 	 * @returns {string}
 	 */
 	getEditorValue() {
-		// @ts-ignore
-		return this.$editor.val();
+		return /** @type {string} */ (this.$editor.val());
 	}
 
 	/**
@@ -1422,6 +1417,7 @@ class PrivateSandbox {
 			elementMap[nameOrObj].setDisabled(disable);
 		} else if (typeof nameOrObj === 'object' && !Array.isArray(nameOrObj) && nameOrObj !== null) {
 			for (const key in nameOrObj) {
+				// @ts-expect-error
 				elementMap[key].setDisabled(nameOrObj[key]);
 			}
 		} else {
@@ -1510,8 +1506,7 @@ class PrivateSandbox {
 
 					// Change interface contents
 					const menu = this.prfDropdown.getMenu();
-					// @ts-ignore
-					const /** @type {OO.ui.MenuOptionWidget} */ oldItem = menu.getItemFromLabel(oldName);
+					const oldItem = /** @type {OO.ui.MenuOptionWidget} */ (menu.getItemFromLabel(oldName));
 					index = menu.getItemIndex(oldItem);
 					menu.addItems([new OO.ui.MenuOptionWidget({label: name, data: name})], index + 1).selectItemByLabel(name).removeItems([oldItem]);
 					mw.notify(mw.format(getMessage('message-profiles-rename-done'), oldName, name), {type: 'success'});
@@ -1541,7 +1536,7 @@ class PrivateSandbox {
 				// Change interface contents
 				const menu = this.prfDropdown.getMenu();
 				/** @type {OO.ui.MenuOptionWidget[]} */
-				// @ts-ignore
+				// @ts-expect-error
 				const options = menu.items;
 				let err = true;
 				for (let i = 0; i < options.length; i++) {
@@ -1790,16 +1785,16 @@ class PrivateSandbox {
 						// Update saved profiles
 						const keys = Object.keys(options).reduce(/** @param {string[]} acc */ (acc, key) => {
 							const val = options[key];
-							let m;
-							if ((m = key.match(/^userjs-pvtsand-(.+?)-(\d+)$/))) { // $1: profile name, $2: index
-								acc.push(m[1]);
+							const [_, profile, index] = key.match(/^userjs-pvtsand-(.+?)-(\d+)$/) || [];
+							if (profile && index) {
+								acc.push(profile);
 								if (val) {
-									if (!this.savedProfiles[m[1]]) {
-										this.savedProfiles[m[1]] = [];
+									if (!this.savedProfiles[profile]) {
+										this.savedProfiles[profile] = [];
 									}
-									this.savedProfiles[m[1]][m[2]] = val;
+									this.savedProfiles[profile][parseInt(index)] = val;
 								} else {
-									delete this.savedProfiles[m[1]];
+									delete this.savedProfiles[profile];
 								}
 							}
 							return acc;
@@ -1930,7 +1925,7 @@ class PrivateSandbox {
 			} else {
 				return null;
 			}
-		}).catch(/** @param {object} err */ function(_, err) {
+		}).catch(/** @param {Record<string, any>} err */ function(_, err) {
 			if (err.exception === 'abort') {
 				return '';
 			} else {
