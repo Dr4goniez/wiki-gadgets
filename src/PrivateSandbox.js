@@ -14,17 +14,16 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.1.0
+	@version 1.1.1
 
 \**************************************************************************************************/
-
 // @ts-check
-/// <reference path="./window/PrivateSandbox.d.ts" />
 /* global mw, OO */
 //<nowiki>
 (() => {
+//*************************************************************************************************
 
-const version = '1.1.0';
+const version = '1.1.1';
 
 // Initialize configs
 /** @type {PrivateSandboxConfig} */
@@ -1859,7 +1858,7 @@ class PrivateSandbox {
 			meta: 'userinfo',
 			uiprop: 'options',
 			formatversion: '2'
-		}).then(/** @param {ApiResponseUserinfo} res */ (res) => {
+		}).then(/** @param {ApiResponse} res */ (res) => {
 			return res && res.query && res.query.userinfo && res.query.userinfo.options || null;
 		}).catch((_, err) => {
 			console.warn(err);
@@ -1917,7 +1916,7 @@ class PrivateSandbox {
 			disableeditsection: true,
 			contentmodel: 'wikitext',
 			formatversion: '2'
-		}).then(/** @param {ApiResponseParse} res */ (res) => {
+		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resParse = res && res.parse;
 			if (resParse) {
 				const {text, modules, modulestyles, categorieshtml} = resParse;
@@ -1956,8 +1955,16 @@ class PrivateSandbox {
 
 }
 
-// Start-up
+//*************************************************************************************************
+
+/**
+ * @typedef {import('./window/PrivateSandbox.d.ts').PrivateSandboxConfig} PrivateSandboxConfig
+ * @typedef {import('./window/PrivateSandbox.d.ts').PrivateSandboxMessage} PrivateSandboxMessage
+ * @typedef {import('./window/PrivateSandbox.d.ts').ApiResponse} ApiResponse
+ */
+
 PrivateSandbox.init();
 
+//*************************************************************************************************
 })();
 //</nowiki>

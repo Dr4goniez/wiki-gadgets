@@ -1,8 +1,10 @@
-interface Window {
-	privateSandboxConfig?: PrivateSandboxConfig;
+declare global {
+	interface Window {
+		privateSandboxConfig?: PrivateSandboxConfig;
+	}
 }
 
-interface PrivateSandboxConfig {
+export interface PrivateSandboxConfig {
 	debug: boolean;
 	lang: string;
 	expandPreview: boolean;
@@ -10,7 +12,7 @@ interface PrivateSandboxConfig {
 	generatePortletLink: boolean;
 }
 
-interface PrivateSandboxMessage {
+export interface PrivateSandboxMessage {
 	'message-load-interface': string;
 	'message-load-failed': string;
 	'message-load-welcome': string;
@@ -71,30 +73,34 @@ interface PrivateSandboxMessage {
 	'title-preview-disabled': string;
 }
 
+export interface ApiResponse {
+	parse?: ApiResponseParse;
+	query?: ApiResponseQuery;
+}
+
 interface ApiResponseParse {
-	parse?: {
-		title: string;
-		pageid: number;
-		text: string;
-		categorieshtml: string;
-		modules: string[];
-        modulescripts: string[];
-        modulestyles: string[];
-        jsconfigvars: {
-			[key: string]: {
-                alert: string;
-                notice: string;
-            };
-        };
+	title: string;
+	pageid: number;
+	text: string;
+	categorieshtml: string;
+	modules: string[];
+	modulescripts: string[];
+	modulestyles: string[];
+	jsconfigvars: {
+		[key: string]: {
+			alert: string;
+			notice: string;
+		};
 	};
 }
 
-interface ApiResponseUserinfo {
-	query?: {
-		userinfo?: {
-			id: number;
-			name: string;
-			options?: Record<string, string>; // This is actually "Record<string, number|string|boolean>"
-		};
-	};
+interface ApiResponseQuery {
+	userinfo?: ApiResponseQueryMetaUserinfo;
+}
+
+interface ApiResponseQueryMetaUserinfo {
+	id: number;
+	name: string;
+	/** This is actually `Record<string, number|string|boolean>` */
+	options?: Record<string, string>;
 }
