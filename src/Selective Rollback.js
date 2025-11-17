@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.1.0
+	@version 5.1.1
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionality in this script is adapted from:
@@ -36,7 +36,7 @@ if (wgUserName === null || mw.config.get('wgUserIsTemp')) {
 }
 const wgWikiID = mw.config.get('wgWikiID');
 
-const version = '5.1.0';
+const version = '5.1.1';
 /**
  * @type {mw.Api}
  */
@@ -490,6 +490,7 @@ class SelectiveRollback {
 	 * @param {InstanceType<ReturnType<typeof SelectiveRollbackDialogFactory>>} dialog
 	 * @param {Required<SelectiveRollbackConfigObject>} cfg
 	 * @param {ParentNode} parentNode
+	 * @private
 	 */
 	constructor(dialog, cfg, parentNode) {
 		/**
@@ -1749,6 +1750,10 @@ class SelectiveRollbackConfig {
 		if (!isObject(userCfg)) {
 			return null;
 		}
+		if (!this.deprecatedConfigWarned) {
+			console.warn('Use of window.selectiveRollbackConfig has been deprecated. Please use Special:SelectiveRollbackConfig instead.');
+			this.deprecatedConfigWarned = true;
+		}
 
 		/**
 		 * Checks whether a config value is of the expected type.
@@ -1887,6 +1892,8 @@ class SelectiveRollbackConfig {
 			.css({ position: 'relative' });
 
 		const miscTab = new SelectiveRollbackConfigMisc($overlay);
+		const globalTab = new this('global', $overlay, miscTab);
+		const localTab = new this('local', $overlay, miscTab);
 
 		globalTabPanel.$element.append(
 			new OO.ui.MessageWidget({
@@ -1894,7 +1901,7 @@ class SelectiveRollbackConfig {
 				type: 'notice',
 				label: msg['config-notice-global']
 			}).$element,
-			new this('global', $overlay, miscTab).$element
+			globalTab.$element
 		);
 		localTabPanel.$element.append(
 			new OO.ui.MessageWidget({
@@ -1902,17 +1909,31 @@ class SelectiveRollbackConfig {
 				type: 'notice',
 				label: msg['config-notice-local']
 			}).$element,
-			new this('local', $overlay, miscTab).$element
+			localTab.$element
 		);
 		miscTabPanel.$element.append(
 			miscTab.$element
 		);
 
 		const dirMismatch = document.dir !== dir;
-		if (!dirMismatch) {
-			return;
+		if (dirMismatch) {
+			this.handleDirMismatch();
 		}
-		this.handleDirMismatch();
+
+		const beforeunloadMap = {
+			local: localTab,
+			global: globalTab
+		};
+		window.onbeforeunload = (e) => {
+			const unsaved = Object.entries(beforeunloadMap).some(([k, field]) => {
+				const key = /** @type {'local' | 'global'} */ (k);
+				return !objectsEqual(this.get(key), field.retrieve());
+			});
+			if (unsaved) {
+				e.preventDefault();
+				e.returnValue = 'You have unsaved changes. Do you want to leave the page?';
+			}
+		};
 	}
 
 	/**
@@ -2420,8 +2441,11 @@ class SelectiveRollbackConfig {
 		 * @returns {?string}
 		 */
 		const getDropdownValue = (dropdown) => {
-			// @ts-expect-error
-			return dropdown.getMenu().findFirstSelectedItem().getData();
+			const selected = dropdown.getMenu().findFirstSelectedItem();
+			if (!selected) {
+				console.error('No dropdown option is selected.', dropdown);
+			}
+			return selected && /** @type {?string} */ (selected.getData());
 		};
 
 		/** @type {import('./window/Selective Rollback.d.ts').NullableNonBoolean<Required<SelectiveRollbackConfigObject>>} */
@@ -2433,12 +2457,9 @@ class SelectiveRollbackConfig {
 			replacementExpressions: !$.isEmptyObject(replacementExpressions) ? replacementExpressions : null,
 			mergeReplacers: this.mergeReplacers.isSelected(),
 			watchlist: this.watchlist.isSelected(),
-			// @ts-expect-error
-			watchlistExpiry: getDropdownValue(this.watchlistExpiry),
-			// @ts-expect-error
-			desktopConfirm: getDropdownValue(this.desktopConfirm),
-			// @ts-expect-error
-			mobileConfirm: getDropdownValue(this.mobileConfirm),
+			watchlistExpiry: /** @type {?WatchlistExpiry} */ (getDropdownValue(this.watchlistExpiry)),
+			desktopConfirm: /** @type {?SRConfirm} */ (getDropdownValue(this.desktopConfirm)),
+			mobileConfirm: /** @type {?SRConfirm} */ (getDropdownValue(this.mobileConfirm)),
 			checkboxLabelColor: clean(this.checkboxLabelColor.getValue()) || null,
 			markBot: this.markBot.isSelected(),
 			configLink: this.configLink.isSelected(),
@@ -2448,11 +2469,7 @@ class SelectiveRollbackConfig {
 		// Return an empty object when all the field values are defaults, so that save()
 		// will convert it to null to reset the option on the server
 		const defaults = this.fieldDefaults;
-		const allFieldsDefault = Object.entries(defaults).every(([key, defaultValue]) => {
-			const k = /** @type {keyof SelectiveRollbackConfigObject} */ (key);
-			return ret[k] === defaultValue;
-		});
-		if (allFieldsDefault) {
+		if (objectsEqual(ret, defaults)) {
 			return Object.create(null);
 		}
 
@@ -2642,6 +2659,80 @@ SelectiveRollbackConfig.keys = {
 	global: 'userjs-selectiverollback-global',
 	localexists: 'userjs-selectiverollback-localexists'
 };
+SelectiveRollbackConfig.deprecatedConfigWarned = false;
+
+/**
+ * Performs a shallow-to-moderate structural equality check between two plain objects.
+ *
+ * **What this function supports**
+ * - Plain objects (`Record<string, any>`).
+ * - Primitive values.
+ * - Arrays (shallow comparison only; elements must be strictly equal).
+ * - Nested plain objects (recursively, with the same rules).
+ *
+ * **Limitations**
+ * - Class instances, Dates, Maps, Sets, RegExps, and other non-plain objects are **not** supported.
+ * - Arrays are compared **only shallowly** (no deep comparison of nested arrays).
+ * - Prototype chains are ignored — only own, enumerable string keys are compared.
+ * - Circular references are **not** supported and will cause infinite recursion.
+ * - Objects must have exactly the same set of keys to be considered equal.
+ *
+ * **Null handling**
+ * - Two `null` values are considered equal.
+ * - A `null` value compared with a non-null object is considered unequal.
+ *
+ * @param {?Record<string, any>} obj1 The first object to compare.
+ * @param {?Record<string, any>} obj2 The second object to compare.
+ * @returns {boolean} `true` if both values are considered equal under the rules above.
+ */
+function objectsEqual(obj1, obj2) {
+	if (obj1 === null && obj2 === null) {
+		return true;
+	}
+	if (!isObject(obj1) || !isObject(obj2)) {
+		return false;
+	}
+
+	const keys1 = Object.keys(obj1);
+	const keys2 = Object.keys(obj2);
+	if (keys1.length !== keys2.length) {
+		return false;
+	}
+
+	return keys1.every(key => {
+		if (!(key in obj2)) {
+			return false;
+		}
+		const v1 = obj1[key];
+		const v2 = obj2[key];
+
+		// Array comparison
+		if (Array.isArray(v1) || Array.isArray(v2)) {
+			return (
+				Array.isArray(v1) &&
+				Array.isArray(v2) &&
+				v1.length === v2.length &&
+				v1.every((el, i) => el === v2[i])
+			);
+		}
+
+		// Nested plain object
+		if (isObject(v1) && isObject(v2)) {
+			return objectsEqual(v1, v2);
+		}
+
+		// Primitive or mismatched types
+		return v1 === v2;
+	});
+}
+
+/**
+ * @param {unknown} obj
+ * @returns {obj is Record<string, any>}
+ */
+function isObject(obj) {
+	return typeof obj === 'object' && !Array.isArray(obj) && obj !== null;
+}
 
 /**
  * Returns a jQuery object for the `label` parameter of `OO.ui.FieldLayout`.
@@ -3092,14 +3183,6 @@ SelectiveRollbackConfigMisc.iconMap = {
 	tick: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Antu_mail-mark-notjunk.svg/30px-Antu_mail-mark-notjunk.svg.png',
 	cross: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Cross_reject.svg/30px-Cross_reject.svg.png'
 };
-
-/**
- * @param {unknown} obj
- * @returns {obj is Record<string, any>}
- */
-function isObject(obj) {
-	return typeof obj === 'object' && !Array.isArray(obj) && obj !== null;
-}
 
 /**
  * @param {number} milliSeconds
@@ -4142,6 +4225,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 
 /**
  * @typedef {import('./window/Selective Rollback.d.ts').ParentNode} ParentNode
+ * @typedef {import('./window/Selective Rollback.d.ts').WatchlistExpiry} WatchlistExpiry
  * @typedef {import('./window/Selective Rollback.d.ts').SelectiveRollbackConfigObjectLegacy} SelectiveRollbackConfigObjectLegacy
  * @typedef {import('./window/Selective Rollback.d.ts').SelectiveRollbackConfigObject} SelectiveRollbackConfigObject
  * @typedef {import('./window/Selective Rollback.d.ts').IsOfType} IsOfType

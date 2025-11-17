@@ -14,7 +14,7 @@ declare global {
 	}
 }
 
-type WatchlistExpiry = 'indefinite' | 'infinite' | 'infinity' | 'never' | '1 week' | '1 month' | '3 months' | '6 months' | '1 year';
+export type WatchlistExpiry = 'indefinite' | 'infinite' | 'infinity' | 'never' | '1 week' | '1 month' | '3 months' | '6 months' | '1 year';
 
 export interface SelectiveRollbackConfigObjectLegacy {
 	lang?: string;
