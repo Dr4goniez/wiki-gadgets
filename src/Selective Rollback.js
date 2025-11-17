@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.1.1
+	@version 5.1.2
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionality in this script is adapted from:
@@ -36,7 +36,7 @@ if (wgUserName === null || mw.config.get('wgUserIsTemp')) {
 }
 const wgWikiID = mw.config.get('wgWikiID');
 
-const version = '5.1.1';
+const version = '5.1.2';
 /**
  * @type {mw.Api}
  */
@@ -56,7 +56,7 @@ let dir;
 /**
  * Whether the user is on Recentchanges or Watchlist.
  */
-const isOnRCW = ['Recentchanges', 'Watchlist'].includes(mw.config.get('wgCanonicalSpecialPageName') || '');
+const isOnRCW = ['Recentchanges', 'Recentchangeslinked', 'Watchlist'].includes(mw.config.get('wgCanonicalSpecialPageName') || '');
 /**
  * Whether the user is on Special:SelectiveRollbackConfig.
  */
