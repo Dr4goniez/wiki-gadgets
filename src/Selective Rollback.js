@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.1.2
+	@version 5.1.3
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionality in this script is adapted from:
@@ -19,6 +19,8 @@
 //<nowiki>
 (() => {
 //**************************************************************************************************
+
+const version = '5.1.3';
 
 // Run this script only when on /wiki/$1 or /w/index.php
 if (
@@ -36,7 +38,6 @@ if (wgUserName === null || mw.config.get('wgUserIsTemp')) {
 }
 const wgWikiID = mw.config.get('wgWikiID');
 
-const version = '5.1.2';
 /**
  * @type {mw.Api}
  */
@@ -1352,6 +1353,7 @@ SelectiveRollback.i18n = {
 	},
 	/**
 	 * @author [[User:Hide on Rosé]]
+	 * @author [[User:Nvdtn19]]
 	 * @since 4.1.0
 	 */
 	vi: {
@@ -1362,12 +1364,12 @@ SelectiveRollback.i18n = {
 		'dialog-label-summary-default': 'Tóm lược sửa đổi mặc định',
 		'dialog-label-summary-custom': 'Tuỳ chỉnh',
 		'dialog-label-summaryinput': 'Tóm lược tuỳ chỉnh',
-		'dialog-help-summaryinput-$0': '<code>$0</code> sẽ được thay bằng tóm lược sửa đổi mặc định.',
-		'dialog-help-summaryinput-$0-error': '<code>$0</code> sẽ được thay bằng tóm lược sửa đổi mặc định <b>trong tiếng Anh</b>.',
+		'dialog-help-summaryinput-$0': '<code>$0</code> sẽ được thay bằng tóm lược lùi sửa mặc định.',
+		'dialog-help-summaryinput-$0-error': '<code>$0</code> sẽ được thay bằng tóm lược lùi sửa mặc định <b>trong tiếng Anh</b>.',
 		'dialog-label-summarypreview': 'Xem trước tóm lược', // v4.0.0
 		'dialog-help-summarypreview': '<code>{{PLURAL:$7}}</code> sẽ được thay thế.', // Updated in v5.0.0
 		'dialog-label-markbot': 'Đánh dấu là sửa đổi bot',
-		'dialog-label-watchlist': 'Thêm mục tiêu hoàn tác vào danh sách theo dõi', // Updated in v5.1.0
+		'dialog-label-watchlist': 'Thêm trang tôi lùi sửa vào danh sách theo dõi', // Updated in v5.1.0
 		'dialog-label-watchlistexpiry': 'Thời hạn', // Deprecated since v5.0.0
 		'dialog-label-watchlistexpiry-indefinite': 'Vô hạn',
 		'dialog-label-watchlistexpiry-1week': '1 tuần',
@@ -1383,12 +1385,12 @@ SelectiveRollback.i18n = {
 		'dialog-button-close': 'Đóng', // Deprecated since v5.0.0
 		'rollback-notify-noneselected': 'Chưa chọn sửa đổi.',
 		'rollback-notify-linksresolved': 'Đã xử lý tất cả liên kết lùi sửa.',
-		'rollback-confirm': 'Bạn có muốn lùi sửa sửa đổi này không?',
+		'rollback-confirm': 'Bạn có muốn lùi sửa đổi này không?',
 		'rollback-label-success': 'đã lùi sửa',
 		'rollback-label-failure': 'lùi lại không thành công',
 		'rollback-notify-success': 'Thành công', // v4.0.0
 		'rollback-notify-failure': 'Không thành công', // v4.0.0
-		// v5.1.0 (review required)
+		// v5.1.0
 		'config-title': 'Cấu hình Selective Rollback',
 		'config-tab-local': 'Cục bộ',
 		'config-tab-global': 'Toàn cục',
@@ -1398,43 +1400,43 @@ SelectiveRollback.i18n = {
 		'config-default-disabled': 'Tắt',
 		'config-default-enabled': 'Bật',
 		'config-label-lang': 'Ngôn ngữ',
-		'config-help-lang': 'Ngôn ngữ giao diện người dùng đã đặt trong Tùy chỉnh, hoặc tiếng Anh nếu không có bản dịch.',
-		'config-label-summary': 'Tóm tắt đặt sẵn',
-		'config-label-propertyinput-key': 'Khóa',
+		'config-help-lang': 'Dùng ngôn ngữ giao diện mà người dùng đã thiết lập trong phần Tùy chọn, nếu không có bản dịch thì mặc định là tiếng Anh.',
+		'config-label-summary': 'Tóm lược tùy chỉnh',
+		'config-label-propertyinput-key': 'Nhãn',
 		'config-label-propertyinput-value': 'Giá trị',
-		'config-error-propertyinput-key-empty': 'Khóa không được để trống.',
-		'config-error-propertyinput-value-empty': 'Giá trị không được để trống.',
-		'config-error-propertyinput-key-reserved': 'Khóa "$1" được hệ thống dành riêng nên không thể sử dụng.',
-		'config-error-propertyinput-key-duplicate': 'Khóa không được trùng lặp.',
+		'config-error-propertyinput-key-empty': 'Không thể để trống nhãn.',
+		'config-error-propertyinput-value-empty': 'Không thể để trống giá trị.',
+		'config-error-propertyinput-key-reserved': 'Nhãn "$1" là dành riêng cho hệ thống nên không thể sử dụng.',
+		'config-error-propertyinput-key-duplicate': 'Nhãn không được trùng lặp.',
 		'config-button-add': 'Thêm',
-		'config-button-remove': 'Loại bỏ',
+		'config-button-remove': 'Xóa',
 		'config-button-deselectall': 'Bỏ chọn tất cả',
-		'config-help-summary-$0': '<code>$0</code> — tóm tắt hoàn tác mặc định của wiki cục bộ',
-		'config-help-summary-$1': '<code>$1</code> — tên người dùng của tác giả bản sửa được khôi phục',
-		'config-help-summary-$2': '<code>$2</code> — tên người dùng của tác giả các sửa bị hoàn tác',
-		'config-help-summary-$3': '<code>$3</code> — ID phiên bản được hoàn tác tới',
-		'config-help-summary-$4': '<code>$4</code> — thời gian của phiên bản được hoàn tác tới',
-		'config-help-summary-$5': '<code>$5</code> — ID phiên bản bị hoàn tác',
-		'config-help-summary-$6': '<code>$6</code> — thời gian của phiên bản bị hoàn tác',
-		'config-help-summary-$7': '<code>$7</code> — số sửa bị hoàn tác',
-		'config-label-showkeys': 'Dùng khóa thay vì giá trị trong menu thả xuống',
-		'config-label-mergesummaries': 'Gộp các tóm tắt từ cấu hình toàn cục thay vì ghi đè chúng',
+		'config-help-summary-$0': '<code>$0</code> — tóm lược lùi sửa mặc định của wiki cục bộ',
+		'config-help-summary-$1': '<code>$1</code> — tên người dùng của phiên bản được lùi về',
+		'config-help-summary-$2': '<code>$2</code> — tên người dùng của phiên bản bị lùi lại',
+		'config-help-summary-$3': '<code>$3</code> — ID phiên bản được lùi về',
+		'config-help-summary-$4': '<code>$4</code> — thời gian của phiên bản được lùi về',
+		'config-help-summary-$5': '<code>$5</code> — ID phiên bản bị lùi lại',
+		'config-help-summary-$6': '<code>$6</code> — thời gian của phiên bản bị lùi lại',
+		'config-help-summary-$7': '<code>$7</code> — số sửa đổi bị lùi lại',
+		'config-label-showkeys': 'Dùng nhãn thay vì giá trị trong menu thả xuống',
+		'config-label-mergesummaries': 'Bổ sung các tóm lược từ cấu hình toàn cục thay vì ghi đè',
 		'config-label-replacer': 'Thay thế biểu thức',
-		'config-help-replacer': 'Thay thế biểu thức sẽ được đổi thành văn bản tương ứng trong tóm tắt hoàn tác. Khuyến nghị <b>luôn</b> bắt đầu bằng <code>$</code> hoặc ký hiệu tương tự để tránh thay thế ngoài ý muốn.',
-		'config-label-mergereplacers': 'Gộp các biểu thức thay thế từ cấu hình toàn cục thay vì ghi đè chúng',
+		'config-help-replacer': 'Các biểu thức thay thế sẽ được chuyển thành văn bản tương ứng trong phần tóm lược lùi sửa. Nên <b>luôn</b> bắt đầu bằng <code>$</code> hoặc ký hiệu tương tự để tránh việc thay thế ngoài ý muốn.',
+		'config-label-mergereplacers': 'Bổ sung các biểu thức thay thế từ cấu hình toàn cục thay vì ghi đè',
 		'config-label-watchlist': 'Danh sách theo dõi',
-		'config-label-watchlistexpiry': 'Thời hạn danh sách theo dõi',
-		'config-label-confirmation': 'Xác nhận hoàn tác',
+		'config-label-watchlistexpiry': 'Thời hạn trong danh sách theo dõi',
+		'config-label-confirmation': 'Xác nhận lùi sửa',
 		'config-label-confirmation-desktop': 'Máy tính',
 		'config-label-confirmation-mobile': 'Di động',
-		'config-label-confirmation-always': 'Luôn xác nhận',
-		'config-label-confirmation-never': 'Không bao giờ xác nhận',
-		'config-label-confirmation-RCW': 'Xác nhận khi ở Thay đổi gần đây hoặc Trang tôi theo dõi',
-		'config-label-confirmation-nonRCW': 'Xác nhận khi không ở Thay đổi gần đây hoặc Trang tôi theo dõi',
+		'config-label-confirmation-always': 'Luôn yêu cầu xác nhận',
+		'config-label-confirmation-never': 'Không yêu cầu xác nhận',
+		'config-label-confirmation-RCW': 'Yêu cầu xác nhận khi ở Thay đổi gần đây hoặc Danh sách theo dõi',
+		'config-label-confirmation-nonRCW': 'Yêu cầu xác nhận khi không ở Thay đổi gần đây hoặc Danh sách theo dõi',
 		'config-label-checkboxlabelcolor': 'Màu nhãn hộp kiểm',
 		'config-help-checkboxlabelcolor': 'Xem trước:',
 		'config-label-miscellaneous': 'Khác',
-		'config-help-markbot': 'Tùy chọn này chỉ áp dụng khi bạn có quyền cần thiết trên wiki.',
+		'config-help-markbot': 'Tùy chọn này chỉ được áp dụng khi bạn có quyền cần thiết trên wiki.',
 		'config-label-configlink': 'Tạo liên kết portlet đến trang cấu hình',
 		'config-label-purger': 'Tạo liên kết portlet để xóa bộ nhớ đệm',
 		'config-button-save': 'Lưu',
@@ -1452,9 +1454,9 @@ SelectiveRollback.i18n = {
 		'config-help-deletelocalall-absent': 'Bạn không có cấu hình cục bộ nào trên các dự án khác.',
 		'config-label-deletedata': 'Xóa dữ liệu',
 		'config-button-deletedata': 'Xóa',
-		'config-confirm-deletedata': 'Bạn có chắc chắn muốn xóa dữ liệu cấu hình không? Hành động này không thể hoàn tác.',
-		'config-notify-deletedata-success': 'Đã xóa dữ liệu cấu hình được chỉ định.',
-		'config-notify-deletedata-failure': 'Không thể xóa một số dữ liệu cấu hình được chỉ định.',
+		'config-confirm-deletedata': 'Bạn có chắc chắn muốn xóa dữ liệu cấu hình không? Bạn không thể hoàn tác hành động này.',
+		'config-notify-deletedata-success': 'Đã xóa dữ liệu cấu hình được chọn.',
+		'config-notify-deletedata-failure': 'Không thể xóa một số dữ liệu cấu hình được chọn.',
 	},
 	/**
 	 * @author [[User:Gerges]]
