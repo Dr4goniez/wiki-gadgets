@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.2.1
+	@version 1.2.2
 
 \**************************************************************************************************/
 // @ts-check
@@ -23,7 +23,7 @@
 (() => {
 //*************************************************************************************************
 
-const version = '1.2.1';
+const version = '1.2.2';
 
 // Initialize configs
 /** @type {PrivateSandboxConfig} */
@@ -1141,6 +1141,7 @@ class PrivateSandbox {
 				if (!cmMode || typeof cmMode.mediawiki !== 'function') {
 					break;
 				}
+				this.$editor.css({ height: '300px' }); // Ensure the editor is expanded on initialization
 				const cmWe = new CodeMirrorWikiEditor(this.$editor, cmMode.mediawiki());
 				cmWe.mode = 'mediawiki';
 				cmWe.initialize();
