@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.2.0
+	@version 1.2.1
 
 \**************************************************************************************************/
 // @ts-check
@@ -23,7 +23,7 @@
 (() => {
 //*************************************************************************************************
 
-const version = '1.2.0';
+const version = '1.2.1';
 
 // Initialize configs
 /** @type {PrivateSandboxConfig} */
@@ -38,7 +38,10 @@ const cfg = Object.assign({
 // Exit on certain conditions
 if (mw.config.get('wgUserId') === null) {
 	// User is not logged in
-	mw.notify('You are not logged in. Please log in to your account to access the private sandbox.', {type: 'error', autoHideSeconds: 'long'});
+	mw.notify(
+		'You are not logged in. Please log in to your account to access the private sandbox.',
+		{ type: 'error', autoHideSeconds: 'long' }
+	);
 	return;
 } else if (!(mw.config.get('wgNamespaceNumber') === -1 && /^(PrivateSandbox|PS)$/i.test(mw.config.get('wgTitle')))) {
 	// User is not on Special:PrivateSandbox
@@ -192,7 +195,7 @@ class ScreenOverlay {
 	/**
 	 * @param {boolean} show
 	 * @param {number} [displayedFor]
-	 * @returns {ScreenOverlay|JQueryPromise<ScreenOverlay>}
+	 * @returns {ScreenOverlay | JQueryPromise<ScreenOverlay>}
 	 */
 	toggle(show, displayedFor) {
 		if (show === false && typeof displayedFor === 'number') {
@@ -240,7 +243,7 @@ class ScreenOverlay {
 	/**
 	 * @param {string} [str]
 	 * @param {boolean} [showSpinner]
-	 * @returns {ScreenOverlay|string}
+	 * @returns {ScreenOverlay | string}
 	 */
 	text(str, showSpinner) {
 		if (typeof str === 'string') {
@@ -440,7 +443,7 @@ const messages = (() => {
 	if (cfg.lang && !i18n[cfg.lang]) {
 		mw.notify(
 			$(`<div>Sorry, PrivateSandbox does not currently have <code>${cfg.lang}</code> language support for its interface.</div>`),
-			{type: 'error', autoHideSeconds: 'long'}
+			{ type: 'error', autoHideSeconds: 'long' }
 		);
 	}
 	return i18n[lang] || i18n.en;
@@ -602,7 +605,7 @@ class PrivateSandbox {
 			const $content = $('.mw-body-content');
 			if (!$heading.length || !$content.length) {
 				sco.toggle(false);
-				mw.notify(getMessage('message-load-failed'), {type: 'error', autoHide: false});
+				mw.notify(getMessage('message-load-failed'), { type: 'error', autoHide: false });
 				return;
 			}
 			$heading.text(scriptName);
@@ -773,7 +776,7 @@ class PrivateSandbox {
 		 */
 		this.profiles = Object.keys(this.savedProfiles).reduce(/** @param {Record<string, string>} acc */ (acc, key) => {
 			acc[key] = this.savedProfiles[key].join('');
-			ddItems.push(new OO.ui.MenuOptionWidget({label: key, data: key}));
+			ddItems.push(new OO.ui.MenuOptionWidget({ label: key, data: key }));
 			return acc;
 		}, Object.create(null));
 
@@ -1023,7 +1026,7 @@ class PrivateSandbox {
 			const show = !this.$previewContent.is(':visible');
 			this.$previewContent.toggle(show);
 			btnPreview
-				.setFlags({progressive: show})
+				.setFlags({ progressive: show })
 				.setTitle(getMessage(show ? 'title-preview-collapse' : 'title-preview-expand'));
 			if (show) {
 				this.preview(this.getEditorValue());
@@ -1032,7 +1035,7 @@ class PrivateSandbox {
 		if (cfg.expandPreview) {
 			// The collapsed state of $previewContent is initialized when it's added to the DOM,
 			// meaning that no click event fires on it; hence add the flag if needed
-			btnPreview.setFlags({progressive: true});
+			btnPreview.setFlags({ progressive: true });
 		}
 
 		// Construct the interface
@@ -1312,7 +1315,7 @@ class PrivateSandbox {
 	welcomeOnFirstVisit() {
 		const optionKey = 'userjs-pvtsand-welcomed';
 		if (mw.user.options.get(optionKey) !== '') {
-			PrivateSandbox.saveOptions({[optionKey]: ''}).then(() => {
+			PrivateSandbox.saveOptions({ [optionKey]: '' }).then(() => {
 				this.sco.toggle(false, 800).then(() => {
 					OO.ui.alert(getMessage(this.processed ? 'message-load-updated' : 'message-load-welcome'), {
 						title: 'Welcome!',
@@ -1421,7 +1424,7 @@ class PrivateSandbox {
 	}
 
 	/**
-	 * @typedef {"dropdown"|"input"|"create"|"rename"|"delete"|"save"|"saveall"|"listunsaved"} PSElements
+	 * @typedef { 'dropdown' | 'input' | 'create' | 'rename' | 'delete' | 'save' | 'saveall' | 'listunsaved'} PSElements
 	 */
 	/**
 	 * Toggle the disabled states of interface elements.
@@ -1438,7 +1441,7 @@ class PrivateSandbox {
 	 * @returns {PrivateSandbox}
 	 */
 	/**
-	 * @param {PSElements|Partial<Record<PSElements, boolean>>} nameOrObj
+	 * @param {PSElements | Partial<Record<PSElements, boolean>>} nameOrObj
 	 * @param {boolean} [disable]
 	 * @returns {PrivateSandbox}
 	 */
@@ -1471,7 +1474,7 @@ class PrivateSandbox {
 
 	/**
 	 * Perform an action to modify a profile when the given button is clicked.
-	 * @param {"create"|"rename"|"delete"} action
+	 * @param { 'create' | 'rename' | 'delete'} action
 	 * @returns {void}
 	 */
 	modifyProfile(action) {
@@ -1510,8 +1513,8 @@ class PrivateSandbox {
 		}
 
 		// Change interface contents
-		this.prfDropdown.getMenu().addItems([new OO.ui.MenuOptionWidget({label: name, data: name})]).selectItemByLabel(name);
-		mw.notify(mw.format(getMessage('message-profiles-create-done'), name), {type: 'success'});
+		this.prfDropdown.getMenu().addItems([new OO.ui.MenuOptionWidget({ label: name, data: name })]).selectItemByLabel(name);
+		mw.notify(mw.format(getMessage('message-profiles-create-done'), name), { type: 'success' });
 
 	}
 
@@ -1551,8 +1554,8 @@ class PrivateSandbox {
 					const menu = this.prfDropdown.getMenu();
 					const oldItem = /** @type {OO.ui.MenuOptionWidget} */ (menu.getItemFromLabel(oldName));
 					index = menu.getItemIndex(oldItem);
-					menu.addItems([new OO.ui.MenuOptionWidget({label: name, data: name})], index + 1).selectItemByLabel(name).removeItems([oldItem]);
-					mw.notify(mw.format(getMessage('message-profiles-rename-done'), oldName, name), {type: 'success'});
+					menu.addItems([new OO.ui.MenuOptionWidget({ label: name, data: name })], index + 1).selectItemByLabel(name).removeItems([oldItem]);
+					mw.notify(mw.format(getMessage('message-profiles-rename-done'), oldName, name), { type: 'success' });
 
 				}
 			});
@@ -1597,7 +1600,7 @@ class PrivateSandbox {
 					throw new Error('There is no option labelled as "' + name + '".');
 				}
 
-				mw.notify(mw.format(getMessage('message-profiles-delete-done'), name), {type: 'success'});
+				mw.notify(mw.format(getMessage('message-profiles-delete-done'), name), { type: 'success' });
 
 			}
 		});
@@ -1672,7 +1675,7 @@ class PrivateSandbox {
 
 					if (!fetchedOptions) {
 						this.sco.toggle(false, 800).then(() => {
-							mw.notify(getMessage('message-predeletedata-failed'), {type: 'error', autoHideSeconds: 'long'});
+							mw.notify(getMessage('message-predeletedata-failed'), { type: 'error', autoHideSeconds: 'long' });
 						});
 						return;
 					}
@@ -1692,7 +1695,7 @@ class PrivateSandbox {
 							this.sco.text(getMessage('message-deletedata-done'), false);
 						} else {
 							this.sco.toggle(false, 800).then(() => {
-								mw.notify(getMessage('message-deletedata-failed'), {type: 'error'});
+								mw.notify(getMessage('message-deletedata-failed'), { type: 'error' });
 							});
 						}
 					});
@@ -1729,7 +1732,7 @@ class PrivateSandbox {
 			// Exit if the fetching failed
 			if (!fetchedOptions) {
 				this.sco.toggle(false, 500).then(() => {
-					mw.notify(getMessage('message-presave-failed'), {type: 'error', autoHideSeconds: 'long'});
+					mw.notify(getMessage('message-presave-failed'), { type: 'error', autoHideSeconds: 'long' });
 				});
 				return;
 			}
@@ -1792,7 +1795,7 @@ class PrivateSandbox {
 				// Collect profiles that need to be updated
 				const options = this.getUnsavedProfiles(name).reduce(/** @param {Record<string, string?>} acc */ (acc, prof) => {
 					/**
-					 * @type {(string|null)[]}
+					 * @type {(?string)[]}
 					 */
 					const values = [];
 					if (typeof this.profiles[prof] === 'string') {
@@ -1822,7 +1825,7 @@ class PrivateSandbox {
 					let notifyResult;
 					if (success) {
 
-						notifyResult = () => mw.notify(getMessage('message-save-done'), {type: 'success'});
+						notifyResult = () => mw.notify(getMessage('message-save-done'), { type: 'success' });
 						mw.user.options.set(options);
 
 						// Update saved profiles
@@ -1861,7 +1864,7 @@ class PrivateSandbox {
 						mw.hook('pvtsand.content').fire(this.getEditorValue());
 
 					} else {
-						notifyResult = () => mw.notify(getMessage('message-save-failed'), {type: 'error'});
+						notifyResult = () => mw.notify(getMessage('message-save-failed'), { type: 'error' });
 					}
 
 					if (confirmed) {
@@ -1872,8 +1875,8 @@ class PrivateSandbox {
 						this.sco.toggle(false, 800).then(notifyResult);
 
 						if (cfg.debug) {
-							const {savedProfiles, profiles, deletedProfiles, renameLogs} = this;
-							console.log({options, savedProfiles, profiles, deletedProfiles, renameLogs});
+							const { savedProfiles, profiles, deletedProfiles, renameLogs } = this;
+							console.log({ options, savedProfiles, profiles, deletedProfiles, renameLogs });
 						}
 
 					}
@@ -1957,7 +1960,7 @@ class PrivateSandbox {
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resParse = res && res.parse;
 			if (resParse) {
-				const {text, modules, modulestyles, categorieshtml} = resParse;
+				const { text, modules, modulestyles, categorieshtml } = resParse;
 				if (modules.length) {
 					mw.loader.load(modules);
 				}
