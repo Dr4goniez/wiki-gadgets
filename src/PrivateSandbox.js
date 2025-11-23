@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.1.2
+	@version 1.1.3
 
 \**************************************************************************************************/
 // @ts-check
@@ -23,7 +23,7 @@
 (() => {
 //*************************************************************************************************
 
-const version = '1.1.2';
+const version = '1.1.3';
 
 // Initialize configs
 /** @type {PrivateSandboxConfig} */
@@ -1241,6 +1241,11 @@ class PrivateSandbox {
 		} else {
 			// If there's no profile, trigger a labelChange event to initialize the interface elements
 			this.prfDropdown.emit('labelChange');
+
+			// The callback to the labelChange event internally calls `prfInput.setValue`, but no change
+			// event is emitted when the old and new input values are identical. Because of this, it's
+			// necessary to manually emit a change event here as a workaround for this behaviour 
+			this.prfInput.emit('change', '');
 		}
 
 	}
