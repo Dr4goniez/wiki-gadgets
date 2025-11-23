@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.1.3
+	@version 1.2.0
 
 \**************************************************************************************************/
 // @ts-check
@@ -23,7 +23,7 @@
 (() => {
 //*************************************************************************************************
 
-const version = '1.1.3';
+const version = '1.2.0';
 
 // Initialize configs
 /** @type {PrivateSandboxConfig} */
@@ -476,14 +476,12 @@ class PrivateSandbox {
 				'oojs-ui.styles.icons-editing-core',
 				'oojs-ui.styles.icons-editing-list'
 			],
-			ed: [
-				'ext.wikiEditor'
-			]
+			ed: /** @type {string[]} */ ([])
 		};
 		const defModules = mw.loader.using(dependencies.main);
 
 		// Load the DOM
-		$(function() {
+		$(() => {
 
 			// Create a style tag
 			const style = document.createElement('style');
@@ -534,9 +532,6 @@ class PrivateSandbox {
 					'cursor: not-allowed;' +
 					'user-select: none;' +
 				'}' +
-				'.pvtsand-editor {' +
-					'font-size: 82%;' +
-				'}' +
 				'#pvtsand-savebutton-container {' +
 					'margin-top: 1em;' +
 				'}' +
@@ -567,26 +562,37 @@ class PrivateSandbox {
 			});
 
 			// Load wikiEditor-related modules in the background
-			let edModules;
-			if (mw.loader.getState(dependencies.ed[0])) { // If wikiEditor is available as an extension
+			const we = 'ext.wikiEditor';
+			let /** @type {?JQuery.Promise<ModuleRequire>} */ edModules = null;
+			if (this.isModuleAvailable(we)) {
+				dependencies.ed.push(we);
 
 				// Hack: wikiEditor-related manipulations before loading the extension
 				mw.config.get('wgExtraSignatureNamespaces', []).push(-1); // For the signature button to be available
 				$('body').addClass('ns-subject'); // For the reference button to be avaiable
 
 				// Also load plugins if available
-				[
+				const modules = [
 					'ext.TemplateWizard',
 					'ext.cite.wikiEditor',
-					// 'ext.CodeMirror.v6.WikiEditor'
-				]
-				.forEach((m) => {
-					if (mw.loader.getState(m)) {
-						dependencies.ed.push(m);
+					'ext.CodeMirror.v6.WikiEditor',
+					'ext.CodeMirror.v6.mode.mediawiki'
+				];
+				for (let i = 0; i < modules.length; i++) {
+					const mod = modules[i];
+					if (this.isModuleAvailable(mod)) {
+						dependencies.ed.push(mod);
+					} else {
+						if (cfg.debug) {
+							console.warn(`Module ${mod} is unavailable.`);
+						}
+						if (i === 2) {
+							break;
+						}
 					}
-				});
-				edModules = mw.loader.using(dependencies.ed);
+				}
 
+				edModules = mw.loader.using(dependencies.ed);
 			}
 
 			// Collect and manipulate native DOM elements
@@ -646,11 +652,11 @@ class PrivateSandbox {
 			};
 
 			// When modules are ready, create the PrivateSandbox interface
-			$.when(defModules, edModules).then((req) => {
+			$.when(defModules, edModules).then((req, cmReq) => {
 				/** @type {MwString} */
 				const mwString = req('mediawiki.String');
 				processOldProfile().then((processed) => {
-					const ps = new PrivateSandbox(mwString, processed, sco, $content);
+					const ps = new PrivateSandbox(mwString, cmReq, processed, sco, $content);
 					ps.welcomeOnFirstVisit();
 					if (cfg.debug) {
 						// @ts-expect-error
@@ -661,6 +667,14 @@ class PrivateSandbox {
 
 		});
 
+	}
+
+	/**
+	 * @param {string} moduleName
+	 * @returns {boolean}
+	 */
+	static isModuleAvailable(moduleName) {
+		return this.availableModules.has(moduleName);
 	}
 
 	/**
@@ -711,11 +725,12 @@ class PrivateSandbox {
 
 	/**
 	 * @param {MwString} mwString
+	 * @param {?ModuleRequire} requireCm
 	 * @param {boolean} processed Whether an old profile has been processed.
 	 * @param {ScreenOverlay} sco
 	 * @param {JQuery<HTMLElement>} $content
 	 */
-	constructor(mwString, processed, sco, $content) {
+	constructor(mwString, requireCm, processed, sco, $content) {
 
 		/**
 		 * @type {MwString}
@@ -1101,18 +1116,34 @@ class PrivateSandbox {
 		// Set up wikiEditor
 		// @ts-expect-error
 		const addWikiEditor = mw.addWikiEditor;
+		let codeMirrorLoaded = false;
 		if (typeof addWikiEditor === 'function') {
-
 			addWikiEditor(this.$editor);
 
 			// Load realtimepreview if available. The extension internally defines a "context" variable, and
 			// the loading must be deferred until wikiEditor is initialized.
 			const rtp ='ext.wikiEditor.realtimepreview';
-			if (mw.loader.getState(rtp)) {
+			if (PrivateSandbox.isModuleAvailable(rtp)) {
 				mw.user.options.set('wikieditor-realtimepreview', 0); // Turn it off by default
 				mw.loader.using(rtp);
 			}
 
+			// Load CodeMirror
+			while (typeof requireCm === 'function') {
+				const CodeMirrorWikiEditor = requireCm('ext.CodeMirror.v6.WikiEditor');
+				if (!CodeMirrorWikiEditor) {
+					break;
+				}
+				const cmMode = requireCm('ext.CodeMirror.v6.mode.mediawiki');
+				if (!cmMode || typeof cmMode.mediawiki !== 'function') {
+					break;
+				}
+				const cmWe = new CodeMirrorWikiEditor(this.$editor, cmMode.mediawiki());
+				cmWe.mode = 'mediawiki';
+				cmWe.initialize();
+				codeMirrorLoaded = true;
+				break;
+			}
 		}
 
 		// Set up events (for non-buttons)
@@ -1178,14 +1209,17 @@ class PrivateSandbox {
 		});
 
 		// Fire the "pvtsand.content" hook when the content is edited
-		/** @type {NodeJS.Timeout} */
-		let editorTimeout;
-		this.$editor.off('input').on('input', () => {
+		let /** @type {NodeJS.Timeout} */ editorTimeout;
+		const onEditorContentChange = () => {
 			clearTimeout(editorTimeout);
 			editorTimeout = setTimeout(() => {
 				mw.hook('pvtsand.content').fire(this.getEditorValue());
 			}, 500);
-		});
+		};
+		this.$editor.off('input').on('input', onEditorContentChange);
+		if (codeMirrorLoaded) {
+			mw.hook('ext.CodeMirror.input').add(onEditorContentChange);
+		}
 
 		// Event handler for when the editor content is changed
 		/** @type {NodeJS.Timeout} */
@@ -1244,8 +1278,12 @@ class PrivateSandbox {
 
 			// The callback to the labelChange event internally calls `prfInput.setValue`, but no change
 			// event is emitted when the old and new input values are identical. Because of this, it's
-			// necessary to manually emit a change event here as a workaround for this behaviour 
+			// necessary to manually emit a change event here as a workaround for this behaviour
 			this.prfInput.emit('change', '');
+
+			// CodeMirror automatically sets focus on the editor, but the profile input must be focused instead
+			// because the editor is pseudo-disabled by the overlay and should be inaccessible
+			this.prfInput.focus();
 		}
 
 	}
@@ -1345,7 +1383,7 @@ class PrivateSandbox {
 	 * @returns {string}
 	 */
 	getEditorValue() {
-		return /** @type {string} */ (this.$editor.val());
+		return this.$editor.textSelection('getContents');
 	}
 
 	/**
@@ -1354,7 +1392,7 @@ class PrivateSandbox {
 	 * @returns {PrivateSandbox}
 	 */
 	setEditorValue(content) {
-		this.$editor.val(content);
+		this.$editor.textSelection('setContents', content);
 		mw.hook('pvtsand.content').fire(content);
 		return this;
 	}
@@ -1954,12 +1992,14 @@ class PrivateSandbox {
 	}
 
 }
+PrivateSandbox.availableModules = new Set(mw.loader.getModuleNames());
 
 //*************************************************************************************************
 
 /**
  * @typedef {import('./window/PrivateSandbox.d.ts').PrivateSandboxConfig} PrivateSandboxConfig
  * @typedef {import('./window/PrivateSandbox.d.ts').PrivateSandboxMessage} PrivateSandboxMessage
+ * @typedef {import('./window/PrivateSandbox.d.ts').ModuleRequire} ModuleRequire
  * @typedef {import('./window/PrivateSandbox.d.ts').ApiResponse} ApiResponse
  */
 

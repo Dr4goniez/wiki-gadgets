@@ -73,6 +73,9 @@ export interface PrivateSandboxMessage {
 	'title-preview-disabled': string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ModuleRequire = (moduleName: string) => any;
+
 export interface ApiResponse {
 	parse?: ApiResponseParse;
 	query?: ApiResponseQuery;
