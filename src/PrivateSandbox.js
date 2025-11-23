@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.2.2
+	@version 1.2.3
 
 \**************************************************************************************************/
 // @ts-check
@@ -23,7 +23,7 @@
 (() => {
 //*************************************************************************************************
 
-const version = '1.2.2';
+const version = '1.2.3';
 
 // Initialize configs
 /** @type {PrivateSandboxConfig} */
@@ -36,7 +36,7 @@ const cfg = Object.assign({
 }, window.privateSandboxConfig);
 
 // Exit on certain conditions
-if (mw.config.get('wgUserId') === null) {
+if (!mw.config.get('wgUserName') || mw.config.get('wgUserIsTemp')) {
 	// User is not logged in
 	mw.notify(
 		'You are not logged in. Please log in to your account to access the private sandbox.',
@@ -66,12 +66,6 @@ if (mw.config.get('wgUserId') === null) {
  */
 class ScreenOverlay {
 
-	/**
-	 * @typedef {object} ScreenOverlayOptions
-	 * @property {string} [text] The text to use to initialize ScreenOverlay.
-	 * @property {boolean} [showSpinner] Whether to show the spinner on the side of the text, defaulted to `true`.
-	 * @property {boolean} [autoStart] Whether to auto-start ScreenOverlay, defaulted to `true`.
-	 */
 	/**
 	 * Initialize a ScreenOverlay instance.
 	 * @param {ScreenOverlayOptions} [options]
@@ -190,12 +184,12 @@ class ScreenOverlay {
 	 * @overload
 	 * @param {false} show
 	 * @param {number} displayedFor Milliseconds for which to ensure that the overlay has been displayed.
-	 * @returns {JQueryPromise<ScreenOverlay>}
+	 * @returns {JQuery.Promise<ScreenOverlay>}
 	 */
 	/**
 	 * @param {boolean} show
 	 * @param {number} [displayedFor]
-	 * @returns {ScreenOverlay | JQueryPromise<ScreenOverlay>}
+	 * @returns {ScreenOverlay | JQuery.Promise<ScreenOverlay>}
 	 */
 	toggle(show, displayedFor) {
 		if (show === false && typeof displayedFor === 'number') {
@@ -442,7 +436,7 @@ const messages = (() => {
 	const lang = cfg.lang || mw.config.get('wgUserLanguage').replace(/-.*$/, '');
 	if (cfg.lang && !i18n[cfg.lang]) {
 		mw.notify(
-			$(`<div>Sorry, PrivateSandbox does not currently have <code>${cfg.lang}</code> language support for its interface.</div>`),
+			$('<div>').html(`Sorry, PrivateSandbox does not currently have <code>${cfg.lang}</code> language support for its interface.`),
 			{ type: 'error', autoHideSeconds: 'long' }
 		);
 	}
@@ -462,9 +456,8 @@ class PrivateSandbox {
 
 	/**
 	 * Initialize PrivateSandbox.
-	 * @static
 	 */
-	static init() {
+	static async init() {
 
 		// Load modules in the background
 		const dependencies = {
@@ -483,193 +476,192 @@ class PrivateSandbox {
 		};
 		const defModules = mw.loader.using(dependencies.main);
 
-		// Load the DOM
-		$(() => {
+		await $.when($.ready);
+		this.addStyleTag();
 
-			// Create a style tag
-			const style = document.createElement('style');
-			style.textContent =
-				'#pvtsand-container {' +
-					'position: relative;' +
-				'}' +
-				'#pvtsand-container-overlay {' +
-					'width: 100%;' +
-					'height: 100%;' +
-					'position: absolute;' +
-					'top: 0;' +
-					'left: 0;' +
-					'z-index: 10;' +
-				'}' +
-				'#pvtsand-profiles-container {' +
-					'padding: 1em;' +
-					'margin-bottom: 1em;' +
-					'border: 1px solid var(--border-color-base, #ccc);' +
-				'}' +
-				'#pvtsand-profiles-selector {' +
-					'z-index: 8;' + // Prevent dropdown options from expanding behind WikiEditor
-				'}' +
-				'#pvtsand-profiles-buttons {' +
-					'margin-top: 12px;' +
-					'margin-bottom: 4px;' +
-				'}' +
-				'#pvtsand-profiles-input-warning.pvtsand-warning {' +
-					'color: red;' +
-				'}' +
-				'.pvtsand-warning code {' +
-					'color: inherit;' +
-				'}' +
-				'.pvtsand-overlay-parent {' +
-					'width: 100%;' +
-					'position: relative;' +
-				'}' +
-				'.pvtsand-overlay {' +
-					'width: 100%;' +
-					'height: 100%;' +
-					'position: absolute;' +
-					'top: 0;' +
-					'left: 0;' +
-					'z-index: 10;' +
-					'border: 1px solid var(--border-color-base, #ccc);' +
-					'background-color: var(--background-color-disabled, #ccc);' +
-					'opacity: 0.6;' +
-					'cursor: not-allowed;' +
-					'user-select: none;' +
-				'}' +
-				'#pvtsand-savebutton-container {' +
-					'margin-top: 1em;' +
-				'}' +
-				'#pvtsand-preview-container {' +
-					'margin-top: 1em;' +
-					'border: 1px solid var(--border-color-base, #ccc);' +
-				'}' +
-				'#pvtsand-preview-header {' +
-					'background-color: var(--background-color-neutral-subtle, #f8f8f8);' +
-					'padding-left: 1em;' +
-					'padding-right: 1em;' +
-				'}' +
-				'#pvtsand-preview-loading {' +
-					'height: 1em;' +
-				'}' +
-				'#pvtsand-preview-content {' +
-					'text-align: justify;' +
-					'min-height: 1em;' +
-					'padding: 0.3em 1em;' +
-					'border-top: 1px solid var(--border-color-base, #ccc);' +
-				'}';
-			document.head.appendChild(style);
-
-			// Show a "now loading" overlay
-			const sco = new ScreenOverlay({
-				text: getMessage('message-load-interface'),
-				autoStart: true
-			});
-
-			// Load wikiEditor-related modules in the background
-			const we = 'ext.wikiEditor';
-			let /** @type {?JQuery.Promise<ModuleRequire>} */ edModules = null;
-			if (this.isModuleAvailable(we)) {
-				dependencies.ed.push(we);
-
-				// Hack: wikiEditor-related manipulations before loading the extension
-				mw.config.get('wgExtraSignatureNamespaces', []).push(-1); // For the signature button to be available
-				$('body').addClass('ns-subject'); // For the reference button to be avaiable
-
-				// Also load plugins if available
-				const modules = [
-					'ext.TemplateWizard',
-					'ext.cite.wikiEditor',
-					'ext.CodeMirror.v6.WikiEditor',
-					'ext.CodeMirror.v6.mode.mediawiki'
-				];
-				for (let i = 0; i < modules.length; i++) {
-					const mod = modules[i];
-					if (this.isModuleAvailable(mod)) {
-						dependencies.ed.push(mod);
-					} else {
-						if (cfg.debug) {
-							console.warn(`Module ${mod} is unavailable.`);
-						}
-						if (i === 2) {
-							break;
-						}
-					}
-				}
-
-				edModules = mw.loader.using(dependencies.ed);
-			}
-
-			// Collect and manipulate native DOM elements
-			const scriptName = 'Private sandbox';
-			document.title = scriptName + ' - ' + mw.config.get('wgSiteName');
-			const $heading = $('.mw-first-heading');
-			const $content = $('.mw-body-content');
-			if (!$heading.length || !$content.length) {
-				sco.toggle(false);
-				mw.notify(getMessage('message-load-failed'), { type: 'error', autoHide: false });
-				return;
-			}
-			$heading.text(scriptName);
-
-			/**
-			 * Process the old profile if there's any, for the new version of PrivateSandbox.
-			 * @returns {JQueryPromise<boolean>} Whether an old profile has been processed.
-			 * @requires mediawiki.user
-			 * @requires mediawiki.api
-			 */
-			const processOldProfile = () => {
-
-				const key = 'userjs-pvt-sandbox';
-				/**
-				 * The saved content for the old version of PrivateSandbox, if any.
-				 *
-				 * This never exceeds the maximum byte length because the version wasn't capable of handling such an excess.
-				 * @type {string?}
-				 */
-				const content = mw.user.options.get(key);
-				const newProfilesExist = Object.keys(mw.user.options.get()).some((k) => /^userjs-pvtsand-.+?-\d+$/.test(k));
-
-				// There isn't an old profile
-				if (content === null) {
-					return $.Deferred().resolve(false);
-				// There is an old profile
-				} else if (newProfilesExist) { // There's some new profile (= failed to clean up the old profile in the last run)
-					// Reset the old profile
-					return PrivateSandbox.saveOptions({
-						[key]: null,
-					}).then(() => {
-						mw.user.options.set(key, null);
-						return false;
-					});
-				} else { // There's no new profile
-					// Cast the old profile to profile 1 and reset the option
-					const options = {
-						[key]: null,
-						'userjs-pvtsand-1-0': content
-					};
-					return PrivateSandbox.saveOptions(options).then(() => {
-						mw.user.options.set(options);
-						return true;
-					});
-				}
-
-			};
-
-			// When modules are ready, create the PrivateSandbox interface
-			$.when(defModules, edModules).then((req, cmReq) => {
-				/** @type {MwString} */
-				const mwString = req('mediawiki.String');
-				processOldProfile().then((processed) => {
-					const ps = new PrivateSandbox(mwString, cmReq, processed, sco, $content);
-					ps.welcomeOnFirstVisit();
-					if (cfg.debug) {
-						// @ts-expect-error
-						mw.libs.PrivateSandbox = ps;
-					}
-				});
-			});
-
+		// Show a "now loading" overlay
+		const sco = new ScreenOverlay({
+			text: getMessage('message-load-interface'),
+			autoStart: true
 		});
 
+		// Load wikiEditor-related modules in the background
+		const we = 'ext.wikiEditor';
+		let /** @type {?JQuery.Promise<ModuleRequire>} */ edModules = null;
+		if (this.isModuleAvailable(we)) {
+			dependencies.ed.push(we);
+
+			// Hack: wikiEditor-related manipulations before loading the extension
+			mw.config.get('wgExtraSignatureNamespaces', []).push(-1); // For the signature button to be available
+			$('body').addClass('ns-subject'); // For the reference button to be avaiable
+
+			// Also load plugins if available
+			const modules = [
+				'ext.TemplateWizard',
+				'ext.cite.wikiEditor',
+				'ext.CodeMirror.v6.WikiEditor',
+				'ext.CodeMirror.v6.mode.mediawiki'
+			];
+			for (let i = 0; i < modules.length; i++) {
+				const mod = modules[i];
+				if (this.isModuleAvailable(mod)) {
+					dependencies.ed.push(mod);
+				} else {
+					if (cfg.debug) {
+						console.warn(`Module ${mod} is unavailable.`);
+					}
+					if (i === 2) {
+						break;
+					}
+				}
+			}
+
+			edModules = mw.loader.using(dependencies.ed);
+		}
+
+		// Collect and manipulate native DOM elements
+		const scriptName = 'Private sandbox';
+		document.title = scriptName + ' - ' + mw.config.get('wgSiteName');
+		const $heading = $('.mw-first-heading');
+		const $content = $('.mw-body-content');
+		if (!$heading.length || !$content.length) {
+			sco.toggle(false);
+			mw.notify(getMessage('message-load-failed'), { type: 'error', autoHide: false });
+			return;
+		}
+		$heading.text(scriptName);
+
+		/**
+		 * Process the old profile if there's any, for the new version of PrivateSandbox.
+		 * @returns {JQuery.Promise<boolean>} Whether an old profile has been processed.
+		 * @requires mediawiki.user
+		 * @requires mediawiki.api
+		 */
+		const processOldProfile = () => {
+
+			const key = 'userjs-pvt-sandbox';
+			/**
+			 * The saved content for the old version of PrivateSandbox, if any.
+			 *
+			 * This never exceeds the maximum byte length because the version wasn't capable of handling such an excess.
+			 * @type {?string}
+			 */
+			const content = mw.user.options.get(key);
+			const newProfilesExist = Object.keys(mw.user.options.get()).some((k) => /^userjs-pvtsand-.+?-\d+$/.test(k));
+
+			// There isn't an old profile
+			if (content === null) {
+				return $.Deferred().resolve(false);
+			// There is an old profile
+			} else if (newProfilesExist) { // There's some new profile (= failed to clean up the old profile in the last run)
+				// Reset the old profile
+				return PrivateSandbox.saveOptions({
+					[key]: null,
+				}).then(() => {
+					mw.user.options.set(key, null);
+					return false;
+				});
+			} else { // There's no new profile
+				// Cast the old profile to profile 1 and reset the option
+				const options = {
+					[key]: null,
+					'userjs-pvtsand-1-0': content
+				};
+				return PrivateSandbox.saveOptions(options).then(() => {
+					mw.user.options.set(options);
+					return true;
+				});
+			}
+
+		};
+
+		// When the dependent modules get ready, create the PrivateSandbox interface
+		const [req, cmReq] = await Promise.all([defModules, edModules]);
+		const processed = await processOldProfile();
+
+		const /** @type {MwString} */ mwString = req('mediawiki.String');
+		const ps = new PrivateSandbox(mwString, cmReq, processed, sco, $content);
+		ps.welcomeOnFirstVisit();
+		if (cfg.debug) {
+			// @ts-expect-error
+			mw.libs.PrivateSandbox = ps;
+		}
+	}
+
+	/**
+	 * @private
+	 */
+	static addStyleTag() {
+		const style = document.createElement('style');
+		style.textContent =
+			'#pvtsand-container {' +
+				'position: relative;' +
+			'}' +
+			'#pvtsand-container-overlay {' +
+				'width: 100%;' +
+				'height: 100%;' +
+				'position: absolute;' +
+				'top: 0;' +
+				'left: 0;' +
+				'z-index: 10;' +
+			'}' +
+			'#pvtsand-profiles-container {' +
+				'padding: 1em;' +
+				'margin-bottom: 1em;' +
+				'border: 1px solid var(--border-color-base, #ccc);' +
+			'}' +
+			'#pvtsand-profiles-selector {' +
+				'z-index: 8;' + // Prevent dropdown options from expanding behind WikiEditor
+			'}' +
+			'#pvtsand-profiles-buttons {' +
+				'margin-top: 12px;' +
+				'margin-bottom: 4px;' +
+			'}' +
+			'#pvtsand-profiles-input-warning.pvtsand-warning {' +
+				'color: red;' +
+			'}' +
+			'.pvtsand-warning code {' +
+				'color: inherit;' +
+			'}' +
+			'.pvtsand-overlay-parent {' +
+				'width: 100%;' +
+				'position: relative;' +
+			'}' +
+			'.pvtsand-overlay {' +
+				'width: 100%;' +
+				'height: 100%;' +
+				'position: absolute;' +
+				'top: 0;' +
+				'left: 0;' +
+				'z-index: 10;' +
+				'border: 1px solid var(--border-color-base, #ccc);' +
+				'background-color: var(--background-color-disabled, #ccc);' +
+				'opacity: 0.6;' +
+				'cursor: not-allowed;' +
+				'user-select: none;' +
+			'}' +
+			'#pvtsand-savebutton-container {' +
+				'margin-top: 1em;' +
+			'}' +
+			'#pvtsand-preview-container {' +
+				'margin-top: 1em;' +
+				'border: 1px solid var(--border-color-base, #ccc);' +
+			'}' +
+			'#pvtsand-preview-header {' +
+				'background-color: var(--background-color-neutral-subtle, #f8f8f8);' +
+				'padding-left: 1em;' +
+				'padding-right: 1em;' +
+			'}' +
+			'#pvtsand-preview-loading {' +
+				'height: 1em;' +
+			'}' +
+			'#pvtsand-preview-content {' +
+				'text-align: justify;' +
+				'min-height: 1em;' +
+				'padding: 0.3em 1em;' +
+				'border-top: 1px solid var(--border-color-base, #ccc);' +
+			'}';
+		document.head.appendChild(style);
 	}
 
 	/**
@@ -682,9 +674,8 @@ class PrivateSandbox {
 
 	/**
 	 * Save options to the server. *This method does not prepend `userjs-pvtsand-` to the option keys.*
-	 * @param {Record<string, string?>} options If a property is valued with `null`, the given option will be reset.
-	 * @returns {JQueryPromise<boolean>} The result of the HTTP request as a boolean value.
-	 * @static
+	 * @param {Record<string, ?string>} options If a property is valued with `null`, the given option will be reset.
+	 * @returns {JQuery.Promise<boolean>} The result of the HTTP request as a boolean value.
 	 */
 	static saveOptions(options) {
 		const data = [];
@@ -734,64 +725,47 @@ class PrivateSandbox {
 	 * @param {JQuery<HTMLElement>} $content
 	 */
 	constructor(mwString, requireCm, processed, sco, $content) {
-
 		/**
 		 * @type {MwString}
 		 */
 		this.mwString = mwString;
-
 		/**
 		 * Whether an old profile has been processed.
 		 * @type {boolean}
 		 */
 		this.processed = processed;
-
 		/**
 		 * @type {ScreenOverlay}
 		 */
 		this.sco = sco;
-
-		// Get profiles as an object
-
-		/**
-		 * @type {Record<string, string>}
-		 */
-		const options = mw.user.options.get();
-
 		/**
 		 * Profiles that have been saved to the server, stored as arrays.
 		 * @type {Record<string, string[]>}
 		 */
-		this.savedProfiles = PrivateSandbox.objectifySavedOptions(options);
-
+		this.savedProfiles = PrivateSandbox.objectifySavedOptions(mw.user.options.get());
 		/**
-		 * Initial options for the profile selector dropdown.
-		 * @type {OO.ui.MenuOptionWidget[]}
-		 */
-		const ddItems = [];
-
-		/**
-		 * Profiles that have yet to be saved to the server, stored as strings.
+		 * Object mapping from profile names to their text contents that have not yet been saved.
 		 * @type {Record<string, string>}
 		 */
-		this.profiles = Object.keys(this.savedProfiles).reduce(/** @param {Record<string, string>} acc */ (acc, key) => {
-			acc[key] = this.savedProfiles[key].join('');
-			ddItems.push(new OO.ui.MenuOptionWidget({ label: key, data: key }));
-			return acc;
-		}, Object.create(null));
-
+		this.profiles = Object.create(null);
 		/**
 		 * Object that stores renaming logs, keyed by current profiles and valued by previous profiles.
 		 * @type {Record<string, string[]>}
 		 */
 		this.renameLogs = Object.create(null);
-
 		/**
 		 * A list of deleted profile names. Note that the original profiles of renamed profiles are also considered
 		 * to have been deleted.
 		 * @type {string[]}
 		 */
 		this.deletedProfiles = [];
+
+		// Initialize `profiles` and the profile dropdown options
+		const /** @type {OO.ui.MenuOptionWidget[]} */ dropdownOptions = [];
+		for (const [key, arr] of Object.entries(this.savedProfiles)) {
+			this.profiles[key] = arr.join('');
+			dropdownOptions.push(new OO.ui.MenuOptionWidget({ label: key, data: key }));
+		}
 
 		// Create DOM elements for the interface
 
@@ -813,7 +787,7 @@ class PrivateSandbox {
 		this.prfDropdown = new OO.ui.DropdownWidget({
 			id: 'pvtsand-profiles-selector',
 			menu: {
-				items: ddItems
+				items: dropdownOptions
 			}
 		});
 
@@ -948,7 +922,7 @@ class PrivateSandbox {
 					})
 					.append(
 						$.map(this.getUnsavedProfiles(), (prof) => {
-							if (this.deletedProfiles.indexOf(prof) !== -1) {
+							if (this.deletedProfiles.includes(prof)) {
 								// If this unsaved profile has been deleted, add " (deleted)"
 								prof += ` (${getMessage('label-dialog-listunsaved-deleteditem')})`;
 							}
@@ -1188,7 +1162,7 @@ class PrivateSandbox {
 						/**
 						 * Whether the input value matches a profile name.
 						 */
-						const profileExists = this.getProfileNames().indexOf(v) !== -1;
+						const profileExists = this.getProfileNames().includes(v);
 						this.setDisabled({
 							create: profileExists,
 							rename: profileExists,
@@ -1255,7 +1229,7 @@ class PrivateSandbox {
 			// Change the disabled states of the save buttons
 			const unsaved = this.getUnsavedProfiles();
 			this.setDisabled({
-				save: unsaved.indexOf(prof) === -1,
+				save: !unsaved.includes(prof),
 				saveall: !(unsaved.length >= 2 || unsaved.some((v) => v !== prof)),
 				listunsaved: unsaved.length === 0
 			});
@@ -1284,11 +1258,13 @@ class PrivateSandbox {
 			// event is emitted when the old and new input values are identical. Because of this, it's
 			// necessary to manually emit a change event here as a workaround for this behaviour
 			this.prfInput.emit('change', '');
-
-			// CodeMirror automatically sets focus on the editor, but the profile input must be focused instead
-			// because the editor is pseudo-disabled by the overlay and should be inaccessible
-			this.prfInput.focus();
 		}
+
+		// Set focus on the profile input on page load. This overrides CodeMirror's auto-focus on the editor.
+		// If some profile exists, this ensures that the page isn't scrolled down on initialization; If not,
+		// this keeps the editor (pseudo-disabled by the overlay) inaccessible.
+		this.prfInput.focus();
+		window.scrollTo(0, 0);
 
 	}
 
@@ -1350,7 +1326,7 @@ class PrivateSandbox {
 	/**
 	 * Get the name of the profile that is currently selected in the dropdown.
 	 * @overload
-	 * @returns {string?} A string value if some option is selected (i.e. there's at least one option);
+	 * @returns {?string} A string value if some option is selected (i.e. there's at least one option);
 	 * `null` if no option is selected (i.e. there's no option).
 	 */
 	/**
@@ -1362,10 +1338,10 @@ class PrivateSandbox {
 	 */
 	/**
 	 * @param {true} [nullproof]
-	 * @returns {string?}
+	 * @returns {?string}
 	 */
 	getSelectedProfile(nullproof) {
-		const selected = this.prfDropdown.getMenu().findSelectedItem();
+		const selected = this.prfDropdown.getMenu().findFirstSelectedItem();
 		if (!selected) {
 			if (nullproof) {
 				throw new Error('getSelectedProfile returned null in the nullproof mode.');
@@ -1373,12 +1349,9 @@ class PrivateSandbox {
 				// If no option is selected (i.e. there's no option)
 				return null;
 			}
-		} else if (selected instanceof OO.ui.OptionWidget) {
+		} else {
 			// If some option is selected (i.e. there's at least one option)
 			return /** @type {string} */ (selected.getData());
-		} else { // OO.ui.OptionWidget[]
-			console.error(selected);
-			throw new Error('Expected items are selected in the dropdown.');
 		}
 	}
 
@@ -1416,7 +1389,7 @@ class PrivateSandbox {
 
 	/**
 	 * Validate and return the current input value.
-	 * @returns {JQueryPromise<string?>} A string value if valid, or else `null`.
+	 * @returns {JQuery.Promise<?string>} A string value if valid, or else `null`.
 	 */
 	getValidatedValue() {
 		return this.prfInput.getValidity().then(() => true).catch(() => false).then((valid) => {
@@ -1424,9 +1397,6 @@ class PrivateSandbox {
 		});
 	}
 
-	/**
-	 * @typedef { 'dropdown' | 'input' | 'create' | 'rename' | 'delete' | 'save' | 'saveall' | 'listunsaved'} PSElements
-	 */
 	/**
 	 * Toggle the disabled states of interface elements.
 	 * @overload
@@ -1475,7 +1445,7 @@ class PrivateSandbox {
 
 	/**
 	 * Perform an action to modify a profile when the given button is clicked.
-	 * @param { 'create' | 'rename' | 'delete'} action
+	 * @param {'create' | 'rename' | 'delete'} action
 	 * @returns {void}
 	 */
 	modifyProfile(action) {
@@ -1618,7 +1588,7 @@ class PrivateSandbox {
 	 */
 	markAsDeleted(name) {
 		delete this.profiles[name];
-		if (this.getProfileNames(true).indexOf(name) !== -1) {
+		if (this.getProfileNames(true).includes(name)) {
 			// Mark the profile as deleted if the saved profiles have the profile to be deleted
 			this.deletedProfiles.push(name);
 		}
@@ -1635,7 +1605,7 @@ class PrivateSandbox {
 		// Collect the names of profiles that have yet to be saved
 		const ret = Object.keys(this.profiles).reduce(/** @param {string[]} acc */ (acc, name) => {
 			// Get profiles that have been newly created or modified
-			if (acc.indexOf(name) === -1 && (
+			if (!acc.includes(name) && (
 				!this.savedProfiles[name] || this.savedProfiles[name].join('') !== this.profiles[name]
 			)) {
 				acc.push(name);
@@ -1650,10 +1620,10 @@ class PrivateSandbox {
 			/**
 			 * Previous names of the target profile, if any, which have already been deleted.
 			 */
-			const prev = (this.renameLogs[name] || []).filter((v) => this.deletedProfiles.indexOf(v) !== -1);
+			const prev = (this.renameLogs[name] || []).filter((v) => this.deletedProfiles.includes(v));
 
 			// If "name" is specified, only include profiles with that name or previously associated with that name
-			return ret.filter((el) => el === name || prev.indexOf(el) !== -1);
+			return ret.filter((el) => el === name || prev.includes(el));
 		}
 
 	}
@@ -1759,7 +1729,7 @@ class PrivateSandbox {
 			});
 
 			// Deal with edits conflicts
-			/** @type {JQueryPromise<boolean?>} */
+			/** @type {JQuery.Promise<?boolean>} */
 			let conflictPromise;
 			if (Object.keys(conflicts).length) { // Edit conflict detected
 				conflictPromise = (() => {
@@ -1794,7 +1764,7 @@ class PrivateSandbox {
 				}
 
 				// Collect profiles that need to be updated
-				const options = this.getUnsavedProfiles(name).reduce(/** @param {Record<string, string?>} acc */ (acc, prof) => {
+				const options = this.getUnsavedProfiles(name).reduce(/** @param {Record<string, ?string>} acc */ (acc, prof) => {
 					/**
 					 * @type {(?string)[]}
 					 */
@@ -1859,7 +1829,7 @@ class PrivateSandbox {
 								delete this.renameLogs[key];
 							}
 						}
-						this.deletedProfiles = this.deletedProfiles.filter((v) => keys.indexOf(v) === -1);
+						this.deletedProfiles = this.deletedProfiles.filter((v) => !keys.includes(v));
 
 						// Update the disabled states of the save buttons
 						mw.hook('pvtsand.content').fire(this.getEditorValue());
@@ -1892,7 +1862,7 @@ class PrivateSandbox {
 
 	/**
 	 * Fetch user options from the API.
-	 * @returns {JQueryPromise<Record<string, string>?>}
+	 * @returns {JQuery.Promise<?Record<string, string>>}
 	 */
 	static fetchOptions() {
 		return new mw.Api().get({
@@ -1979,7 +1949,7 @@ class PrivateSandbox {
 				console.error(err);
 				return null;
 			}
-		}).then(/** @param {string?} html */ (html) => {
+		}).then(/** @param {?string} html */ (html) => {
 			this.$previewLoader.hide();
 			if (typeof html === 'string') {
 				const $content = $(html);
@@ -2002,9 +1972,11 @@ PrivateSandbox.availableModules = new Set(mw.loader.getModuleNames());
 
 /**
  * @typedef {import('./window/PrivateSandbox.d.ts').PrivateSandboxConfig} PrivateSandboxConfig
+ * @typedef {import('./window/PrivateSandbox.d.ts').ScreenOverlayOptions} ScreenOverlayOptions
  * @typedef {import('./window/PrivateSandbox.d.ts').PrivateSandboxMessage} PrivateSandboxMessage
  * @typedef {import('./window/PrivateSandbox.d.ts').ModuleRequire} ModuleRequire
  * @typedef {import('./window/PrivateSandbox.d.ts').ApiResponse} ApiResponse
+ * @typedef {import('./window/PrivateSandbox.d.ts').PSElements} PSElements
  */
 
 PrivateSandbox.init();

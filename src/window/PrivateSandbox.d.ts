@@ -12,6 +12,15 @@ export interface PrivateSandboxConfig {
 	generatePortletLink: boolean;
 }
 
+export interface ScreenOverlayOptions {
+	/** The text to use to initialize ScreenOverlay. */
+	text?: string;
+	/** Whether to show the spinner on the side of the text (default: `true`). */
+	showSpinner?: boolean;
+	/** Whether to auto-start ScreenOverlay (default: `true`). */
+	autoStart?: boolean;
+}
+
 export interface PrivateSandboxMessage {
 	'message-load-interface': string;
 	'message-load-failed': string;
@@ -107,3 +116,5 @@ interface ApiResponseQueryMetaUserinfo {
 	/** This is actually `Record<string, number|string|boolean>` */
 	options?: Record<string, string>;
 }
+
+export type PSElements = 'dropdown' | 'input' | 'create' | 'rename' | 'delete' | 'save' | 'saveall' | 'listunsaved';
