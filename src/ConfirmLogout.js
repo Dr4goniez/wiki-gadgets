@@ -14,7 +14,7 @@
 	mw.loader.load('https://ja.wikipedia.org/w/load.php?modules=ext.gadget.ConfirmLogout');
 	```
 
-	@version 1.1.2
+	@version 1.1.3
 	@author [[User:Dragoniez]]
 
 \*****************************************************************************************/
@@ -29,8 +29,7 @@ if ((mw.config.get('wgUserGroups') || []).includes('user')) {
 
 	mw.loader.using([
 		'mediawiki.storage',
-		'mediawiki.api',
-		'oojs-ui'
+		'mediawiki.api'
 	]).then(() => {
 		return $.when(
 			getMessage(),
@@ -43,7 +42,7 @@ if ((mw.config.get('wgUserGroups') || []).includes('user')) {
 		 */
 		const $logout = $(selectorLogoutLink);
 		if (!$logout.length) {
-			return;
+			throw new Error(selectorLogoutLink + ' not found');
 		}
 
 		// Remove MediaWiki's default click handler that fires the logout hook
@@ -52,11 +51,13 @@ if ((mw.config.get('wgUserGroups') || []).includes('user')) {
 		$logout.on('click', function(event) {
 			event.preventDefault(); // Cancel default anchor navigation
 
-			OO.ui.confirm(logoutMessage).then((confirmed) => {
-				if (confirmed) {
-					// Re-fire the logout hook with the href manually
-					mw.hook('skin.logout').fire(this.href);
-				}
+			mw.loader.using('oojs-ui-windows').then(() => {
+				OO.ui.confirm(logoutMessage).then((confirmed) => {
+					if (confirmed) {
+						// Re-fire the logout hook with the href manually
+						mw.hook('skin.logout').fire(this.href);
+					}
+				});
 			});
 		});
 
@@ -65,7 +66,7 @@ if ((mw.config.get('wgUserGroups') || []).includes('user')) {
 }
 
 /**
- * @returns {JQueryPromise<string>}
+ * @returns {JQuery.Promise<string>}
  * @requires mediawiki.storage
  * @requires mediawiki.api
  */
@@ -87,14 +88,15 @@ function getMessage() {
 	let message = mw.messages.get(key.message);
 	if (message) {
 		cache(message);
-		return $.Deferred().resolve(message);
+		return $.Deferred().resolve(message).promise();
 	}
 	message = mw.storage.get(key.storage);
 	if (message) {
-		return $.Deferred().resolve(message);
+		return $.Deferred().resolve(message).promise();
 	}
 
-	return new mw.Api().getMessages(key.message).then(({ [key.message]: msg }) => {
+	return new mw.Api().getMessages(key.message)
+	.then(({ [key.message]: msg }) => {
 		if (msg) {
 			mw.messages.set(key.message, msg);
 			cache(msg);
