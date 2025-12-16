@@ -4,7 +4,7 @@
 
 	@see https://ja.wikipedia.org/wiki/Help:MassRollback
 	@author [[User:Dragoniez]]
-	@version 2.0.2
+	@version 2.0.3
 
 \*************************************************************/
 // @ts-check
@@ -43,40 +43,55 @@ class MassRollback {
 
 			portlet.addEventListener('click', (e) => {
 				e.preventDefault();
-				MassRollbackDialog.windowManager.openWindow(dialog);
+				dialog.open();
 			});
 		});
 	}
 
 	/**
 	 * @returns {typeof this}
+	 * @private
 	 */
 	static createStyleTag() {
 		const style = document.createElement('style');
 		style.id = 'mr-styles';
 		style.textContent =
-			'.mr-icon-container {' +
-				'display: inline-block;' +
-			'}' +
 			'.mr-icon {' +
 				'width: 1em;' +
 				'vertical-align: middle;' +
 				'border: 0;' +
-			'}' +
-			'.mr-icon-subtext {' +
-				'margin-left: 0.2em;' +
-			'}' +
-			'.mr-icon-subtext-green {' +
-				'color: var(--color-icon-success, #099979);' +
-			'}' +
-			'.mr-icon-subtext-red {' +
-				'color: var(--color-icon-error, #f54739);' +
 			'}' +
 			'.mr-rollback-link-resolved::before {' +
 				'content: "[";' +
 			'}' +
 			'.mr-rollback-link-resolved::after {' +
 				'content: "]";' +
+			'}' +
+			'.mr-rollback-link-success {' +
+				'background-color: lightgreen;' +
+			'}' +
+			'@media screen {' +
+				'html.skin-theme-clientpref-night .mr-rollback-link-success {' +
+					'background-color: #099979;' +
+				'}' +
+			'}' +
+			'@media screen and (prefers-color-scheme: dark) {' +
+				'html.skin-theme-clientpref-os .mr-rollback-link-success {' +
+					'background-color: #099979;' +
+				'}' +
+			'}' +
+			'.mr-rollback-link-fail {' +
+				'background-color: lightpink;' +
+			'}' +
+			'@media screen {' +
+				'html.skin-theme-clientpref-night .mr-rollback-link-fail {' +
+					'background-color: #f54739;' +
+				'}' +
+			'}' +
+			'@media screen and (prefers-color-scheme: dark) {' +
+				'html.skin-theme-clientpref-os .mr-rollback-link-fail {' +
+					'background-color: #f54739;' +
+				'}' +
 			'}' +
 			'';
 		document.head.appendChild(style);
@@ -87,51 +102,54 @@ class MassRollback {
 	 * Preloads icons used by MassRollback.
 	 *
 	 * @returns {typeof this}
+	 * @private
 	 */
 	static preloadIcons() {
-		for (const [_, src] of this.iconMap) {
-			const img = new Image();
-			img.src = src;
-		}
+		const img = new Image();
+		img.src = this.loadingIconUrl;
 		return this;
 	}
 
 	/**
-	 * Creates and retrieves an icon.
+	 * Pre- or post-processes the given rollback link.
 	 *
-	 * @param {Icons} iconName The name of the icon to get.
-	 * @param {string} [subtext] Optional text shown next to the icon.
+	 * This method:
+	 * * Replaces the innerHTML of the rollback link with a spinner icon for a pre-process,
+	 *   or with the result of a rollback for a post-process.
+	 * * Removes click event handlers on the rollback link once called.
 	 *
-	 * The text is coloured in:
-	 * * Green when `iconName` is `'done'`.
-	 * * Red when `iconName` is `'failed'`.
-	 * @returns {HTMLSpanElement} The icon container.
+	 * @param {HTMLSpanElement} rbspan
+	 * @param {string | boolean} [result]
+	 * * `string` - The error code on failure.
+	 * * `true` - On success.
+	 * * `false` (default) - For a spinner icon.
+	 * @returns {void}
 	 */
-	static getIcon(iconName, subtext) {
-		const href = this.iconMap.get(iconName);
-		if (!href) throw new Error('Invalid icon name: ' + iconName);
-
-		const icon = new Image();
-		icon.classList.add('mr-icon');
-		icon.src = href;
-
-		const container = document.createElement('span');
-		container.classList.add('mr-icon-container');
-		container.appendChild(icon);
-
-		if (subtext) {
-			const textElement = document.createElement('span');
-			textElement.classList.add('mr-icon-subtext');
-			textElement.textContent = subtext;
-			if (iconName === 'done') {
-				textElement.classList.add('mr-icon-subtext-green');
-			} else if (iconName === 'failed') {
-				textElement.classList.add('mr-icon-subtext-red');
-			}
-			container.appendChild(textElement);
+	static processRollbackLink(rbspan, result = false) {
+		const $rbspan = $(rbspan);
+		$rbspan.off('click');
+		if (result === false) {
+			// Replace the innerHTML of the rbspan with a spinner icon
+			$rbspan
+				.empty()
+				.append(
+					$('<img>')
+						.prop({ src: this.loadingIconUrl })
+						.addClass('mr-icon')
+				);
+		} else {
+			// Replace the innerHTML of the rbspan with the rollback result
+			const isFailure = typeof result === 'string';
+			$rbspan
+				.empty()
+				.append(
+					$('<span>')
+						.text(isFailure ? `巻き戻し失敗 (${result})` : '巻き戻し済み')
+						.addClass(isFailure ? 'mr-rollback-link-fail' : 'mr-rollback-link-success')
+				)
+				.removeClass('mw-rollback-link')
+				.addClass('mr-rollback-link-resolved');
 		}
-
-		return container;
 	}
 
 	/**
@@ -141,11 +159,11 @@ class MassRollback {
 	 * @param {string} title
 	 * @param {string} user
 	 * @param {RollbackParams} params
-	 * @returns {JQueryPromise<string | undefined>} Error code on failure; otherwise, undefined.
+	 * @returns {JQueryPromise<string | true>} Error code on failure; otherwise, true.
 	 */
 	static execute(api, title, user, params) {
 		return api.rollback(title, user, /** @type {Record<string, any>} */ (params))
-			.then(() => void 0)
+			.then(() => true)
 			.catch(/** @param {string} code */ (code, err) => {
 				console.warn(err);
 				return code;
@@ -157,26 +175,19 @@ class MassRollback {
 	 * @param {string} _title
 	 * @param {string} _user
 	 * @param {RollbackParams} _params
-	 * @returns {JQueryPromise<string | undefined>} Error code on failure; otherwise, undefined.
+	 * @returns {JQueryPromise<string | true>} Error code on failure; otherwise, true.
 	 */
 	static executeDev(_api, _title, _user, _params) {
 		const def = $.Deferred();
 		const rand = Math.random();
 		setTimeout(() => {
-			def.resolve(rand > 0.5 ? void 0 : 'debug');
+			def.resolve(rand > 0.5 ? true : 'debug');
 		}, 800 + rand * 1000);
 		return def.promise();
 	}
 
 }
-/**
- * @type {Map<Icons, string>}
- */
-MassRollback.iconMap = new Map([
-	['doing', 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif'],
-	['done', 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Antu_mail-mark-notjunk.svg/30px-Antu_mail-mark-notjunk.svg.png'],
-	['failed', 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Cross_reject.svg/30px-Cross_reject.svg.png'],
-]);
+MassRollback.loadingIconUrl = 'https://upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif';
 
 function MassRollbackDialogFactory() {
 	class MassRollbackDialog extends OO.ui.ProcessDialog {
@@ -327,13 +338,13 @@ function MassRollbackDialogFactory() {
 				 * @param {string} code
 				 */
 				const markAsFailed = (rbspan, code) => {
-					rbspan.replaceChildren(MassRollback.getIcon('failed', code));
+					MassRollback.processRollbackLink(rbspan, code);
 					batch.push($.Deferred().resolve(false).promise());
 				};
 				const api = new mw.Api({
 					ajax: {
 						headers: {
-							'Api-User-Agent': 'MassRollback/2.0.2 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRollback.js)'
+							'Api-User-Agent': 'MassRollback/2.0.3 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRollback.js)'
 						}
 					}
 				});
@@ -371,16 +382,13 @@ function MassRollbackDialogFactory() {
 					if (!user) {
 						return markAsFailed(rbspan, 'usermissing');
 					}
-					rbspan.replaceChildren(MassRollback.getIcon('doing'));
+					MassRollback.processRollbackLink(rbspan);
 
 					// Execute rollback on this link
 					batch.push(
 						MassRollback.execute(api, title, user, params).then((code) => {
-							const iconTyle = code ? 'failed' : 'done';
-							rbspan.replaceChildren(MassRollback.getIcon(iconTyle, code));
-							rbspan.classList.remove('mw-rollback-link');
-							rbspan.classList.add('mr-rollback-link-resolved');
-							return !code;
+							MassRollback.processRollbackLink(rbspan, code);
+							return code === true;
 						})
 					);
 				});
@@ -445,8 +453,6 @@ function MassRollbackDialogFactory() {
  * @property {'nochange' | 'preferences' | 'unwatch' | 'watch'} watchlist
  * @property {string | false} watchlistexpiry
  * @property {string | false} tags
- *
- * @typedef {'doing' | 'done' | 'failed'} Icons
  */
 MassRollback.init();
 
