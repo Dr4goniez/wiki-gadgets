@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.1.3
+	@version 5.1.4
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionality in this script is adapted from:
@@ -20,7 +20,7 @@
 (() => {
 //**************************************************************************************************
 
-const version = '5.1.3';
+const version = '5.1.4';
 
 // Run this script only when on /wiki/$1 or /w/index.php
 if (
@@ -3695,7 +3695,36 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 		);
 	};
 
-	class SelectiveRollbackDialog extends OO.ui.ProcessDialog {
+	/**
+	 * **IMPORTANT:**
+	 *
+	 * When subclassing an OOUI dialog class, the base class must be interposed once if the subclass defines or
+	 * overrides static dialog metadata.
+	 *
+	 * OOUI stores dialog metadata (e.g. `static.title`, `static.actions`) on a mutable `.static` object that is
+	 * inherited through the constructor prototype chain. As a result, direct subclasses of `OO.ui.ProcessDialog`,
+	 * regardless of whether they are created using ES6 `class` syntax or legacy `OO.inheritClass`, may share and
+	 * overwrite each other's static properties.
+	 *
+	 * This static property contamination can cause unrelated dialogs to display the wrong title or action buttons
+	 * when multiple ProcessDialog subclasses coexist on the same page.
+	 *
+	 * Introducing this intermediate constructor breaks the shared `.static` chain and ensures that each dialog class
+	 * owns and isolates its own static metadata.
+	 *
+	 * @constructor
+	 * @param {OO.ui.ProcessDialog.ConfigOptions} [config]
+	 */
+	function ProcessDialog(config) {
+		// @ts-expect-error
+		ProcessDialog.super.call(this, config);
+	}
+	OO.inheritClass(ProcessDialog, OO.ui.ProcessDialog);
+
+	/**
+	 * @extends OO.ui.ProcessDialog
+	 */
+	class SelectiveRollbackDialog extends ProcessDialog {
 
 		/**
 		 * @param {OO.ui.ProcessDialog.ConfigOptions} [config]
