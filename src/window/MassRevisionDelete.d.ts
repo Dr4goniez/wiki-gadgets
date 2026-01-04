@@ -1,4 +1,4 @@
-import type { XOR } from 'ts-xor';
+import type { XOR } from 'ts-essentials';
 
 export type RevdelTarget = 'content' | 'comment' | 'user';
 

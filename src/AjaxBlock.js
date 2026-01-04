@@ -2801,7 +2801,7 @@ var logo;
 /**
  * @template T
  * @template U
- * @typedef {import('ts-xor').XOR<T,U>} XOR
+ * @typedef {import('ts-essentials').XOR<T,U>} XOR
  */
 /**
  * Object that stores the information of (un)block links.
