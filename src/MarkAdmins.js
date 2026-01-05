@@ -18,7 +18,7 @@
  * - Does not suppport configurations via user common.js. Instead, it provides
  *   [[Special:MarkAdminsConfig]] for user configurations.
  * - User contribs links are also marked.
- * @version 2.0.1
+ * @version 2.0.2
  *
  * @requires [[MediaWiki:Gadget-MarkAdmins-data.json]]
  * @requires [[MediaWiki:Gadget-MarkAdmins-updater.js]]
@@ -38,7 +38,7 @@ if (
 	return;
 }
 
-const version = '2.0.1';
+const version = '2.0.2';
 const DEVMODE = false;
 const wgNamespaceNumber = mw.config.get('wgNamespaceNumber');
 const wgCanonicalSpecialPageName = mw.config.get('wgCanonicalSpecialPageName') || '';
@@ -512,15 +512,15 @@ class MarkAdminsConfig {
 		document.head.appendChild(style);
 	}
 
-    static createPortletLink() {
-        mw.util.addPortletLink(
-            'p-tb',
-            '/wiki/Special:MarkAdminsConfig',
-            'MarkAdminsの設定',
-            't-mac',
-            'MarkAdminsの設定を変更する'
-        );
-    }
+	static createPortletLink() {
+		mw.util.addPortletLink(
+			'p-tb',
+			'/wiki/Special:MarkAdminsConfig',
+			'MarkAdminsの設定',
+			't-mac',
+			'MarkAdminsの設定を変更する'
+		);
+	}
 
 	/**
 	 * Creates the config interface.
@@ -1112,6 +1112,13 @@ MarkAdminsConfig.groupMap = new Map([
 		enabled: true,
 		localized: 'ボット',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:Bot',
+		domain: 'local'
+	}],
+	['temporary-account-viewer', {
+		label: 'TAIV',
+		enabled: true,
+		localized: '仮アカウントIP閲覧者',
+		link: 'https://ja.wikipedia.org/wiki/Wikipedia:仮アカウントIP閲覧者',
 		domain: 'local'
 	}],
 	['founder', {
