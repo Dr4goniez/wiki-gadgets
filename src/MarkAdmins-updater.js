@@ -101,7 +101,8 @@ class MarkAdminsUpdater {
 			}
 		});
 
-		const json = Object.fromEntries(merged);
+		const json = Object.create(null);
+		merged.forEach((groups, username) => json[username] = groups);
 		console.log(json);
 		mw.notify('JSONデータをブラウザコンソールに出力しました', { type: 'success' });
 		const serialized = JSON.stringify(json);
@@ -145,8 +146,7 @@ class MarkAdminsUpdater {
 		} else {
 			let oldJson;
 			try {
-				/** @type {Record<string, any>} */
-				oldJson = JSON.parse(rev.content);
+				oldJson = /** @type {Record<string, readonly string[]>} */ (JSON.parse(rev.content));
 			} catch (_) {
 				mw.notify('既存のJSONが不正です', { type: 'warn' });
 				oldJson = null;
@@ -167,7 +167,7 @@ class MarkAdminsUpdater {
 			await api.postWithEditToken({
 				action: 'edit',
 				title: rev.title,
-				text: JSON.stringify(json, null, 4),
+				text: JSON.stringify(json),
 				summary: 'データの更新 ([[H:MA#UPDATER|MarkAdmins-updater]])',
 				baserevid: rev.baserevid,
 				basetimestamp: rev.basetimestamp,

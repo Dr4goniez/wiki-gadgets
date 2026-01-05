@@ -18,7 +18,7 @@
  * - Does not suppport configurations via user common.js. Instead, it provides
  *   [[Special:MarkAdminsConfig]] for user configurations.
  * - User contribs links are also marked.
- * @version 2.0.0
+ * @version 2.0.1
  *
  * @requires [[MediaWiki:Gadget-MarkAdmins-data.json]]
  * @requires [[MediaWiki:Gadget-MarkAdmins-updater.js]]
@@ -38,7 +38,7 @@ if (
 	return;
 }
 
-const version = '2.0.0';
+const version = '2.0.1';
 const DEVMODE = false;
 const wgNamespaceNumber = mw.config.get('wgNamespaceNumber');
 const wgCanonicalSpecialPageName = mw.config.get('wgCanonicalSpecialPageName') || '';
@@ -60,6 +60,7 @@ class MarkAdmins {
 			new MarkAdminsConfig(cfg);
 			return;
 		}
+		MarkAdminsConfig.createPortletLink();
 		if (
 			!MarkAdminsConfig.decodeNamespaces(cfg.conds.namespaces).includes(wgNamespaceNumber) &&
 			!(cfg.conds.talk && wgNamespaceNumber > 0 && wgNamespaceNumber % 2 === 1) &&
@@ -230,7 +231,7 @@ class MarkAdmins {
 			} else if ((match = this.regex.usertalk.exec(prefixedTitle))) {
 				title = match[1];
 				pagetype = 'usertalk';
-			} else if ((match = this.regex.contribs.exec(prefixedTitle))) {
+			} else if (cfg.conds.contribs && (match = this.regex.contribs.exec(prefixedTitle))) {
 				title = match[1];
 				pagetype = 'contribs';
 			} else {
@@ -298,7 +299,7 @@ MarkAdmins.regex = (() => {
 	};
 	for (const [alias, ns] of Object.entries(mw.config.get('wgNamespaceIds'))) {
 		if (ns in aliases) {
-			aliases[/** @type {keyof typeof aliases} */(ns)].push(mw.util.escapeRegExp(alias.replace(/_/g, ' ')));
+			aliases[/** @type {keyof typeof aliases} */ (ns)].push(mw.util.escapeRegExp(alias.replace(/_/g, ' ')));
 		}
 	}
 
@@ -392,8 +393,7 @@ class MarkAdminsConfig {
 				[legacyKey]: null,
 				[this.key]: $.isEmptyObject(ret) ? null : JSON.stringify(ret)
 			},
-			// Always call `mw.user.options.set` for getLatest() to work properly
-			true
+			true // Always call `mw.user.options.set` for getLatest() to work properly
 		);
 		return ret;
 	}
@@ -511,6 +511,16 @@ class MarkAdminsConfig {
 			'}';
 		document.head.appendChild(style);
 	}
+
+    static createPortletLink() {
+        mw.util.addPortletLink(
+            'p-tb',
+            '/wiki/Special:MarkAdminsConfig',
+            'MarkAdminsの設定',
+            't-mac',
+            'MarkAdminsの設定を変更する'
+        );
+    }
 
 	/**
 	 * Creates the config interface.
@@ -659,16 +669,20 @@ class MarkAdminsConfig {
 		onReadyCallbacks.push(() => labelRows[0].resetButton.emit('disable', true)); // Initialize state
 
 		// Create a section for conds settings
-		const nsWidgetInitializer = MarkAdminsConfig.getNamespaceWidgetInitializer(cfg, defaults);
+		const nsWidgetInitializer = MarkAdminsConfig.getNamespaceWidgetInitializer(cfg);
 		/**
 		 * @type {OO.ui.MenuTagMultiselectWidget}
 		 */
 		this.namespaces = new OO.ui.MenuTagMultiselectWidget({
 			inputPosition: 'outline',
 			options: nsWidgetInitializer.options,
-			allowedValues: nsWidgetInitializer.options.map(obj => obj.data),
-			selected: nsWidgetInitializer.labels
+			allowedValues: nsWidgetInitializer.options.map(obj => obj.data)
 		});
+		this.namespaces.setValue(
+			// Don't use the `selected` option in the constructor call. The specified tags will otherwise
+			// appear in the tag list and duplicate the dropdown options (is this an upstream bug?)
+			nsWidgetInitializer.labels
+		);
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 */
@@ -801,7 +815,11 @@ class MarkAdminsConfig {
 			flags: ['primary', 'progressive'],
 			label: '保存'
 		});
-		this.saveButton.on('click', () => this.save());
+		this.saveButton.on('click', async () => {
+			this.$overlay.show();
+			await this.save();
+			this.$overlay.hide();
+		});
 
 		// Finalize page content
 		$content.append(
@@ -829,13 +847,13 @@ class MarkAdminsConfig {
 	 */
 	static async resetIfConfirmed(callback) {
 		const confirmed = await OO.ui.confirm('値を既定値にリセットしますか？', {
-			actions: MarkAdminsConfig.getActionsForConfirmDialog(),
+			actions: MarkAdminsConfig.getYesNoActions(),
 			title: '確認',
 			size: 'medium'
 		});
 		if (confirmed) {
 			await callback();
-			mw.notify('リセットしました。', { type: 'success' });
+			mw.notify('リセットしました', { type: 'success' });
 		}
 		return confirmed;
 	}
@@ -844,7 +862,7 @@ class MarkAdminsConfig {
 	 * @returns {OO.ui.ActionWidget.ConfigOptions[]}
 	 * @private
 	 */
-	static getActionsForConfirmDialog() {
+	static getYesNoActions() {
 		return [
 			{
 				action: 'accept',
@@ -861,16 +879,15 @@ class MarkAdminsConfig {
 
 	/**
 	 * @param {DefaultConfigSchema} cfg
-	 * @param {DefaultConfigSchema} defaults
 	 * @returns {{ options: OO.ui.MenuTagMultiselectWidget.Option[]; labels: string[]; defaultLabels: string[]; }}
 	 * @private
 	 */
-	static getNamespaceWidgetInitializer(cfg, defaults) {
+	static getNamespaceWidgetInitializer(cfg) {
 		const wgFormattedNamespaces = mw.config.get('wgFormattedNamespaces');
 		const /** @type {string[]} */ labels = [];
 		const /** @type {string[]} */ defaultLabels = [];
 		const namespaces = this.decodeNamespaces(cfg.conds.namespaces);
-		const defaultNamespaces = this.decodeNamespaces(defaults.conds.namespaces);
+		const defaultNamespaces = this.decodeNamespaces(this.defaults.conds.namespaces);
 		const options = Object.keys(wgFormattedNamespaces).sort((a, b) => +a - +b).map((n) => {
 			const ns = +n;
 			const label = wgFormattedNamespaces[ns] || '(標準)';
@@ -889,8 +906,11 @@ class MarkAdminsConfig {
 		return /** @type {number[]} */ (this.namespaces.getValue());
 	}
 
+	/**
+	 * @returns {Promise<void>}
+	 * @private
+	 */
 	async save() {
-		// this.$overlay.show();
 		const /** @type {PartialConfigSchema} */ options = Object.create(null);
 		const defaults = MarkAdminsConfig.defaults;
 
@@ -903,8 +923,7 @@ class MarkAdminsConfig {
 			labelInput.setValue(label);
 			if (!label) {
 				labelInput.focus();
-				this.$overlay.hide();
-				mw.notify('エラーを解消してください。', { type: 'error' });
+				mw.notify('エラーを解消してください', { type: 'error' });
 				return;
 			} else if (labelsSeen.has(label)) {
 				focusTarget = focusTarget || labelInput;
@@ -934,8 +953,7 @@ class MarkAdminsConfig {
 		}
 
 		if (OO.compare(options, MarkAdminsConfig.getLatest())) {
-			this.$overlay.hide();
-			mw.notify('設定内容が保存済みの値と同一です。');
+			mw.notify('設定内容が保存済みの値と同一です');
 			return;
 		}
 
@@ -950,14 +968,13 @@ class MarkAdminsConfig {
 					'このまま保存しますか？'
 				),
 				{
-					actions: MarkAdminsConfig.getActionsForConfirmDialog(),
+					actions: MarkAdminsConfig.getYesNoActions(),
 					title: '警告',
 					size: 'medium'
 				}
 			);
 			if (!confirmed) {
 				if (focusTarget) focusTarget.focus();
-				this.$overlay.hide();
 				return;
 			}
 		}
@@ -973,10 +990,9 @@ class MarkAdminsConfig {
 		if (code) {
 			mw.notify('保存に失敗しました: ' + code, { type: 'error', autoHideSeconds: 'long' });
 		} else {
-			mw.notify('保存しました。', { type: 'success' });
+			mw.notify('保存しました', { type: 'success' });
 		}
 		this.saveButton.unsetPending();
-		this.$overlay.hide();
 	}
 
 }
