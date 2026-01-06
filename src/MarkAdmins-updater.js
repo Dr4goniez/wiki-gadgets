@@ -41,6 +41,7 @@ class MarkAdminsUpdater {
 			portlet.addEventListener('click', async (e) => {
 				e.preventDefault();
 				if (this.running) {
+					mw.notify('別の更新処理が進行中です。完了までお待ちください', { type: 'warn' });
 					return;
 				}
 				this.running = true;
@@ -55,6 +56,9 @@ class MarkAdminsUpdater {
 		}
 	}
 
+	/**
+	 * @typedef {Record<string, string[]>} JsonSchema
+	 */
 	/**
 	 * @returns {Promise<void>}
 	 */
@@ -77,32 +81,31 @@ class MarkAdminsUpdater {
 		}
 
 		/**
-		 * @type {UserGroupMap}
+		 * @type {JsonSchema}
 		 */
-		const merged = new Map();
+		const json = Object.create(null);
 		/**
 		 * @type {UserGroupMap[]}
 		 */
-		(responses).forEach((map) => {
+		(responses).forEach((map, i) => {
+			const isLastIteration = i === responses.length - 1;
 			map.forEach((groups, username) => {
-				if (!merged.has(username)) {
-					merged.set(username, []);
+				if (!(username in json)) {
+					json[username] = [];
 				}
-				/** @type {string[]} */
-				(merged.get(username)).push(...groups);
+				json[username].push(...groups);
+
+				if (isLastIteration) {
+					// Ensure the array is non-empty and its elements are unique
+					const set = new Set(json[username]);
+					if (set.size) {
+						json[username] = [...set];
+					} else {
+						delete json[username];
+					}
+				}
 			});
 		});
-		merged.forEach((groups, username) => {
-			const set = new Set(groups);
-			if (set.size) {
-				merged.set(username, [...set]);
-			} else {
-				merged.delete(username);
-			}
-		});
-
-		const json = Object.create(null);
-		merged.forEach((groups, username) => json[username] = groups);
 		console.log(json);
 		mw.notify('JSONデータをブラウザコンソールに出力しました', { type: 'success' });
 		const serialized = JSON.stringify(json);
@@ -146,13 +149,13 @@ class MarkAdminsUpdater {
 		} else {
 			let oldJson;
 			try {
-				oldJson = /** @type {Record<string, readonly string[]>} */ (JSON.parse(rev.content));
+				oldJson = /** @type {JsonSchema} */ (JSON.parse(rev.content));
 			} catch (_) {
 				mw.notify('既存のJSONが不正です', { type: 'warn' });
 				oldJson = null;
 			}
 			if (oldJson !== null && serialized === JSON.stringify(oldJson)) {
-				mw.notify('データは最新のため更新不要です');
+				mw.notify('データは最新です');
 				proceed = false;
 			} else if (autoEdit) {
 				mw.notify('データを更新しています...');
@@ -167,7 +170,7 @@ class MarkAdminsUpdater {
 			await api.postWithEditToken({
 				action: 'edit',
 				title: rev.title,
-				text: JSON.stringify(json),
+				text: serialized,
 				summary: 'データの更新 ([[H:MA#UPDATER|MarkAdmins-updater]])',
 				baserevid: rev.baserevid,
 				basetimestamp: rev.basetimestamp,
