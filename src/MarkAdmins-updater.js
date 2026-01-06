@@ -309,20 +309,20 @@ class MarkAdminsUpdater {
 			curtimestamp: 1,
 			formatversion: '2'
 		}).then((res) => {
-			const pages = res.query.pages;
-			if (!pages[0]) {
+			const pages = res && res.query && res.query.pages;
+			if (!Array.isArray(pages) || !pages[0]) {
 				return null;
 			}
 			const { title, missing = false, revisions } = pages[0];
 			if (missing) {
 				return { title, missing };
 			}
-			if (!revisions[0]) {
+			if (!Array.isArray(revisions) || !revisions[0]) {
 				return null;
 			}
 			const { revid, timestamp, slots } = revisions[0];
 			const content = slots && slots.main && slots.main.content;
-			if (!revid || !timestamp || typeof content !== 'string') {
+			if (typeof revid !== 'number' || !timestamp || typeof content !== 'string') {
 				return null;
 			} else {
 				return {
