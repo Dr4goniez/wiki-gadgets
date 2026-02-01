@@ -18,7 +18,7 @@
  * - Does not suppport configurations via user common.js. Instead, it provides
  *   [[Special:MarkAdminsConfig]] for user configurations.
  * - User contribs links are also marked.
- * @version 2.0.2
+ * @version 2.0.3
  *
  * @requires [[MediaWiki:Gadget-MarkAdmins-data.json]]
  * @requires [[MediaWiki:Gadget-MarkAdmins-updater.js]]
@@ -38,7 +38,7 @@ if (
 	return;
 }
 
-const version = '2.0.2';
+const version = '2.0.3';
 const DEVMODE = false;
 const wgNamespaceNumber = mw.config.get('wgNamespaceNumber');
 const wgCanonicalSpecialPageName = mw.config.get('wgCanonicalSpecialPageName') || '';
@@ -114,7 +114,6 @@ class MarkAdmins {
 				'content: attr(data-markadmins);' +
 				'font-weight: bold;' +
 				'font-size: 85%;' +
-				'vertical-align: middle;' +
 				'margin-left: 0.2em;' +
 			'}';
 		document.head.appendChild(style);
