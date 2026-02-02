@@ -12,7 +12,7 @@
  * @author Dragoniez ([[ja:User:Dragoniez]])
  * - Rewritten completely in Feb 2026; added AJAX watchlist updates
  *
- * @version 2.0.1
+ * @version 2.0.2
  */
 // @ts-check
 /* global mw, OO */
@@ -20,7 +20,7 @@
 (() => {
 // *******************************************************************************************
 
-const VERSION = '2.0.1';
+const VERSION = '2.0.2';
 
 class ModifyEditSection {
 
@@ -80,8 +80,8 @@ class ModifyEditSection {
 			for (const [key, value] of Object.entries(json)) {
 				if (!mw.message(key).exists()) {
 					mw.messages.set(key, value);
-					missing.delete(key);
 				}
+				missing.delete(key);
 			}
 		}
 		if (!missing.size) {
@@ -274,36 +274,25 @@ class ModifyEditSection {
 	registerExpandedLinks(a, title) {
 		const prefixedTitle = title.getPrefixedText();
 
-		/**
-		 * @type {JQuery<HTMLAnchorElement>}
-		 */
+		/** @type {JQuery<HTMLAnchorElement>} */
 		const $view = $('<a>');
 		$view.prop({ href: mw.util.getUrl(prefixedTitle) }).text(lcFirst(mw.msg('view')));
 
-		/**
-		 * @type {JQuery<HTMLAnchorElement>}
-		 */
+		/** @type {JQuery<HTMLAnchorElement>} */
 		const $history = $('<a>');
 		$history.prop({ href: mw.util.getUrl(prefixedTitle, { action: 'history' }) }).text(mw.msg('history_small'));
 
-		/**
-		 * @type {JQuery<HTMLAnchorElement>}
-		 */
+		/** @type {JQuery<HTMLAnchorElement>} */
 		const $watch = $('<a>');
 		$watch.prop({ href: mw.util.getUrl(prefixedTitle, { action: 'watch' }) }).text(lcFirst(mw.msg('watch')));
 		const $watchContainer = ModifyEditSection.wrap($watch);
 
-		/**
-		 * @type {JQuery<HTMLAnchorElement>}
-		 * @readonly
-		 */
+		/** @type {JQuery<HTMLAnchorElement>} */
 		const $unwatch = $('<a>');
 		$unwatch.prop({ href: mw.util.getUrl(prefixedTitle, { action: 'unwatch' }) }).text(lcFirst(mw.msg('unwatch')));
 		const $unwatchContainer = ModifyEditSection.wrap($unwatch);
 
-		/**
-		 * @type {JQuery<HTMLAnchorElement>}
-		 */
+		/** @type {JQuery<HTMLAnchorElement>} */
 		const $purge = $('<a>');
 		$purge.prop({ href: mw.util.getUrl(prefixedTitle, { action: 'purge' }) }).text(lcFirst(mw.msg('purge')));
 
@@ -449,13 +438,8 @@ class ModifyEditSection {
 			});
 		}
 
-		if (unwatch) {
-			obj.$watchContainer.show();
-			obj.$unwatchContainer.hide();
-		} else {
-			obj.$watchContainer.hide();
-			obj.$unwatchContainer.show();
-		}
+		obj.$watchContainer.toggle(unwatch);
+		obj.$unwatchContainer.toggle(!unwatch);
 	}
 
 	/**
@@ -487,12 +471,13 @@ class ModifyEditSection {
 	 * @returns {string}
 	 */
 	static getMessageKeyForSuccessfulWatch(unwatch, obj, expiry = 'infinity') {
+		const isTalkPage = obj.title.isTalkPage();
 		if (unwatch) {
-			return obj.title.isTalkPage() ? 'removedwatchtext-talk' : 'removedwatchtext';
+			return isTalkPage ? 'removedwatchtext-talk' : 'removedwatchtext';
 		} else if (mw.util.isInfinity(expiry)) {
-			return obj.title.isTalkPage() ? 'addedwatchindefinitelytext-talk' : 'addedwatchindefinitelytext';
+			return isTalkPage ? 'addedwatchindefinitelytext-talk' : 'addedwatchindefinitelytext';
 		} else {
-			return obj.title.isTalkPage() ? 'addedwatchexpirytext-talk' : 'addedwatchexpirytext';
+			return isTalkPage ? 'addedwatchexpirytext-talk' : 'addedwatchexpirytext';
 		}
 	}
 
