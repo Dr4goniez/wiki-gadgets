@@ -12,7 +12,7 @@
  * @author Dragoniez ([[ja:User:Dragoniez]])
  * - Rewritten completely in Feb 2026; added AJAX watchlist updates
  *
- * @version 2.0.0
+ * @version 2.0.1
  */
 // @ts-check
 /* global mw, OO */
@@ -20,7 +20,7 @@
 (() => {
 // *******************************************************************************************
 
-const VERSION = '2.0.0';
+const VERSION = '2.0.1';
 
 class ModifyEditSection {
 
@@ -45,11 +45,8 @@ class ModifyEditSection {
 		await this.loadMessagesIfMissing();
 		this.addStyleTag();
 
-		const modifyEditSection = new this(editSectionLinks);
-		if (!modifyEditSection.expanded.size) {
-			return;
-		}
-		modifyEditSection.initializeWatchLinks();
+		const mes = new this();
+		await mes.execute(editSectionLinks);
 	}
 
 	static async loadMessagesIfMissing() {
@@ -59,13 +56,11 @@ class ModifyEditSection {
 			'watch',
 			'unwatch',
 			'purge',
-			// "\"[[:$1]]\" and its discussion page have been added to your [[Special:Watchlist|watchlist]]."
-			'addedwatchtext',
-			// "\"[[:$1]]\" and its associated page have been added to your [[Special:Watchlist|watchlist]]."
-			'addedwatchtext-talk',
-			// "\"[[:$1]]\" and its discussion page have been removed from your [[Special:Watchlist|watchlist]]."
+			'addedwatchexpirytext',
+			'addedwatchexpirytext-talk',
+			'addedwatchindefinitelytext',
+			'addedwatchindefinitelytext-talk',
 			'removedwatchtext',
-			// "\"[[:$1]]\" and its associated page have been removed from your [[Special:Watchlist|watchlist]]."
 			'removedwatchtext-talk',
 			'protect-expiry-options',
 			'infiniteblock'
@@ -121,18 +116,19 @@ class ModifyEditSection {
 
 	/**
 	 * @typedef {object} ExpandedSectionLink
+	 * @property {HTMLAnchorElement} anchor
 	 * @property {mw.Title} title
 	 * @property {boolean} watched
 	 * @property {boolean} processing
+	 * @property {JQuery<HTMLAnchorElement>} $view
+	 * @property {JQuery<HTMLAnchorElement>} $history
 	 * @property {JQuery<HTMLAnchorElement>} $watch
 	 * @property {JQuery<HTMLElement>} $watchContainer
 	 * @property {JQuery<HTMLAnchorElement>} $unwatch
 	 * @property {JQuery<HTMLElement>} $unwatchContainer
+	 * @property {JQuery<HTMLAnchorElement>} $purge
 	 */
-	/**
-	 * @param {NodeListOf<HTMLAnchorElement>} editSectionLinks
-	 */
-	constructor(editSectionLinks) {
+	constructor() {
 		/**
 		 * Mapping from title strings (as in API responses) to objects that store
 		 * expanded section links.
@@ -157,16 +153,16 @@ class ModifyEditSection {
 				formatversion: '2'
 			}
 		});
-
-		this.build(editSectionLinks);
 	}
 
 	/**
 	 * @param {NodeListOf<HTMLAnchorElement>} editSectionLinks
 	 */
-	build(editSectionLinks) {
+	async execute(editSectionLinks) {
 		const rArticle = new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^?]+)'));
-		/** @type {Map<String, number>} */
+		/**
+		 * @type {Map<string, number>}
+		 */
 		const levelMap = new Map();
 
 		for (const a of editSectionLinks) {
@@ -211,14 +207,55 @@ class ModifyEditSection {
 
 			// Skip this editsection link if we've already expanded another for the same page
 			// with a smaller heading level
-			const dbKey = t.getPrefixedDb();
-			const seenLevel = levelMap.get(dbKey);
+			const prefixedTitle = t.getPrefixedText();
+			const seenLevel = levelMap.get(prefixedTitle);
 			if (seenLevel !== undefined && level > seenLevel) {
 				continue;
 			}
-			levelMap.set(dbKey, level);
+			levelMap.set(prefixedTitle, level);
 
-			this.expandSectionLink(a, t);
+			this.registerExpandedLinks(a, t);
+		}
+		if (!this.expanded.size) {
+			return;
+		}
+
+		// Initialize the `watched` property
+		await this.initializeWatchedStates();
+
+		/**
+		 * @param {JQuery.ClickEvent<HTMLAnchorElement, undefined, HTMLAnchorElement, HTMLAnchorElement>} e
+		 * @param {boolean} unwatch
+		 * @param {ExpandedSectionLink} obj
+		 * @param {string} title
+		 */
+		const clickHandler = async (e, unwatch, obj, title) => {
+			e.preventDefault();
+			e.stopPropagation();
+			if (obj.processing) {
+				return;
+			}
+			obj.processing = true;
+			// handleWatchLinkClick() should never reject by design, but we take the *safest* approach here
+			try {
+				await this.handleWatchLinkClick(unwatch, obj, title);
+			} finally {
+				obj.processing = false;
+			}
+		};
+
+		// All preparations are complete; actually expand the edit section links
+		for (const [title, obj] of this.expanded) {
+			$(obj.anchor).after(
+				ModifyEditSection.wrap(obj.$view),
+				ModifyEditSection.wrap(obj.$history),
+				obj.$watchContainer.toggle(!obj.watched),
+				obj.$unwatchContainer.toggle(obj.watched),
+				ModifyEditSection.wrap(obj.$purge)
+			);
+
+			obj.$watch.off('click').on('click', (e) => clickHandler(e, false, obj, title));
+			obj.$unwatch.off('click').on('click', (e) => clickHandler(e, true, obj, title));
 		}
 	}
 
@@ -234,7 +271,7 @@ class ModifyEditSection {
 	 * @param {HTMLAnchorElement} a
 	 * @param {mw.Title} title
 	 */
-	expandSectionLink(a, title) {
+	registerExpandedLinks(a, title) {
 		const prefixedTitle = title.getPrefixedText();
 
 		/**
@@ -270,33 +307,26 @@ class ModifyEditSection {
 		const $purge = $('<a>');
 		$purge.prop({ href: mw.util.getUrl(prefixedTitle, { action: 'purge' }) }).text(lcFirst(mw.msg('purge')));
 
-		$(a).after(
-			ModifyEditSection.wrap($view),
-			ModifyEditSection.wrap($history),
-			$watchContainer,
-			$unwatchContainer.hide(),
-			ModifyEditSection.wrap($purge)
-		);
-
 		this.expanded.set(prefixedTitle, {
+			anchor: a,
 			title,
 			watched: false,
 			processing: false,
-			// $view,
-			// $history,
+			$view,
+			$history,
 			$watch,
 			$watchContainer,
 			$unwatch,
 			$unwatchContainer,
-			// $purge
+			$purge
 		});
 	}
 
-	async initializeWatchLinks() {
-		if (!this.expanded.size) {
-			return;
-		}
-
+	/**
+	 * Checks all titles in {@link expanded} for whether the user is currently
+	 * watching them, and updates the {@link ExpandedSectionLink.watched} property.
+	 */
+	initializeWatchedStates() {
 		// Get the user's API limit
 		const groupsWithApiHighLimits = new Set([
 			'sysop', 'bot', 'apihighlimits-requestor', 'global-bot',
@@ -364,38 +394,77 @@ class ModifyEditSection {
 			});
 			batch.push(req);
 		}
-		await Promise.all(batch);
+		return Promise.all(batch);
+	}
 
-		for (const [title, obj] of this.expanded) {
-			// If the user is already watching the linked title, change the "watch" label to "unwatch"
-			if (obj.watched) {
-				obj.$watchContainer.hide();
-				obj.$unwatchContainer.show();
+	/**
+	 * @typedef {object} Expiry
+	 * @property {string} label
+	 * @property {string} data
+	 */
+	/**
+	 * @param {boolean} unwatch
+	 * @param {ExpandedSectionLink} obj
+	 * @param {string} title
+	 * @param {Expiry} [expiryObj]
+	 */
+	async handleWatchLinkClick(unwatch, obj, title, expiryObj) {
+		let [$msg] = await Promise.all([
+			this.watchPage(unwatch, title, expiryObj && expiryObj.data),
+			mw.loader.using(['oojs-ui', 'mediawiki.jqueryMsg'])
+		]);
+
+		if ($msg) {
+			mw.notify($msg, { type: 'error' });
+			return;
+		}
+
+		const msgKey = ModifyEditSection.getMessageKeyForSuccessfulWatch(unwatch, obj, expiryObj && expiryObj.data);
+		$msg = $('<div>').append(mw.message(msgKey, title, expiryObj && expiryObj.label).parse());
+
+		/** @type {?OO.ui.DropdownWidget} */
+		let dropdown = null;
+		while (!unwatch) {
+			dropdown = ModifyEditSection.createWatchlistExpiryDropdown();
+			if (!dropdown) {
+				break;
 			}
+			dropdown.getMenu().selectItemByData(expiryObj ? expiryObj.data : 'infinity');
+			$msg.append(dropdown.$element.css({ 'margin-top': '1em' }));
+			break;
+		}
 
-			obj.$watch.off('click').on('click', (e) => this.watchLinkHandler(e, false, obj, title));
-			obj.$unwatch.off('click').on('click', (e) => this.watchLinkHandler(e, true, obj, title));
+		const notif = await mw.notify($msg);
+		if (dropdown) {
+			dropdown.on('labelChange', async () => {
+				if (obj.processing) {
+					return;
+				}
+				obj.processing = true;
+				try {
+					await this.handleExpiryDropdownChange(notif, obj, title, dropdown);
+				} finally {
+					obj.processing = false;
+				}
+			});
+		}
+
+		if (unwatch) {
+			obj.$watchContainer.show();
+			obj.$unwatchContainer.hide();
+		} else {
+			obj.$watchContainer.hide();
+			obj.$unwatchContainer.show();
 		}
 	}
 
 	/**
-	 * @param {JQuery.ClickEvent<HTMLAnchorElement, undefined, HTMLAnchorElement, HTMLAnchorElement>|null} e
 	 * @param {boolean} unwatch
-	 * @param {ExpandedSectionLink} obj
 	 * @param {string} title
 	 * @param {string} [expiry]
+	 * @returns {JQuery.Promise<?JQuery<HTMLElement>>}
 	 */
-	async watchLinkHandler(e, unwatch, obj, title, expiry) {
-		if (e) {
-			e.preventDefault();
-			e.stopPropagation();
-		}
-		if (obj.processing) {
-			return;
-		}
-		obj.processing = true;
-		await mw.loader.using(['oojs-ui', 'mediawiki.jqueryMsg']);
-
+	watchPage(unwatch, title, expiry) {
 		return this.api.postWithToken('watch', {
 			action: 'watch',
 			expiry,
@@ -408,46 +477,23 @@ class ModifyEditSection {
 		.catch((_, err) => {
 			console.warn(err);
 			return this.api.getErrorMessage(err);
-		}).then(/** @param {?JQuery<HTMLElement>} $msg */ ($msg) => {
-			if ($msg) {
-				mw.notify($msg, { type: 'error' });
-				return;
-			}
-
-			let msgKey;
-			if (unwatch) {
-				msgKey = obj.title.isTalkPage() ? 'removedwatchtext-talk' : 'removedwatchtext';
-			} else {
-				msgKey = obj.title.isTalkPage() ? 'addedwatchtext-talk' : 'addedwatchtext';
-			}
-			$msg = $('<div>').append(mw.message(msgKey, title).parse());
-
-			/** @type {?OO.ui.DropdownWidget} */
-			let dropdown = null;
-			while (!unwatch) {
-				dropdown = ModifyEditSection.createWatchlistExpiryDropdown();
-				if (!dropdown) {
-					break;
-				}
-				dropdown.getMenu().selectItemByData(expiry || 'infinity');
-				$msg.append(dropdown.$element.css({ 'margin-top': '1em' }));
-				break;
-			}
-
-			mw.notify($msg);
-			if (dropdown) {
-				dropdown.on('labelChange', () => this.expiryDropdownChangeHandler(obj, title, dropdown));
-			}
-		}).then(() => {
-			obj.processing = false;
-			if (unwatch) {
-				obj.$watchContainer.show();
-				obj.$unwatchContainer.hide();
-			} else {
-				obj.$watchContainer.hide();
-				obj.$unwatchContainer.show();
-			}
 		});
+	}
+
+	/**
+	 * @param {boolean} unwatch
+	 * @param {ExpandedSectionLink} obj
+	 * @param {string} [expiry]
+	 * @returns {string}
+	 */
+	static getMessageKeyForSuccessfulWatch(unwatch, obj, expiry = 'infinity') {
+		if (unwatch) {
+			return obj.title.isTalkPage() ? 'removedwatchtext-talk' : 'removedwatchtext';
+		} else if (mw.util.isInfinity(expiry)) {
+			return obj.title.isTalkPage() ? 'addedwatchindefinitelytext-talk' : 'addedwatchindefinitelytext';
+		} else {
+			return obj.title.isTalkPage() ? 'addedwatchexpirytext-talk' : 'addedwatchexpirytext';
+		}
 	}
 
 	static createWatchlistExpiryDropdown() {
@@ -510,18 +556,34 @@ class ModifyEditSection {
 	}
 
 	/**
+	 * @param {Awaited<ReturnType<mw['notify']>>} notif
 	 * @param {ExpandedSectionLink} obj
 	 * @param {string} title
 	 * @param {OO.ui.DropdownWidget} dropdown
 	 */
-	expiryDropdownChangeHandler(obj, title, dropdown) {
-		dropdown.$element.remove();
+	async handleExpiryDropdownChange(notif, obj, title, dropdown) {
+		notif.pause();
 
-		const expiry = /** @type {string} */ (
-			/** @type {OO.ui.OptionWidget} */ (dropdown.getMenu().findSelectedItem())
-			.getData()
+		const item = /** @type {OO.ui.OptionWidget} */ (dropdown.getMenu().findSelectedItem());
+		const expiryObj = {
+			data: /** @type {string} */ (item.getData()),
+			label: /** @type {string} */ (item.getLabel()),
+		};
+		let $msg = await this.watchPage(false, title, expiryObj.data);
+
+		if ($msg) {
+			mw.notify($msg, { type: 'error' });
+			notif.resume();
+			return;
+		}
+
+		const msgKey = ModifyEditSection.getMessageKeyForSuccessfulWatch(false, obj, expiryObj.data);
+		$msg = $('<div>').append(
+			mw.message(msgKey, title, expiryObj.label).parse(),
+			dropdown.$element
 		);
-		this.watchLinkHandler(null, false, obj, title, expiry);
+		notif.$notification.empty().append($msg);
+		notif.resume();
 	}
 
 }
