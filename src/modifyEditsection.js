@@ -10,9 +10,9 @@
  * @author cpro ([[ja:User:Cpro]])
  *
  * @author Dragoniez ([[ja:User:Dragoniez]])
- * - Rewritten completely in Feb 2026; added AJAX watchlist updates
+ * - Rewritten completely in Feb 2026; added AJAX watchlist and purge updates
  *
- * @version 2.0.3
+ * @version 2.0.4
  */
 // @ts-check
 /* global mw, OO */
@@ -20,7 +20,7 @@
 (() => {
 // *******************************************************************************************
 
-const VERSION = '2.0.3';
+const VERSION = '2.0.4';
 
 class ModifyEditSection {
 
@@ -63,7 +63,10 @@ class ModifyEditSection {
 			'removedwatchtext',
 			'removedwatchtext-talk',
 			'protect-expiry-options',
-			'infiniteblock'
+			'infiniteblock',
+			'confirm-purge-top',
+			'confirmable-yes',
+			'confirmable-no',
 		];
 		const missing = new Set(required.filter(msg => !mw.message(msg).exists()));
 		if (!missing.size) {
@@ -119,14 +122,13 @@ class ModifyEditSection {
 	 * @property {HTMLAnchorElement} anchor
 	 * @property {mw.Title} title
 	 * @property {boolean} watched
-	 * @property {JQuery<HTMLAnchorElement>} $view
-	 * @property {JQuery<HTMLAnchorElement>} $history
-	 * @property {JQuery<HTMLAnchorElement>} $watch
-	 * @property {JQuery<HTMLElement>} $watchContainer
-	 * @property {JQuery<HTMLAnchorElement>} $unwatch
-	 * @property {JQuery<HTMLElement>} $unwatchContainer
-	 * @property {JQuery<HTMLImageElement>} $spinner
-	 * @property {JQuery<HTMLAnchorElement>} $purge
+	 * @property {WrappedLink} view
+	 * @property {WrappedLink} history
+	 * @property {WrappedLink} watch
+	 * @property {WrappedLink} unwatch
+	 * @property {JQuery<HTMLImageElement>} $watchSpinner
+	 * @property {WrappedLink} purge
+	 * @property {JQuery<HTMLSpanElement>} $purgeSpinner
 	 */
 	constructor() {
 		/**
@@ -232,40 +234,34 @@ class ModifyEditSection {
 		const clickHandler = async (e, unwatch, obj, title) => {
 			e.preventDefault();
 			e.stopPropagation();
-			if (obj.$spinner.is(':visible')) {
+			if (obj.$watchSpinner.is(':visible')) {
 				return;
 			}
-			obj.$spinner.show();
+			obj.$watchSpinner.show();
 			// handleWatchLinkClick() should never reject by design, but we take the *safest* approach here
 			try {
 				await this.handleWatchLinkClick(unwatch, obj, title);
 			} finally {
-				obj.$spinner.hide();
+				obj.$watchSpinner.hide();
 			}
 		};
 
 		// All preparations are complete; actually expand the edit section links
 		for (const [title, obj] of this.expanded) {
 			$(obj.anchor).after(
-				ModifyEditSection.wrap(obj.$view),
-				ModifyEditSection.wrap(obj.$history),
-				obj.$watchContainer.toggle(!obj.watched),
-				obj.$unwatchContainer.toggle(obj.watched),
-				obj.$spinner.hide(),
-				ModifyEditSection.wrap(obj.$purge)
+				obj.view.$container,
+				obj.history.$container,
+				obj.watch.$container.toggle(!obj.watched),
+				obj.unwatch.$container.toggle(obj.watched),
+				obj.$watchSpinner.hide(),
+				obj.purge.$container,
+				obj.$purgeSpinner.hide()
 			);
 
-			obj.$watch.off('click').on('click', (e) => clickHandler(e, false, obj, title));
-			obj.$unwatch.off('click').on('click', (e) => clickHandler(e, true, obj, title));
+			obj.watch.$link.off('click').on('click', (e) => clickHandler(e, false, obj, title));
+			obj.unwatch.$link.off('click').on('click', (e) => clickHandler(e, true, obj, title));
+			obj.purge.$link.off('click').on('click', (e) => this.handlePurgeLinkClick(e, obj, title));
 		}
-	}
-
-	/**
-	 * @param {JQuery<HTMLAnchorElement>} $a
-	 * @returns {JQuery<HTMLElement>}
-	 */
-	static wrap($a) {
-		return $('<span>').addClass('mw-editsection-expanded').append($a);
 	}
 
 	/**
@@ -274,45 +270,17 @@ class ModifyEditSection {
 	 */
 	registerExpandedLinks(a, title) {
 		const prefixedTitle = title.getPrefixedText();
-
-		/** @type {JQuery<HTMLAnchorElement>} */
-		const $view = $('<a>');
-		$view.prop({ href: mw.util.getUrl(prefixedTitle) }).text(lcFirst(mw.msg('view')));
-
-		/** @type {JQuery<HTMLAnchorElement>} */
-		const $history = $('<a>');
-		$history.prop({ href: mw.util.getUrl(prefixedTitle, { action: 'history' }) }).text(mw.msg('history_small'));
-
-		/** @type {JQuery<HTMLAnchorElement>} */
-		const $watch = $('<a>');
-		$watch.prop({ href: mw.util.getUrl(prefixedTitle, { action: 'watch' }) }).text(lcFirst(mw.msg('watch')));
-		const $watchContainer = ModifyEditSection.wrap($watch);
-
-		/** @type {JQuery<HTMLAnchorElement>} */
-		const $unwatch = $('<a>');
-		$unwatch.prop({ href: mw.util.getUrl(prefixedTitle, { action: 'unwatch' }) }).text(lcFirst(mw.msg('unwatch')));
-		const $unwatchContainer = ModifyEditSection.wrap($unwatch);
-
-		const spinner = new Image();
-		spinner.src = 'https://upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif';
-		spinner.style.cssText = 'vertical-align: middle; height: 1em; border: 0; margin-left: 0.2em;';
-
-		/** @type {JQuery<HTMLAnchorElement>} */
-		const $purge = $('<a>');
-		$purge.prop({ href: mw.util.getUrl(prefixedTitle, { action: 'purge' }) }).text(lcFirst(mw.msg('purge')));
-
 		this.expanded.set(prefixedTitle, {
 			anchor: a,
 			title,
 			watched: false,
-			$view,
-			$history,
-			$watch,
-			$watchContainer,
-			$unwatch,
-			$unwatchContainer,
-			$spinner: $(spinner),
-			$purge
+			view: new WrappedLink(lcFirst(mw.msg('view')), prefixedTitle),
+			history: new WrappedLink(mw.msg('history_small'), prefixedTitle, { action: 'history' }),
+			watch: new WrappedLink(lcFirst(mw.msg('watch')), prefixedTitle, { action: 'watch' }),
+			unwatch: new WrappedLink(lcFirst(mw.msg('unwatch')), prefixedTitle, { action: 'unwatch' }),
+			$watchSpinner: WrappedLink.createSpinner().css({ 'margin-left': '0.2em' }),
+			purge: new WrappedLink(lcFirst(mw.msg('purge')), prefixedTitle, { action: 'purge' }),
+			$purgeSpinner: WrappedLink.wrap(WrappedLink.createSpinner()),
 		});
 	}
 
@@ -431,20 +399,20 @@ class ModifyEditSection {
 		const notif = await mw.notify($msg);
 		if (dropdown) {
 			dropdown.on('labelChange', async () => {
-				if (obj.$spinner.is(':visible')) {
+				if (obj.$watchSpinner.is(':visible')) {
 					return;
 				}
-				obj.$spinner.show();
+				obj.$watchSpinner.show();
 				try {
 					await this.handleExpiryDropdownChange(notif, obj, title, dropdown);
 				} finally {
-					obj.$spinner.hide();
+					obj.$watchSpinner.hide();
 				}
 			});
 		}
 
-		obj.$watchContainer.toggle(unwatch);
-		obj.$unwatchContainer.toggle(!unwatch);
+		obj.watch.$container.toggle(unwatch);
+		obj.unwatch.$container.toggle(!unwatch);
 	}
 
 	/**
@@ -576,12 +544,126 @@ class ModifyEditSection {
 		notif.resume();
 	}
 
+	/**
+	 * @param {JQuery.ClickEvent<HTMLAnchorElement, undefined, HTMLAnchorElement, HTMLAnchorElement>} e
+	 * @param {ExpandedSectionLink} obj
+	 * @param {string} title
+	 */
+	async handlePurgeLinkClick(e, obj, title) {
+		e.preventDefault();
+		e.stopPropagation();
+
+		if (obj.$purgeSpinner.is(':visible')) {
+			return;
+		}
+		obj.purge.$container.hide();
+		obj.$purgeSpinner.show();
+
+		await mw.loader.using('oojs-ui');
+
+		const confirmed = await OO.ui.confirm(
+			$('<div>').append(
+				new OO.ui.MessageWidget({
+					label: $('<a>').text(title).prop({
+						href: mw.util.getUrl(title),
+						target: '_blank'
+					}),
+					type: 'notice'
+				}).$element.css({ 'margin': '0.5em 0' }),
+				mw.msg('confirm-purge-top')
+			),
+			{
+				actions: [
+					{
+						action: 'accept',
+						label: mw.msg('confirmable-yes'),
+						flags: ['primary', 'progressive']
+					},
+					{
+						action: 'reject',
+						label: mw.msg('confirmable-no'),
+						flags: 'safe'
+					}
+				],
+				size: 'medium',
+				title: mw.msg('purge')
+			}
+		);
+		if (!confirmed) {
+			obj.purge.$container.show();
+			obj.$purgeSpinner.hide();
+			return;
+		}
+
+		/** @type {?JQuery<HTMLElement>} */
+		const $msg = await this.api.post({
+			action: 'purge',
+			forcerecursivelinkupdate: 1,
+			titles: title,
+			redirects: 1,
+			errorformat: 'html',
+			errorlang: mw.config.get('wgUserLanguage'),
+			errorsuselocal: true,
+		}).then(() => null)
+		.catch((_, err) => {
+			console.warn(err);
+			return this.api.getErrorMessage(err);
+		});
+
+		if ($msg) {
+			mw.notify($msg, { type: 'error' });
+			obj.purge.$container.show();
+			obj.$purgeSpinner.hide();
+			return;
+		}
+		location.reload();
+	}
+
 }
 /**
  * @type {OO.ui.MenuOptionWidget.ConfigOptions[]|false|null}
  * `false` if no parsable messages exist.
  */
 ModifyEditSection.expiryOptions = null;
+
+class WrappedLink {
+
+	/**
+	 * @param {string} text
+	 * @param {string} title
+	 * @param {Record<string, string | number | boolean>} [query]
+	 */
+	constructor(text, title, query) {
+		/**
+		 * @type {JQuery<HTMLAnchorElement>}
+		 * @readonly
+		 */
+		this.$link = $('<a>');
+		/**
+		 * @type {JQuery<HTMLSpanElement>}
+		 * @readonly
+		 */
+		this.$container = WrappedLink.wrap(this.$link);
+
+		this.$link.prop({ href: mw.util.getUrl(title, query) }).text(text);
+	}
+
+	/**
+	 * @param {JQuery<HTMLElement>} $el
+	 * @returns {JQuery<HTMLSpanElement>}
+	 */
+	static wrap($el) {
+		return $('<span>').addClass('mw-editsection-expanded').append($el);
+	}
+
+	static createSpinner() {
+		const spinner = new Image();
+		spinner.src = 'https://upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif';
+		spinner.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
+		return $(spinner);
+	}
+
+}
 
 /**
  * @param {string} str
