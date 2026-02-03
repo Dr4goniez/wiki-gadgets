@@ -12,7 +12,7 @@
  * @author Dragoniez ([[ja:User:Dragoniez]])
  * - Rewritten completely in Feb 2026; added AJAX watchlist updates
  *
- * @version 2.0.2
+ * @version 2.0.3
  */
 // @ts-check
 /* global mw, OO */
@@ -20,7 +20,7 @@
 (() => {
 // *******************************************************************************************
 
-const VERSION = '2.0.2';
+const VERSION = '2.0.3';
 
 class ModifyEditSection {
 
@@ -119,13 +119,13 @@ class ModifyEditSection {
 	 * @property {HTMLAnchorElement} anchor
 	 * @property {mw.Title} title
 	 * @property {boolean} watched
-	 * @property {boolean} processing
 	 * @property {JQuery<HTMLAnchorElement>} $view
 	 * @property {JQuery<HTMLAnchorElement>} $history
 	 * @property {JQuery<HTMLAnchorElement>} $watch
 	 * @property {JQuery<HTMLElement>} $watchContainer
 	 * @property {JQuery<HTMLAnchorElement>} $unwatch
 	 * @property {JQuery<HTMLElement>} $unwatchContainer
+	 * @property {JQuery<HTMLImageElement>} $spinner
 	 * @property {JQuery<HTMLAnchorElement>} $purge
 	 */
 	constructor() {
@@ -232,15 +232,15 @@ class ModifyEditSection {
 		const clickHandler = async (e, unwatch, obj, title) => {
 			e.preventDefault();
 			e.stopPropagation();
-			if (obj.processing) {
+			if (obj.$spinner.is(':visible')) {
 				return;
 			}
-			obj.processing = true;
+			obj.$spinner.show();
 			// handleWatchLinkClick() should never reject by design, but we take the *safest* approach here
 			try {
 				await this.handleWatchLinkClick(unwatch, obj, title);
 			} finally {
-				obj.processing = false;
+				obj.$spinner.hide();
 			}
 		};
 
@@ -251,6 +251,7 @@ class ModifyEditSection {
 				ModifyEditSection.wrap(obj.$history),
 				obj.$watchContainer.toggle(!obj.watched),
 				obj.$unwatchContainer.toggle(obj.watched),
+				obj.$spinner.hide(),
 				ModifyEditSection.wrap(obj.$purge)
 			);
 
@@ -292,6 +293,10 @@ class ModifyEditSection {
 		$unwatch.prop({ href: mw.util.getUrl(prefixedTitle, { action: 'unwatch' }) }).text(lcFirst(mw.msg('unwatch')));
 		const $unwatchContainer = ModifyEditSection.wrap($unwatch);
 
+		const spinner = new Image();
+		spinner.src = 'https://upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif';
+		spinner.style.cssText = 'vertical-align: middle; height: 1em; border: 0; margin-left: 0.2em;';
+
 		/** @type {JQuery<HTMLAnchorElement>} */
 		const $purge = $('<a>');
 		$purge.prop({ href: mw.util.getUrl(prefixedTitle, { action: 'purge' }) }).text(lcFirst(mw.msg('purge')));
@@ -300,13 +305,13 @@ class ModifyEditSection {
 			anchor: a,
 			title,
 			watched: false,
-			processing: false,
 			$view,
 			$history,
 			$watch,
 			$watchContainer,
 			$unwatch,
 			$unwatchContainer,
+			$spinner: $(spinner),
 			$purge
 		});
 	}
@@ -426,14 +431,14 @@ class ModifyEditSection {
 		const notif = await mw.notify($msg);
 		if (dropdown) {
 			dropdown.on('labelChange', async () => {
-				if (obj.processing) {
+				if (obj.$spinner.is(':visible')) {
 					return;
 				}
-				obj.processing = true;
+				obj.$spinner.show();
 				try {
 					await this.handleExpiryDropdownChange(notif, obj, title, dropdown);
 				} finally {
-					obj.processing = false;
+					obj.$spinner.hide();
 				}
 			});
 		}
