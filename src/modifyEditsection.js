@@ -12,7 +12,7 @@
  * @author Dragoniez ([[ja:User:Dragoniez]])
  * - Rewritten completely in Feb 2026; added AJAX watchlist and purge updates
  *
- * @version 2.0.4
+ * @version 2.0.5
  */
 // @ts-check
 /* global mw, OO */
@@ -20,7 +20,7 @@
 (() => {
 // *******************************************************************************************
 
-const VERSION = '2.0.4';
+const VERSION = '2.0.5';
 
 class ModifyEditSection {
 
@@ -155,6 +155,15 @@ class ModifyEditSection {
 				formatversion: '2'
 			}
 		});
+		/**
+		 * Object keyed by link titles and valued by watchlist expiry dropdowns
+		 * shown in mw.notify messages. Used to disable the dropdowns when
+		 * they should no longer be accessible while they may still be visible
+		 * on the UI.
+		 *
+		 * @type {Record<string, OO.ui.DropdownWidget>}
+		 */
+		this.notifDropdowns = Object.create(null);
 	}
 
 	/**
@@ -216,7 +225,18 @@ class ModifyEditSection {
 			}
 			levelMap.set(prefixedTitle, level);
 
-			this.registerExpandedLinks(a, t);
+			this.expanded.set(prefixedTitle, {
+				anchor: a,
+				title: t,
+				watched: false,
+				view: new WrappedLink(lcFirst(mw.msg('view')), prefixedTitle),
+				history: new WrappedLink(mw.msg('history_small'), prefixedTitle, { action: 'history' }),
+				watch: new WrappedLink(lcFirst(mw.msg('watch')), prefixedTitle, { action: 'watch' }),
+				unwatch: new WrappedLink(lcFirst(mw.msg('unwatch')), prefixedTitle, { action: 'unwatch' }),
+				$watchSpinner: WrappedLink.createSpinner().css({ 'margin-left': '0.2em' }),
+				purge: new WrappedLink(lcFirst(mw.msg('purge')), prefixedTitle, { action: 'purge' }),
+				$purgeSpinner: WrappedLink.wrap(WrappedLink.createSpinner()),
+			});
 		}
 		if (!this.expanded.size) {
 			return;
@@ -242,6 +262,12 @@ class ModifyEditSection {
 			try {
 				await this.handleWatchLinkClick(unwatch, obj, title);
 			} finally {
+				// If the user's just unwatched the title and a previous watch notification is still shown,
+				// disallow further interaction with the dropdown in it
+				if (unwatch && this.notifDropdowns[title] && this.notifDropdowns[title].$element.is(':visible')) {
+					this.notifDropdowns[title].setDisabled(true);
+					delete this.notifDropdowns[title];
+				}
 				obj.$watchSpinner.hide();
 			}
 		};
@@ -262,26 +288,6 @@ class ModifyEditSection {
 			obj.unwatch.$link.off('click').on('click', (e) => clickHandler(e, true, obj, title));
 			obj.purge.$link.off('click').on('click', (e) => this.handlePurgeLinkClick(e, obj, title));
 		}
-	}
-
-	/**
-	 * @param {HTMLAnchorElement} a
-	 * @param {mw.Title} title
-	 */
-	registerExpandedLinks(a, title) {
-		const prefixedTitle = title.getPrefixedText();
-		this.expanded.set(prefixedTitle, {
-			anchor: a,
-			title,
-			watched: false,
-			view: new WrappedLink(lcFirst(mw.msg('view')), prefixedTitle),
-			history: new WrappedLink(mw.msg('history_small'), prefixedTitle, { action: 'history' }),
-			watch: new WrappedLink(lcFirst(mw.msg('watch')), prefixedTitle, { action: 'watch' }),
-			unwatch: new WrappedLink(lcFirst(mw.msg('unwatch')), prefixedTitle, { action: 'unwatch' }),
-			$watchSpinner: WrappedLink.createSpinner().css({ 'margin-left': '0.2em' }),
-			purge: new WrappedLink(lcFirst(mw.msg('purge')), prefixedTitle, { action: 'purge' }),
-			$purgeSpinner: WrappedLink.wrap(WrappedLink.createSpinner()),
-		});
 	}
 
 	/**
@@ -377,7 +383,7 @@ class ModifyEditSection {
 		]);
 
 		if ($msg) {
-			mw.notify($msg, { type: 'error' });
+			await mw.notify($msg, { type: 'error' });
 			return;
 		}
 
@@ -391,6 +397,12 @@ class ModifyEditSection {
 			if (!dropdown) {
 				break;
 			}
+			if (this.notifDropdowns[title] && this.notifDropdowns[title].$element.is(':visible')) {
+				// If a previous watch notification is still shown, disallow further interaction
+				// with the dropdown in it
+				this.notifDropdowns[title].setDisabled(true);
+			}
+			this.notifDropdowns[title] = dropdown;
 			dropdown.getMenu().selectItemByData(expiryObj ? expiryObj.data : 'infinity');
 			$msg.append(dropdown.$element.css({ 'margin-top': '1em' }));
 			break;
@@ -530,7 +542,7 @@ class ModifyEditSection {
 		let $msg = await this.watchPage(false, title, expiryObj.data);
 
 		if ($msg) {
-			mw.notify($msg, { type: 'error' });
+			await mw.notify($msg, { type: 'error' });
 			notif.resume();
 			return;
 		}
@@ -611,7 +623,7 @@ class ModifyEditSection {
 		});
 
 		if ($msg) {
-			mw.notify($msg, { type: 'error' });
+			await mw.notify($msg, { type: 'error' });
 			obj.purge.$container.show();
 			obj.$purgeSpinner.hide();
 			return;
