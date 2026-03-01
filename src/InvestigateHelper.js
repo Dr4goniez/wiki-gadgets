@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.2.1
+ * @version 1.2.2
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -50,9 +50,9 @@ class InvestigateHelper {
 			return;
 		}
 
-		/** @type {Record<string, string>} */
-		const i18n = Messages.i18n[wgUserLanguage.replace(/-.*$/, '')] || Messages.i18n.en;
-		mw.messages.set(i18n);
+		const userLang = /** @type {keyof typeof Messages.i18n} */ (wgUserLanguage.replace(/-.*$/, ''));
+		const i18n = Messages.i18n[userLang] || Messages.i18n.en;
+		mw.messages.set(/** @type {any} */ (i18n));
 
 		// Initialize a mw.Api instance
 		api = new mw.Api(this.getApiOptions());
@@ -168,7 +168,7 @@ class InvestigateHelper {
 	/**
 	 * Loads the `ip-wiki` module from the Japanese Wikipedia.
 	 *
-	 * @returns {JQueryPromise<void>}
+	 * @returns {JQuery.Promise<void>}
 	 */
 	static loadIpWiki() {
 		const moduleName = 'ext.gadget.ip-wiki';
@@ -850,7 +850,7 @@ class InvestigateHelper {
 
 		const $content = $('<ul>');
 		for (const id of ids) {
-			const key = id.replace(/^ih-interface-/, '');
+			const key = /** @type {keyof typeof labelMap} */ (id.replace(/^ih-interface-/, ''));
 			const label = labelMap[key];
 			if (label === undefined) {
 				throw new Error(`${key} is not a valid key for labelMap.`);
@@ -887,7 +887,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.2.1 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.2.2 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -910,6 +910,18 @@ class InvestigateHelper {
 		};
 	}
 
+	/**
+	 * @param {string[]} batchArray
+	 * @param {Record<string, string | number | boolean | string[] | File | number[] | undefined>} params
+	 * @returns {mw.Api.AbortablePromise}
+	 */
+	static fetch(batchArray, params) {
+		if (batchArray.length <= 50) {
+			return api.get(params);
+		} else {
+			return api.post(params, this.nonwritePost());
+		}
+	}
 }
 InvestigateHelper.CLS_FOREIGN_TABLE = 'ih-foreigntable';
 InvestigateHelper.traverserAborted = false;
@@ -924,7 +936,7 @@ class Messages {
 	 * using batches of 500 messages per request (instead of 50), improving performance.
 	 *
 	 * @param {string[]} messages List of message keys to ensure they are available.
-	 * @returns {JQueryPromise<boolean>} Resolves to `true` if any new messages were added; otherwise `false`.
+	 * @returns {JQuery.Promise<boolean>} Resolves to `true` if any new messages were added; otherwise `false`.
 	 */
 	static loadMessagesIfMissing(messages) {
 		/**
@@ -968,20 +980,17 @@ class Messages {
 			return $.Deferred().resolve(false).promise();
 		}
 
+		return (
 		/**
 		 * Recursively loads missing messages in batches of up to 500.
 		 *
 		 * @param {string[]} keys List of message keys to load.
 		 * @param {number} index Starting index for the current batch.
-		 * @returns {JQueryPromise<boolean>}
+		 * @returns {JQuery.Promise<boolean>}
 		 */
-		return (function execute(keys, index) {
+		function execute(keys, index) {
 			const batch = keys.slice(index, index + 500);
-			const request = batch.length <= 50
-				? (query) => api.get(query)
-				: (query) => api.post(query, InvestigateHelper.nonwritePost());
-
-			return request({
+			return InvestigateHelper.fetch(batch, {
 				action: 'query',
 				formatversion: '2',
 				meta: 'allmessages',
@@ -1143,7 +1152,7 @@ class Messages {
 	 * Parses and caches MediaWiki interface messages using the parse API. Cached values are reused via `mw.storage`.
 	 *
 	 * @param {(keyof LoadedMessages)[]} keys List of message keys to parse.
-	 * @returns {JQueryPromise<void>} A promise that resolves when parsing and caching are complete.
+	 * @returns {JQuery.Promise<void>} A promise that resolves when parsing and caching are complete.
 	 */
 	static parse(keys) {
 		// FIXME: The storage key may need to be changed if we use this method again
@@ -1222,7 +1231,7 @@ class Messages {
 	static parseBlockReasonDropdown() {
 		// Adapted from Html::listDropdownOptions
 		const /** @type {Record<string, string | Record<string, string>>} */ options = {};
-		let /** @type {string | false} */optgroup = false;
+		let /** @type {string | false} */ optgroup = false;
 
 		for (const rawOption of this.get('ipbreason-dropdown', [], { method: 'plain' }).split('\n')) {
 			const value = rawOption.trim();
@@ -1247,6 +1256,7 @@ class Messages {
 					if (typeof options[optgroup] !== 'object' || options[optgroup] === null) {
 						options[optgroup] = {};
 					}
+					// @ts-expect-error
 					options[optgroup][opt] = opt;
 				}
 			} else {
@@ -1366,7 +1376,7 @@ class Messages {
 	 * Parses a summary via the API.
 	 *
 	 * @param {string} summary The summary to parse.
-	 * @returns {JQueryPromise<?string>}
+	 * @returns {JQuery.Promise<?string>}
 	 */
 	static parseSummary(summary) {
 		return api.get({
@@ -1671,7 +1681,7 @@ class UserListItem {
 	/**
 	 * Checks the existence of pages linked from {@link CLS_EXISTENCE_UNKNOWN} anchors.
 	 *
-	 * @returns {JQueryPromise<void>}
+	 * @returns {JQuery.Promise<void>}
 	 */
 	static checkExistence() {
 		const /** @type {Map<string, HTMLAnchorElement[]>} */ linkMap = new Map();
@@ -1696,11 +1706,12 @@ class UserListItem {
 			titleBatches[titleBatches.length - 1].push(title);
 		}
 
+		return (
 		/**
 		 * @param {string[][]} batches
 		 * @param {number} iter
 		 */
-		return (function execute(batches, iter) {
+		function execute(batches, iter) {
 			const titles = batches[iter];
 			return api.post({
 				action: 'query',
@@ -2414,6 +2425,7 @@ class BlockField {
 		const targetField = new OO.ui.FieldsetLayout({
 			label: Messages.get('checkuser-investigateblock-target')
 		});
+		/** @type {string[]} */
 		const presetTargets = [ // For debugging
 			// '192.168.0.0/28',
 			// '192.168.0.0/24',
@@ -2927,7 +2939,7 @@ class BlockField {
 	 * Checks the block status of `targets` and returns a Map of usernames to block info.
 	 *
 	 * @param {NonNullable<ReturnType<BlockField['getCategorizedUsernames']>>} targets The users to check the block status of.
-	 * @returns {JQueryPromise<BlockIdMap | string>} A Promise that resolves with a Map of usernames to block data, or
+	 * @returns {JQuery.Promise<BlockIdMap | string>} A Promise that resolves with a Map of usernames to block data, or
 	 * an API error code as a string on failure.
 	 */
 	static checkBlocks(targets) {
@@ -2939,16 +2951,13 @@ class BlockField {
 		return (
 		/**
 		 * @param {number} index
-		 * @returns {JQueryPromise<BlockIdMap | string>}
+		 * @returns {JQuery.Promise<BlockIdMap | string>}
 		 */
 		function execute(index) {
-			const allUsers = usernames.slice(index, index + 500);
-			const request = allUsers.length <= 50
-				? (query) => api.get(query)
-				: (query) => api.post(query, InvestigateHelper.nonwritePost());
-			return request({
+			const batch = usernames.slice(index, index + 500);
+			return InvestigateHelper.fetch(batch, {
 				list: 'blocks',
-				bkusers: allUsers.join('|'),
+				bkusers: batch.join('|'),
 				bklimit: 'max',
 				bkprop: 'id|user|timestamp'
 			}).then(/** @param {ApiResponse} res */ (res) => {
@@ -2970,7 +2979,7 @@ class BlockField {
 					}
 				}
 				index += 500;
-				if (targets[index]) {
+				if (usernames[index]) {
 					return execute(index);
 				}
 				return map;
@@ -3026,7 +3035,7 @@ class BlockLog {
 	 *
 	 * @param {string} username The name of the user whose block logs are being retrieved.
 	 * @param {BlockIdMapValue} data The user's active block data (IDs and earliest block timestamp).
-	 * @returns {JQueryPromise<BlockLogMap | string>} A Promise resolving to a Map of block IDs to block log details,
+	 * @returns {JQuery.Promise<BlockLogMap | string>} A Promise resolving to a Map of block IDs to block log details,
 	 * or to an API error code string if the request fails.
 	 * @private
 	 */
@@ -3382,6 +3391,7 @@ function BlockDialogFactory() {
 		 * @override
 		 */
 		initialize() {
+			// @ts-expect-error
 			super.initialize.apply(this, arguments);
 
 			this.content = new OO.ui.PanelLayout({
@@ -3439,7 +3449,7 @@ function BlockDialogFactory() {
 				}
 
 				const params = this.blockField.getBlockDetails();
-				/** @type {JQueryPromise<?string>} */
+				/** @type {JQuery.Promise<?string>} */
 				const summaryPromise = params.reason
 					? Messages.parseSummary(params.reason)
 					: $.Deferred().resolve('').promise();
@@ -3796,7 +3806,7 @@ function BlockDialogFactory() {
 				 * @returns {Promise<void>}
 				 */
 				const execute = async (action) => {
-					/** @type {JQueryPromise<void>[]} */
+					/** @type {JQuery.Promise<void>[]} */
 					let batch = [];
 
 					for (const [$icon, { params, $line, newline, blockId }] of postsaveParamMap) {
@@ -3874,7 +3884,7 @@ function BlockDialogFactory() {
 		 *
 		 * @param {string | JQuery<HTMLElement>} text
 		 * @param {OO.ui.MessageDialog.SetupDataMap} [options]
-		 * @returns {JQueryPromise<boolean>}
+		 * @returns {JQuery.Promise<boolean>}
 		 */
 		layeredConfirm(text, options = {}) {
 			this.$element.css('z-index', '100');
@@ -4302,7 +4312,7 @@ class BlockTarget {
 	 * Performs an `action=block` or `action=unblock` request.
 	 *
 	 * @param {BlockParams | UnblockParams} params
-	 * @returns {JQueryPromise<string | undefined>} A Promise resolving to `undefined` on success,
+	 * @returns {JQuery.Promise<string | undefined>} A Promise resolving to `undefined` on success,
 	 * or an error code on failure.
 	 */
 	static doBlock(params) {
@@ -4316,7 +4326,7 @@ class BlockTarget {
 
 	/**
 	 * @param {BlockParams | UnblockParams} _params
-	 * @returns {JQueryPromise<string | undefined>}
+	 * @returns {JQuery.Promise<string | undefined>}
 	 */
 	static doFakeBlock(_params) {
 		const def = $.Deferred();
