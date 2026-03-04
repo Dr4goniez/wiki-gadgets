@@ -11,7 +11,7 @@
 \**********************************************************************/
 //<nowiki>
 // @ts-check
-/* global mw, OO*/
+/* global mw, OO */
 (() => {
 //**********************************************************************
 
@@ -58,7 +58,7 @@ class AjaxBlock {
 		}
 
 		const data = this.collectBlockLinks(initializer);
-		if (!data.links.length) {
+		if ($.isEmptyObject(data.links)) {
 			return;
 		}
 		this.addStyleTag();
@@ -230,7 +230,7 @@ class AjaxBlock {
 		const linkMap = Object.create(null);
 
 		let index = 0;
-		for (const a of /** @type {NodeListOf<HTMLAnchorElement>} */ (document.querySelectorAll('.mw-body-content a'))) {
+		for (const a of /** @type {NodeListOf<HTMLAnchorElement>} */ (document.querySelectorAll('#bodyContent a'))) {
 			const href = a.href;
 			if (
 				!href ||
@@ -362,7 +362,6 @@ class AjaxBlock {
 			});
 		});
 
-		// await mw.loader.using(['oojs-ui', 'mediawiki.widgets.TitlesMultiselectWidget', 'mediawiki.widgets.NamespacesMultiselectWidget']);
 		const AjaxBlockDialog = AjaxBlockDialogFactory();
 		this.dialog = new AjaxBlockDialog({
 			classes: ['ajaxblock-dialog'],
@@ -375,7 +374,7 @@ class AjaxBlock {
 	 * @param {PointerEvent} e
 	 * @param {BlockLink} obj
 	 */
-	async handleClick(e, obj) {
+	handleClick(e, obj) {
 		let callback;
 		if (e.shiftKey && e.ctrlKey) {
 			// One click execution with all warnings suppressed
@@ -966,15 +965,13 @@ function AjaxBlockDialogFactory() {
 			super(config);
 
 			/**
-			 * @type {boolean}
 			 * @private
 			 */
-			this.destroyed = false;
-
-			const BlockUser = BlockUserFactory();
-			this.blockUser = new BlockUser(this);
-			// this.blockTemp = new BlockUser();
-			// this.blockAnon = new BlockUser();
+			this._ready = false;
+			/**
+			 * @type {InstanceType<ReturnType<BlockUserFactory>>}
+			 */
+			this.blockUser = Object.create(null);
 		}
 
 		/**
@@ -985,20 +982,53 @@ function AjaxBlockDialogFactory() {
 			// @ts-expect-error
 			super.initialize.apply(this, arguments);
 
-			this.content = new OO.ui.PanelLayout({
-				padded: true,
-				expanded: false
-			});
-			this.content.$element.append(
-				this.blockUser.$element
-				// this.blockNamed.$element,
-				// this.blockTemp.$element,
-				// this.blockAnon.$element
-			);
-			// @ts-expect-error
-			this.$body.append(this.content.$element);
+			this.pushPending();
 
 			return this;
+		}
+
+		/**
+		 * Lazy-construct the dialog elements.
+		 *
+		 * This avoids an unconditional load of dependent modules.
+		 *
+		 * @returns {JQuery.Promise<void>}
+		 * @private
+		 */
+		prepareDialog() {
+			if (this._ready) {
+				return $.Deferred().resolve().promise();
+			}
+			this._ready = true;
+
+			return mw.loader.using([
+				'oojs-ui',
+				'mediawiki.widgets.TitlesMultiselectWidget',
+				'mediawiki.widgets.NamespacesMultiselectWidget'
+			]).then(() => {
+				const BlockUser = BlockUserFactory();
+				this.blockUser = new BlockUser(this);
+
+				const content = new OO.ui.PanelLayout({
+					padded: true,
+					expanded: false
+				});
+				content.$element.append(
+					this.blockUser.$element
+					// this.blockNamed.$element,
+					// this.blockTemp.$element,
+					// this.blockAnon.$element
+				);
+
+				// @ts-expect-error
+				this.$body.append(content.$element);
+				this.popPending();
+				this.updateSize();
+			});
+		}
+
+		isDialogReady() {
+			return this._ready;
 		}
 
 		/**
@@ -1006,33 +1036,33 @@ function AjaxBlockDialogFactory() {
 		 * @override
 		 */
 		getSetupProcess() {
-			return super.getSetupProcess()
-			.next(async () => {
-				await mw.loader.using(['oojs-ui', 'mediawiki.widgets.TitlesMultiselectWidget', 'mediawiki.widgets.NamespacesMultiselectWidget']);
-				// this.$selectedCount.text(this.sr.getSelected().length);
-				// this.getActions().setMode(parentNode ? 'nonRCW' : 'RCW');
-			});
+			const process = super.getSetupProcess();
+
+			if (!this.isDialogReady()) {
+				process.next(() => this.prepareDialog());
+			}
+
+			return process;
 		}
 
 		/**
 		 * @inheritdoc
 		 * @override
 		 */
-		getReadyProcess() {
-			return super.getReadyProcess().next(() => {
-				// if (dirMismatch) {
-				// 	this.$element.find('.oo-ui-processDialog-actions-other .oo-ui-actionWidget > .oo-ui-buttonElement-button').css({
-				// 		[`border-${uiStart}-color`]: 'transparent',
-				// 		[`border-${uiEnd}-color`]: 'var(--border-color-subtle,#c8ccd1)'
-				// 	});
-				// }
-			});
-		}
+		// getReadyProcess() {
+		// 	const process = super.getSetupProcess();
+
+		// 	if (!this.isDialogReady()) {
+		// 		process.next(() => this.prepareDialog());
+		// 	}
+
+		// 	return process;
+		// }
 
 		/**
 		 * @inheritdoc
-		 * @param {string} [action]
 		 * @override
+		 * @param {string} [action]
 		 */
 		getActionProcess(action) {
 			return new OO.ui.Process(() => {
@@ -1047,39 +1077,15 @@ function AjaxBlockDialogFactory() {
 					// 	this.sr.selectiveRollback(selectedLinks);
 					// 	break;
 					// }
-					// case 'documentation':
-					// 	window.open('https://meta.wikimedia.org/wiki/Special:MyLanguage/User:Dragoniez/AjaxBlock', '_blank');
-					// 	break;
-					// case 'config':
-					// 	window.open(mw.util.getUrl('Special:AjaxBlockConfig'), '_blank');
-					// 	break;
-					// case 'selectall': {
-					// 	const count = this.sr.selectAll();
-					// 	this.$selectedCount.text(count);
-					// 	break;
-					// }
+					case 'documentation':
+						window.open('https://meta.wikimedia.org/wiki/Special:MyLanguage/User:Dragoniez/AjaxBlock', '_blank');
+						break;
+					case 'config':
+						window.open(mw.util.getUrl('Special:AjaxBlockConfig'), '_blank');
+						break;
 					default: this.close();
 				}
 			});
-		}
-
-		/**
-		 * Destroys the dialog.
-		 */
-		destroy() {
-			AjaxBlockDialog.windowManager.destroy();
-			// if (this.portlet) {
-			// 	this.portlet.remove();
-			// }
-			this.destroyed = true;
-		}
-
-		/**
-		 * Checks whether the dialog has been destroyed.
-		 * @returns {boolean}
-		 */
-		isDestroyed() {
-			return this.destroyed;
 		}
 
 	}
@@ -1100,21 +1106,17 @@ function AjaxBlockDialogFactory() {
 			action: 'execute',
 			label: 'Block', // TODO
 			flags: ['primary', 'progressive'],
-			modes: ['nonRCW']
 		},
 		{
 			action: 'documentation',
 			label: 'Docs', // TODO
-			modes: ['RCW', 'nonRCW']
 		},
 		{
 			action: 'config',
 			label: 'Config', // TODO
-			modes: ['RCW', 'nonRCW']
 		},
 		{
 			flags: ['safe', 'close'],
-			modes: ['RCW', 'nonRCW']
 		}
 	];
 	AjaxBlockDialog.windowManager = (() => {
