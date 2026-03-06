@@ -31,8 +31,8 @@ if (
 	return;
 }
 
-/** @type {mw.Api} */
-let api;
+let /** @type {mw.Api} */ api;
+const wgUserLanguage = mw.config.get('wgUserLanguage');
 
 class AjaxBlock {
 
@@ -58,40 +58,40 @@ class AjaxBlock {
 		}
 
 		const data = this.collectBlockLinks(initializer);
+		console.log(data);
 		if ($.isEmptyObject(data.links)) {
 			return;
 		}
 		this.addStyleTag();
 
-		await mw.loader.using('oojs-ui-windows');
+		const userLang = /** @type {keyof typeof Messages.i18n} */ (wgUserLanguage.replace(/-.*$/, ''));
+		const i18n = Messages.i18n[userLang] || Messages.i18n.en;
+		mw.messages.set(/** @type {any} */ (i18n));
+
+		await $.when(
+			mw.loader.using('oojs-ui-windows'),
+			Messages.loadMessagesIfMissing([
+				'block',
+				'block-target',
+				'block-expiry',
+				'ipboptions',
+				'ipbother',
+				'ipbreason-dropdown',
+				'htmlform-selectorother-other',
+				'block-reason',
+				'block-reason-other',
+
+				'unblock',
+				'block-removal-reason-placeholder',
+			], initializer.userRights)
+		);
 		new this(data);
 	}
 
 	/**
-	 * @typedef {object} Initializer
-	 * @property {Record<'Block' | 'Unblock', string[]>} blockPageAliases
-	 * @property {string[]} specialNamespaceAliases
-	 * @property {Set<string>} userRights
-	 *
-	 * @typedef {object} ApiResponse
-	 * @property {ApiResponseQuery} [query]
-	 *
-	 * @typedef {object} ApiResponseQuery
-	 * @property {ApiResponseQuerySiteinfoSpecialpagealiases[]} [specialpagealiases]
-	 * @property {ApiResponseQueryUserinfoRights} [userinfo]
-	 *
-	 * @typedef {object} ApiResponseQuerySiteinfoSpecialpagealiases
-	 * @property {string} realname
-	 * @property {string[]} aliases
-	 *
-	 * @typedef {object} ApiResponseQueryUserinfoRights
-	 * @property {number} id
-	 * @property {string} name
-	 * @property {string[]} rights
-	 */
-	/**
 	 * @param {mw.Api} api
 	 * @returns {JQuery.Promise<Initializer>}
+	 * @private
 	 */
 	static getInitializer(api) {
 		const specialNamespaceAliases = [];
@@ -176,18 +176,9 @@ class AjaxBlock {
 	}
 
 	/**
-	 * @typedef {object} BlockLink
-	 * @property {number} index
-	 * @property {HTMLAnchorElement} anchor
-	 * @property {'block' | 'unblock'} type
-	 * @property {string} target
-	 * @property {Query} query
-	 *
-	 * @typedef {Record<string, string | number>} Query
-	 */
-	/**
 	 * @param {Initializer} init
-	 * @return {{ users: { registered: Set<string>, anon: Set<string> }, links: Record<string, BlockLink[]> }}
+	 * @return {{ users: { registered: Set<string>; anon: Set<string>; }; links: Record<string, BlockLink[]>; }}
+	 * @private
 	 */
 	static collectBlockLinks(init) {
 		const wgServerName = mw.config.get('wgServerName');
@@ -245,7 +236,7 @@ class AjaxBlock {
 			if ((m = regex.article.exec(href))) {
 				prefixedTitle = decodeURIComponent(m[1]).replace(/[_+]/g, ' ');
 			} else if (a.pathname === wgScript) {
-				const t = mw.util.getParamValue('title');
+				const t = mw.util.getParamValue('title', href);
 				if (!t) {
 					continue;
 				}
@@ -271,7 +262,7 @@ class AjaxBlock {
 			// Extract target
 			let target = m[2]
 				? decodeURIComponent(m[2]).replace(/[_+]/g, ' ')
-				: mw.util.getParamValue('target');
+				: mw.util.getParamValue('target', href);
 			if (!target) {
 				continue;
 			}
@@ -293,7 +284,7 @@ class AjaxBlock {
 			}
 
 			// Extract query parameters
-			/** @type {Query} */
+			/** @type {URLQueryParams} */
 			const query = Object.create(null);
 			for (const [key, value] of new URLSearchParams(a.search).entries()) {
 				/** @type {string | number} */
@@ -331,6 +322,9 @@ class AjaxBlock {
 		};
 	}
 
+	/**
+	 * @private
+	 */
 	static addStyleTag() {
 		const style = document.createElement('style');
 		style.id = 'ajaxblock-styles';
@@ -343,12 +337,22 @@ class AjaxBlock {
 			.ajaxblock-dialog .ajaxblock-horizontalfield .oo-ui-fieldLayout-field {
 				width: 80% !important;
 			}
+			${/* Vertically align FieldLayout's text field with its header element */''}
+			.ajaxblock-dialog .ajaxblock-targetlabel {
+				display: block;
+				padding-top: 4px;
+			}
+			${/* Disable the top margin for :not(:first-child) fieldsets */''}
+			.ajaxblock-dialog .ajaxblock-fieldset {
+				margin-top: 0px;
+			}
 		`.replace(/[\t\n\r]+/g, '');
 		document.head.appendChild(style);
 	}
 
 	/**
 	 * @param {ReturnType<AjaxBlock.collectBlockLinks>} linkObj
+	 * @private
 	 */
 	constructor(linkObj) {
 		this.registered = linkObj.users.registered;
@@ -368,11 +372,13 @@ class AjaxBlock {
 			size: 'large',
 		});
 		AjaxBlockDialog.windowManager.addWindows([this.dialog]);
+		console.log('AjaxBlock has been loaded');
 	}
 
 	/**
 	 * @param {PointerEvent} e
 	 * @param {BlockLink} obj
+	 * @private
 	 */
 	handleClick(e, obj) {
 		let callback;
@@ -398,6 +404,7 @@ class AjaxBlock {
 	/**
 	 * @param {BlockLink} link
 	 * @param {boolean} suppressWarnings
+	 * @private
 	 */
 	execute(link, suppressWarnings) {
 
@@ -443,10 +450,11 @@ class Messages {
 	 * Unlike `mw.Api.loadMessagesIfMissing`, this version supports API continuation
 	 * using batches of 500 messages per request (instead of 50), improving performance.
 	 *
-	 * @param {string[]} messages List of message keys to ensure they are available.
+	 * @param {(keyof MediaWikiMessages)[]} messages List of message keys to ensure they are available.
+	 * @param {Set<string>} userRights A list of permissions the user has.
 	 * @returns {JQuery.Promise<boolean>} Resolves to `true` if any new messages were added; otherwise `false`.
 	 */
-	static loadMessagesIfMissing(messages) {
+	static loadMessagesIfMissing(messages, userRights) {
 		/**
 		 * Messages that are missing and need to be fetched
 		 * @type {Set<string>}
@@ -488,6 +496,7 @@ class Messages {
 			return $.Deferred().resolve(false).promise();
 		}
 
+		const apilimit = userRights.has('apihighlimits') ? 500 : 50;
 		return (
 		/**
 		 * Recursively loads missing messages in batches of up to 500.
@@ -497,13 +506,11 @@ class Messages {
 		 * @returns {JQuery.Promise<boolean>}
 		 */
 		function execute(keys, index) {
-			const batch = keys.slice(index, index + 500);
+			const batch = keys.slice(index, index + apilimit);
 			return AjaxBlock.fetch(batch, {
-				action: 'query',
-				formatversion: '2',
 				meta: 'allmessages',
 				ammessages: batch,
-				amlang: mw.config.get('wgUserLanguage'),
+				amlang: wgUserLanguage,
 			}).then(/** @param {ApiResponse} res */ (res) => {
 				const allmessages = res && res.query && res.query.allmessages || [];
 				let added = false;
@@ -529,7 +536,7 @@ class Messages {
 					}
 				}
 
-				index += 500;
+				index += apilimit;
 
 				// Recursively process messages that contain {{int:...}}
 				if (containsIntAndMissing.size) {
@@ -578,83 +585,83 @@ class Messages {
 		})(Array.from(missingMessages), 0);
 	}
 
-	// /**
-	//  * Parses a message string and replaces any `{{int:messageKey}}` magic words with
-	//  * resolved messages from `mw.messages`, if available. If not available, the message
-	//  * key is returned so it can be loaded later.
-	//  *
-	//  * If any substitutions are made, the parsed version is stored in `mw.messages`
-	//  * under the original key.
-	//  *
-	//  * @param {string} msg The raw message string to parse.
-	//  * @param {string} key The message key associated with `msg`.
-	//  * @returns {Set<string>} A set of message keys that were referenced but missing.
-	//  */
-	// static parseInt(msg, key) {
-	// 	const original = msg;
-	// 	/** @type {Set<string>} */
-	// 	const missingKeys = new Set();
+	/**
+	 * Parses a message string and replaces any `{{int:messageKey}}` magic words with
+	 * resolved messages from `mw.messages`, if available. If not available, the message
+	 * key is returned so it can be loaded later.
+	 *
+	 * If any substitutions are made, the parsed version is stored in `mw.messages`
+	 * under the original key.
+	 *
+	 * @param {string} msg The raw message string to parse.
+	 * @param {string} key The message key associated with `msg`.
+	 * @returns {Set<string>} A set of message keys that were referenced but missing.
+	 */
+	static parseInt(msg, key) {
+		const original = msg;
+		/** @type {Set<string>} */
+		const missingKeys = new Set();
 
-	// 	msg = msg.replace(/\{\{\s*int:([^}]+)\}\}/g, /** @param {string} rawKey */ (match, rawKey) => {
-	// 		const parsedKey = this.lcFirst(rawKey.trim());
-	// 		/** @type {?string} */
-	// 		const replacement = mw.messages.get(parsedKey);
-	// 		if (replacement !== null) {
-	// 			return replacement;
-	// 		} else {
-	// 			missingKeys.add(parsedKey);
-	// 			return match;
-	// 		}
-	// 	});
+		msg = msg.replace(/\{\{\s*int:([^}]+)\}\}/g, /** @param {string} rawKey */ (match, rawKey) => {
+			const parsedKey = this.lcFirst(rawKey.trim());
+			/** @type {?string} */
+			const replacement = mw.messages.get(parsedKey);
+			if (replacement !== null) {
+				return replacement;
+			} else {
+				missingKeys.add(parsedKey);
+				return match;
+			}
+		});
 
-	// 	// Update the message only if it was modified
-	// 	if (msg !== original) {
-	// 		mw.messages.set(key, msg);
-	// 	}
+		// Update the message only if it was modified
+		if (msg !== original) {
+			mw.messages.set(key, msg);
+		}
 
-	// 	return missingKeys;
-	// }
+		return missingKeys;
+	}
 
-	// /**
-	//  * Gets an interface message.
-	//  *
-	//  * @template {keyof LoadedMessages} K
-	//  * @param {K} key Key of the message to retrieve.
-	//  * @param {string[]} [params] Positional parameters for replacements.
-	//  * @param {object} [options] Additional options.
-	//  * @param {import('./window/AjaxBlock').StringMethodKeys<mw.Message>} [options.method='text']
-	//  * Method of `mw.message` to use. Defaults to `text`.
-	//  * @param {boolean} [options.restoreTags=false] For `method='parse'`, whether to restore angle brackets
-	//  * to use the message as raw HTML. Defaults to `false`.
-	//  * @returns {LoadedMessages[K]} The message as a string.
-	//  */
-	// static get(key, params = [], options = {}) {
-	// 	const { method = 'text', restoreTags = false } = options;
-	// 	let ret = mw.message(key, ...params)[method]();
-	// 	const unparsable = Array.from(ret.match(/⧼[^⧽]+⧽/g) || []);
-	// 	if (unparsable.length) {
-	// 		throw new Error('Encountered unparsable message(s): ' + unparsable.join(', '));
-	// 	}
-	// 	if (/<a[\s>]/.test(ret)) {
-	// 		// Set `target="_blank"` on all anchors if `ret` contains any links
-	// 		const $html = $('<div>').html(ret);
-	// 		$html.find('a').each((_, a) => {
-	// 			if (a.role !== 'button' && a.href && !a.href.startsWith('#')) {
-	// 				a.target = '_blank';
-	// 			}
-	// 		});
-	// 		ret = $html.html();
-	// 	}
-	// 	if (method === 'parse' && restoreTags) {
-	// 		ret = ret
-	// 			// .replace(/&#039;/g, '\'')
-	// 			// .replace(/&quot;/g, '"')
-	// 			.replace(/&lt;/g, '<')
-	// 			.replace(/&gt;/g, '>');
-	// 			// .replace(/&amp;/g, '&');
-	// 	}
-	// 	return ret;
-	// }
+	/**
+	 * Gets an interface message.
+	 *
+	 * @template {keyof LoadedMessages} K
+	 * @param {K} key Key of the message to retrieve.
+	 * @param {string[]} [params] Positional parameters for replacements.
+	 * @param {object} [options] Additional options.
+	 * @param {import('./window/AjaxBlock').StringMethodKeys<mw.Message>} [options.method='text']
+	 * Method of `mw.message` to use. Defaults to `text`.
+	 * @param {boolean} [options.restoreTags=false] For `method='parse'`, whether to restore angle brackets
+	 * to use the message as raw HTML. Defaults to `false`.
+	 * @returns {LoadedMessages[K]} The message as a string.
+	 */
+	static get(key, params = [], options = {}) {
+		const { method = 'text', restoreTags = false } = options;
+		let ret = mw.message(key, ...params)[method]();
+		const unparsable = Array.from(ret.match(/⧼[^⧽]+⧽/g) || []);
+		if (unparsable.length) {
+			throw new Error('Encountered unparsable message(s): ' + unparsable.join(', '));
+		}
+		if (/<a[\s>]/.test(ret)) {
+			// Set `target="_blank"` on all anchors if `ret` contains any links
+			const $html = $('<div>').html(ret);
+			$html.find('a').each((_, a) => {
+				if (a.role !== 'button' && a.href && !a.href.startsWith('#')) {
+					a.target = '_blank';
+				}
+			});
+			ret = $html.html();
+		}
+		if (method === 'parse' && restoreTags) {
+			ret = ret
+				// .replace(/&#039;/g, '\'')
+				// .replace(/&quot;/g, '"')
+				.replace(/&lt;/g, '<')
+				.replace(/&gt;/g, '>');
+				// .replace(/&amp;/g, '&');
+		}
+		return ret;
+	}
 
 	// /**
 	//  * *[This method is currently not used in any logic.]*
@@ -725,73 +732,79 @@ class Messages {
 	// 	return message.charAt(0).toUpperCase() + message.slice(1);
 	// }
 
-	// /**
-	//  * @param {string} message
-	//  * @returns {string}
-	//  */
-	// static lcFirst(message) {
-	// 	return message.charAt(0).toLowerCase() + message.slice(1);
-	// }
+	/**
+	 * @param {string} message
+	 * @returns {string}
+	 */
+	static lcFirst(message) {
+		return message.charAt(0).toLowerCase() + message.slice(1);
+	}
 
-	// /**
-	//  * Parses the `ipbreason-dropdown` message to an array of `OO.ui.MenuOptionWidget` instances.
-	//  *
-	//  * @returns {OO.ui.MenuOptionWidget[]}
-	//  */
-	// static parseBlockReasonDropdown() {
-	// 	// Adapted from Html::listDropdownOptions
-	// 	const /** @type {Record<string, string | Record<string, string>>} */ options = {};
-	// 	let /** @type {string | false} */ optgroup = false;
+	/**
+	 * Parses the `ipbreason-dropdown` message to an array of `OO.ui.MenuOptionWidget` instances.
+	 *
+	 * @returns {OO.ui.MenuOptionWidget[]}
+	 */
+	static parseBlockReasonDropdown() {
+		// Adapted from Html::listDropdownOptions
+		let /** @type {CachedMessage['ipbreason-dropdown']} */ options = Object.create(null);
+		let /** @type {string | false} */ optgroup = false;
 
-	// 	for (const rawOption of this.get('ipbreason-dropdown', [], { method: 'plain' }).split('\n')) {
-	// 		const value = rawOption.trim();
-	// 		if (value === '') {
-	// 			continue;
-	// 		}
+		const msgKey = 'ipbreason-dropdown';
+		if (this.cache[msgKey]) {
+			options = this.cache[msgKey];
+		} else {
+			for (const rawOption of this.get(msgKey, [], { method: 'plain' }).split('\n')) {
+				const value = rawOption.trim();
+				if (value === '') {
+					continue;
+				}
 
-	// 		if (value.startsWith('*') && !value.startsWith('**')) {
-	// 			// A new group is starting...
-	// 			const groupLabel = value.slice(1).trim();
-	// 			if (groupLabel !== '') {
-	// 				optgroup = groupLabel;
-	// 			} else {
-	// 				optgroup = false;
-	// 			}
-	// 		} else if (value.startsWith('**')) {
-	// 			// Group member
-	// 			const opt = value.slice(2).trim();
-	// 			if (optgroup === false) {
-	// 				options[opt] = opt;
-	// 			} else {
-	// 				if (typeof options[optgroup] !== 'object' || options[optgroup] === null) {
-	// 					options[optgroup] = {};
-	// 				}
-	// 				// @ts-expect-error
-	// 				options[optgroup][opt] = opt;
-	// 			}
-	// 		} else {
-	// 			// Groupless reason list
-	// 			optgroup = false;
-	// 			options[value] = value;
-	// 		}
-	// 	}
+				if (value.startsWith('*') && !value.startsWith('**')) {
+					// A new group is starting...
+					const groupLabel = value.slice(1).trim();
+					if (groupLabel !== '') {
+						optgroup = groupLabel;
+					} else {
+						optgroup = false;
+					}
+				} else if (value.startsWith('**')) {
+					// Group member
+					const opt = value.slice(2).trim();
+					if (optgroup === false) {
+						options[opt] = opt;
+					} else {
+						if (typeof options[optgroup] !== 'object' || options[optgroup] === null) {
+							options[optgroup] = {};
+						}
+						// @ts-expect-error
+						options[optgroup][opt] = opt;
+					}
+				} else {
+					// Groupless reason list
+					optgroup = false;
+					options[value] = value;
+				}
+			}
+			this.cache[msgKey] = options;
+		}
 
-	// 	// Adapted from listDropdownOptionsOoui
-	// 	const /** @type {OO.ui.MenuOptionWidget[]} */ items = [
-	// 		new OO.ui.MenuOptionWidget({ data: '', label: Messages.get('htmlform-selectorother-other') })
-	// 	];
-	// 	for (const [text, value] of Object.entries(options)) {
-	// 		if (typeof value === 'object') {
-	// 			items.push(new OO.ui.MenuSectionOptionWidget({ label: text }));
-	// 			for (const [text2, value2] of Object.entries(value)) {
-	// 				items.push(new OO.ui.MenuOptionWidget({ data: value2, label: text2 }));
-	// 			}
-	// 		} else {
-	// 			items.push(new OO.ui.MenuOptionWidget({ data: value, label: text }));
-	// 		}
-	// 	}
-	// 	return items;
-	// }
+		// Adapted from listDropdownOptionsOoui
+		const /** @type {OO.ui.MenuOptionWidget[]} */ items = [
+			new OO.ui.MenuOptionWidget({ data: '', label: this.get('htmlform-selectorother-other') })
+		];
+		for (const [text, value] of Object.entries(options)) {
+			if (typeof value === 'object') {
+				items.push(new OO.ui.MenuSectionOptionWidget({ label: text }));
+				for (const [text2, value2] of Object.entries(value)) {
+					items.push(new OO.ui.MenuOptionWidget({ data: value2, label: text2 }));
+				}
+			} else {
+				items.push(new OO.ui.MenuOptionWidget({ data: value, label: text }));
+			}
+		}
+		return items;
+	}
 
 	// /**
 	//  * Creates a wikilink to a local title as raw HTML.
@@ -808,53 +821,60 @@ class Messages {
 	// 	return anchor.outerHTML;
 	// }
 
-	// /**
-	//  * Parse labels and values out of a comma- and colon-separated list of options, such as is
-	//  * used for expiry and duration lists.
-	//  *
-	//  * This method is adapted from `XmlSelect::parseOptionsMessage`.
-	//  * @param {string} message The message to parse as a list.
-	//  * @returns {Map<string, string>}
-	//  */
-	// static parseOptionsMessage(message) {
-	// 	/** @type {Map<string, string>} */
-	// 	const ret = new Map();
-	// 	if (message === '-') {
-	// 		return ret;
-	// 	}
-	// 	message.split(',').forEach((el) => {
-	// 		// Normalize options that only have one part
-	// 		if (!el.includes(':')) {
-	// 			el = `${el}:${el}`;
-	// 		}
-	// 		// Extract the two parts.
-	// 		const [label, value] = el.split(':');
-	// 		ret.set(label.trim(), value.trim());
-	// 	});
-	// 	return ret;
-	// }
+	/**
+	 * Parse labels and values out of a comma- and colon-separated list of options, such as is
+	 * used for expiry and duration lists.
+	 *
+	 * This method is adapted from `XmlSelect::parseOptionsMessage`.
+	 * @param {'ipboptions'} msgKey The key of the message to parse as a list.
+	 * @returns {Map<string, string>}
+	 */
+	static parseOptionsMessage(msgKey) {
+		if (this.cache[msgKey]) {
+			return this.cache[msgKey];
+		}
 
-	// /**
-	//  * Parses the `ipboptions` message to an array of `OO.ui.MenuOptionWidget` instances.
-	//  *
-	//  * @returns {OO.ui.MenuOptionWidget[]}
-	//  */
-	// static getBlockDurations() {
-	// 	const map = this.parseOptionsMessage(this.get('ipboptions', [], { method: 'plain' }));
-	// 	/** @type {OO.ui.MenuOptionWidget[]} */
-	// 	const options = [
-	// 		new OO.ui.MenuOptionWidget({
-	// 			label: this.get('ipbother').replace(/[:：]$/, ''),
-	// 			data: ''
-	// 		})
-	// 	];
-	// 	for (const [label, value] of map) {
-	// 		options.push(
-	// 			new OO.ui.MenuOptionWidget({ label, data: value })
-	// 		);
-	// 	}
-	// 	return options;
-	// }
+		const message = this.get(msgKey, [], { method: 'plain' });
+		/** @type {Map<string, string>} */
+		const ret = new Map();
+		if (message === '-') {
+			return ret;
+		}
+		message.split(',').forEach((el) => {
+			// Normalize options that only have one part
+			if (!el.includes(':')) {
+				el = `${el}:${el}`;
+			}
+			// Extract the two parts.
+			const [label, value] = el.split(':');
+			ret.set(label.trim(), value.trim());
+		});
+
+		this.cache[msgKey] = ret;
+		return ret;
+	}
+
+	/**
+	 * Parses the `ipboptions` message to an array of `OO.ui.MenuOptionWidget` instances.
+	 *
+	 * @returns {OO.ui.MenuOptionWidget[]}
+	 */
+	static getBlockDurations() {
+		const map = this.parseOptionsMessage('ipboptions');
+		/** @type {OO.ui.MenuOptionWidget[]} */
+		const options = [
+			new OO.ui.MenuOptionWidget({
+				label: this.get('ipbother').replace(/[:：]$/, ''),
+				data: ''
+			})
+		];
+		for (const [label, value] of map) {
+			options.push(
+				new OO.ui.MenuOptionWidget({ label, data: value })
+			);
+		}
+		return options;
+	}
 
 	// /**
 	//  * Translates an expiry value to its localized label if available.
@@ -924,22 +944,34 @@ class Messages {
 
 }
 /**
- * @type {Record<'en' | 'ja', Record<string, string>>}
+ * @type {Record<'en' | 'ja', AjaxBlockMessages>}
  */
 Messages.i18n = {
 	en: {
+		'ajaxblock-dialog-button-label-block': 'Block',
+		'ajaxblock-dialog-button-label-unblock': 'Unblock',
+		'ajaxblock-dialog-button-label-docs': 'Docs',
+		'ajaxblock-dialog-button-label-config': 'Config',
 	},
 	ja: {
+		'ajaxblock-dialog-button-label-block': 'ブロック',
+		'ajaxblock-dialog-button-label-unblock': 'ブロック解除',
+		'ajaxblock-dialog-button-label-docs': '解説',
+		'ajaxblock-dialog-button-label-config': '設定',
 	}
 };
 /**
  * Key for `mw.storage` to cache some messages.
  */
 Messages.storageKey = 'mw-AjaxBlock-messages';
+/**
+ * @type {CachedMessage}
+ */
+Messages.cache = Object.create(null);
 
-class AjaxBlockConfig {
+// class AjaxBlockConfig {
 	
-}
+// }
 
 function AjaxBlockDialogFactory() {
 	/**
@@ -959,9 +991,8 @@ function AjaxBlockDialogFactory() {
 
 		/**
 		 * @param {OO.ui.ProcessDialog.ConfigOptions} [config]
-		 * @param {string[]} [autocompleteSources]
 		 */
-		constructor(config, autocompleteSources = []) {
+		constructor(config) {
 			super(config);
 
 			/**
@@ -972,6 +1003,10 @@ function AjaxBlockDialogFactory() {
 			 * @type {InstanceType<ReturnType<BlockUserFactory>>}
 			 */
 			this.blockUser = Object.create(null);
+			/**
+			 * @type {InstanceType<ReturnType<UnblockUserFactory>>}
+			 */
+			this.unblockUser = Object.create(null);
 		}
 
 		/**
@@ -1009,15 +1044,16 @@ function AjaxBlockDialogFactory() {
 				const BlockUser = BlockUserFactory();
 				this.blockUser = new BlockUser(this);
 
+				const UnblockUser = UnblockUserFactory();
+				this.unblockUser = new UnblockUser(this);
+
 				const content = new OO.ui.PanelLayout({
 					padded: true,
 					expanded: false
 				});
 				content.$element.append(
-					this.blockUser.$element
-					// this.blockNamed.$element,
-					// this.blockTemp.$element,
-					// this.blockAnon.$element
+					this.blockUser.$element,
+					this.unblockUser.$element
 				);
 
 				// @ts-expect-error
@@ -1034,30 +1070,44 @@ function AjaxBlockDialogFactory() {
 		/**
 		 * @inheritdoc
 		 * @override
+		 * @param {BlockLink} data
 		 */
-		getSetupProcess() {
+		getSetupProcess(data) {
 			const process = super.getSetupProcess();
 
 			if (!this.isDialogReady()) {
 				process.next(() => this.prepareDialog());
 			}
 
+			process.next(() => {
+				this.setMode(data);
+				return true;
+			});
+
 			return process;
 		}
 
 		/**
-		 * @inheritdoc
-		 * @override
+		 * @param {BlockLink} data
+		 * @returns {void}
+		 * @private
 		 */
-		// getReadyProcess() {
-		// 	const process = super.getSetupProcess();
+		setMode(data) {
+			this.getActions().setMode(data.type);
 
-		// 	if (!this.isDialogReady()) {
-		// 		process.next(() => this.prepareDialog());
-		// 	}
-
-		// 	return process;
-		// }
+			switch (data.type) {
+				case 'block':
+					this.blockUser.toggle(true).setTarget(data.target);
+					this.unblockUser.toggle(false);
+					break;
+				case 'unblock':
+					this.blockUser.toggle(false);
+					this.unblockUser.toggle(true).setTarget(data.target);
+					break;
+				default:
+					throw new Error('Invalid data type: ' + data.type);
+			}
+		}
 
 		/**
 		 * @inheritdoc
@@ -1090,7 +1140,7 @@ function AjaxBlockDialogFactory() {
 
 	}
 
-	AjaxBlockDialog.static.name = 'AjaxBlock';
+	AjaxBlockDialog.static.name = scriptName;
 	AjaxBlockDialog.static.title = $('<label>').append(
 		`${scriptName} (`,
 		$('<a>')
@@ -1103,20 +1153,30 @@ function AjaxBlockDialogFactory() {
 	);
 	AjaxBlockDialog.static.actions = [
 		{
-			action: 'execute',
-			label: 'Block', // TODO
+			action: 'block',
+			label: Messages.get('ajaxblock-dialog-button-label-block'),
 			flags: ['primary', 'progressive'],
+			modes: ['block']
+		},
+		{
+			action: 'unblock',
+			label: Messages.get('ajaxblock-dialog-button-label-unblock'),
+			flags: ['primary', 'progressive'],
+			modes: ['unblock']
 		},
 		{
 			action: 'documentation',
-			label: 'Docs', // TODO
+			label: Messages.get('ajaxblock-dialog-button-label-docs'),
+			modes: ['block', 'unblock']
 		},
 		{
 			action: 'config',
-			label: 'Config', // TODO
+			label: Messages.get('ajaxblock-dialog-button-label-config'),
+			modes: ['block', 'unblock']
 		},
 		{
 			flags: ['safe', 'close'],
+			modes: ['block', 'unblock']
 		}
 	];
 	AjaxBlockDialog.windowManager = (() => {
@@ -1156,7 +1216,8 @@ function BlockUserFactory() {
 		 */
 		constructor(dialog, config) {
 			config = config || {};
-			config.label = 'Block user';
+			config.classes = ['ajaxblock-fieldset'];
+			config.label = Messages.get('block');
 			super(config);
 
 			this.dialog = dialog;
@@ -1164,55 +1225,78 @@ function BlockUserFactory() {
 			/** @type {OO.ui.Element[]} */
 			const items = [];
 
-			this.target = new OO.ui.LabelWidget();
+			this.$target = $('<span>').addClass('ajaxblock-targetlabel');
+			this.target = new OO.ui.LabelWidget({
+				label: this.$target
+			});
 			items.push(
 				new OO.ui.FieldLayout(this.target, {
 					classes: ['ajaxblock-horizontalfield'],
-					label: 'Target',
+					label: Messages.get('block-target'),
 					align: 'left',
 				})
 			);
 
-			this.expiry = new OO.ui.DropdownWidget();
+			this.expiry = new OO.ui.DropdownWidget({
+				menu: {
+					items: Messages.getBlockDurations()
+				}
+			});
+			for (const item of /** @type {OO.ui.MenuOptionWidget[]} */ (this.expiry.getMenu().getItems())) {
+				if (mw.util.isInfinity(/** @type {string} */ (item.getData()))) {
+					this.expiry.getMenu().selectItem(item);
+					break;
+				}
+			}
 			items.push(
 				new OO.ui.FieldLayout(this.expiry, {
 					classes: ['ajaxblock-horizontalfield'],
-					label: 'Expiry',
+					label: Messages.get('block-expiry'),
 					align: 'left',
 				})
 			);
 
 			this.expiryOther = new OO.ui.TextInputWidget({
-				placeholder: 'Other time',
+				placeholder: Messages.get('ipbother').replace(/[:：]$/, ''),
 			});
 			items.push(
 				new OO.ui.FieldLayout(this.expiryOther, {
 					classes: ['ajaxblock-horizontalfield'],
-					label: $('<span>'),
+					label: $('<span>'), // Blank label
 					align: 'left',
 				})
 			);
 
-			this.reason1 = new OO.ui.DropdownWidget();
+			this.reason1 = new OO.ui.DropdownWidget({
+				menu: {
+					items: Messages.parseBlockReasonDropdown()
+				}
+			});
+			this.reason1.getMenu().selectItemByData(''); // Select 'other'
 			items.push(
 				new OO.ui.FieldLayout(this.reason1, {
 					classes: ['ajaxblock-horizontalfield'],
-					label: 'Reason 1',
+					label: Messages.get('block-reason'),
 					align: 'left',
 				})
 			);
 
-			this.reason2 = new OO.ui.DropdownWidget();
+			this.reason2 = new OO.ui.DropdownWidget({
+				menu: {
+					items: Messages.parseBlockReasonDropdown()
+				}
+			});
+			this.reason2.getMenu().selectItemByData(''); // Select 'other'
 			items.push(
 				new OO.ui.FieldLayout(this.reason2, {
 					classes: ['ajaxblock-horizontalfield'],
-					label: 'Reason 2',
+					label: Messages.get('block-reason'),
 					align: 'left',
 				})
 			);
 
 			this.reasonOther = new OO.ui.TextInputWidget({
-				placeholder: 'Other reasons',
+				placeholder: Messages.get('block-reason-other'),
 			});
 			items.push(
 				new OO.ui.FieldLayout(this.reasonOther, {
@@ -1353,11 +1437,11 @@ function BlockUserFactory() {
 		}
 
 		/**
-		 * @param {string} username
+		 * @param {string} target
 		 * @returns {this}
 		 */
-		setUsername(username) {
-			this.target.setLabel(username);
+		setTarget(target) {
+			this.$target.text(target);
 			return this;
 		}
 
@@ -1366,12 +1450,83 @@ function BlockUserFactory() {
 	return BlockUser;
 }
 
+function UnblockUserFactory() {
+	/**
+	 * @extends OO.ui.FieldsetLayout
+	 */
+	class UnblockUser extends FieldsetLayoutFactory() {
+
+		/**
+		 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+		 * @param {OO.ui.FieldsetLayout.ConfigOptions} [config]
+		 */
+		constructor(dialog, config) {
+			config = config || {};
+			config.classes = ['ajaxblock-fieldset'];
+			config.label = Messages.get('unblock');
+			super(config);
+
+			this.dialog = dialog;
+
+			/** @type {OO.ui.Element[]} */
+			const items = [];
+
+			this.$target = $('<span>').addClass('ajaxblock-targetlabel');
+			this.target = new OO.ui.LabelWidget({
+				label: this.$target
+			});
+			items.push(
+				new OO.ui.FieldLayout(this.target, {
+					classes: ['ajaxblock-horizontalfield'],
+					label: Messages.get('block-target'),
+					align: 'left',
+				})
+			);
+
+			this.reason = new OO.ui.TextInputWidget({
+				placeholder: Messages.get('block-removal-reason-placeholder')
+			});
+			items.push(
+				new OO.ui.FieldLayout(this.reason, {
+					classes: ['ajaxblock-horizontalfield'],
+					label: Messages.get('block-reason'),
+					align: 'left',
+				})
+			);
+
+			this.addItems(items);
+		}
+
+		/**
+		 * @param {string} target
+		 * @returns {this}
+		 */
+		setTarget(target) {
+			this.$target.text(target);
+			return this;
+		}
+
+		getReason() {
+			return this.reason.getValue().trim();
+		}
+
+	}
+
+	return UnblockUser;
+}
+
 //**********************************************************************
 
-// /**
-//  * @typedef {import('./window/AjaxBlock').Initializer} Initializer
-//  * @typedef {import('./window/AjaxBlock').ApiResponse} ApiResponse
-//  */
+/**
+ * @typedef {import('./window/AjaxBlock').Initializer} Initializer
+ * @typedef {import('./window/AjaxBlock').ApiResponse} ApiResponse
+ * @typedef {import('./window/AjaxBlock').BlockLink} BlockLink
+ * @typedef {import('./window/AjaxBlock').URLQueryParams} URLQueryParams
+ * @typedef {import('./window/AjaxBlock').AjaxBlockMessages} AjaxBlockMessages
+ * @typedef {import('./window/AjaxBlock').MediaWikiMessages} MediaWikiMessages
+ * @typedef {import('./window/AjaxBlock').LoadedMessages} LoadedMessages
+ * @typedef {import('./window/AjaxBlock').CachedMessage} CachedMessage
+ */
 
 AjaxBlock.init();
 
