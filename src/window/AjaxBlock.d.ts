@@ -100,6 +100,7 @@ export interface AjaxBlockMessages {
 	'ajaxblock-dialog-block-label-option-autoblock': string;
 	'ajaxblock-dialog-message-nonactive-id': string;
 	'ajaxblock-dialog-message-unprocessable-id': string;
+	'ajaxblock-dialog-message-existingblocks': string;
 	'ajaxblock-notify-error-loadblocklogs': string;
 }
 
@@ -138,6 +139,7 @@ export interface MediaWikiMessages {
 	'ipb-hardblock': string;
 	'ipbhidename': string;
 	'ipbwatchuser': string;
+	'block-create': string;
 
 	'unblock': string;
 	'block-reason': string;

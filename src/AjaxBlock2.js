@@ -126,6 +126,7 @@ class AjaxBlock {
 				'ipb-hardblock',
 				'ipbhidename',
 				'ipbwatchuser',
+				'block-create',
 
 				'unblock',
 				'block-reason',
@@ -480,6 +481,10 @@ class AjaxBlock {
 				font-style: italic;
 				font-size: 1.1em;
 			}
+			${/* Override a top alignment for given radio options */''}
+			.ajaxblock-dialog .ajaxblock-dialog-radiooption-middlealigned .oo-ui-radioInputWidget {
+				vertical-align: middle;
+			}
 		`.replace(/[\t\n\r]+/g, '');
 		document.head.appendChild(style);
 	}
@@ -623,7 +628,7 @@ class BlockLookup {
 				list: 'blocks',
 				[`bk${batchParam}`]: batch.slice(offset, offset + apilimit).join('|'),
 				bklimit: 'max',
-				bkprop: 'user|by|expiry|reason|flags|restrictions',
+				bkprop: 'id|user|by|timestamp|expiry|reason|flags|restrictions',
 			}, ajaxOptions).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
 				if (res && res.query && Array.isArray(res.query.blocks)) {
 					ret.push(...res.query.blocks);
@@ -1477,8 +1482,9 @@ Messages.i18n = {
 		'ajaxblock-dialog-block-label-reason2': 'Reason 2',
 		'ajaxblock-dialog-block-label-partial': 'Partial block',
 		'ajaxblock-dialog-block-label-option-autoblock': 'Apply autoblock',
-		'ajaxblock-dialog-message-nonactive-id': 'The block ID #$1 specified by this link is no longer active; hence disregarded.',
-		'ajaxblock-dialog-message-unprocessable-id': 'The block for ID #$1 cannot be processed because it is no longer active.',
+		'ajaxblock-dialog-message-nonactive-id': 'The block ID <b>#$1</b> specified by this link is no longer active and hence disregarded.',
+		'ajaxblock-dialog-message-unprocessable-id': 'The block for ID <b>#$1</b> cannot be processed because it is no longer active.',
+		'ajaxblock-dialog-message-existingblocks': '<b>This user has active block(s).</b> Select a block you want to update, or check "{{int:block-create}}" to add a new block.',
 		'ajaxblock-notify-error-loadblocklogs': 'Failed to load block information ($1)',
 	},
 	ja: {
@@ -1491,8 +1497,9 @@ Messages.i18n = {
 		'ajaxblock-dialog-block-label-reason2': '理由2',
 		'ajaxblock-dialog-block-label-partial': '部分ブロック',
 		'ajaxblock-dialog-block-label-option-autoblock': '自動ブロックを適用',
-		'ajaxblock-dialog-message-nonactive-id': 'このリンクにより指定されているID #$1 のブロックは、既に解除されているため無視されています。',
-		'ajaxblock-dialog-message-unprocessable-id': 'ID #$1 のブロックは既に解除されているため処理できません。',
+		'ajaxblock-dialog-message-nonactive-id': 'このリンクにより指定されているID <b>#$1</b> のブロックは、既に解除されているため無視されています。',
+		'ajaxblock-dialog-message-unprocessable-id': 'ID <b>#$1</b> のブロックは既に解除されているため処理できません。',
+		'ajaxblock-dialog-message-existingblocks': '<b>この利用者は既にブロックされています。</b>更新するブロックを選択するか、「{{int:block-create}}」をチェックしてください。',
 		'ajaxblock-notify-error-loadblocklogs': 'ブロック情報の取得に失敗しました ($1)',
 	}
 };
@@ -1633,9 +1640,40 @@ function AjaxBlockDialogFactory() {
 		 * @override
 		 * @param {BlockLink} data
 		 */
+		getSetupProcess(data) {
+			return super.getSetupProcess().next(() => {
+				this.getActions().setMode(data.type);
+
+				switch (data.type) {
+					case 'block':
+						this.blockUser.toggle(true);
+						this.unblockUser.toggle(false);
+						break;
+					case 'unblock':
+						this.blockUser.toggle(false);
+						this.unblockUser.toggle(true);
+						break;
+					default:
+						throw new Error('Invalid data type: ' + data.type);
+				}
+			});
+		}
+
+		/**
+		 * @inheritdoc
+		 * @override
+		 * @param {BlockLink} data
+		 */
 		getReadyProcess(data) {
-			// @ts-expect-error Promise<void> incompatible with Promise<void, any, any>
-			return super.getSetupProcess().next(() => this.prepareDisplay(data));
+			return super.getReadyProcess()
+				.next(() => {
+					this.pushPending();
+				})
+				// @ts-expect-error Promise<void> incompatible with Promise<void, any, any>
+				.next(() => this.getReadyProcessInternal(data))
+				.next(() => {
+					this.updateSize().popPending();
+				});
 		}
 
 		/**
@@ -1643,29 +1681,28 @@ function AjaxBlockDialogFactory() {
 		 * @returns {Promise<void>}
 		 * @private
 		 */
-		async prepareDisplay(data) {
+		async getReadyProcessInternal(data) {
 			this.getActions().setMode(data.type);
-			this.blockUser.blockSelector = null;
 
-			let cb;
+			let field;
 			switch (data.type) {
 				case 'block':
-					cb = this.blockUser.toggle(true).setTarget(data.target);
-					this.unblockUser.toggle(false);
+					field = this.blockUser;
 					break;
 				case 'unblock':
-					this.blockUser.toggle(false);
-					cb = this.unblockUser.toggle(true).setTarget(data.target, this.blockLookup);
+					field = this.unblockUser;
 					break;
 				default:
 					throw new Error('Invalid data type: ' + data.type);
 			}
+			field.blockSelector = null;
 
-			// TODO: Handle unblocks separately
-			if (!cb) {
+			const callback = field.setTarget(data.target);
+			if (!callback) {
 				return;
 			}
-			const blockLoglineMap = await cb();
+
+			const blockLoglineMap = await callback();
 			if (typeof blockLoglineMap === 'string') {
 				const err =
 					scriptName + Messages.get('colon-separator') +
@@ -1679,21 +1716,33 @@ function AjaxBlockDialogFactory() {
 			for (const [id, logline] of blockLoglineMap) {
 				options.push(
 					new OO.ui.RadioOptionWidget({
+						classes: ['ajaxblock-dialog-radiooption-middlealigned'],
 						data: id,
 						label: new OO.ui.HtmlSnippet(logline),
 					})
 				);
 			}
-			this.blockUser.blockSelector = new OO.ui.RadioSelectWidget({
+			field.blockSelector = new OO.ui.RadioSelectWidget({
 				items: options,
 			});
 
 			const selectorId = 'ajaxblock-blockselector';
-			this.blockUser.addMessage({
+			field.addMessage({
 				label: $('<span>').prop('id', selectorId),
 				type: 'warning',
 			});
-			$(`#${selectorId}`).append(this.blockUser.blockSelector.$element);
+			$(`#${selectorId}`).append(
+				$('<span>')
+					.append(Messages.get('ajaxblock-dialog-message-existingblocks'))
+					.css({
+						'display': 'inline-block',
+						'margin-bottom': '0.5em',
+					}),
+				document.createElement('br'),
+				field.blockSelector.$element
+			);
+
+			this.updateSize();
 		}
 
 		/**
@@ -1788,7 +1837,7 @@ class AjaxBlockDialogContent {
 		});
 		/**
 		 * @type {?boolean} `false` means unprocessable, `null` means the dialog should be opened.
-		 * @private
+		 * @protected
 		 */
 		this.oneClickAllowed = null;
 		/**
@@ -1872,103 +1921,11 @@ class AjaxBlockDialogContent {
 	}
 
 	/**
-	 * @param {BlockTarget} target
-	 * @param {BlockLookup} blockLookup
-	 * @returns {?(() => ReturnType<typeof BlockLog['new']>)} `null` or a callback function
-	 */
-	setTarget(target, blockLookup) {
-		const id = target.getId();
-		const username = target.getUsername();
-		const blocks = username ? blockLookup.getBlocksByUsername(username) : null;
-
-		if (id !== null) {
-			const block = blockLookup.getBlockById(id);
-			if (block) {
-				// The block associated with this ID exists
-				if (block.user) {
-					// Ordinary block
-					this.$target.text(block.user);
-					this.$targetAux.text(`(#${id})`);
-					this.setTargetInternal(id, block.user, true);
-				} else {
-					// Autoblock
-					if (!block.automatic) {
-						// TODO: Replace this with console.error
-						mw.notify('The associated block is not an autoblock.', { type: 'warn' });
-					}
-					this.$target.text(Messages.get('autoblockid', [id]));
-					this.$targetAux.text('');
-					this.setTargetInternal(id, null, true);
-				}
-			} else {
-				// ID no longer active
-				// TODO: Remove this
-				mw.notify('The block ID is no longer effective.', { type: 'warn' });
-				if (username !== null) {
-					// Ignore ID and use username
-					this.$target.text(username);
-					this.$targetAux.text('');
-					this.setTargetInternal(null, username, true).clearMessages().addMessage({
-						label: Messages.get('ajaxblock-dialog-message-nonactive-id', [id]),
-						type: 'notice',
-					});
-
-					// If other active blocks exist, allow the user to choose which to update
-					if (Array.isArray(blocks)) {
-						const idMap = BlockLookup.toIdMap(
-							// `user` is never missing for non-autoblocks
-							/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
-						);
-						this.oneClickAllowed = null;
-						return () => BlockLog.new(username, idMap);
-					}
-				} else {
-					// ID no longer active, no username: unprocessable
-					this.$target.text(`#${id}`);
-					this.$targetAux.text('');
-					this.setTargetInternal(id, null, false).clearMessages().addMessage({
-						label: Messages.get('ajaxblock-dialog-message-unprocessable-id', [id]),
-						type: 'error',
-					});
-				}
-			}
-			return null;
-		}
-
-		if (username !== null) {
-			if (Array.isArray(blocks)) {
-				if (blocks.length > 1) {
-					// Multiple active blocks
-					this.$target.text(username);
-					this.$targetAux.text('');
-					const idMap = BlockLookup.toIdMap(
-						// `user` is never missing for non-autoblocks
-						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
-					);
-					this.oneClickAllowed = null;
-					return () => BlockLog.new(username, idMap);
-				} else {
-					// Single active block
-					this.$target.text(username);
-					this.$targetAux.text(`(#${blocks[0].id})`);
-				}
-			} else {
-				// No active blocks
-				this.$target.text(username);
-				this.$targetAux.text('');
-			}
-			return null;
-		}
-
-		throw new Error('id or username must be non-null');
-	}
-
-	/**
 	 * @param {?number} id
 	 * @param {?string} username
 	 * @param {?boolean} oneClick `false` means unprocessable, `null` means the dialog should be opened.
 	 * @returns {this}
-	 * @private
+	 * @protected
 	 */
 	setTargetInternal(id, username, oneClick) {
 		this.currentTarget.id = id;
@@ -2028,6 +1985,11 @@ class AjaxBlockDialogContent {
 
 }
 
+/**
+ * @requires oojs-ui
+ * @requires mediawiki.widgets.TitlesMultiselectWidget
+ * @requires mediawiki.widgets.NamespacesMultiselectWidget
+ */
 class BlockUser extends AjaxBlockDialogContent {
 
 	/**
@@ -2262,11 +2224,11 @@ class BlockUser extends AjaxBlockDialogContent {
 	}
 
 	/**
-	 * @inheritdoc
-	 * @override
 	 * @param {BlockTarget} target
+	 * @returns {?(() => ReturnType<typeof BlockLog['new']>)} `null` or a callback function
 	 */
 	setTarget(target) {
+		// Adjust the visibility of field items
 		if (target.getType() === 'anon') {
 			this.cbAutoblockContainer.toggle(false);
 			this.cbAutoblock.setSelected(false);
@@ -2284,7 +2246,95 @@ class BlockUser extends AjaxBlockDialogContent {
 				this.cbHideName.setSelected(false);
 			}
 		}
-		return super.setTarget(target, this.dialog.blockLookup);
+
+		const id = target.getId();
+		const username = target.getUsername();
+		const blocks = username ? this.dialog.blockLookup.getBlocksByUsername(username) : null;
+
+		if (id !== null) {
+			const block = this.dialog.blockLookup.getBlockById(id);
+			if (block) {
+				// The block associated with this ID exists
+				if (block.user) {
+					// Ordinary block
+					this.$target.text(block.user);
+					this.$targetAux.text(`(#${id})`);
+					this.setTargetInternal(id, block.user, true);
+				} else {
+					// Autoblock
+					if (!block.automatic) {
+						// TODO: Replace this with console.error
+						mw.notify('The associated block is not an autoblock.', { type: 'warn' });
+					}
+					this.$target.text(Messages.get('autoblockid', [id]));
+					this.$targetAux.text('');
+					this.setTargetInternal(id, null, true);
+				}
+			} else {
+				// ID no longer active
+				// TODO: Remove this
+				mw.notify('The block ID is no longer effective.', { type: 'warn' });
+				if (username !== null) {
+					// Ignore ID and use username
+					this.$target.text(username);
+					this.$targetAux.text('');
+					this.setTargetInternal(null, username, true).clearMessages().addMessage({
+						label: new OO.ui.HtmlSnippet(
+							Messages.get('ajaxblock-dialog-message-nonactive-id', [id])
+						),
+						type: 'notice',
+					});
+
+					// If other active blocks exist, allow the user to choose which to update
+					if (Array.isArray(blocks)) {
+						const idMap = BlockLookup.toIdMap(
+							// `user` is never missing for non-autoblocks
+							/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
+						);
+						this.oneClickAllowed = null;
+						return () => BlockLog.new(username, idMap);
+					}
+				} else {
+					// ID no longer active, no username: unprocessable
+					this.$target.text(`#${id}`);
+					this.$targetAux.text('');
+					this.setTargetInternal(id, null, false).clearMessages().addMessage({
+						label: new OO.ui.HtmlSnippet(
+							Messages.get('ajaxblock-dialog-message-unprocessable-id', [id])
+						),
+						type: 'error',
+					});
+				}
+			}
+			return null;
+		}
+
+		if (username !== null) {
+			if (Array.isArray(blocks)) {
+				if (blocks.length > 1) {
+					// Multiple active blocks
+					this.$target.text(username);
+					this.$targetAux.text('');
+					const idMap = BlockLookup.toIdMap(
+						// `user` is never missing for non-autoblocks
+						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
+					);
+					this.oneClickAllowed = null;
+					return () => BlockLog.new(username, idMap);
+				} else {
+					// Single active block
+					this.$target.text(username);
+					this.$targetAux.text(`(#${blocks[0].id})`);
+				}
+			} else {
+				// No active blocks
+				this.$target.text(username);
+				this.$targetAux.text('');
+			}
+			return null;
+		}
+
+		throw new Error('id or username must be non-null');
 	}
 
 	// /**
@@ -2537,6 +2587,15 @@ class UnblockUser extends AjaxBlockDialogContent {
 		});
 		optionsFieldset.addItems(items);
 		this.$element.append(optionsFieldset.$element);
+	}
+
+	/**
+	 * @param {BlockTarget} target
+	 * @returns {?(() => ReturnType<typeof BlockLog['new']>)} `null` or a callback function
+	 * @todo Define this method
+	 */
+	setTarget(target) {
+		return null;
 	}
 
 	getReason() {
