@@ -2032,298 +2032,6 @@ class AjaxBlockDialogContent {
 }
 
 /**
- * Class that generates block loglines for a given blocked user.
- */
-class BlockLog {
-
-	/**
-	 * Retrieves detailed log entries for the given user's active blocks.
-	 *
-	 * @param {string} username The name of the user whose block logs are being retrieved.
-	 * @param {BlockIdMapValue} data The user's active block data (IDs and earliest block timestamp).
-	 * @returns {JQuery.Promise<BlockLogMap | string>} A Promise resolving to a Map of block IDs to block log details,
-	 * or to an API error code string if the request fails.
-	 * @private
-	 */
-	static getEntries(username, data) {
-		const { ids, earliestTimestamp } = data;
-		return api.get({
-			action: 'query',
-			formatversion: '2',
-			list: 'logevents',
-			leprop: 'user|type|timestamp|parsedcomment|details',
-			letype: 'block',
-			leend: earliestTimestamp,
-			letitle: `User:${username}`,
-			lelimit: 'max',
-			uselang: wgUserLanguage
-		}).then(/** @param {ApiResponse} res */ (res) => {
-			const logevents = res && res.query && res.query.logevents || [];
-			/**
-			 * @type {BlockLogMap}
-			 */
-			const ret = new Map();
-			/**
-			 * Given a block log entry, attempts to find its corresponding active block
-			 * by matching the block timestamp.
-			 *
-			 * @param {ApiResponseQueryListLogevents} log A block log entry from the API.
-			 * @returns {number=} The matching block ID, or `undefined` if no match was found.
-			 */
-			const findId = (log) => {
-				for (const [id, block] of ids) {
-					if (block.timestamp === log.timestamp) {
-						return id;
-					}
-				}
-				return void 0;
-			};
-			const rIsoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
-
-			for (let i = 0; i < logevents.length; i++) {
-				let log = logevents[i];
-				let blockId = log.params.blockId;
-
-				// Log entries generated before the rollout of multiblocks lack a `blockId` property
-				// Plus, `list=blocks` returned information about the initial block even if it was
-				// later updated by a reblock (see also [[phab:T313661]])
-				if (typeof blockId !== 'number') {
-					// If the log entry has no `blockId`, try to infer it by matching against
-					// `list=blocks` data or traversing older logs depending on the action
-					switch (log.action) {
-						case 'block':
-							// For a block/block entry: check if it corresponds to an active block
-							// Note that `findId` is designed specifically for the bug mentioned above
-							blockId = findId(log);
-							break;
-						case 'reblock': {
-							// For a block/reblock entry: walk forward through older logs until the
-							// initial block is found. Because logs are anti-chronological, we must
-							// search toward larger indexes.
-							// - If we encounter another "reblock", skip it and keep searching.
-							// - If we encounter a "block", that’s the original → capture its ID.
-							// - If we encounter an "unblock" first, it may correspond to a different
-							//   earlier block, so the chain is ambiguous → stop searching.
-							let j = i + 1;
-							let done = false;
-							while (j < logevents.length && !done) {
-								const laterLog = logevents[j];
-								switch (laterLog.action) {
-									case 'block':
-										blockId = findId(laterLog);
-										done = true;
-										break;
-									case 'reblock':
-										break; // Ignore and keep searching
-									case 'unblock':
-										done = true; // Ambiguous case, stop here
-										break;
-								}
-								j++;
-							}
-							// Skip ahead so the outer loop doesn’t re-process logs we already examined
-							i = j;
-							break;
-						}
-						case 'unblock':
-							// For "unblock" entries: skip, since they cannot represent an active block
-							continue;
-					}
-				}
-				if (typeof blockId !== 'number' || !ids.has(blockId) || log.action === 'unblock') {
-					continue;
-				}
-				const { params, action, user, timestamp, parsedcomment } = log;
-				const { duration, flags, restrictions, finalTargetCount, sitewide, 'duration-l10n': duration_l10n } = params;
-				ret.set(blockId, {
-					subtype: action,
-					timestamp: timestamp.replace(/Z$/, ''),
-					sitewide,
-					count: finalTargetCount !== undefined ? finalTargetCount : 0,
-					performer: user,
-					target: username,
-					// `duration` being an ISO 8601 timestamp means either that an absolute time was specified
-					// for a new block, or that the expiry wasn't updated for a reblock. The latter case isn't
-					// 100% accurate though, as it's possible to specify an absolute time for a reblock. But
-					// this should be sufficient for the purpose here, because we would otherwise have to look
-					// for the initial block log overwritten by the reblock.
-					duration: rIsoTimestamp.test(duration)
-						? duration.replace(/Z$/, '') // Use the ISO 8601 timestamp as the block duration
-						: duration_l10n,
-					flags,
-					restrictions,
-					parsedcomment
-				});
-			}
-
-			return ret;
-		}).catch((code, err) => {
-			console.warn(err);
-			return /** @type {string} */ (code);
-		});
-	}
-
-	/**
-	 * Creates a block log line as raw HTML.
-	 *
-	 * **Messages**:
-	 * * `logentry-block-block`
-	 *   * `"$1 {{GENDER:$2|blocked}} {{GENDER:$4|$3}} with an expiration time of $5 $6"`
-	 * * `logentry-block-block-multi`
-	 *   * `"$1 {{GENDER:$2|added}} a block for {{GENDER:$4|$3}} with an expiration time of $5 $6"`
-	 * * `logentry-block-reblock`
-	 *   * `"$1 {{GENDER:$2|changed}} block settings for {{GENDER:$4|$3}} with an expiration time of $5 $6"`
-	 *
-	 * * `logentry-partialblock-block`
-	 *   * `"$1 {{GENDER:$2|blocked}} {{GENDER:$4|$3}} from $7 with an expiration time of $5 $6"`
-	 * * `logentry-partialblock-block-multi`
-	 *   * `"$1 {{GENDER:$2|added}} a block for {{GENDER:$4|$3}} from $7 with an expiration time of $5 $6"`
-	 * * `logentry-partialblock-reblock`
-	 *   * `"$1 {{GENDER:$2|changed}} block settings for {{GENDER:$4|$3}} blocking $7 with an expiration time of $5 $6"`
-	 *
-	 * * `logentry-non-editing-block-block`
-	 *   * `"$1 {{GENDER:$2|blocked}} {{GENDER:$4|$3}} from specified non-editing actions with an expiration time of $5 $6"`
-	 * * `logentry-non-editing-block-block-multi`
-	 *   * `"$1 {{GENDER:$2|added}} a block for {{GENDER:$4|$3}} from specified non-editing actions with an expiration time of $5 $6"`
-	 * * `logentry-non-editing-block-reblock`
-	 *   * `"$1 {{GENDER:$2|changed}} block settings for {{GENDER:$4|$3}} for specified non-editing actions with an expiration time of $5 $6"`
-	 *
-	 * **Parameters**:
-	 * * `$1` - link to the user page of the user who performed the action
-	 * * `$2` - username of the user who performed the action (to be used with GENDER)
-	 * * `$3` - link to the affected page
-	 * * `$4` - username for gender or empty string for autoblocks
-	 * * `$5` - the block duration, localized and formatted with the English tooltip
-	 * * `$6` - block detail flags or empty string
-	 * * `$7` - restrictions list – any of:
-	 *   * `logentry-partialblock-block-page` (`"the {{PLURAL:$1|page|pages}} $2"`)
-	 *     * `$1` - number of pages
-	 *     * `$2` - list of pages
-	 *   * `logentry-partialblock-block-ns` (`"the {{PLURAL:$1|namespace|namespaces}} $2"`)
-	 *     * `$1` - number of namespaces
-	 *     * `$2` - list of namespaces
-	 *   * `logentry-partialblock-block-action` (`"the {{PLURAL:$1|action|actions}} $2"`)
-	 *     * `$1` - number of actions
-	 *     * `$2` - list of actions
-	 *
-	 * @param {BlockLogMapValue} data
-	 * @returns {string}
-	 */
-	static create(data) {
-		const { subtype, timestamp, sitewide, count, performer, target, duration, flags, restrictions, parsedcomment } = data;
-
-		/** @type {[string, string, string, string, string, string, string?]} */
-		const parameters = [
-			Messages.wikilink(`User:${performer}`, performer),
-			performer,
-			Messages.wikilink(`User:${target}`, target),
-			target,
-			duration,
-			this.formatFlags(flags)
-		];
-
-		// Adapted from BlockLogFormatter::getMessageKey
-		const type = 'block';
-		let key = `logentry-${type}-${subtype}`;
-		if ((subtype === 'block' || subtype === 'reblock') && !sitewide) {
-			// message changes depending on whether there are editing restrictions or not
-			if (restrictions) {
-				key = `logentry-partial${type}-${subtype}`;
-				parameters.push(
-					Messages.listToText(this.formatRestrictions(restrictions))
-				);
-			} else {
-				key = `logentry-non-editing-${type}-${subtype}`;
-			}
-		}
-		if (subtype === 'block' && count > 1 ) {
-			// logentry-block-block-multi, logentry-partialblock-block-multi,
-			// logentry-non-editing-block-block-multi
-			key += '-multi';
-		}
-
-		// @ts-expect-error
-		const logline = Messages.get(key, parameters);
-		const comment = parsedcomment && Messages.get('parentheses', [parsedcomment]);
-
-		const ret = [timestamp, logline, comment].filter(Boolean);
-		return ret.join('&nbsp;');
-	}
-
-	/**
-	 * Converts block flags to a human-readble string.
-	 *
-	 * @param {BlockFlags[]} flags
-	 * @returns {string}
-	 * @private
-	 */
-	static formatFlags(flags) {
-		const formatted = flags.map((f) => Messages.get(`block-log-flags-${f}`));
-		if (!formatted.length) return '';
-		return Messages.get('parentheses', [formatted.join(Messages.get('comma-separator'))]);
-	}
-
-	/**
-	 * Converts partial block restrictions to human-readble strings.
-	 *
-	 * @param {ApiResponseQueryListLogeventsParamsRestrictions} restrictions
-	 * @returns {string[]}
-	 * @private
-	 */
-	static formatRestrictions(restrictions) {
-		/** @type {string[]} */
-		const $7 = [];
-		const { pages, namespaces, actions } = restrictions;
-		if (pages && pages.length) {
-			const num = String(pages.length);
-			const list = pages.map(({ page_title }) => Messages.wikilink(page_title));
-			const msg = Messages.get('logentry-partialblock-block-page', [num, Messages.listToText(list)]);
-			$7.push(msg);
-		}
-		if (namespaces && namespaces.length) {
-			const num = String(namespaces.length);
-			const nsMap = Object.assign({}, mw.config.get('wgFormattedNamespaces'));
-			nsMap[0] = Messages.get('blanknamespace');
-			const list = namespaces.map((ns) => nsMap[ns]);
-			const msg = Messages.get('logentry-partialblock-block-ns', [num, Messages.listToText(list)]);
-			$7.push(msg);
-		}
-		if (actions && actions.length) {
-			const num = String(actions.length);
-			const list = actions.map((action) => Messages.get(`ipb-action-${action}`));
-			const msg = Messages.get('logentry-partialblock-block-action', [num, Messages.listToText(list)]);
-			$7.push(msg);
-		}
-		return $7;
-	}
-
-	/**
-	 * @param {string} username
-	 * @param {BlockIdMapValue} data
-	 * @returns {Promise<BlockLoglineMap | string>}
-	 */
-	static async new(username, data) {
-		const entry = await this.getEntries(username, data);
-		if (typeof entry === 'string') {
-			return entry;
-		}
-		if (!entry.size) {
-			const code = `Block log query for ${username} returned an empty response.`;
-			console.warn(code);
-			return code;
-		}
-
-		/** @type {BlockLoglineMap} */
-		const loglineMap = new Map();
-		for (const [id, builder] of entry) {
-			loglineMap.set(id, this.create(builder));
-		}
-		return loglineMap; // Return type modified
-	}
-
-}
-
-/**
  * @param {PermissionManager} permissionManager
  * @returns
  */
@@ -2851,6 +2559,298 @@ function UnblockUserFactory(permissionManager) {
 		}
 
 	};
+}
+
+/**
+ * Class that generates block loglines for a given blocked user.
+ */
+class BlockLog {
+
+	/**
+	 * Retrieves detailed log entries for the given user's active blocks.
+	 *
+	 * @param {string} username The name of the user whose block logs are being retrieved.
+	 * @param {BlockIdMapValue} data The user's active block data (IDs and earliest block timestamp).
+	 * @returns {JQuery.Promise<BlockLogMap | string>} A Promise resolving to a Map of block IDs to block log details,
+	 * or to an API error code string if the request fails.
+	 * @private
+	 */
+	static getEntries(username, data) {
+		const { ids, earliestTimestamp } = data;
+		return api.get({
+			action: 'query',
+			formatversion: '2',
+			list: 'logevents',
+			leprop: 'user|type|timestamp|parsedcomment|details',
+			letype: 'block',
+			leend: earliestTimestamp,
+			letitle: `User:${username}`,
+			lelimit: 'max',
+			uselang: wgUserLanguage
+		}).then(/** @param {ApiResponse} res */ (res) => {
+			const logevents = res && res.query && res.query.logevents || [];
+			/**
+			 * @type {BlockLogMap}
+			 */
+			const ret = new Map();
+			/**
+			 * Given a block log entry, attempts to find its corresponding active block
+			 * by matching the block timestamp.
+			 *
+			 * @param {ApiResponseQueryListLogevents} log A block log entry from the API.
+			 * @returns {number=} The matching block ID, or `undefined` if no match was found.
+			 */
+			const findId = (log) => {
+				for (const [id, block] of ids) {
+					if (block.timestamp === log.timestamp) {
+						return id;
+					}
+				}
+				return void 0;
+			};
+			const rIsoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+
+			for (let i = 0; i < logevents.length; i++) {
+				let log = logevents[i];
+				let blockId = log.params.blockId;
+
+				// Log entries generated before the rollout of multiblocks lack a `blockId` property
+				// Plus, `list=blocks` returned information about the initial block even if it was
+				// later updated by a reblock (see also [[phab:T313661]])
+				if (typeof blockId !== 'number') {
+					// If the log entry has no `blockId`, try to infer it by matching against
+					// `list=blocks` data or traversing older logs depending on the action
+					switch (log.action) {
+						case 'block':
+							// For a block/block entry: check if it corresponds to an active block
+							// Note that `findId` is designed specifically for the bug mentioned above
+							blockId = findId(log);
+							break;
+						case 'reblock': {
+							// For a block/reblock entry: walk forward through older logs until the
+							// initial block is found. Because logs are anti-chronological, we must
+							// search toward larger indexes.
+							// - If we encounter another "reblock", skip it and keep searching.
+							// - If we encounter a "block", that’s the original → capture its ID.
+							// - If we encounter an "unblock" first, it may correspond to a different
+							//   earlier block, so the chain is ambiguous → stop searching.
+							let j = i + 1;
+							let done = false;
+							while (j < logevents.length && !done) {
+								const laterLog = logevents[j];
+								switch (laterLog.action) {
+									case 'block':
+										blockId = findId(laterLog);
+										done = true;
+										break;
+									case 'reblock':
+										break; // Ignore and keep searching
+									case 'unblock':
+										done = true; // Ambiguous case, stop here
+										break;
+								}
+								j++;
+							}
+							// Skip ahead so the outer loop doesn’t re-process logs we already examined
+							i = j;
+							break;
+						}
+						case 'unblock':
+							// For "unblock" entries: skip, since they cannot represent an active block
+							continue;
+					}
+				}
+				if (typeof blockId !== 'number' || !ids.has(blockId) || log.action === 'unblock') {
+					continue;
+				}
+				const { params, action, user, timestamp, parsedcomment } = log;
+				const { duration, flags, restrictions, finalTargetCount, sitewide, 'duration-l10n': duration_l10n } = params;
+				ret.set(blockId, {
+					subtype: action,
+					timestamp: timestamp.replace(/Z$/, ''),
+					sitewide,
+					count: finalTargetCount !== undefined ? finalTargetCount : 0,
+					performer: user,
+					target: username,
+					// `duration` being an ISO 8601 timestamp means either that an absolute time was specified
+					// for a new block, or that the expiry wasn't updated for a reblock. The latter case isn't
+					// 100% accurate though, as it's possible to specify an absolute time for a reblock. But
+					// this should be sufficient for the purpose here, because we would otherwise have to look
+					// for the initial block log overwritten by the reblock.
+					duration: rIsoTimestamp.test(duration)
+						? duration.replace(/Z$/, '') // Use the ISO 8601 timestamp as the block duration
+						: duration_l10n,
+					flags,
+					restrictions,
+					parsedcomment
+				});
+			}
+
+			return ret;
+		}).catch((code, err) => {
+			console.warn(err);
+			return /** @type {string} */ (code);
+		});
+	}
+
+	/**
+	 * Creates a block log line as raw HTML.
+	 *
+	 * **Messages**:
+	 * * `logentry-block-block`
+	 *   * `"$1 {{GENDER:$2|blocked}} {{GENDER:$4|$3}} with an expiration time of $5 $6"`
+	 * * `logentry-block-block-multi`
+	 *   * `"$1 {{GENDER:$2|added}} a block for {{GENDER:$4|$3}} with an expiration time of $5 $6"`
+	 * * `logentry-block-reblock`
+	 *   * `"$1 {{GENDER:$2|changed}} block settings for {{GENDER:$4|$3}} with an expiration time of $5 $6"`
+	 *
+	 * * `logentry-partialblock-block`
+	 *   * `"$1 {{GENDER:$2|blocked}} {{GENDER:$4|$3}} from $7 with an expiration time of $5 $6"`
+	 * * `logentry-partialblock-block-multi`
+	 *   * `"$1 {{GENDER:$2|added}} a block for {{GENDER:$4|$3}} from $7 with an expiration time of $5 $6"`
+	 * * `logentry-partialblock-reblock`
+	 *   * `"$1 {{GENDER:$2|changed}} block settings for {{GENDER:$4|$3}} blocking $7 with an expiration time of $5 $6"`
+	 *
+	 * * `logentry-non-editing-block-block`
+	 *   * `"$1 {{GENDER:$2|blocked}} {{GENDER:$4|$3}} from specified non-editing actions with an expiration time of $5 $6"`
+	 * * `logentry-non-editing-block-block-multi`
+	 *   * `"$1 {{GENDER:$2|added}} a block for {{GENDER:$4|$3}} from specified non-editing actions with an expiration time of $5 $6"`
+	 * * `logentry-non-editing-block-reblock`
+	 *   * `"$1 {{GENDER:$2|changed}} block settings for {{GENDER:$4|$3}} for specified non-editing actions with an expiration time of $5 $6"`
+	 *
+	 * **Parameters**:
+	 * * `$1` - link to the user page of the user who performed the action
+	 * * `$2` - username of the user who performed the action (to be used with GENDER)
+	 * * `$3` - link to the affected page
+	 * * `$4` - username for gender or empty string for autoblocks
+	 * * `$5` - the block duration, localized and formatted with the English tooltip
+	 * * `$6` - block detail flags or empty string
+	 * * `$7` - restrictions list – any of:
+	 *   * `logentry-partialblock-block-page` (`"the {{PLURAL:$1|page|pages}} $2"`)
+	 *     * `$1` - number of pages
+	 *     * `$2` - list of pages
+	 *   * `logentry-partialblock-block-ns` (`"the {{PLURAL:$1|namespace|namespaces}} $2"`)
+	 *     * `$1` - number of namespaces
+	 *     * `$2` - list of namespaces
+	 *   * `logentry-partialblock-block-action` (`"the {{PLURAL:$1|action|actions}} $2"`)
+	 *     * `$1` - number of actions
+	 *     * `$2` - list of actions
+	 *
+	 * @param {BlockLogMapValue} data
+	 * @returns {string}
+	 */
+	static create(data) {
+		const { subtype, timestamp, sitewide, count, performer, target, duration, flags, restrictions, parsedcomment } = data;
+
+		/** @type {[string, string, string, string, string, string, string?]} */
+		const parameters = [
+			Messages.wikilink(`User:${performer}`, performer),
+			performer,
+			Messages.wikilink(`User:${target}`, target),
+			target,
+			duration,
+			this.formatFlags(flags)
+		];
+
+		// Adapted from BlockLogFormatter::getMessageKey
+		const type = 'block';
+		let key = `logentry-${type}-${subtype}`;
+		if ((subtype === 'block' || subtype === 'reblock') && !sitewide) {
+			// message changes depending on whether there are editing restrictions or not
+			if (restrictions) {
+				key = `logentry-partial${type}-${subtype}`;
+				parameters.push(
+					Messages.listToText(this.formatRestrictions(restrictions))
+				);
+			} else {
+				key = `logentry-non-editing-${type}-${subtype}`;
+			}
+		}
+		if (subtype === 'block' && count > 1 ) {
+			// logentry-block-block-multi, logentry-partialblock-block-multi,
+			// logentry-non-editing-block-block-multi
+			key += '-multi';
+		}
+
+		// @ts-expect-error
+		const logline = Messages.get(key, parameters);
+		const comment = parsedcomment && Messages.get('parentheses', [parsedcomment]);
+
+		const ret = [timestamp, logline, comment].filter(Boolean);
+		return ret.join('&nbsp;');
+	}
+
+	/**
+	 * Converts block flags to a human-readble string.
+	 *
+	 * @param {BlockFlags[]} flags
+	 * @returns {string}
+	 * @private
+	 */
+	static formatFlags(flags) {
+		const formatted = flags.map((f) => Messages.get(`block-log-flags-${f}`));
+		if (!formatted.length) return '';
+		return Messages.get('parentheses', [formatted.join(Messages.get('comma-separator'))]);
+	}
+
+	/**
+	 * Converts partial block restrictions to human-readble strings.
+	 *
+	 * @param {ApiResponseQueryListLogeventsParamsRestrictions} restrictions
+	 * @returns {string[]}
+	 * @private
+	 */
+	static formatRestrictions(restrictions) {
+		/** @type {string[]} */
+		const $7 = [];
+		const { pages, namespaces, actions } = restrictions;
+		if (pages && pages.length) {
+			const num = String(pages.length);
+			const list = pages.map(({ page_title }) => Messages.wikilink(page_title));
+			const msg = Messages.get('logentry-partialblock-block-page', [num, Messages.listToText(list)]);
+			$7.push(msg);
+		}
+		if (namespaces && namespaces.length) {
+			const num = String(namespaces.length);
+			const nsMap = Object.assign({}, mw.config.get('wgFormattedNamespaces'));
+			nsMap[0] = Messages.get('blanknamespace');
+			const list = namespaces.map((ns) => nsMap[ns]);
+			const msg = Messages.get('logentry-partialblock-block-ns', [num, Messages.listToText(list)]);
+			$7.push(msg);
+		}
+		if (actions && actions.length) {
+			const num = String(actions.length);
+			const list = actions.map((action) => Messages.get(`ipb-action-${action}`));
+			const msg = Messages.get('logentry-partialblock-block-action', [num, Messages.listToText(list)]);
+			$7.push(msg);
+		}
+		return $7;
+	}
+
+	/**
+	 * @param {string} username
+	 * @param {BlockIdMapValue} data
+	 * @returns {Promise<BlockLoglineMap | string>}
+	 */
+	static async new(username, data) {
+		const entry = await this.getEntries(username, data);
+		if (typeof entry === 'string') {
+			return entry;
+		}
+		if (!entry.size) {
+			const code = `Block log query for ${username} returned an empty response.`;
+			console.warn(code);
+			return code;
+		}
+
+		/** @type {BlockLoglineMap} */
+		const loglineMap = new Map();
+		for (const [id, builder] of entry) {
+			loglineMap.set(id, this.create(builder));
+		}
+		return loglineMap; // Return type modified
+	}
+
 }
 
 /**
