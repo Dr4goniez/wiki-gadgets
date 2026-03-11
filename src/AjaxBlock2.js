@@ -55,7 +55,7 @@ class AjaxBlock {
 			}
 		});
 
-		// Check user rights, special namespace aliases, block/unblock special page aliases
+		// Check user rights, special namespace aliases, and block/unblock special page aliases
 		const [initializer] = await Promise.all([this.getInitializer(api), $.when($.ready)]);
 		const permissionManager = new PermissionManager(initializer.userRights);
 		if (!permissionManager.isAllowed('block')) {
@@ -84,12 +84,16 @@ class AjaxBlock {
 		// Continue preparation:
 		// - Check if multiblocks is enabled on this site
 		// - Check the block statuses of the users/IDs extracted from block/unblock links
-		// - Load oojs-ui-windows for AjaxBlockDialog
+		// - Load modules used by AjaxBlockDialog
 		// - Load missing interface messages
 		const [multiBlocksEnabled, blockLookup] = await Promise.all([
 			this.fetchMultiBlockSettings(),
 			BlockLookup.fetch(permissionManager, users, ids),
-			mw.loader.using('oojs-ui-windows'),
+			mw.loader.using([
+				'oojs-ui',
+				'mediawiki.widgets.TitlesMultiselectWidget',
+				'mediawiki.widgets.NamespacesMultiselectWidget'
+			]),
 			Messages.loadMessagesIfMissing(permissionManager, [
 				'colon-separator',
 
@@ -161,15 +165,14 @@ class AjaxBlock {
 		]);
 		wgEnableMultiBlocks = multiBlocksEnabled;
 
-		// Messages are now ready:
-		// Update the title attributes of unprocessable (un)block links
+		// Update the title attributes of unprocessable (un)block links as messages are now ready
 		/** @type {NodeListOf<HTMLAnchorElement>} */
 		const unprocessableLinks = document.querySelectorAll(
 			'.ajaxblock-blocklink-unprocessable, .ajaxblock-unblocklink-unprocessable'
 		);
-		const unprocessableTitle = Messages.get('ajaxblock-title-unprocessable');
+		const titleAttr = Messages.get('word-separator') + Messages.get('ajaxblock-title-unprocessable');
 		for (const a of unprocessableLinks) {
-			a.title += ' ' + unprocessableTitle;
+			a.title += titleAttr;
 		}
 
 		// Create an AjaxBlock instance
@@ -315,35 +318,38 @@ class AjaxBlock {
 			}
 
 			// Get prefixed title from the href
-			let m, prefixedTitle;
-			if ((m = regex.article.exec(href))) {
-				prefixedTitle = decodeURIComponent(m[1]);
+			const mArticle = regex.article.exec(href);
+			let prefixedTitle = '';
+			if (mArticle) {
+				prefixedTitle = decodeURIComponent(mArticle[1]);
 			} else if (a.pathname === wgScript) {
 				prefixedTitle = mw.util.getParamValue('title', href) || '';
-				if (!prefixedTitle) {
-					continue;
-				}
-			} else {
+			}
+			if (!prefixedTitle) {
 				continue;
 			}
-			prefixedTitle = prefixedTitle.replace(/_/g, ' ');
+
+			// Regular expressions for page aliases use underscores
+			prefixedTitle = prefixedTitle.replace(/ /g, '_');
 
 			// Check whether this is a link to Special:Block or Special:Unblock
-			if (!(m = regex.special.exec(prefixedTitle))) {
+			const mSpecial = regex.special.exec(prefixedTitle);
+			if (!mSpecial) {
 				continue;
 			}
-			const title = m[1];
+			const rootPageName = mSpecial[1];
 			let isUnblockLink;
-			if (regex.block.test(title)) {
+			if (regex.block.test(rootPageName)) {
 				isUnblockLink = false;
-			} else if (regex.unblock.test(title)) {
+			} else if (regex.unblock.test(rootPageName)) {
 				isUnblockLink = true;
 			} else {
 				continue;
 			}
 
-			// TODO: Should we really replace underscores here?
-			const query = new URLSearchParams(clean(a.search.replace(/_/g, ' ')));
+			// Extract query parameters
+			// TODO: Filter this to effective params only
+			const query = new URLSearchParams(a.search);
 			if (query.get('remove') === '1') {
 				isUnblockLink = true;
 			}
@@ -351,16 +357,17 @@ class AjaxBlock {
 			const clss = `ajaxblock-${linkType}link`;
 			a.classList.add(clss);
 
-			// Extract target
-			const par = m[2] ? decodeURIComponent(m[2]) : null;
-			const [id, username] = BlockTarget.validate(par, query);
+			// Extract target (subpage (i.e., username) is normalized in BlockTarget.validate())
+			const subpage = mSpecial[2] ? decodeURIComponent(mSpecial[2]) : null;
+			const [id, username] = BlockTarget.validate(subpage, query);
 			if (!id && !username) {
 				a.classList.add(clss + '-unprocessable');
 				continue;
 			}
 
-			// TODO: IPs should be prettified
-			const key = /** @type {string} */ (id ? '#' + id : username); // Prioritize block ID
+			// Register the valid link
+			// TODO: Do we need two separate maps for block and unblock links?
+			const key = /** @type {string} */ (id ? `#${id}` : username); // Prioritize block ID
 			const map = isUnblockLink ? unblockLinkMap : blockLinkMap;
 			map[key] = map[key] || [];
 			map[key].push({
@@ -379,6 +386,7 @@ class AjaxBlock {
 	 *
 	 * @returns {JQuery.Promise<boolean>}
 	 * @private
+	 * @todo Do we need to check this at all?
 	 */
 	static fetchMultiBlockSettings() {
 		const cache = mw.storage.get(this.storageKeys.enableMultiblocks);
@@ -442,31 +450,31 @@ class AjaxBlock {
 				text-decoration-line: underline;
 				text-decoration-style: dotted;
 			}
-			${/* Shrink padding for MessageWidget on the dialog */''}
+			${/* Reduce padding for MessageWidget in the dialog */''}
 			.ajaxblock-dialog .ajaxblock-dialog-message {
 				padding: 8px 12px;
 			}
 			.ajaxblock-dialog .oo-ui-messageWidget.oo-ui-messageWidget-block > .oo-ui-iconElement-icon {
 				background-position: 0 8px;
 			}
-			${/* Shrink vertical space between field items */''}
+			${/* Reduce vertical spacing between field items */''}
 			.ajaxblock-dialog .oo-ui-fieldLayout:not(:first-child) {
 				margin-top: 6px;
 			}
-			${/* Expand the default width of 60% */''}
+			${/* Increase the default width (60%) of fields with a horizontally aligned label */''}
 			.ajaxblock-dialog .ajaxblock-horizontalfield .oo-ui-fieldLayout-field {
 				width: 80% !important;
 			}
-			${/* Vertically align FieldLayout's text field with its header element */''}
+			${/* Vertically align the FieldLayout text field with its label */''}
 			.ajaxblock-dialog .ajaxblock-targetlabel {
 				display: block;
 				padding-top: 4px;
 			}
-			${/* Halve the default margin top for fieldset:not(:first-child) */''}
+			${/* Halve the default top margin for fieldset:not(:first-child) */''}
 			.ajaxblock-dialog .ajaxblock-dialog-content > fieldset:not(:first-child) {
 				margin-top: 12px;
 			}
-			${/* Make non-primary legends less explicit */''}
+			${/* Make non-primary legends less prominent */''}
 			.ajaxblock-dialog .ajaxblock-dialog-content > fieldset:not(:first-child) > legend > .oo-ui-labelElement-label {
 				font-weight: normal;
 				font-style: italic;
@@ -630,15 +638,19 @@ class BlockLookup {
 				return request(batch, batchParam, ret, offset + apilimit);
 			});
 		};
+		/**
+		 * @param {Set<string>} batchSet
+		 * @param {'ids' | 'users'} batchParam
+		 * @returns {JQuery.Promise<ApiResponseQueryListBlocks[]>}
+		 */
+		const requestSafe = (batchSet, batchParam) => {
+			return batchSet.size ? request([...batchSet], batchParam) : $.Deferred().resolve([]).promise();
+		};
 
-		const reqUsers = users.size
-			? request([...users], 'users')
-			: ($.Deferred().resolve([]).promise());
-		const reqIds = ids.size
-			? request([...ids], 'ids')
-			: /** @type {JQuery.Promise<ApiResponseQueryListBlocks[]>} */ ($.Deferred().resolve([]).promise());
-		return $.when(reqUsers, reqIds).then((...args) => {
-			// Filter out duplicate entries
+		return $.when(
+			requestSafe(users, 'users'),
+			requestSafe(ids, 'ids')
+		).then((...args) => {
 			/**
 			 * @type {ApiResponseQueryListBlocks[]}
 			 */
@@ -648,6 +660,7 @@ class BlockLookup {
 			 */
 			const seen = new Set();
 
+			// Flatten args and deduplicate data
 			for (const list of args) {
 				for (const block of list) {
 					if (seen.has(block.id)) {
@@ -691,17 +704,6 @@ class BlockLookup {
 			}
 			/** @type {number[]} */ (this.usernameMap.get(user)).push(i);
 		});
-	}
-
-	get length() {
-		return this.data.length;
-	}
-
-	/**
-	 * @returns {readonly ApiResponseQueryListBlocks[]}
-	 */
-	getData() {
-		return this.data;
 	}
 
 	/**
@@ -756,29 +758,28 @@ class BlockLookup {
 class BlockTarget {
 
 	/**
-	 * @param {?string} par
+	 * @param {?string} subpage
 	 * @param {URLSearchParams} query Underscores must be replaced with spaces
 	 * @returns {[?number, ?string]} [id, username]
 	 * @see SpecialBlock::getTargetInternal
 	 */
-	static validate(par, query) {
+	static validate(subpage, query) {
 		const id = this.validateBlockId(query.get('id'));
 
 		const possibleTargets = [
 			query.get('wpTarget'),
-			par,
+			subpage,
 			query.get('ip'),
 			query.get('wpBlockAddress'), // B/C @since 1.18
 		];
 		/** @type {?string} */
 		let target = null;
-		for (let tar of possibleTargets) {
-			tar = this.validateUsername(tar);
-			if (!tar) {
-				continue;
+		for (const t of possibleTargets) {
+			const validated = this.validateUsername(t);
+			if (validated !== null) { // Note: this is never an empty string
+				target = validated;
+				break;
 			}
-			target = tar;
-			break;
 		}
 
 		return [id, target];
@@ -807,12 +808,16 @@ class BlockTarget {
 		if (!username) {
 			return null;
 		}
-		username = clean(username.replace(/@global$/, ''));
-		if (!username || this.regex.invalidUsername.test(username)) {
+		username = username
+			.replace(/@global$/, '')
+			.replace(/_/g, ' ');
+		username = clean(username);
+		if (mw.util.isIPAddress(username, true)) {
+			username = /** @type {string} */ (mw.util.sanitizeIP(username));
+		} else if (!username || this.regex.invalidUsername.test(username)) {
 			return null;
-		}
-		if (!this.regex.firstGeorgian.test(username)) {
-			username = username.charAt(0).toUpperCase() + username.slice(1);
+		} else if (!this.regex.firstGeorgian.test(username)) {
+			username = Messages.ucFirst(username);
 		}
 		return username;
 	}
@@ -863,15 +868,6 @@ class BlockTarget {
 		}
 		this.id = num;
 		return this;
-	}
-
-	/**
-	 * Gets the block ID in `#id` format.
-	 *
-	 * @returns {?string}
-	 */
-	getHashedId() {
-		return this.id !== null ? `#${this.id}` : null;
 	}
 
 	/**
@@ -1105,6 +1101,7 @@ class Messages {
 	 * @param {string} msg The raw message string to parse.
 	 * @param {string} key The message key associated with `msg`.
 	 * @returns {Set<string>} A set of message keys that were referenced but missing.
+	 * @private
 	 */
 	static parseInt(msg, key) {
 		const original = msg;
@@ -1233,13 +1230,13 @@ class Messages {
 	// 	});
 	// }
 
-	// /**
-	//  * @param {string} message
-	//  * @returns {string}
-	//  */
-	// static ucFirst(message) {
-	// 	return message.charAt(0).toUpperCase() + message.slice(1);
-	// }
+	/**
+	 * @param {string} message
+	 * @returns {string}
+	 */
+	static ucFirst(message) {
+		return message.charAt(0).toUpperCase() + message.slice(1);
+	}
 
 	/**
 	 * @param {string} message
@@ -1604,18 +1601,11 @@ function AjaxBlockDialogFactory(permissionManager, blockLookup) {
 		constructor(config) {
 			super(config);
 
-			/**
-			 * @private
-			 */
-			this._ready = false;
-			/**
-			 * @type {InstanceType<ReturnType<BlockUserFactory>>}
-			 */
-			this.blockUser = Object.create(null);
-			/**
-			 * @type {InstanceType<ReturnType<UnblockUserFactory>>}
-			 */
-			this.unblockUser = Object.create(null);
+			const BlockUser = BlockUserFactory(permissionManager);
+			this.blockUser = new BlockUser(this);
+
+			const UnblockUser = UnblockUserFactory(permissionManager);
+			this.unblockUser = new UnblockUser(this);
 		}
 
 		/**
@@ -1626,54 +1616,19 @@ function AjaxBlockDialogFactory(permissionManager, blockLookup) {
 			// @ts-expect-error
 			super.initialize.apply(this, arguments);
 
-			this.pushPending();
+			const content = new OO.ui.PanelLayout({
+				padded: true,
+				expanded: false
+			});
+			content.$element.append(
+				this.blockUser.$element,
+				this.unblockUser.$element
+			);
+
+			// @ts-expect-error
+			this.$body.append(content.$element);
 
 			return this;
-		}
-
-		/**
-		 * Lazy-construct the dialog elements.
-		 *
-		 * This avoids an unconditional load of dependent modules.
-		 *
-		 * @returns {JQuery.Promise<void>}
-		 * @private
-		 */
-		prepareDialog() {
-			if (this._ready) {
-				return $.Deferred().resolve().promise();
-			}
-			this._ready = true;
-
-			return mw.loader.using([
-				'oojs-ui',
-				'mediawiki.widgets.TitlesMultiselectWidget',
-				'mediawiki.widgets.NamespacesMultiselectWidget'
-			]).then(() => {
-				const BlockUser = BlockUserFactory(permissionManager);
-				this.blockUser = new BlockUser(this);
-
-				const UnblockUser = UnblockUserFactory(permissionManager);
-				this.unblockUser = new UnblockUser(this);
-
-				const content = new OO.ui.PanelLayout({
-					padded: true,
-					expanded: false
-				});
-				content.$element.append(
-					this.blockUser.$element,
-					this.unblockUser.$element
-				);
-
-				// @ts-expect-error
-				this.$body.append(content.$element);
-				this.popPending();
-				this.updateSize();
-			});
-		}
-
-		isDialogReady() {
-			return this._ready;
 		}
 
 		/**
@@ -1681,17 +1636,9 @@ function AjaxBlockDialogFactory(permissionManager, blockLookup) {
 		 * @override
 		 * @param {BlockLink} data
 		 */
-		getSetupProcess(data) {
-			const process = super.getSetupProcess();
-
-			if (!this.isDialogReady()) {
-				process.next(() => this.prepareDialog());
-			}
-
+		getReadyProcess(data) {
 			// @ts-expect-error Promise<void> incompatible with Promise<void, any, any>
-			process.next(() => this.prepareDisplay(data));
-
-			return process;
+			return super.getSetupProcess().next(() => this.prepareDisplay(data));
 		}
 
 		/**

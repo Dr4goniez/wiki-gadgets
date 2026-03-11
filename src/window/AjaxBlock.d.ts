@@ -1,11 +1,16 @@
 import { XOR } from 'ts-essentials';
 import { ApiResponseQueryListLogevents } from './InvestigateHelper';
 
+/**
+ * Object that holds required data for script initialization.
+ *
+ * Note: Page name aliases use **underscores**, not spaces.
+ */
 export interface Initializer {
 	blockPageAliases: Record<'Block' | 'Unblock', string[]>;
 	specialNamespaceAliases: string[];
 	userRights: Set<string>;
-	}
+}
 
 export interface ApiResponse {
 	query?: ApiResponseQuery;
