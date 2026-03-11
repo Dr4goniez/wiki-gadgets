@@ -504,8 +504,8 @@ class AjaxBlock {
 			});
 		});
 
-		const AjaxBlockDialog = AjaxBlockDialogFactory(permissionManager, blockLookup);
-		this.dialog = new AjaxBlockDialog({
+		const AjaxBlockDialog = AjaxBlockDialogFactory();
+		this.dialog = new AjaxBlockDialog(permissionManager, blockLookup, {
 			$element: $('<div>').css({ 'font-size': '90%' }),
 			classes: ['ajaxblock-dialog'],
 			size: 'large',
@@ -1574,12 +1574,7 @@ class DropdownUtil {
 
 }
 
-/**
- * @param {PermissionManager} permissionManager
- * @param {BlockLookup} blockLookup
- * @returns
- */
-function AjaxBlockDialogFactory(permissionManager, blockLookup) {
+function AjaxBlockDialogFactory() {
 	/**
 	 * @constructor
 	 * @param {OO.ui.ProcessDialog.ConfigOptions} [config]
@@ -1596,15 +1591,17 @@ function AjaxBlockDialogFactory(permissionManager, blockLookup) {
 	class AjaxBlockDialog extends ProcessDialog {
 
 		/**
+		 * @param {PermissionManager} permissionManager
+		 * @param {BlockLookup} blockLookup
 		 * @param {OO.ui.ProcessDialog.ConfigOptions} [config]
 		 */
-		constructor(config) {
+		constructor(permissionManager, blockLookup, config) {
 			super(config);
 
-			const BlockUser = BlockUserFactory(permissionManager);
-			this.blockUser = new BlockUser(this);
+			this.permissionManager = permissionManager;
+			this.blockLookup = blockLookup;
 
-			const UnblockUser = UnblockUserFactory(permissionManager);
+			this.blockUser = new BlockUser(this);
 			this.unblockUser = new UnblockUser(this);
 		}
 
@@ -1653,12 +1650,12 @@ function AjaxBlockDialogFactory(permissionManager, blockLookup) {
 			let cb;
 			switch (data.type) {
 				case 'block':
-					cb = this.blockUser.toggle(true).setTarget(data.target, blockLookup);
+					cb = this.blockUser.toggle(true).setTarget(data.target);
 					this.unblockUser.toggle(false);
 					break;
 				case 'unblock':
 					this.blockUser.toggle(false);
-					cb = this.unblockUser.toggle(true).setTarget(data.target, blockLookup);
+					cb = this.unblockUser.toggle(true).setTarget(data.target, this.blockLookup);
 					break;
 				default:
 					throw new Error('Invalid data type: ' + data.type);
@@ -2031,534 +2028,521 @@ class AjaxBlockDialogContent {
 
 }
 
-/**
- * @param {PermissionManager} permissionManager
- * @returns
- */
-function BlockUserFactory(permissionManager) {
-	return class BlockUser extends AjaxBlockDialogContent {
+class BlockUser extends AjaxBlockDialogContent {
 
-		/**
-		 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
-		 */
-		constructor(dialog) {
-			super();
-			this.dialog = dialog;
+	/**
+	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+	 */
+	constructor(dialog) {
+		super();
+		this.dialog = dialog;
 
-			/** @type {OO.ui.Element[]} */
-			let items = [
-				this.messageContainer,
-				this.getTargetField(),
-			];
+		/** @type {OO.ui.Element[]} */
+		let items = [
+			this.messageContainer,
+			this.getTargetField(),
+		];
 
-			this.expiry = new OO.ui.DropdownWidget({
-				menu: {
-					items: Messages.getBlockDurations()
-				}
-			});
-			DropdownUtil.selectInfinity(this.expiry);
-			items.push(
-				new OO.ui.FieldLayout(this.expiry, {
-					classes: ['ajaxblock-horizontalfield'],
-					label: Messages.get('block-expiry'),
-					align: 'left',
-				})
-			);
+		this.expiry = new OO.ui.DropdownWidget({
+			menu: {
+				items: Messages.getBlockDurations()
+			}
+		});
+		DropdownUtil.selectInfinity(this.expiry);
+		items.push(
+			new OO.ui.FieldLayout(this.expiry, {
+				classes: ['ajaxblock-horizontalfield'],
+				label: Messages.get('block-expiry'),
+				align: 'left',
+			})
+		);
 
-			this.expiryOther = new OO.ui.TextInputWidget({
-				placeholder: Messages.get('ipbother').replace(/[:：]$/, ''),
-			});
-			items.push(
-				new OO.ui.FieldLayout(this.expiryOther, {
-					classes: ['ajaxblock-horizontalfield'],
-					label: $('<span>'), // Blank label
-					align: 'left',
-				})
-			);
-			this.expiryOther.on('change', (value) => {
-				if (!clean(value)) {
-					return;
-				}
-				DropdownUtil.selectOther(this.expiry);
-			});
+		this.expiryOther = new OO.ui.TextInputWidget({
+			placeholder: Messages.get('ipbother').replace(/[:：]$/, ''),
+		});
+		items.push(
+			new OO.ui.FieldLayout(this.expiryOther, {
+				classes: ['ajaxblock-horizontalfield'],
+				label: $('<span>'), // Blank label
+				align: 'left',
+			})
+		);
+		this.expiryOther.on('change', (value) => {
+			if (!clean(value)) {
+				return;
+			}
+			DropdownUtil.selectOther(this.expiry);
+		});
 
-			this.reason1 = new OO.ui.DropdownWidget({
-				menu: {
-					items: Messages.parseBlockReasonDropdown()
-				}
-			});
-			DropdownUtil.selectOther(this.reason1);
-			items.push(
-				new OO.ui.FieldLayout(this.reason1, {
-					classes: ['ajaxblock-horizontalfield'],
-					label: Messages.get('ajaxblock-dialog-block-label-reason1'),
-					align: 'left',
-				})
-			);
+		this.reason1 = new OO.ui.DropdownWidget({
+			menu: {
+				items: Messages.parseBlockReasonDropdown()
+			}
+		});
+		DropdownUtil.selectOther(this.reason1);
+		items.push(
+			new OO.ui.FieldLayout(this.reason1, {
+				classes: ['ajaxblock-horizontalfield'],
+				label: Messages.get('ajaxblock-dialog-block-label-reason1'),
+				align: 'left',
+			})
+		);
 
-			this.reason2 = new OO.ui.DropdownWidget({
-				menu: {
-					items: Messages.parseBlockReasonDropdown()
-				}
-			});
-			DropdownUtil.selectOther(this.reason2);
-			items.push(
-				new OO.ui.FieldLayout(this.reason2, {
-					classes: ['ajaxblock-horizontalfield'],
-					label: Messages.get('ajaxblock-dialog-block-label-reason2'),
-					align: 'left',
-				})
-			);
+		this.reason2 = new OO.ui.DropdownWidget({
+			menu: {
+				items: Messages.parseBlockReasonDropdown()
+			}
+		});
+		DropdownUtil.selectOther(this.reason2);
+		items.push(
+			new OO.ui.FieldLayout(this.reason2, {
+				classes: ['ajaxblock-horizontalfield'],
+				label: Messages.get('ajaxblock-dialog-block-label-reason2'),
+				align: 'left',
+			})
+		);
 
-			this.reasonOther = new OO.ui.TextInputWidget({
-				placeholder: Messages.get('block-reason-other'),
-			});
-			items.push(
-				new OO.ui.FieldLayout(this.reasonOther, {
-					classes: ['ajaxblock-horizontalfield'],
-					label: $('<span>'),
-					align: 'left',
-				})
-			);
+		this.reasonOther = new OO.ui.TextInputWidget({
+			placeholder: Messages.get('block-reason-other'),
+		});
+		items.push(
+			new OO.ui.FieldLayout(this.reasonOther, {
+				classes: ['ajaxblock-horizontalfield'],
+				label: $('<span>'),
+				align: 'left',
+			})
+		);
 
-			this.partialBlock = new OO.ui.CheckboxInputWidget();
-			items.push(
-				new OO.ui.FieldLayout(this.partialBlock, {
-					label: Messages.get('ajaxblock-dialog-block-label-partial'),
-					align: 'inline',
-				})
-			);
-
-			const partialBlockLayout = new OO.ui.FieldsetLayout();
-			partialBlockLayout.$element.css({ 'margin-left': '1.8em' });
-			this.partialBlock.on('change', (selected) => {
-				partialBlockLayout.toggle(!!selected);
-				this.dialog.updateSize();
-			});
-			partialBlockLayout.toggle(this.partialBlock.isSelected());
-
-			/** @type {OO.ui.Element[]} */
-			const partialBlockLayoutItems = [];
-
-			this.partialBlockPages = new mw.widgets.TitlesMultiselectWidget({
-				api,
-				placeholder: Messages.get('block-pages-placeholder'),
-				showMissing: false,
-				tagLimit: 50,
-			});
-			partialBlockLayoutItems.push(
-				new OO.ui.FieldLayout(this.partialBlockPages, {
-					label: Messages.get('ipb-pages-label'),
-					align: 'top',
-				})
-			);
-
-			this.partialBlockNamespaces = new mw.widgets.NamespacesMultiselectWidget({
-				placeholder: Messages.get('block-namespaces-placeholder'),
-			});
-			partialBlockLayoutItems.push(
-				new OO.ui.FieldLayout(this.partialBlockNamespaces, {
-					label: Messages.get('ipb-namespaces-label'),
-					align: 'top',
-				})
-			);
-
-			this.partialBlockUpload = new OO.ui.CheckboxInputWidget();
-			partialBlockLayoutItems.push(
-				new OO.ui.FieldLayout(this.partialBlockUpload, {
-					label: Messages.get('ipb-action-upload'),
-					align: 'inline',
-				})
-			);
-
-			this.partialBlockMove = new OO.ui.CheckboxInputWidget();
-			partialBlockLayoutItems.push(
-				new OO.ui.FieldLayout(this.partialBlockMove, {
-					label: Messages.get('ipb-action-move'),
-					align: 'inline',
-				})
-			);
-
-			this.partialBlockCreate = new OO.ui.CheckboxInputWidget();
-			partialBlockLayoutItems.push(
-				new OO.ui.FieldLayout(this.partialBlockCreate, {
-					label: Messages.get('ipb-action-create'),
-					align: 'inline',
-				})
-			);
-
-			this.partialBlockThanks = new OO.ui.CheckboxInputWidget();
-			partialBlockLayoutItems.push(
-				new OO.ui.FieldLayout(this.partialBlockThanks, {
-					label: Messages.get('ipb-action-thanks'),
-					align: 'inline',
-				})
-			);
-
-			partialBlockLayout.addItems(partialBlockLayoutItems);
-			items.push(partialBlockLayout);
-
-			const mainFieldset = new OO.ui.FieldsetLayout({
-				label: Messages.get('block'),
-			});
-			mainFieldset.addItems(items);
-			this.$element.append(mainFieldset.$element);
-			items = [];
-
-			this.cbCreateAccount = new OO.ui.CheckboxInputWidget();
-			items.push(
-				new OO.ui.FieldLayout(this.cbCreateAccount, {
-					label: Messages.get('ipbcreateaccount'),
-					align: 'inline',
-				})
-			);
-
-			this.cbSendEmail = new OO.ui.CheckboxInputWidget();
-			items.push(
-				new OO.ui.FieldLayout(this.cbSendEmail, {
-					label: Messages.get('ipbemailban'),
-					align: 'inline',
-				})
-			);
-
-			this.cbUserTalk = new OO.ui.CheckboxInputWidget();
-			items.push(
-				new OO.ui.FieldLayout(this.cbUserTalk, {
-					label: Messages.get('ipb-disableusertalk'),
-					align: 'inline',
-				})
-			);
-
-			const detailsFieldset = new OO.ui.FieldsetLayout({
-				label: Messages.get('block-details'),
-			});
-			detailsFieldset.addItems(items);
-			this.$element.append(detailsFieldset.$element);
-			items = [];
-
-			this.cbAutoblock = new OO.ui.CheckboxInputWidget();
-			this.cbAutoblockContainer = new OO.ui.FieldLayout(this.cbAutoblock, {
-				label: Messages.get('ajaxblock-dialog-block-label-option-autoblock'),
+		this.partialBlock = new OO.ui.CheckboxInputWidget();
+		items.push(
+			new OO.ui.FieldLayout(this.partialBlock, {
+				label: Messages.get('ajaxblock-dialog-block-label-partial'),
 				align: 'inline',
-			});
-			items.push(this.cbAutoblockContainer);
+			})
+		);
 
-			this.cbHardblock = new OO.ui.CheckboxInputWidget();
-			this.cbHardblockContainer = new OO.ui.FieldLayout(this.cbHardblock, {
-				label: Messages.get('ipb-hardblock'),
+		const partialBlockLayout = new OO.ui.FieldsetLayout();
+		partialBlockLayout.$element.css({ 'margin-left': '1.8em' });
+		this.partialBlock.on('change', (selected) => {
+			partialBlockLayout.toggle(!!selected);
+			this.dialog.updateSize();
+		});
+		partialBlockLayout.toggle(this.partialBlock.isSelected());
+
+		/** @type {OO.ui.Element[]} */
+		const partialBlockLayoutItems = [];
+
+		this.partialBlockPages = new mw.widgets.TitlesMultiselectWidget({
+			api,
+			placeholder: Messages.get('block-pages-placeholder'),
+			showMissing: false,
+			tagLimit: 50,
+		});
+		partialBlockLayoutItems.push(
+			new OO.ui.FieldLayout(this.partialBlockPages, {
+				label: Messages.get('ipb-pages-label'),
+				align: 'top',
+			})
+		);
+
+		this.partialBlockNamespaces = new mw.widgets.NamespacesMultiselectWidget({
+			placeholder: Messages.get('block-namespaces-placeholder'),
+		});
+		partialBlockLayoutItems.push(
+			new OO.ui.FieldLayout(this.partialBlockNamespaces, {
+				label: Messages.get('ipb-namespaces-label'),
+				align: 'top',
+			})
+		);
+
+		this.partialBlockUpload = new OO.ui.CheckboxInputWidget();
+		partialBlockLayoutItems.push(
+			new OO.ui.FieldLayout(this.partialBlockUpload, {
+				label: Messages.get('ipb-action-upload'),
 				align: 'inline',
-			});
-			items.push(this.cbHardblockContainer);
+			})
+		);
 
-			this.cbHideName = new OO.ui.CheckboxInputWidget();
-			this.cbHideNameContainer = new OO.ui.FieldLayout(this.cbHideName, {
-				label: $('<b>').text(Messages.get('ipbhidename')),
+		this.partialBlockMove = new OO.ui.CheckboxInputWidget();
+		partialBlockLayoutItems.push(
+			new OO.ui.FieldLayout(this.partialBlockMove, {
+				label: Messages.get('ipb-action-move'),
 				align: 'inline',
-			});
-			items.push(this.cbHideNameContainer);
+			})
+		);
 
-			items.push(
-				this.getWatchUserLayout(),
-				this.getWatchlistExpiryLayout(dialog)
-			);
+		this.partialBlockCreate = new OO.ui.CheckboxInputWidget();
+		partialBlockLayoutItems.push(
+			new OO.ui.FieldLayout(this.partialBlockCreate, {
+				label: Messages.get('ipb-action-create'),
+				align: 'inline',
+			})
+		);
 
-			const optionsFieldset = new OO.ui.FieldsetLayout({
-				label: Messages.get('block-options'),
-			});
-			optionsFieldset.addItems(items);
-			this.$element.append(optionsFieldset.$element);
-		}
+		this.partialBlockThanks = new OO.ui.CheckboxInputWidget();
+		partialBlockLayoutItems.push(
+			new OO.ui.FieldLayout(this.partialBlockThanks, {
+				label: Messages.get('ipb-action-thanks'),
+				align: 'inline',
+			})
+		);
 
-		/**
-		 * @inheritdoc
-		 * @override
-		 * @param {BlockTarget} target
-		 * @param {BlockLookup} blockLookup
-		 */
-		setTarget(target, blockLookup) {
-			if (target.getType() === 'anon') {
-				this.cbAutoblockContainer.toggle(false);
-				this.cbAutoblock.setSelected(false);
-				this.cbHardblockContainer.toggle(true);
+		partialBlockLayout.addItems(partialBlockLayoutItems);
+		items.push(partialBlockLayout);
+
+		const mainFieldset = new OO.ui.FieldsetLayout({
+			label: Messages.get('block'),
+		});
+		mainFieldset.addItems(items);
+		this.$element.append(mainFieldset.$element);
+		items = [];
+
+		this.cbCreateAccount = new OO.ui.CheckboxInputWidget();
+		items.push(
+			new OO.ui.FieldLayout(this.cbCreateAccount, {
+				label: Messages.get('ipbcreateaccount'),
+				align: 'inline',
+			})
+		);
+
+		this.cbSendEmail = new OO.ui.CheckboxInputWidget();
+		items.push(
+			new OO.ui.FieldLayout(this.cbSendEmail, {
+				label: Messages.get('ipbemailban'),
+				align: 'inline',
+			})
+		);
+
+		this.cbUserTalk = new OO.ui.CheckboxInputWidget();
+		items.push(
+			new OO.ui.FieldLayout(this.cbUserTalk, {
+				label: Messages.get('ipb-disableusertalk'),
+				align: 'inline',
+			})
+		);
+
+		const detailsFieldset = new OO.ui.FieldsetLayout({
+			label: Messages.get('block-details'),
+		});
+		detailsFieldset.addItems(items);
+		this.$element.append(detailsFieldset.$element);
+		items = [];
+
+		this.cbAutoblock = new OO.ui.CheckboxInputWidget();
+		this.cbAutoblockContainer = new OO.ui.FieldLayout(this.cbAutoblock, {
+			label: Messages.get('ajaxblock-dialog-block-label-option-autoblock'),
+			align: 'inline',
+		});
+		items.push(this.cbAutoblockContainer);
+
+		this.cbHardblock = new OO.ui.CheckboxInputWidget();
+		this.cbHardblockContainer = new OO.ui.FieldLayout(this.cbHardblock, {
+			label: Messages.get('ipb-hardblock'),
+			align: 'inline',
+		});
+		items.push(this.cbHardblockContainer);
+
+		this.cbHideName = new OO.ui.CheckboxInputWidget();
+		this.cbHideNameContainer = new OO.ui.FieldLayout(this.cbHideName, {
+			label: $('<b>').text(Messages.get('ipbhidename')),
+			align: 'inline',
+		});
+		items.push(this.cbHideNameContainer);
+
+		items.push(
+			this.getWatchUserLayout(),
+			this.getWatchlistExpiryLayout(dialog)
+		);
+
+		const optionsFieldset = new OO.ui.FieldsetLayout({
+			label: Messages.get('block-options'),
+		});
+		optionsFieldset.addItems(items);
+		this.$element.append(optionsFieldset.$element);
+	}
+
+	/**
+	 * @inheritdoc
+	 * @override
+	 * @param {BlockTarget} target
+	 */
+	setTarget(target) {
+		if (target.getType() === 'anon') {
+			this.cbAutoblockContainer.toggle(false);
+			this.cbAutoblock.setSelected(false);
+			this.cbHardblockContainer.toggle(true);
+			this.cbHideNameContainer.toggle(false);
+			this.cbHideName.setSelected(false);
+		} else {
+			this.cbAutoblockContainer.toggle(true);
+			this.cbHardblockContainer.toggle(false);
+			this.cbHardblock.setSelected(false);
+			if (this.dialog.permissionManager.isAllowed('hideuser')) {
+				this.cbHideNameContainer.toggle(true);
+			} else {
 				this.cbHideNameContainer.toggle(false);
 				this.cbHideName.setSelected(false);
-			} else {
-				this.cbAutoblockContainer.toggle(true);
-				this.cbHardblockContainer.toggle(false);
-				this.cbHardblock.setSelected(false);
-				if (permissionManager.isAllowed('hideuser')) {
-					this.cbHideNameContainer.toggle(true);
-				} else {
-					this.cbHideNameContainer.toggle(false);
-					this.cbHideName.setSelected(false);
-				}
 			}
-			return super.setTarget(target, blockLookup);
 		}
+		return super.setTarget(target, this.dialog.blockLookup);
+	}
 
-		// /**
-		//  * @param {URLSearchParams} query
-		//  * @returns {this}
-		//  */
-		// applyParams(query) {
-		// 	const supportedQueryParameters = new Set([
-		// 		'wpExpiry',
-		// 		'wpReason',
-		// 		'wpReason-other',
-		// 		'wpRemovalReason',
-		// 		'wpEditingRestriction',
-		// 		'wpPageRestrictions',
-		// 		'wpNamespaceRestrictions',
-		// 		'wpActionRestrictions', // ?
-		// 		'wpCreateAccount', // Default: true
-		// 		'wpDisableEmail',
-		// 		'wpDisableUTEdit',
-		// 		'wpAutoBlock',
-		// 		'wpHideUser',
-		// 		'wpHardBlock',
-		// 		'wpWatch',
-		// 	]);
-			// if (query.wpExpiry) {
-			// 	this.setExpiry(query.wpExpiry);
-			// }
-
-			// const partial = query.wpEditingRestriction === 'partial';
-			// this.partialBlock.setSelected(partial);
-			// if (partial) {
-
-			// }
-
-			// $this->codexFormData[ 'blockTypePreset' ] =
-			// 	$request->getRawVal( 'wpEditingRestriction' ) === 'partial' ?
-			// 	'partial' :
-			// 	'sitewide';
-			// $reasonPreset = $request->getVal( 'wpReason' );
-			// $reasonOtherPreset = $request->getVal( 'wpReason-other' );
-			// if ( $reasonPreset && $reasonOtherPreset ) {
-			// 	$this->codexFormData[ 'blockReasonPreset' ] = $reasonPreset .
-			// 		$this->msg( 'colon-separator' )->text() . $reasonOtherPreset;
-			// } else {
-			// 	$this->codexFormData[ 'blockReasonPreset' ] =
-			// 		$reasonPreset ?: $reasonOtherPreset ?: '';
-			// }
-			// $this->codexFormData[ 'blockRemovalReasonPreset' ] = $request->getVal( 'wpRemovalReason' );
-			// $blockAdditionalDetailsPreset = $blockDetailsPreset = [];
-			// // Default is to always block account creation.
-			// if ( $request->getBool( 'wpCreateAccount', true ) ) {
-			// 	$blockDetailsPreset[] = 'wpCreateAccount';
-			// }
-			// if ( $request->getBool( 'wpDisableEmail' ) ) {
-			// 	$blockDetailsPreset[] = 'wpDisableEmail';
-			// }
-			// if ( $request->getBool( 'wpDisableUTEdit' ) ) {
-			// 	$blockDetailsPreset[] = 'wpDisableUTEdit';
-			// }
-			// if ( $request->getRawVal( 'wpAutoBlock' ) !== '0' ) {
-			// 	$blockAdditionalDetailsPreset[] = 'wpAutoBlock';
-			// }
-			// if ( $request->getBool( 'wpWatch' ) ) {
-			// 	$blockAdditionalDetailsPreset[] = 'wpWatch';
-			// }
-			// if ( $request->getBool( 'wpHideUser' ) ) {
-			// 	$blockAdditionalDetailsPreset[] = 'wpHideUser';
-			// }
-			// if ( $request->getBool( 'wpHardBlock' ) ) {
-			// 	$blockAdditionalDetailsPreset[] = 'wpHardBlock';
-			// }
-			// $this->codexFormData[ 'blockDetailsPreset' ] = $blockDetailsPreset;
-			// $this->codexFormData[ 'blockAdditionalDetailsPreset' ] = $blockAdditionalDetailsPreset;
-			// $this->codexFormData[ 'blockPageRestrictions' ] = $request->getVal( 'wpPageRestrictions' );
-			// $this->codexFormData[ 'blockNamespaceRestrictions' ] = $request->getVal( 'wpNamespaceRestrictions' );
+	// /**
+	//  * @param {URLSearchParams} query
+	//  * @returns {this}
+	//  */
+	// applyParams(query) {
+	// 	const supportedQueryParameters = new Set([
+	// 		'wpExpiry',
+	// 		'wpReason',
+	// 		'wpReason-other',
+	// 		'wpRemovalReason',
+	// 		'wpEditingRestriction',
+	// 		'wpPageRestrictions',
+	// 		'wpNamespaceRestrictions',
+	// 		'wpActionRestrictions', // ?
+	// 		'wpCreateAccount', // Default: true
+	// 		'wpDisableEmail',
+	// 		'wpDisableUTEdit',
+	// 		'wpAutoBlock',
+	// 		'wpHideUser',
+	// 		'wpHardBlock',
+	// 		'wpWatch',
+	// 	]);
+		// if (query.wpExpiry) {
+		// 	this.setExpiry(query.wpExpiry);
 		// }
 
-		getExpiry() {
-			const selected = DropdownUtil.getSelectedOptionValue(this.expiry);
-			if (selected) {
-				return selected;
-			} else {
-				return clean(this.expiryOther.getValue());
-			}
+		// const partial = query.wpEditingRestriction === 'partial';
+		// this.partialBlock.setSelected(partial);
+		// if (partial) {
+
+		// }
+
+		// $this->codexFormData[ 'blockTypePreset' ] =
+		// 	$request->getRawVal( 'wpEditingRestriction' ) === 'partial' ?
+		// 	'partial' :
+		// 	'sitewide';
+		// $reasonPreset = $request->getVal( 'wpReason' );
+		// $reasonOtherPreset = $request->getVal( 'wpReason-other' );
+		// if ( $reasonPreset && $reasonOtherPreset ) {
+		// 	$this->codexFormData[ 'blockReasonPreset' ] = $reasonPreset .
+		// 		$this->msg( 'colon-separator' )->text() . $reasonOtherPreset;
+		// } else {
+		// 	$this->codexFormData[ 'blockReasonPreset' ] =
+		// 		$reasonPreset ?: $reasonOtherPreset ?: '';
+		// }
+		// $this->codexFormData[ 'blockRemovalReasonPreset' ] = $request->getVal( 'wpRemovalReason' );
+		// $blockAdditionalDetailsPreset = $blockDetailsPreset = [];
+		// // Default is to always block account creation.
+		// if ( $request->getBool( 'wpCreateAccount', true ) ) {
+		// 	$blockDetailsPreset[] = 'wpCreateAccount';
+		// }
+		// if ( $request->getBool( 'wpDisableEmail' ) ) {
+		// 	$blockDetailsPreset[] = 'wpDisableEmail';
+		// }
+		// if ( $request->getBool( 'wpDisableUTEdit' ) ) {
+		// 	$blockDetailsPreset[] = 'wpDisableUTEdit';
+		// }
+		// if ( $request->getRawVal( 'wpAutoBlock' ) !== '0' ) {
+		// 	$blockAdditionalDetailsPreset[] = 'wpAutoBlock';
+		// }
+		// if ( $request->getBool( 'wpWatch' ) ) {
+		// 	$blockAdditionalDetailsPreset[] = 'wpWatch';
+		// }
+		// if ( $request->getBool( 'wpHideUser' ) ) {
+		// 	$blockAdditionalDetailsPreset[] = 'wpHideUser';
+		// }
+		// if ( $request->getBool( 'wpHardBlock' ) ) {
+		// 	$blockAdditionalDetailsPreset[] = 'wpHardBlock';
+		// }
+		// $this->codexFormData[ 'blockDetailsPreset' ] = $blockDetailsPreset;
+		// $this->codexFormData[ 'blockAdditionalDetailsPreset' ] = $blockAdditionalDetailsPreset;
+		// $this->codexFormData[ 'blockPageRestrictions' ] = $request->getVal( 'wpPageRestrictions' );
+		// $this->codexFormData[ 'blockNamespaceRestrictions' ] = $request->getVal( 'wpNamespaceRestrictions' );
+	// }
+
+	getExpiry() {
+		const selected = DropdownUtil.getSelectedOptionValue(this.expiry);
+		if (selected) {
+			return selected;
+		} else {
+			return clean(this.expiryOther.getValue());
+		}
+	}
+
+	/**
+	 * @param {string} expiry
+	 * @return {this}
+	 */
+	setExpiry(expiry) {
+		expiry = clean(expiry);
+		if (mw.util.isInfinity(expiry)) {
+			expiry = infinity;
 		}
 
-		/**
-		 * @param {string} expiry
-		 * @return {this}
-		 */
-		setExpiry(expiry) {
-			expiry = clean(expiry);
-			if (mw.util.isInfinity(expiry)) {
-				expiry = infinity;
+		const menu = this.expiry.getMenu();
+		let selected = false;
+		for (const item of /** @type {OO.ui.MenuOptionWidget[]} */ (menu.getItems())) {
+			if (item.getData() === expiry) {
+				menu.selectItem(item);
+				selected = true;
+				break;
 			}
-
-			const menu = this.expiry.getMenu();
-			let selected = false;
-			for (const item of /** @type {OO.ui.MenuOptionWidget[]} */ (menu.getItems())) {
-				if (item.getData() === expiry) {
-					menu.selectItem(item);
-					selected = true;
-					break;
-				}
-			}
-			if (selected) {
-				this.expiryOther.setValue('');
-			} else {
-				DropdownUtil.selectOther(this.expiry);
-				this.expiryOther.setValue(expiry);
-			}
-
-			return this;
+		}
+		if (selected) {
+			this.expiryOther.setValue('');
+		} else {
+			DropdownUtil.selectOther(this.expiry);
+			this.expiryOther.setValue(expiry);
 		}
 
-		getReason() {
-			const sep = Messages.get('colon-separator');
-			const main = [
-				DropdownUtil.getSelectedOptionValue(this.reason1),
-				DropdownUtil.getSelectedOptionValue(this.reason2),
-			].filter(Boolean).join(sep);
-			let other = clean(this.reasonOther.getValue());
-			const isOtherCommentOnly = other.startsWith('<!--') && other.endsWith('-->');
-			if (main && other && !isOtherCommentOnly) {
-				// Add the separator if the "other" reason is not a comment tag only
-				other = sep + other;
-			}
-			return main + other;
-		}
+		return this;
+	}
 
-		/**
-		 * @param {string} reason
-		 * @return {this}
-		 */
-		setReason(reason) {
-			const rSep = new RegExp('^' + mw.util.escapeRegExp(Messages.get('colon-separator')));
-			let item = DropdownUtil.findItemByCallback(this.reason1, (option) => {
-				return reason.startsWith(/** @type {string} */ (option.getData()));
+	getReason() {
+		const sep = Messages.get('colon-separator');
+		const main = [
+			DropdownUtil.getSelectedOptionValue(this.reason1),
+			DropdownUtil.getSelectedOptionValue(this.reason2),
+		].filter(Boolean).join(sep);
+		let other = clean(this.reasonOther.getValue());
+		const isOtherCommentOnly = other.startsWith('<!--') && other.endsWith('-->');
+		if (main && other && !isOtherCommentOnly) {
+			// Add the separator if the "other" reason is not a comment tag only
+			other = sep + other;
+		}
+		return main + other;
+	}
+
+	/**
+	 * @param {string} reason
+	 * @return {this}
+	 */
+	setReason(reason) {
+		const rSep = new RegExp('^' + mw.util.escapeRegExp(Messages.get('colon-separator')));
+		let item = DropdownUtil.findItemByCallback(this.reason1, (option) => {
+			return reason.startsWith(/** @type {string} */ (option.getData()));
+		});
+		if (!item) {
+			[this.reason1, this.reason2].forEach((dropdown) => {
+				DropdownUtil.selectOther(dropdown);
 			});
-			if (!item) {
-				[this.reason1, this.reason2].forEach((dropdown) => {
-					DropdownUtil.selectOther(dropdown);
-				});
-				this.reasonOther.setValue(reason);
-				return this;
-			} else {
-				this.reason1.getMenu().selectItem(item);
-				reason = reason
-					.replace(/** @type {string} */ (item.getData()), '')
-					.replace(rSep, '');
-			}
-
-			item = DropdownUtil.findItemByCallback(this.reason2, (option) => {
-				return reason.startsWith(/** @type {string} */ (option.getData()));
-			});
-			if (!item) {
-				DropdownUtil.selectOther(this.reason2);
-			} else {
-				this.reason2.getMenu().selectItem(item);
-				reason = reason
-					.replace(/** @type {string} */ (item.getData()), '')
-					.replace(rSep, '');
-			}
-
 			this.reasonOther.setValue(reason);
 			return this;
+		} else {
+			this.reason1.getMenu().selectItem(item);
+			reason = reason
+				.replace(/** @type {string} */ (item.getData()), '')
+				.replace(rSep, '');
 		}
 
-		getPartialBlockParams() {
-			if (!this.partialBlock.isSelected()) {
-				return { partial: false };
-			}
-
-			/** @type {PartialBlockParams} */
-			const options = Object.create(null);
-			options.partial = true;
-
-			const pages = this.partialBlockPages.getValue();
-			if (pages.length) {
-				options.pagerestrictions = pages.join('|');
-			}
-
-			const namespaces = this.partialBlockNamespaces.getValue();
-			if (namespaces.length) {
-				options.namespacerestrictions = namespaces.join('|');
-			}
-
-			const actionMap = {
-				partialBlockUpload: 'upload',
-				partialBlockCreate: 'create',
-				partialBlockMove: 'move',
-				partialBlockThanks: 'thanks',
-			};
-			const actions = Object.entries(actionMap).reduce((acc, [key, action]) => {
-				const prop = /** @type {keyof typeof actionMap} */ (key);
-				if (this[prop].isSelected()) {
-					acc.push(action);
-				}
-				return acc;
-			}, /** @type {string[]} */ ([]));
-			if (actions.length) {
-				options.actionrestrictions = actions.join('|');
-			}
-
-			return options;
+		item = DropdownUtil.findItemByCallback(this.reason2, (option) => {
+			return reason.startsWith(/** @type {string} */ (option.getData()));
+		});
+		if (!item) {
+			DropdownUtil.selectOther(this.reason2);
+		} else {
+			this.reason2.getMenu().selectItem(item);
+			reason = reason
+				.replace(/** @type {string} */ (item.getData()), '')
+				.replace(rSep, '');
 		}
 
-	};
+		this.reasonOther.setValue(reason);
+		return this;
+	}
+
+	getPartialBlockParams() {
+		if (!this.partialBlock.isSelected()) {
+			return { partial: false };
+		}
+
+		/** @type {PartialBlockParams} */
+		const options = Object.create(null);
+		options.partial = true;
+
+		const pages = this.partialBlockPages.getValue();
+		if (pages.length) {
+			options.pagerestrictions = pages.join('|');
+		}
+
+		const namespaces = this.partialBlockNamespaces.getValue();
+		if (namespaces.length) {
+			options.namespacerestrictions = namespaces.join('|');
+		}
+
+		const actionMap = {
+			partialBlockUpload: 'upload',
+			partialBlockCreate: 'create',
+			partialBlockMove: 'move',
+			partialBlockThanks: 'thanks',
+		};
+		const actions = Object.entries(actionMap).reduce((acc, [key, action]) => {
+			const prop = /** @type {keyof typeof actionMap} */ (key);
+			if (this[prop].isSelected()) {
+				acc.push(action);
+			}
+			return acc;
+		}, /** @type {string[]} */ ([]));
+		if (actions.length) {
+			options.actionrestrictions = actions.join('|');
+		}
+
+		return options;
+	}
+
 }
 
-/**
- * @param {PermissionManager} permissionManager
- * @returns
- */
-function UnblockUserFactory(permissionManager) {
-	return class UnblockUser extends AjaxBlockDialogContent {
+class UnblockUser extends AjaxBlockDialogContent {
 
-		/**
-		 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
-		 */
-		constructor(dialog) {
-			super();
-			this.dialog = dialog;
+	/**
+	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+	 */
+	constructor(dialog) {
+		super();
+		this.dialog = dialog;
 
-			/** @type {OO.ui.Element[]} */
-			let items = [
-				this.messageContainer,
-				this.getTargetField()
-			];
+		/** @type {OO.ui.Element[]} */
+		let items = [
+			this.messageContainer,
+			this.getTargetField()
+		];
 
-			this.reason = new OO.ui.TextInputWidget({
-				placeholder: Messages.get('block-removal-reason-placeholder')
-			});
-			items.push(
-				new OO.ui.FieldLayout(this.reason, {
-					classes: ['ajaxblock-horizontalfield'],
-					label: Messages.get('block-reason'),
-					align: 'left',
-				})
-			);
+		this.reason = new OO.ui.TextInputWidget({
+			placeholder: Messages.get('block-removal-reason-placeholder')
+		});
+		items.push(
+			new OO.ui.FieldLayout(this.reason, {
+				classes: ['ajaxblock-horizontalfield'],
+				label: Messages.get('block-reason'),
+				align: 'left',
+			})
+		);
 
-			const mainFieldset = new OO.ui.FieldsetLayout({
-				label: Messages.get('unblock'),
-			});
-			mainFieldset.addItems(items);
-			this.$element.append(mainFieldset.$element);
-			items = [];
+		const mainFieldset = new OO.ui.FieldsetLayout({
+			label: Messages.get('unblock'),
+		});
+		mainFieldset.addItems(items);
+		this.$element.append(mainFieldset.$element);
+		items = [];
 
-			items.push(
-				this.getWatchUserLayout(),
-				this.getWatchlistExpiryLayout(dialog)
-			);
+		items.push(
+			this.getWatchUserLayout(),
+			this.getWatchlistExpiryLayout(dialog)
+		);
 
-			const optionsFieldset = new OO.ui.FieldsetLayout({
-				label: Messages.get('block-options'),
-			});
-			optionsFieldset.addItems(items);
-			this.$element.append(optionsFieldset.$element);
-		}
+		const optionsFieldset = new OO.ui.FieldsetLayout({
+			label: Messages.get('block-options'),
+		});
+		optionsFieldset.addItems(items);
+		this.$element.append(optionsFieldset.$element);
+	}
 
-		getReason() {
-			return clean(this.reason.getValue());
-		}
+	getReason() {
+		return clean(this.reason.getValue());
+	}
 
-	};
 }
 
 /**
