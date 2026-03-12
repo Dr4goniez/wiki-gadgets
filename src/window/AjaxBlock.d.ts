@@ -173,6 +173,7 @@ export interface AjaxBlockMessages {
 	'ajaxblock-dialog-message-existingblocks': string;
 	'ajaxblock-notify-error-loadblocklogs': string;
 	'ajaxblock-notify-error-idinactivenousername': string;
+	'ajaxblock-notify-error-cannotunblock': string;
 }
 
 /**

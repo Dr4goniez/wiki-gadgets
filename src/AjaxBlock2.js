@@ -1573,6 +1573,7 @@ Messages.i18n = {
 		'ajaxblock-dialog-message-existingblocks': '<b>This user has active block(s).</b> Select a block you want to update, or check "{{int:block-create}}" to add a new block.',
 		'ajaxblock-notify-error-loadblocklogs': 'Failed to load block information ($1)',
 		'ajaxblock-notify-error-idinactivenousername': 'This link cannot be processed because the block for ID <b>#$1</b> is no longer active and also no username is specified.',
+		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> does not have active blocks and cannot be unblocked.',
 	},
 	ja: {
 		'ajaxblock-title-unprocessable': '(AjaxBlock非対応のリンク)',
@@ -1588,6 +1589,7 @@ Messages.i18n = {
 		'ajaxblock-dialog-message-existingblocks': '<b>この利用者は既にブロックされています。</b>更新するブロックを選択するか、「{{int:block-create}}」をチェックしてください。',
 		'ajaxblock-notify-error-loadblocklogs': 'ブロック情報の取得に失敗しました ($1)',
 		'ajaxblock-notify-error-idinactivenousername': 'このリンクに紐付けられたID <b>#$1</b> のブロックは、既に解除されているかつ利用者名も指定されていないため処理できません。',
+		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> は現在ブロックされていないため、ブロックを解除できません。',
 	}
 };
 /**
@@ -2371,7 +2373,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						target: [''],
 						targetAux: [''],
 						id,
-						username: '',
+						username: null,
 						oneClick: false,
 						addBlock: false,
 					});
@@ -2420,7 +2422,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						target: [''],
 						targetAux: [''],
 						id,
-						username: '',
+						username: null,
 						oneClick: false,
 						addBlock: false,
 					});
@@ -2766,17 +2768,198 @@ class UnblockUser extends AjaxBlockDialogContent {
 		this.$element.append(optionsFieldset.$element);
 	}
 
-	/**
-	 * @param {BlockTarget} target
-	 * @returns {?(() => ReturnType<typeof BlockLog['new']>)} `null` or a callback function
-	 * @todo Define this method
-	 */
-	setTarget(target) {
-		return null;
-	}
-
 	getReason() {
 		return clean(this.reason.getValue());
+	}
+
+	/**
+	 * Sets a target to the target field.
+	 *
+	 * @param {BlockTarget} target
+	 * @returns {(() => ReturnType<typeof BlockLog['new']>) | Parameters<typeof Messages['get']> | null} One of the following:
+	 * - `null`: No blocker to open the dialog.
+	 * - `function`: A callback to generate block log lines.
+	 * - `array`: Arguments for {@link Messages.get} that explains why the unblock cannot be processed.
+	 */
+	setTarget(target) {
+		const id = target.getId();
+		const username = target.getUsername();
+		const blocks = username ? this.dialog.blockLookup.getBlocksByUsername(username) : null;
+		this.clearMessages(); // Don't inherit the previous message
+
+		if (id !== null) {
+			const block = this.dialog.blockLookup.getBlockById(id);
+			if (block) {
+				// The block associated with this ID exists
+				if (username && blocks && blocks.length > 1) {
+					// Other blocks also exist
+					this.setTargetInternal({
+						target: [username],
+						targetAux: [''],
+						id: null,
+						username,
+						oneClick: null,
+					});
+					const idMap = BlockLookup.toIdMap(
+						// `user` is never missing for non-autoblocks
+						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
+					);
+					return () => BlockLog.new(username, idMap);
+				} else if (block.user) {
+					// Ordinary block
+					this.setTargetInternal({
+						target: [block.user],
+						targetAux: [
+							Messages.get('parentheses-start'),
+							BlockTarget.createBlockListLink(id),
+							Messages.get('parentheses-end'),
+						],
+						id,
+						username: block.user,
+						oneClick: true,
+					});
+				} else {
+					// Autoblock
+					if (!block.automatic) {
+						console.error('The associated block is not an autoblock.', block);
+					}
+					this.setTargetInternal({
+						target: [
+							Messages.get('autoblockid').replace(`#${id}`, BlockTarget.createBlockListLink(id).outerHTML)
+						],
+						targetAux: [''],
+						id,
+						username: null,
+						oneClick: true,
+					});
+				}
+			} else {
+				// ID no longer active
+				if (username !== null) {
+					// Ignore ID and use username
+					this.addMessage({
+						label: new OO.ui.HtmlSnippet(
+							Messages.get('ajaxblock-dialog-message-nonactive-id', [id])
+								.replace(`#${id}`, BlockTarget.createBlockListLink(id).outerHTML)
+						),
+						type: 'notice',
+					});
+					if (Array.isArray(blocks)) {
+						// If other active blocks exist, allow the user to choose which one to update
+						this.setTargetInternal({
+							target: [username],
+							targetAux: [''],
+							id: null,
+							username,
+							oneClick: null,
+						});
+						const idMap = BlockLookup.toIdMap(
+							// `user` is never missing for non-autoblocks
+							/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
+						);
+						return () => BlockLog.new(username, idMap);
+					} else {
+						// No other active blocks (cannot be unblocked)
+						this.setTargetInternal({
+							target: [username],
+							targetAux: [''],
+							id: null,
+							username,
+							oneClick: false,
+						});
+						return ['ajaxblock-notify-error-cannotunblock', [username]];
+					}
+				} else {
+					// ID no longer active, no username: unprocessable
+					this.setTargetInternal({
+						target: [''],
+						targetAux: [''],
+						id,
+						username: null,
+						oneClick: false,
+					});
+					return ['ajaxblock-notify-error-idinactivenousername', [id]];
+				}
+			}
+			return null;
+		}
+
+		if (username !== null) {
+			if (Array.isArray(blocks)) {
+				if (blocks.length > 1) {
+					// Multiple active blocks
+					this.setTargetInternal({
+						target: [username],
+						targetAux: [''],
+						id: null,
+						username,
+						oneClick: null,
+					});
+					const idMap = BlockLookup.toIdMap(
+						// `user` is never missing for non-autoblocks
+						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
+					);
+					return () => BlockLog.new(username, idMap);
+				} else {
+					// Single active block
+					this.setTargetInternal({
+						target: [username],
+						targetAux: [
+							Messages.get('parentheses-start'),
+							BlockTarget.createBlockListLink(blocks[0].id),
+							Messages.get('parentheses-end'),
+						],
+						id: blocks[0].id,
+						username,
+						oneClick: true,
+					});
+				}
+			} else {
+				// No active blocks
+				this.setTargetInternal({
+					target: [username],
+					targetAux: [''],
+					id: null,
+					username,
+					oneClick: false,
+				});
+				return ['ajaxblock-notify-error-cannotunblock', [username]];
+			}
+			return null;
+		}
+
+		this.setTargetInternal({
+			target: [''],
+			targetAux: [''],
+			id: null,
+			username: null,
+			oneClick: false,
+		});
+		throw new Error('Either the ID or username must be non-null');
+	}
+
+	/**
+	 * @param {object} data
+	 * @param {Array<JQuery.htmlString | JQuery.TypeOrArray<JQuery.Node | JQuery<JQuery.Node>>>} data.target
+	 * Parameters for JQuery.append, which sets the auxiliary target text for {@link $target}.
+	 * @param {Array<JQuery.htmlString | JQuery.TypeOrArray<JQuery.Node | JQuery<JQuery.Node>>>} data.targetAux
+	 * Parameters for JQuery.append, which sets the auxiliary target text for {@link $targetAux}.
+	 * @param {?number} data.id The block ID of the target.
+	 * @param {?string} data.username The username of the target.
+	 * @param {?boolean} data.oneClick Whether the target can be processed in the one-click mode:
+	 * - `true`: No blocker for a one-click processing.
+	 * - `false`: The target cannot be processed.
+	 * - `null`: There is a blocker for a one-click processing (i.e., warnings).
+	 * @returns {this}
+	 * @private
+	 */
+	setTargetInternal({ target, targetAux, id, username, oneClick }) {
+		this.$target.empty().append(...target);
+		this.$targetAux.empty().append(...targetAux);
+		this.currentTarget.id = id;
+		this.currentTarget.username = username;
+		this.oneClickAllowed = oneClick;
+		return this;
 	}
 
 }
