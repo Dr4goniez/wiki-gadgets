@@ -1,13 +1,15 @@
 import { XOR } from 'ts-essentials';
 import { ApiResponseQueryListLogevents } from './InvestigateHelper';
 
+export type BlockPageNames = 'Block' | 'Unblock';
+
 /**
  * Object that holds required data for script initialization.
  *
  * Note: Page name aliases use **underscores**, not spaces.
  */
 export interface Initializer {
-	blockPageAliases: Record<'Block' | 'Unblock', string[]>;
+	blockPageAliases: Record<BlockPageNames, string[]>;
 	specialNamespaceAliases: string[];
 	userRights: Set<string>;
 	actionRestrictions: string[];

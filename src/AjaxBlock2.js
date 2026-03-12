@@ -280,12 +280,12 @@ class AjaxBlock {
 							if (realname !== 'Block' && realname !== 'Unblock') {
 								continue;
 							}
-							const canonical = /** @type {keyof Initializer['blockPageAliases']} */ (realname);
+							const canonical = /** @type {BlockPageNames} */ (realname);
 							const lc = realname.toLowerCase();
 							map[canonical] = aliases.filter(a => a === realname || a.toLowerCase() !== lc) ;
 						}
 
-						const targets = /** @type {(keyof Initializer['blockPageAliases'])[]} */ (['Block', 'Unblock']);
+						const targets = /** @type {BlockPageNames[]} */ (['Block', 'Unblock']);
 						if (targets.every(name => Array.isArray(map[name]) && map[name].length)) {
 							mw.storage.setObject(this.storageKeys.blockPageAliases, map, daysInSeconds(3));
 							data.blockPageAliases = map;
@@ -403,21 +403,18 @@ class AjaxBlock {
 				continue;
 			}
 			const rootPageName = mSpecial[1];
-			let isUnblockLink;
+			let /** @type {BlockPageNames} */ specialPageName;
 			if (regex.block.test(rootPageName)) {
-				isUnblockLink = false;
+				specialPageName = 'Block';
 			} else if (regex.unblock.test(rootPageName)) {
-				isUnblockLink = true;
+				specialPageName = 'Unblock';
 			} else {
 				continue;
 			}
 
 			// Extract query parameters
-			// TODO: Filter this to effective params only
 			const query = new URLSearchParams(a.search);
-			if (query.get('remove') === '1') {
-				isUnblockLink = true;
-			}
+			const isUnblockLink = specialPageName === 'Unblock' || query.get('remove') === '1';
 			const linkType = isUnblockLink ? 'unblock' : 'block';
 			const clss = `ajaxblock-${linkType}link`;
 			a.classList.add(clss);
@@ -430,6 +427,16 @@ class AjaxBlock {
 				continue;
 			}
 
+			// Create a map of supported parameters to their values
+			const params = /** @type {Map<string, string>} */ (new Map());
+			const SpecialPage = isUnblockLink ? UnblockUser : BlockUser;
+			for (const [key, value] of query.entries()) {
+				// TODO: Determine how wpRemovalReason should be handled
+				if (SpecialPage.supportsParam(key)) {
+					params.set(key, clean(value));
+				}
+			}
+
 			// Register the valid link
 			// TODO: Do we need two separate maps for block and unblock links?
 			const key = /** @type {string} */ (id ? `#${id}` : username); // Prioritize block ID
@@ -437,9 +444,9 @@ class AjaxBlock {
 			map[key] = map[key] || [];
 			map[key].push({
 				anchor: a,
-				query,
+				params,
 				target: new BlockTarget(id, username),
-				type: isUnblockLink ? 'unblock' : 'block',
+				type: linkType,
 			});
 		}
 
@@ -2556,23 +2563,6 @@ class BlockUser extends AjaxBlockDialogContent {
 	//  * @returns {this}
 	//  */
 	// applyParams(query) {
-	// 	const supportedQueryParameters = new Set([
-	// 		'wpExpiry',
-	// 		'wpReason',
-	// 		'wpReason-other',
-	// 		'wpRemovalReason',
-	// 		'wpEditingRestriction',
-	// 		'wpPageRestrictions',
-	// 		'wpNamespaceRestrictions',
-	// 		'wpActionRestrictions', // ?
-	// 		'wpCreateAccount', // Default: true
-	// 		'wpDisableEmail',
-	// 		'wpDisableUTEdit',
-	// 		'wpAutoBlock',
-	// 		'wpHideUser',
-	// 		'wpHardBlock',
-	// 		'wpWatch',
-	// 	]);
 		// if (query.wpExpiry) {
 		// 	this.setExpiry(query.wpExpiry);
 		// }
@@ -2750,6 +2740,30 @@ class BlockUser extends AjaxBlockDialogContent {
 	}
 
 }
+BlockUser.supportedQueryParams = new Set([
+	'wpExpiry',
+	'wpReason',
+	'wpReason-other',
+	'wpRemovalReason',
+	'wpEditingRestriction',
+	'wpPageRestrictions',
+	'wpNamespaceRestrictions',
+	'wpActionRestrictions', // ?
+	'wpCreateAccount', // Default: true
+	'wpDisableEmail',
+	'wpDisableUTEdit',
+	'wpAutoBlock',
+	'wpHideUser',
+	'wpHardBlock',
+	'wpWatch',
+]);
+/**
+ * @param {string} param
+ * @returns {boolean}
+ */
+BlockUser.supportsParam = function(param) {
+	return this.supportedQueryParams.has(param);
+};
 
 class UnblockUser extends AjaxBlockDialogContent {
 
@@ -2993,6 +3007,17 @@ class UnblockUser extends AjaxBlockDialogContent {
 	}
 
 }
+UnblockUser.supportedQueryParams = new Set([
+	'wpReason',
+	'wpWatch',
+]);
+/**
+ * @param {string} param
+ * @returns {boolean}
+ */
+UnblockUser.supportsParam = function(param) {
+	return this.supportedQueryParams.has(param);
+};
 
 /**
  * Class that generates block loglines for a given blocked user.
@@ -3443,6 +3468,7 @@ AjaxBlockLogo.svg = `
 //**********************************************************************
 
 /**
+ * @typedef {import('./window/AjaxBlock').BlockPageNames} BlockPageNames
  * @typedef {import('./window/AjaxBlock').Initializer} Initializer
  * @typedef {import('./window/AjaxBlock').ApiResponse} ApiResponse
  * @typedef {import('./window/AjaxBlock').ApiResponseQueryListBlocks} ApiResponseQueryListBlocks
@@ -3465,7 +3491,7 @@ AjaxBlockLogo.svg = `
 /**
  * @typedef {object} BlockLink
  * @prop {HTMLAnchorElement} anchor
- * @prop {URLSearchParams} query
+ * @prop {Map<string, string>} params
  * @prop {BlockTarget} target
  * @prop {'block' | 'unblock'} type
  *
