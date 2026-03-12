@@ -247,6 +247,9 @@ export interface MediaWikiMessages {
 	'logentry-partialblock-block-page': string;
 	'logentry-partialblock-block-ns': string;
 	'logentry-partialblock-block-action': string;
+
+	'blocked-notice-logextract': string;
+	'blocked-notice-logextract-anon': string;
 }
 
 /**
@@ -257,23 +260,6 @@ export interface LoadedMessages extends AjaxBlockMessages, MediaWikiMessages {}
 export interface CachedMessage {
 	'ipbreason-dropdown': readonly Record<string, string | Record<string, string>>;
 	'ipboptions': readonly Map<string, string>;
-}
-
-export interface BlockLink {
-	anchor: HTMLAnchorElement;
-	query: URLSearchParams;
-	target: BlockTarget; // unresolved
-	type: 'block' | 'unblock';
-}
-
-export interface BlockLinkMap {
-	[idOrUser: string]: BlockLink[];
-}
-
-export interface UnblockLink extends BlockLink {}
-
-export interface UnblockLinkMap {
-	[idOrUser: string]: UnblockLink[];
 }
 
 export type BlockTargetType = 'anon' | 'temp' | 'named' | null;

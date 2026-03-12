@@ -177,6 +177,9 @@ class AjaxBlock {
 					'logentry-partialblock-block-ns',
 					'logentry-partialblock-block-action',
 
+					'blocked-notice-logextract',
+					'blocked-notice-logextract-anon',
+
 					// @ts-expect-error
 					...initializer.actionRestrictions.map(r => `ipb-action-${r}`),
 				])
@@ -448,7 +451,6 @@ class AjaxBlock {
 	 *
 	 * @returns {JQuery.Promise<boolean>}
 	 * @private
-	 * @todo Do we need to check this at all?
 	 */
 	static fetchMultiBlockSettings() {
 		const cache = mw.storage.get(this.storageKeys.enableMultiblocks);
@@ -531,6 +533,17 @@ class AjaxBlock {
 			}
 			.ajaxblock-dialog .oo-ui-messageWidget.oo-ui-messageWidget-block > .oo-ui-iconElement-icon {
 				background-position: 0 8px;
+			}
+			${/* Increase spacing between log lines in the dialog */''}
+			.ajaxblock-dialog-logline {
+				padding: 4px 0;
+			}
+			.ajaxblock-dialog-logline:first-child {
+				padding-top: 0;
+			}
+			.ajaxblock-dialog-logline-header {
+				display: inline-block;
+				margin-bottom: 0.5em;
 			}
 			${/* Reduce vertical spacing between field items */''}
 			.ajaxblock-dialog .oo-ui-fieldLayout:not(:first-child) {
@@ -1409,11 +1422,12 @@ class Messages {
 	 *
 	 * @param {string} title The title of the page to link to.
 	 * @param {string} [display] The display text of the link. If omitted, `title` is used.
+	 * @param {Record<string, string | number>} [query]
 	 * @returns {string} An `<a>` tag as raw HTML.
 	 */
-	static wikilink(title, display) {
+	static wikilink(title, display, query) {
 		const anchor = document.createElement('a');
-		anchor.href = mw.util.getUrl(title, { noredirect: 1 });
+		anchor.href = mw.util.getUrl(title, query || { noredirect: 1 });
 		anchor.target = '_blank';
 		anchor.textContent = display || title;
 		return anchor.outerHTML;
@@ -1496,7 +1510,7 @@ class Messages {
 	//  * as-is if no translation is available.
 	//  */
 	// static translateBlockExpiry(expiry) {
-	// 	const map = this.parseOptionsMessage(this.get('ipboptions'));
+	// 	const map = this.parseOptionsMessage('ipboptions');
 	// 	const isInputIndef = mw.util.isInfinity(expiry);
 	// 	for (const [label, value] of map) {
 	// 		if (expiry === value || isInputIndef && mw.util.isInfinity(value)) {
@@ -1700,10 +1714,10 @@ function AjaxBlockDialogFactory() {
 			this.actionRestrictions = actionRestrictions;
 
 			/**
-			 * The currently active field, and a callback registered in {@link getSetupProcess} and
-			 * executed in {@link getReadyProcess}.
+			 * The currently active field, and a {@link BlockLog} instance created in {@link getSetupProcess}
+			 * and used in {@link getReadyProcess}.
 			 *
-			 * @type {?{ field: BlockUser | UnblockUser; callback: () => ReturnType<typeof BlockLog['new']>; }}
+			 * @type {?{ field: BlockUser | UnblockUser; blockLog: BlockLog; }}
 			 * @private
 			 */
 			this.readyProcessStore = null;
@@ -1753,24 +1767,28 @@ function AjaxBlockDialogFactory() {
 				// to open the dialog
 				const field = data.type === 'block' ? this.blockUser : this.unblockUser;
 				field.blockSelector = null;
-				const genBlockLogs = field.setTarget(data.target);
+				const targetHandler = field.setTarget(data.target);
 
-				if (Array.isArray(genBlockLogs)) {
+				if (Array.isArray(targetHandler)) {
 					// There's a blocker to open the dialog
-					const args = genBlockLogs;
+					const args = targetHandler;
 					mw.notify(
 						$('<span>').append(Messages.get(...args)),
 						{ type: 'error' }
 					);
 					return false;
-				} else if (genBlockLogs) {
+				} else if (targetHandler instanceof BlockLog) {
 					// Block log lines should be generated asynchronously
 					this.readyProcessStore = {
 						field,
-						callback: genBlockLogs,
+						blockLog: targetHandler,
 					};
 					this.pushPending();
 					this.content.toggle(false);
+				} else {
+					this.readyProcessStore = null;
+					this.popPending();
+					this.content.toggle(true);
 				}
 			});
 		}
@@ -1778,19 +1796,28 @@ function AjaxBlockDialogFactory() {
 		/**
 		 * @inheritdoc
 		 * @override
-		 * @param {BlockLink} _data
+		 * @param {BlockLink} data
 		 */
-		getReadyProcess(_data) {
+		getReadyProcess(data) {
 			// @ts-expect-error
 			return super.getReadyProcess().next(async () => {
 				if (this.readyProcessStore) {
 					const start = Date.now();
-					const { field, callback } = this.readyProcessStore;
-					await this.getReadyProcessInternal(field, callback);
-					const end = Date.now();
+
+					const { field, blockLog } = this.readyProcessStore;
+					try {
+						await this.getReadyProcessInternal(data, field, blockLog);
+					} catch (code) {
+						const err =
+							scriptName +
+							Messages.get('colon-separator') +
+							Messages.get('ajaxblock-notify-error-loadblocklogs', [/** @type {string} */ (code)]);
+						mw.notify(err, { type: 'error' });
+						return false;
+					}
 
 					// Prevent the pending animation from showing for a too short time
-					await sleep(1000 - (end - start));
+					await sleep(1000 - (Date.now() - start));
 
 					this.content.toggle(true);
 					this.updateSize().popPending();
@@ -1800,51 +1827,49 @@ function AjaxBlockDialogFactory() {
 		}
 
 		/**
+		 * @param {BlockLink} data
 		 * @param {BlockUser | UnblockUser} field
-		 * @param {() => Promise<string | BlockLoglineMap>} genBlockLogs
+		 * @param {BlockLog} blockLog
 		 * @returns {Promise<void>}
 		 * @private
 		 */
-		async getReadyProcessInternal(field, genBlockLogs) {
-			const blockLoglineMap = await genBlockLogs();
-			if (typeof blockLoglineMap === 'string') {
-				const err =
-					scriptName + Messages.get('colon-separator') +
-					Messages.get('ajaxblock-notify-error-loadblocklogs', [blockLoglineMap]);
-				mw.notify(err, { type: 'error' });
-				throw new Error(err);
+		async getReadyProcessInternal(data, field, blockLog) {
+			const options = await blockLog.generate();
+
+			let /** @type {keyof LoadedMessages} */ msgKey;
+			let /** @type {OO.ui.MessageWidget.ConfigOptions['type']} */ msgType;
+			let /** @type {JQuery<HTMLElement>} */ $logLines;
+			if (Array.isArray(options)) {
+				msgKey = 'ajaxblock-dialog-message-existingblocks';
+				msgType = 'warning';
+				field.blockSelector = new OO.ui.RadioSelectWidget({
+					items: options,
+				});
+				$logLines = field.blockSelector.$element.css({
+					'max-height': '9.3em',
+					'overflow-y': 'auto',
+				});
+			} else {
+				msgKey = data.target.getType() === 'anon'
+					? 'blocked-notice-logextract-anon'
+					: 'blocked-notice-logextract';
+				msgType = 'notice';
+				$logLines = options;
 			}
 
-			/** @type {OO.ui.RadioOptionWidget[]} */
-			const options = [];
-			for (const [id, logline] of blockLoglineMap) {
-				options.push(
-					new OO.ui.RadioOptionWidget({
-						classes: ['ajaxblock-dialog-radiooption-middlealigned'],
-						data: id,
-						label: new OO.ui.HtmlSnippet(logline),
-					})
-				);
-			}
-			field.blockSelector = new OO.ui.RadioSelectWidget({
-				items: options,
-			});
-
-			const selectorId = 'ajaxblock-blockselector';
-			field.addMessage({
-				label: $('<span>').prop('id', selectorId),
-				type: 'warning',
-			});
-			$(`#${selectorId}`).append(
+			const $label = $('<span>').append(
 				$('<span>')
-					.append(Messages.get('ajaxblock-dialog-message-existingblocks'))
-					.css({
-						'display': 'inline-block',
-						'margin-bottom': '0.5em',
-					}),
+					.addClass('ajaxblock-dialog-logline-header')
+					.append(
+						Messages.get(msgKey, [/** @type {string} */ (data.target.getUsername())])
+					),
 				document.createElement('br'),
-				field.blockSelector.$element
+				$logLines
 			);
+			field.addMessage({
+				label: $label,
+				type: msgType,
+			});
 		}
 
 		/**
@@ -2301,10 +2326,7 @@ class BlockUser extends AjaxBlockDialogContent {
 	 * Sets a target to the target field.
 	 *
 	 * @param {BlockTarget} target
-	 * @returns {(() => ReturnType<typeof BlockLog['new']>) | Parameters<typeof Messages['get']> | null} One of the following:
-	 * - `null`: No blocker to open the dialog.
-	 * - `function`: A callback to generate block log lines.
-	 * - `array`: Arguments for {@link Messages.get} that explains why the block cannot be processed.
+	 * @returns {TargetHandler}
 	 */
 	setTarget(target) {
 		// Adjust the visibility of field items
@@ -2349,7 +2371,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						// `user` is never missing for non-autoblocks
 						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
 					);
-					return () => BlockLog.new(username, idMap);
+					return new BlockLog(username, idMap);
 				} else if (block.user) {
 					// Ordinary block
 					this.setTargetInternal({
@@ -2364,6 +2386,9 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: true,
 						addBlock: true,
 					});
+					// @ts-expect-error
+					const idMap = BlockLookup.toIdMap([block]);
+					return new BlockLog(block.user, idMap, false);
 				} else {
 					// Autoblock (this code path is presumably never reached)
 					if (!block.automatic) {
@@ -2404,7 +2429,7 @@ class BlockUser extends AjaxBlockDialogContent {
 							// `user` is never missing for non-autoblocks
 							/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
 						);
-						return () => BlockLog.new(username, idMap);
+						return new BlockLog(username, idMap);
 					} else {
 						// No other active blocks either
 						this.setTargetInternal({
@@ -2448,7 +2473,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						// `user` is never missing for non-autoblocks
 						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
 					);
-					return () => BlockLog.new(username, idMap);
+					return new BlockLog(username, idMap);
 				} else {
 					// Single active block
 					this.setTargetInternal({
@@ -2463,6 +2488,9 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: true,
 						addBlock: true,
 					});
+					// @ts-expect-error
+					const idMap = BlockLookup.toIdMap(blocks);
+					return new BlockLog(username, idMap, false);
 				}
 			} else {
 				// No active blocks
@@ -2776,10 +2804,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 	 * Sets a target to the target field.
 	 *
 	 * @param {BlockTarget} target
-	 * @returns {(() => ReturnType<typeof BlockLog['new']>) | Parameters<typeof Messages['get']> | null} One of the following:
-	 * - `null`: No blocker to open the dialog.
-	 * - `function`: A callback to generate block log lines.
-	 * - `array`: Arguments for {@link Messages.get} that explains why the unblock cannot be processed.
+	 * @returns {TargetHandler}
 	 */
 	setTarget(target) {
 		const id = target.getId();
@@ -2804,7 +2829,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						// `user` is never missing for non-autoblocks
 						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
 					);
-					return () => BlockLog.new(username, idMap);
+					return new BlockLog(username, idMap);
 				} else if (block.user) {
 					// Ordinary block
 					this.setTargetInternal({
@@ -2818,6 +2843,9 @@ class UnblockUser extends AjaxBlockDialogContent {
 						username: block.user,
 						oneClick: true,
 					});
+					// @ts-expect-error
+					const idMap = BlockLookup.toIdMap([block]);
+					return new BlockLog(block.user, idMap, false);
 				} else {
 					// Autoblock
 					if (!block.automatic) {
@@ -2857,7 +2885,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 							// `user` is never missing for non-autoblocks
 							/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
 						);
-						return () => BlockLog.new(username, idMap);
+						return new BlockLog(username, idMap);
 					} else {
 						// No other active blocks (cannot be unblocked)
 						this.setTargetInternal({
@@ -2899,7 +2927,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						// `user` is never missing for non-autoblocks
 						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
 					);
-					return () => BlockLog.new(username, idMap);
+					return new BlockLog(username, idMap);
 				} else {
 					// Single active block
 					this.setTargetInternal({
@@ -2913,6 +2941,9 @@ class UnblockUser extends AjaxBlockDialogContent {
 						username,
 						oneClick: true,
 					});
+					// @ts-expect-error
+					const idMap = BlockLookup.toIdMap(blocks);
+					return new BlockLog(username, idMap, false);
 				}
 			} else {
 				// No active blocks
@@ -2925,7 +2956,6 @@ class UnblockUser extends AjaxBlockDialogContent {
 				});
 				return ['ajaxblock-notify-error-cannotunblock', [username]];
 			}
-			return null;
 		}
 
 		this.setTargetInternal({
@@ -2969,17 +2999,17 @@ class UnblockUser extends AjaxBlockDialogContent {
  */
 class BlockLog {
 
+	// ---- Adapted from InvestigateHelper ----
+
 	/**
 	 * Retrieves detailed log entries for the given user's active blocks.
 	 *
-	 * @param {string} username The name of the user whose block logs are being retrieved.
-	 * @param {BlockIdMapValue} data The user's active block data (IDs and earliest block timestamp).
-	 * @returns {JQuery.Promise<BlockLogMap | string>} A Promise resolving to a Map of block IDs to block log details,
-	 * or to an API error code string if the request fails.
+	 * @returns {JQuery.Promise<BlockLogMap>} A Promise resolving to a Map of block IDs to block log details.
+	 * The Promise could reject in the same way as mw.Api.
 	 * @private
 	 */
-	static getEntries(username, data) {
-		const { ids, earliestTimestamp } = data;
+	getEntries() {
+		const { ids, earliestTimestamp } = this.data;
 		return api.get({
 			action: 'query',
 			formatversion: '2',
@@ -2987,11 +3017,14 @@ class BlockLog {
 			leprop: 'user|type|timestamp|parsedcomment|details',
 			letype: 'block',
 			leend: earliestTimestamp,
-			letitle: `User:${username}`,
+			letitle: `User:${this.username}`,
 			lelimit: 'max',
 			uselang: wgUserLanguage
-		}).then(/** @param {ApiResponse} res */ (res) => {
-			const logevents = res && res.query && res.query.logevents || [];
+		}).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+			const logevents = res && res.query && res.query.logevents;
+			if (!logevents) {
+				return failAsEmptyResult(res, jqXHR);
+			}
 			/**
 			 * @type {BlockLogMap}
 			 */
@@ -3074,7 +3107,7 @@ class BlockLog {
 					sitewide,
 					count: finalTargetCount !== undefined ? finalTargetCount : 0,
 					performer: user,
-					target: username,
+					target: this.username,
 					// `duration` being an ISO 8601 timestamp means either that an absolute time was specified
 					// for a new block, or that the expiry wasn't updated for a reblock. The latter case isn't
 					// 100% accurate though, as it's possible to specify an absolute time for a reblock. But
@@ -3089,10 +3122,10 @@ class BlockLog {
 				});
 			}
 
+			if (!ret.size) {
+				return failAsEmptyResult(res, jqXHR);
+			}
 			return ret;
-		}).catch((code, err) => {
-			console.warn(err);
-			return /** @type {string} */ (code);
 		});
 	}
 
@@ -3141,6 +3174,7 @@ class BlockLog {
 	 *
 	 * @param {BlockLogMapValue} data
 	 * @returns {string}
+	 * @private
 	 */
 	static create(data) {
 		const { subtype, timestamp, sitewide, count, performer, target, duration, flags, restrictions, parsedcomment } = data;
@@ -3231,28 +3265,66 @@ class BlockLog {
 		return $7;
 	}
 
+	// ---- Adaption end ----
+
 	/**
 	 * @param {string} username
 	 * @param {BlockIdMapValue} data
-	 * @returns {Promise<BlockLoglineMap | string>}
+	 * @param {boolean} [useRadio=true] By default (i.e., true), {@link generate} returns `OO.ui.RadioOptionWidget[]`
+	 * with no option selected so that the user can choose which block to interact with. **If false**, {@link generate}
+	 * instead returns `JQuery<HTMLDivElement>` with a block log, **only if** there is only one active block.
 	 */
-	static async new(username, data) {
-		const entry = await this.getEntries(username, data);
-		if (typeof entry === 'string') {
-			return entry;
-		}
-		if (!entry.size) {
-			const code = `Block log query for ${username} returned an empty response.`;
-			console.warn(code);
-			return code;
-		}
+	constructor(username, data, useRadio = true) {
+		/**
+		 * @readonly
+		 * @private
+		 */
+		this.username = username;
+		/**
+		 * @readonly
+		 * @private
+		 */
+		this.data = data;
+		/**
+		 * @readonly
+		 * @private
+		 */
+		this.useRadio = useRadio;
+	}
 
-		/** @type {BlockLoglineMap} */
-		const loglineMap = new Map();
-		for (const [id, builder] of entry) {
-			loglineMap.set(id, this.create(builder));
-		}
-		return loglineMap; // Return type modified
+	/**
+	 * @returns {JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement>>}
+	 */
+	generate() {
+		// TODO: Log entries should be cached
+		// TODO: Detect updates in blocks
+		return this.getEntries().then((blockLogMap) => {
+			if (this.useRadio || blockLogMap.size > 1) {
+				const options = /** @type {OO.ui.RadioOptionWidget[]} */ ([]);
+				for (const [id, logData] of blockLogMap) {
+					options.push(
+						new OO.ui.RadioOptionWidget({
+							classes: ['ajaxblock-dialog-radiooption-middlealigned'],
+							data: id,
+							label: new OO.ui.HtmlSnippet(
+								BlockLog.create(logData)
+							),
+						})
+					);
+				}
+				return options;
+			} else {
+				const $wrapper = $('<div>');
+				for (const [id, logData] of blockLogMap) {
+					$wrapper.append(
+						$(`<div data-blockid="${id}">`)
+							.addClass('ajaxblock-dialog-logline')
+							.append(BlockLog.create(logData))
+					);
+				}
+				return $wrapper;
+			}
+		});
 	}
 
 }
@@ -3374,10 +3446,6 @@ AjaxBlockLogo.svg = `
  * @typedef {import('./window/AjaxBlock').Initializer} Initializer
  * @typedef {import('./window/AjaxBlock').ApiResponse} ApiResponse
  * @typedef {import('./window/AjaxBlock').ApiResponseQueryListBlocks} ApiResponseQueryListBlocks
- * @typedef {import('./window/AjaxBlock').BlockLink} BlockLink
- * @typedef {import('./window/AjaxBlock').BlockLinkMap} BlockLinkMap
- * @typedef {import('./window/AjaxBlock').UnblockLink} UnblockLink
- * @typedef {import('./window/AjaxBlock').UnblockLinkMap} UnblockLinkMap
  * @typedef {import('./window/AjaxBlock').AjaxBlockMessages} AjaxBlockMessages
  * @typedef {import('./window/AjaxBlock').MediaWikiMessages} MediaWikiMessages
  * @typedef {import('./window/AjaxBlock').LoadedMessages} LoadedMessages
@@ -3393,6 +3461,26 @@ AjaxBlockLogo.svg = `
  * @typedef {import('./window/InvestigateHelper').BlockLogMapValue} BlockLogMapValue
  * @typedef {import('./window/InvestigateHelper').BlockLoglineMap} BlockLoglineMap
  * @typedef {import('./window/InvestigateHelper').BlockFlags} BlockFlags
+ */
+/**
+ * @typedef {object} BlockLink
+ * @prop {HTMLAnchorElement} anchor
+ * @prop {URLSearchParams} query
+ * @prop {BlockTarget} target
+ * @prop {'block' | 'unblock'} type
+ *
+ * @typedef {{ [idOrUser: string]: BlockLink[]; }} BlockLinkMap
+ *
+ * @typedef {BlockLink} UnblockLink
+ *
+ * @typedef {{ [idOrUser: string]: UnblockLink[]; }} UnblockLinkMap
+ */
+/**
+ * @typedef {BlockLog | Parameters<typeof Messages['get']> | null} TargetHandler
+ * One of the following:
+ * - `null`: No blocker to open the dialog.
+ * - `BlockLog`: Block logs should be generated via {@link BlockLog.generate}.
+ * - `array`: Arguments for {@link Messages.get} that explains why the block cannot be processed.
  */
 
 AjaxBlock.init();
