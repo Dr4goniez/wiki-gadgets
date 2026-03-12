@@ -96,6 +96,8 @@ class AjaxBlock {
 			]),
 			Messages.loadMessagesIfMissing(permissionManager, [
 				'colon-separator',
+				'parentheses-start',
+				'parentheses-end',
 
 				'block',
 				'block-target',
@@ -131,6 +133,9 @@ class AjaxBlock {
 				'unblock',
 				'block-reason',
 				'block-removal-reason-placeholder',
+
+				// Used in setTarget()
+				'apierror-modify-autoblock',
 
 				// For BlockLog
 				'logentry-block-block',
@@ -709,6 +714,7 @@ class BlockLookup {
 			}
 			/** @type {number[]} */ (this.usernameMap.get(user)).push(i);
 		});
+		console.log(this);
 	}
 
 	/**
@@ -717,7 +723,7 @@ class BlockLookup {
 	 */
 	getBlockById(id) {
 		const index = this.idMap.get(id);
-		if (!index) {
+		if (index === undefined) {
 			return null;
 		}
 		return this.data[index];
@@ -729,7 +735,7 @@ class BlockLookup {
 	 */
 	getBlocksByUsername(username) {
 		const indexes = this.usernameMap.get(username);
-		if (!indexes) {
+		if (indexes === undefined) {
 			return null;
 		}
 		return this.data.filter((_, i) => indexes.includes(i));
@@ -929,6 +935,21 @@ class BlockTarget {
 			t = 'named';
 		}
 		this.type = t;
+	}
+
+	/**
+	 * @param {string | number} id `'#ID` as a string or a block ID as a number.
+	 * @returns {HTMLAnchorElement}
+	 */
+	static createBlockListLink(id) {
+		const wpTarget = typeof id === 'string'
+			? id
+			: '#' + id;
+		const anchor = document.createElement('a');
+		anchor.href = mw.util.getUrl('Special:BlockList', { wpTarget });
+		anchor.target = '_blank';
+		anchor.textContent = wpTarget;
+		return anchor;
 	}
 
 }
@@ -1483,9 +1504,9 @@ Messages.i18n = {
 		'ajaxblock-dialog-block-label-partial': 'Partial block',
 		'ajaxblock-dialog-block-label-option-autoblock': 'Apply autoblock',
 		'ajaxblock-dialog-message-nonactive-id': 'The block ID <b>#$1</b> specified by this link is no longer active and hence disregarded.',
-		'ajaxblock-dialog-message-unprocessable-id': 'The block for ID <b>#$1</b> cannot be processed because it is no longer active.',
 		'ajaxblock-dialog-message-existingblocks': '<b>This user has active block(s).</b> Select a block you want to update, or check "{{int:block-create}}" to add a new block.',
 		'ajaxblock-notify-error-loadblocklogs': 'Failed to load block information ($1)',
+		'ajaxblock-notify-error-idinactivenousername': 'This link cannot be processed because the block for ID <b>#$1</b> is no longer active and also no username is specified.',
 	},
 	ja: {
 		'ajaxblock-title-unprocessable': '(AjaxBlock非対応のリンク)',
@@ -1498,9 +1519,9 @@ Messages.i18n = {
 		'ajaxblock-dialog-block-label-partial': '部分ブロック',
 		'ajaxblock-dialog-block-label-option-autoblock': '自動ブロックを適用',
 		'ajaxblock-dialog-message-nonactive-id': 'このリンクにより指定されているID <b>#$1</b> のブロックは、既に解除されているため無視されています。',
-		'ajaxblock-dialog-message-unprocessable-id': 'ID <b>#$1</b> のブロックは既に解除されているため処理できません。',
 		'ajaxblock-dialog-message-existingblocks': '<b>この利用者は既にブロックされています。</b>更新するブロックを選択するか、「{{int:block-create}}」をチェックしてください。',
 		'ajaxblock-notify-error-loadblocklogs': 'ブロック情報の取得に失敗しました ($1)',
+		'ajaxblock-notify-error-idinactivenousername': 'このリンクに紐付けられたID <b>#$1</b> のブロックは、既に解除されているかつ利用者名も指定されていないため処理できません。',
 	}
 };
 /**
@@ -1610,6 +1631,23 @@ function AjaxBlockDialogFactory() {
 
 			this.blockUser = new BlockUser(this);
 			this.unblockUser = new UnblockUser(this);
+			/**
+			 * The currently active field, and a callback registered in {@link getSetupProcess} and
+			 * executed in {@link getReadyProcess}.
+			 *
+			 * @type {?{ field: BlockUser | UnblockUser; callback: () => ReturnType<typeof BlockLog['new']>; }}
+			 * @private
+			 */
+			this.readyProcessStore = null;
+
+			this.content = new OO.ui.PanelLayout({
+				padded: true,
+				expanded: false
+			});
+			this.content.$element.append(
+				this.blockUser.$element,
+				this.unblockUser.$element
+			);
 		}
 
 		/**
@@ -1620,17 +1658,8 @@ function AjaxBlockDialogFactory() {
 			// @ts-expect-error
 			super.initialize.apply(this, arguments);
 
-			const content = new OO.ui.PanelLayout({
-				padded: true,
-				expanded: false
-			});
-			content.$element.append(
-				this.blockUser.$element,
-				this.unblockUser.$element
-			);
-
 			// @ts-expect-error
-			this.$body.append(content.$element);
+			this.$body.append(this.content.$element);
 
 			return this;
 		}
@@ -1642,19 +1671,35 @@ function AjaxBlockDialogFactory() {
 		 */
 		getSetupProcess(data) {
 			return super.getSetupProcess().next(() => {
+				// Set mode to determine which buttons to show
 				this.getActions().setMode(data.type);
 
-				switch (data.type) {
-					case 'block':
-						this.blockUser.toggle(true);
-						this.unblockUser.toggle(false);
-						break;
-					case 'unblock':
-						this.blockUser.toggle(false);
-						this.unblockUser.toggle(true);
-						break;
-					default:
-						throw new Error('Invalid data type: ' + data.type);
+				// Set up the visibility of dialog items
+				this.blockUser.toggle(data.type === 'block');
+				this.unblockUser.toggle(data.type === 'unblock');
+
+				// Set target and check if any additional processes should be handled
+				// to open the dialog
+				const field = data.type === 'block' ? this.blockUser : this.unblockUser;
+				field.blockSelector = null;
+				const genBlockLogs = field.setTarget(data.target);
+
+				if (Array.isArray(genBlockLogs)) {
+					// There's a blocker to open the dialog
+					const args = genBlockLogs;
+					mw.notify(
+						$('<span>').append(Messages.get(...args)),
+						{ type: 'error' }
+					);
+					return false;
+				} else if (genBlockLogs) {
+					// Block log lines should be generated asynchronously
+					this.readyProcessStore = {
+						field,
+						callback: genBlockLogs,
+					};
+					this.pushPending();
+					this.content.toggle(false);
 				}
 			});
 		}
@@ -1662,47 +1707,35 @@ function AjaxBlockDialogFactory() {
 		/**
 		 * @inheritdoc
 		 * @override
-		 * @param {BlockLink} data
+		 * @param {BlockLink} _data
 		 */
-		getReadyProcess(data) {
-			return super.getReadyProcess()
-				.next(() => {
-					this.pushPending();
-				})
-				// @ts-expect-error Promise<void> incompatible with Promise<void, any, any>
-				.next(() => this.getReadyProcessInternal(data))
-				.next(() => {
+		getReadyProcess(_data) {
+			// @ts-expect-error
+			return super.getReadyProcess().next(async () => {
+				if (this.readyProcessStore) {
+					const start = Date.now();
+					const { field, callback } = this.readyProcessStore;
+					await this.getReadyProcessInternal(field, callback);
+					const end = Date.now();
+
+					// Prevent the pending animation from showing for a too short time
+					await sleep(1000 - (end - start));
+
+					this.content.toggle(true);
 					this.updateSize().popPending();
-				});
+					this.readyProcessStore = null;
+				}
+			});
 		}
 
 		/**
-		 * @param {BlockLink} data
+		 * @param {BlockUser | UnblockUser} field
+		 * @param {() => Promise<string | BlockLoglineMap>} genBlockLogs
 		 * @returns {Promise<void>}
 		 * @private
 		 */
-		async getReadyProcessInternal(data) {
-			this.getActions().setMode(data.type);
-
-			let field;
-			switch (data.type) {
-				case 'block':
-					field = this.blockUser;
-					break;
-				case 'unblock':
-					field = this.unblockUser;
-					break;
-				default:
-					throw new Error('Invalid data type: ' + data.type);
-			}
-			field.blockSelector = null;
-
-			const callback = field.setTarget(data.target);
-			if (!callback) {
-				return;
-			}
-
-			const blockLoglineMap = await callback();
+		async getReadyProcessInternal(field, genBlockLogs) {
+			const blockLoglineMap = await genBlockLogs();
 			if (typeof blockLoglineMap === 'string') {
 				const err =
 					scriptName + Messages.get('colon-separator') +
@@ -1741,8 +1774,6 @@ function AjaxBlockDialogFactory() {
 				document.createElement('br'),
 				field.blockSelector.$element
 			);
-
-			this.updateSize();
 		}
 
 		/**
@@ -1753,16 +1784,13 @@ function AjaxBlockDialogFactory() {
 		getActionProcess(action) {
 			return new OO.ui.Process(() => {
 				switch (action) {
-					// case 'execute': {
-					// 	const selectedLinks = this.sr.getSelected();
-					// 	if (!selectedLinks.length) {
-					// 		mw.notify(msg['rollback-notify-noneselected'], { type: 'warn' });
-					// 		return;
-					// 	}
-					// 	this.close();
-					// 	this.sr.selectiveRollback(selectedLinks);
-					// 	break;
-					// }
+					case 'execute': {
+						if (this.readyProcessStore) {
+							// No-op if the dialog is still getting ready
+							return;
+						}
+						break;
+					}
 					case 'documentation':
 						window.open('https://meta.wikimedia.org/wiki/Special:MyLanguage/User:Dragoniez/AjaxBlock', '_blank');
 						break;
@@ -1847,9 +1875,10 @@ class AjaxBlockDialogContent {
 
 		const $targetContainer = $('<span>').addClass('ajaxblock-targetlabel');
 		this.$target = $('<b>');
-		this.$targetAux = $('<span>').css({ 'margin-left': '0.5em' });
+		this.$targetAux = $('<span>');
 		$targetContainer.append(
 			this.$target,
+			Messages.get('word-separator'),
 			this.$targetAux
 		);
 		this.target = new OO.ui.LabelWidget({
@@ -1858,7 +1887,7 @@ class AjaxBlockDialogContent {
 		/**
 		 * @type {Target}
 		 * @readonly
-		 * @private
+		 * @protected
 		 */
 		this.currentTarget = {
 			id: null,
@@ -1918,20 +1947,6 @@ class AjaxBlockDialogContent {
 			label: Messages.get('block-target'),
 			align: 'left',
 		});
-	}
-
-	/**
-	 * @param {?number} id
-	 * @param {?string} username
-	 * @param {?boolean} oneClick `false` means unprocessable, `null` means the dialog should be opened.
-	 * @returns {this}
-	 * @protected
-	 */
-	setTargetInternal(id, username, oneClick) {
-		this.currentTarget.id = id;
-		this.currentTarget.username = username;
-		this.oneClickAllowed = oneClick;
-		return this;
 	}
 
 	getTarget() {
@@ -2216,6 +2231,13 @@ class BlockUser extends AjaxBlockDialogContent {
 			this.getWatchlistExpiryLayout(dialog)
 		);
 
+		this.cbAddBlock = new OO.ui.CheckboxInputWidget();
+		this.cbAddBlockContainer = new OO.ui.FieldLayout(this.cbAddBlock, {
+			label: $('<b>').text(Messages.get('block-create')),
+			align: 'inline',
+		});
+		items.push(this.cbAddBlockContainer);
+
 		const optionsFieldset = new OO.ui.FieldsetLayout({
 			label: Messages.get('block-options'),
 		});
@@ -2224,8 +2246,13 @@ class BlockUser extends AjaxBlockDialogContent {
 	}
 
 	/**
+	 * Sets a target to the target field.
+	 *
 	 * @param {BlockTarget} target
-	 * @returns {?(() => ReturnType<typeof BlockLog['new']>)} `null` or a callback function
+	 * @returns {(() => ReturnType<typeof BlockLog['new']>) | Parameters<typeof Messages['get']> | null} One of the following:
+	 * - `null`: No blocker to open the dialog.
+	 * - `function`: A callback to generate block log lines.
+	 * - `array`: Arguments for {@link Messages.get} that explains why the block cannot be processed.
 	 */
 	setTarget(target) {
 		// Adjust the visibility of field items
@@ -2250,60 +2277,104 @@ class BlockUser extends AjaxBlockDialogContent {
 		const id = target.getId();
 		const username = target.getUsername();
 		const blocks = username ? this.dialog.blockLookup.getBlocksByUsername(username) : null;
+		this.clearMessages(); // Don't inherit the previous message
 
 		if (id !== null) {
 			const block = this.dialog.blockLookup.getBlockById(id);
 			if (block) {
 				// The block associated with this ID exists
-				if (block.user) {
+				if (username && blocks && blocks.length > 1) {
+					// Other blocks also exist
+					this.setTargetInternal({
+						target: [username],
+						targetAux: [''],
+						id: null,
+						username,
+						oneClick: null,
+						addBlock: true,
+					});
+					const idMap = BlockLookup.toIdMap(
+						// `user` is never missing for non-autoblocks
+						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
+					);
+					return () => BlockLog.new(username, idMap);
+				} else if (block.user) {
 					// Ordinary block
-					this.$target.text(block.user);
-					this.$targetAux.text(`(#${id})`);
-					this.setTargetInternal(id, block.user, true);
+					this.setTargetInternal({
+						target: [block.user],
+						targetAux: [
+							Messages.get('parentheses-start'),
+							BlockTarget.createBlockListLink(id),
+							Messages.get('parentheses-end'),
+						],
+						id,
+						username: block.user,
+						oneClick: true,
+						addBlock: true,
+					});
 				} else {
-					// Autoblock
+					// Autoblock (this code path is presumably never reached)
 					if (!block.automatic) {
-						// TODO: Replace this with console.error
-						mw.notify('The associated block is not an autoblock.', { type: 'warn' });
+						console.error('The associated block is not an autoblock.', block);
 					}
-					this.$target.text(Messages.get('autoblockid', [id]));
-					this.$targetAux.text('');
-					this.setTargetInternal(id, null, true);
+					this.setTargetInternal({
+						target: [''],
+						targetAux: [''],
+						id,
+						username: '',
+						oneClick: false,
+						addBlock: false,
+					});
+					return ['apierror-modify-autoblock'];
 				}
 			} else {
 				// ID no longer active
-				// TODO: Remove this
-				mw.notify('The block ID is no longer effective.', { type: 'warn' });
 				if (username !== null) {
 					// Ignore ID and use username
-					this.$target.text(username);
-					this.$targetAux.text('');
-					this.setTargetInternal(null, username, true).clearMessages().addMessage({
+					this.addMessage({
 						label: new OO.ui.HtmlSnippet(
 							Messages.get('ajaxblock-dialog-message-nonactive-id', [id])
+								.replace(`#${id}`, BlockTarget.createBlockListLink(id).outerHTML)
 						),
 						type: 'notice',
 					});
-
-					// If other active blocks exist, allow the user to choose which to update
 					if (Array.isArray(blocks)) {
+						// If other active blocks exist, allow the user to choose which one to update
+						this.setTargetInternal({
+							target: [username],
+							targetAux: [''],
+							id: null,
+							username,
+							oneClick: null,
+							addBlock: true,
+						});
 						const idMap = BlockLookup.toIdMap(
 							// `user` is never missing for non-autoblocks
 							/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
 						);
-						this.oneClickAllowed = null;
 						return () => BlockLog.new(username, idMap);
+					} else {
+						// No other active blocks either
+						this.setTargetInternal({
+							target: [username],
+							targetAux: [''],
+							id: null,
+							username,
+							oneClick: true,
+							addBlock: false,
+						});
 					}
 				} else {
 					// ID no longer active, no username: unprocessable
-					this.$target.text(`#${id}`);
-					this.$targetAux.text('');
-					this.setTargetInternal(id, null, false).clearMessages().addMessage({
-						label: new OO.ui.HtmlSnippet(
-							Messages.get('ajaxblock-dialog-message-unprocessable-id', [id])
-						),
-						type: 'error',
+					this.setTargetInternal({
+						target: [''],
+						targetAux: [''],
+						id,
+						username: '',
+						oneClick: false,
+						addBlock: false,
 					});
+					return ['ajaxblock-notify-error-idinactivenousername', [id]];
 				}
 			}
 			return null;
@@ -2313,28 +2384,91 @@ class BlockUser extends AjaxBlockDialogContent {
 			if (Array.isArray(blocks)) {
 				if (blocks.length > 1) {
 					// Multiple active blocks
-					this.$target.text(username);
-					this.$targetAux.text('');
+					this.setTargetInternal({
+						target: [username],
+						targetAux: [''],
+						id: null,
+						username,
+						oneClick: null,
+						addBlock: true,
+					});
 					const idMap = BlockLookup.toIdMap(
 						// `user` is never missing for non-autoblocks
 						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
 					);
-					this.oneClickAllowed = null;
 					return () => BlockLog.new(username, idMap);
 				} else {
 					// Single active block
-					this.$target.text(username);
-					this.$targetAux.text(`(#${blocks[0].id})`);
+					this.setTargetInternal({
+						target: [username],
+						targetAux: [
+							Messages.get('parentheses-start'),
+							BlockTarget.createBlockListLink(blocks[0].id),
+							Messages.get('parentheses-end'),
+						],
+						id: blocks[0].id,
+						username,
+						oneClick: true,
+						addBlock: true,
+					});
 				}
 			} else {
 				// No active blocks
-				this.$target.text(username);
-				this.$targetAux.text('');
+				this.setTargetInternal({
+					target: [username],
+					targetAux: [''],
+					id: null,
+					username,
+					oneClick: true,
+					addBlock: false,
+				});
 			}
 			return null;
 		}
 
-		throw new Error('id or username must be non-null');
+		this.setTargetInternal({
+			target: [''],
+			targetAux: [''],
+			id: null,
+			username: null,
+			oneClick: false,
+			addBlock: false,
+		});
+		throw new Error('Either the ID or username must be non-null');
+	}
+
+	/**
+	 * @param {object} data
+	 * @param {[text: string | number | boolean]} data.target Parameters for JQuery.text, which sets
+	 * the main target text for {@link $target}.
+	 * @param {Array<JQuery.htmlString | JQuery.TypeOrArray<JQuery.Node | JQuery<JQuery.Node>>>} data.targetAux
+	 * Parameters for JQuery.append, which sets the auxiliary target text for {@link $targetAux}.
+	 * @param {?number} data.id The block ID of the target.
+	 * @param {?string} data.username The username of the target.
+	 * @param {?boolean} data.oneClick Whether the target can be processed in the one-click mode:
+	 * - `true`: No blocker for a one-click processing.
+	 * - `false`: The target cannot be processed.
+	 * - `null`: There is a blocker for a one-click processing (i.e., warnings).
+	 * @param {boolean} data.addBlock Whether to show the "Add block" checkbox.
+	 * @returns {this}
+	 * @private
+	 */
+	setTargetInternal({ target, targetAux, id, username, oneClick, addBlock }) {
+		this.$target.text(...target);
+		this.$targetAux.empty().append(...targetAux);
+		this.currentTarget.id = id;
+		this.currentTarget.username = username;
+		this.oneClickAllowed = oneClick;
+		if (wgEnableMultiBlocks) {
+			this.cbAddBlockContainer.toggle(addBlock);
+		} else {
+			// In MW >= 1.44, the block API accepts the `newblock` parameter but "add block" fails
+			// if wgEnableMultiBlocks is disabled (see BlockUser::placeBlockInternal)
+			this.cbAddBlockContainer.toggle(false);
+		}
+		this.cbAddBlock.setSelected(false);
+
+		return this;
 	}
 
 	// /**
@@ -2903,6 +3037,14 @@ class BlockLog {
  */
 function clean(str) {
 	return str.replace(/[\u200E\u200F\u202A-\u202E]+/g, '').trim();
+}
+
+/**
+ * @param {number} milliseconds Nagative values are rounded up to 0.
+ * @returns {Promise<void>}
+ */
+function sleep(milliseconds) {
+	return new Promise((resolve) => setTimeout(resolve, Math.max(0, milliseconds)));
 }
 
 /**

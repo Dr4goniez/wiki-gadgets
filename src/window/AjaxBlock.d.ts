@@ -99,9 +99,9 @@ export interface AjaxBlockMessages {
 	'ajaxblock-dialog-block-label-partial': string;
 	'ajaxblock-dialog-block-label-option-autoblock': string;
 	'ajaxblock-dialog-message-nonactive-id': string;
-	'ajaxblock-dialog-message-unprocessable-id': string;
 	'ajaxblock-dialog-message-existingblocks': string;
 	'ajaxblock-notify-error-loadblocklogs': string;
+	'ajaxblock-notify-error-idinactivenousername': string;
 }
 
 /**
@@ -109,6 +109,8 @@ export interface AjaxBlockMessages {
  */
 export interface MediaWikiMessages {
 	'colon-separator': string;
+	'parentheses-start': string;
+	'parentheses-end': string;
 
 	'block': string;
 	'block-target': string;
@@ -144,6 +146,9 @@ export interface MediaWikiMessages {
 	'unblock': string;
 	'block-reason': string;
 	'block-removal-reason-placeholder': string;
+
+	// Used in setTarget()
+	'apierror-modify-autoblock': string;
 
 	// Copied from InvestigateHelper
 	'logentry-block-block': string;
