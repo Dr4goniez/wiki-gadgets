@@ -114,7 +114,6 @@ class AjaxBlock {
 
 					'block',
 					'block-target',
-					'autoblockid',
 					'block-expiry',
 					'infiniteblock',
 					'ipboptions',
@@ -127,10 +126,6 @@ class AjaxBlock {
 					'block-pages-placeholder',
 					'ipb-namespaces-label',
 					'block-namespaces-placeholder',
-					'ipb-action-create',
-					'ipb-action-move',
-					'ipb-action-upload',
-					'ipb-action-thanks',
 
 					'block-details',
 					'ipbcreateaccount',
@@ -149,8 +144,9 @@ class AjaxBlock {
 
 					// Used in setTarget()
 					'apierror-modify-autoblock',
+					'autoblockid',
 
-					// For BlockLog
+					// Copied from InvestigateHelper
 					'logentry-block-block',
 					'logentry-block-block-multi',
 					'logentry-block-reblock',
@@ -173,13 +169,16 @@ class AjaxBlock {
 					'and',
 					'word-separator',
 					'blanknamespace',
-					'ipb-action-create',
-					'ipb-action-move',
-					'ipb-action-thanks',
-					'ipb-action-upload',
+					// 'ipb-action-create',
+					// 'ipb-action-move',
+					// 'ipb-action-thanks',
+					// 'ipb-action-upload',
 					'logentry-partialblock-block-page',
 					'logentry-partialblock-block-ns',
 					'logentry-partialblock-block-action',
+
+					// @ts-expect-error
+					...initializer.actionRestrictions.map(r => `ipb-action-${r}`),
 				])
 			]);
 		} catch (e) {
@@ -202,7 +201,7 @@ class AjaxBlock {
 
 		// Create an AjaxBlock instance
 		this.addStyleTag();
-		new this(permissionManager, linkMaps, blockLookup);
+		new this(permissionManager, linkMaps, blockLookup, initializer.actionRestrictions);
 		logo.remove(1200);
 	}
 
@@ -212,85 +211,122 @@ class AjaxBlock {
 	 * @private
 	 */
 	static getInitializer(api) {
+		const data = /** @type {Partial<Initializer>} */ (Object.create(null));
+
+		// Special namespace aliases (always local)
 		const specialNamespaceAliases = [];
 		for (const [alias, ns] of Object.entries(mw.config.get('wgNamespaceIds'))) {
-			if (ns !== -1) {
-				continue;
+			if (ns === -1) {
+				specialNamespaceAliases.push(alias);
 			}
-			specialNamespaceAliases.push(alias);
 		}
+		data.specialNamespaceAliases = specialNamespaceAliases;
 
-		/** @type {Initializer} */
-		const data = {
-			blockPageAliases: {
-				'Block': ['Block', 'BlockIP', 'BlockUser'],
-				'Unblock': ['Unblock'],
-			},
-			specialNamespaceAliases,
-			userRights: new Set()
-		};
-		const params = Object.create(null);
-		params.meta = [];
-
-		/** @type {Initializer['blockPageAliases'] | false | null} */
+		// Cached block page aliases
 		const cachedAliases = mw.storage.getObject(this.storageKeys.blockPageAliases);
-		if (cachedAliases && $.isPlainObject(cachedAliases.Block) && $.isPlainObject(cachedAliases.Unblock)) {
+		if (
+			cachedAliases &&
+			Array.isArray(cachedAliases.Block) &&
+			Array.isArray(cachedAliases.Unblock)
+		) {
 			data.blockPageAliases = cachedAliases;
-		} else {
-			params.meta.push('siteinfo');
-			params.siprop = 'specialpagealiases';
 		}
 
-		/** @type {string[] | false | null} */
+		// Cached user rights
 		const cachedRights = mw.storage.getObject(this.storageKeys.userRights);
-		if (Array.isArray(cachedRights) && cachedRights.every(el => typeof el === 'string')) {
+		if (Array.isArray(cachedRights) && cachedRights.every(r => typeof r === 'string')) {
 			data.userRights = new Set(cachedRights);
-		} else {
-			params.meta.push('userinfo');
-			params.uiprop = 'rights';
 		}
 
-		if (!params.meta.length) {
-			return $.Deferred().resolve(data).promise();
+		// Cached action restrictions
+		const cachedRestrictions = mw.storage.getObject(this.storageKeys.actionRestrictions);
+		if (Array.isArray(cachedRestrictions) && cachedRestrictions.every(r => typeof r === 'string')) {
+			data.actionRestrictions = cachedRestrictions;
 		}
 
-		return api.get(params).then(/** @param {ApiResponse} res */ ({ query }) => {
-			if (!query) {
-				return data;
+		/** @type {JQuery.Promise<void>[]} */
+		const requests = [];
+
+		// Query siteinfo/userinfo if needed
+		if (!data.blockPageAliases || !data.userRights) {
+			const params = Object.create(null);
+			params.meta = [];
+
+			if (!data.blockPageAliases) {
+				params.meta.push('siteinfo');
+				params.siprop = 'specialpagealiases';
 			}
 
-			if (Array.isArray(query.specialpagealiases)) {
-				const targets = new Set(['Block', 'Unblock']);
-				const map = Object.create(null);
-				let processed = 0;
-				for (const { realname, aliases } of query.specialpagealiases) {
-					if (targets.has(realname)) {
-						const lcRealName = realname.toLowerCase();
-						map[realname] = aliases.filter(el => el.toLowerCase() !== lcRealName || el === realname);
-						processed++;
+			if (!data.userRights) {
+				params.meta.push('userinfo');
+				params.uiprop = 'rights';
+			}
+
+			requests.push(
+				api.get(params).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+					if (!res || !res.query) {
+						return failAsEmptyResult(res, jqXHR);
 					}
-					if (processed === targets.size) {
-						break;
+					const { specialpagealiases, userinfo } = res.query;
+
+					// Block aliases
+					if (Array.isArray(specialpagealiases)) {
+						const map = /** @type {Initializer['blockPageAliases']} */ (Object.create(null));
+
+						for (const { realname, aliases } of specialpagealiases) {
+							if (realname !== 'Block' && realname !== 'Unblock') {
+								continue;
+							}
+							const canonical = /** @type {keyof Initializer['blockPageAliases']} */ (realname);
+							const lc = realname.toLowerCase();
+							map[canonical] = aliases.filter(a => a === realname || a.toLowerCase() !== lc) ;
+						}
+
+						const targets = /** @type {(keyof Initializer['blockPageAliases'])[]} */ (['Block', 'Unblock']);
+						if (targets.every(name => Array.isArray(map[name]) && map[name].length)) {
+							mw.storage.setObject(this.storageKeys.blockPageAliases, map, daysInSeconds(3));
+							data.blockPageAliases = map;
+						}
 					}
-				}
-				// Edge case guard: Incomplete data shouldn't be cached or set
-				if ([...targets].every(realname => Array.isArray(map[realname]) && map[realname].length)) {
-					mw.storage.setObject(this.storageKeys.blockPageAliases, map, 3 * 24 * 60 * 60); // 3 days
-					data.blockPageAliases = map;
-				}
-			}
 
-			const userRights = query.userinfo && query.userinfo.rights;
-			if (Array.isArray(userRights)) {
-				mw.storage.setObject(this.storageKeys.userRights, userRights, 24 * 60 * 60); // 1 day
-				data.userRights = new Set(userRights);
-			}
+					// User rights
+					const rights = userinfo && userinfo.rights;
+					if (Array.isArray(rights)) {
+						mw.storage.setObject(this.storageKeys.userRights, rights, daysInSeconds(1));
+						data.userRights = new Set(rights);
+					}
+				})
+			);
+		}
 
-			return data;
-		}).catch((_, err) => {
-			console.warn(err);
-			return data;
-		});
+		// Fetch paraminfo if needed
+		if (!data.actionRestrictions) {
+			requests.push(
+				api.get({
+					action: 'paraminfo',
+					modules: 'block',
+				}).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+					const mod = res && res.paraminfo && res.paraminfo.modules && res.paraminfo.modules[0];
+					if (!mod || mod.name !== 'block') {
+						return failAsEmptyResult(res, jqXHR);
+					}
+
+					const param = mod.parameters.find(p => p.name === 'actionrestrictions');
+					const actions = param && param.type;
+					if (Array.isArray(actions)) {
+						mw.storage.setObject(this.storageKeys.actionRestrictions, actions, daysInSeconds(7));
+						data.actionRestrictions = actions;
+					}
+				})
+			);
+		}
+
+		// Everything cached
+		if (!requests.length) {
+			return $.Deferred().resolve(/** @type {Initializer} */ (data)).promise();
+		}
+
+		return $.when(...requests).then(() => /** @type {Initializer} */ (data));
 	}
 
 	/**
@@ -451,7 +487,7 @@ class AjaxBlock {
 				mw.storage.set(
 					this.storageKeys.enableMultiblocks,
 					enabled ? '1' : '0',
-					(enabled ? 7 : 3) * 24 * 60 * 60 // A 7-day expiry if enabled, 3 days otherwise
+					daysInSeconds(enabled ? 7 : 3)
 				);
 				return enabled;
 			}
@@ -531,9 +567,10 @@ class AjaxBlock {
 	 * @param {PermissionManager} permissionManager
 	 * @param {[BlockLinkMap, UnblockLinkMap]} linkMaps
 	 * @param {BlockLookup} blockLookup
+	 * @param {string[]} actionRestrictions
 	 * @private
 	 */
-	constructor(permissionManager, linkMaps, blockLookup) {
+	constructor(permissionManager, linkMaps, blockLookup, actionRestrictions) {
 		this.permissionManager = permissionManager;
 		this.linkMaps = linkMaps;
 		this.blockLookup = blockLookup;
@@ -548,7 +585,7 @@ class AjaxBlock {
 		});
 
 		const AjaxBlockDialog = AjaxBlockDialogFactory();
-		this.dialog = new AjaxBlockDialog(permissionManager, blockLookup, {
+		this.dialog = new AjaxBlockDialog(permissionManager, blockLookup, actionRestrictions, {
 			$element: $('<div>').css({ 'font-size': '90%' }),
 			classes: ['ajaxblock-dialog'],
 			size: 'large',
@@ -609,6 +646,7 @@ AjaxBlock.storageKeys = {
 	blockPageAliases: 'mw-AjaxBlock-blockPageAliases',
 	userRights: 'mw-AjaxBlock-userRights',
 	enableMultiblocks: 'mw-AjaxBlock-enableMultiblocks',
+	actionRestrictions: 'mw-AjaxBlock-actionRestrictions',
 };
 
 class PermissionManager {
@@ -671,12 +709,7 @@ class BlockLookup {
 				if (res && res.query && Array.isArray(res.query.blocks)) {
 					ret.push(...res.query.blocks);
 				} else {
-					return $.Deferred().reject(
-						'ok-but-empty',
-						'OK response but empty result',
-						res,
-						jqXHR
-					).promise();
+					return failAsEmptyResult(res, jqXHR);
 				}
 				return request(batch, batchParam, ret, offset + apilimit);
 			});
@@ -1141,7 +1174,7 @@ class Messages {
 					}
 				}
 				if (!$.isEmptyObject(newCache)) {
-					mw.storage.setObject(storageKey, newCache, 24 * 60 * 60); // 1-day expiry
+					mw.storage.setObject(storageKey, newCache, daysInSeconds(1));
 				}
 
 				return added;
@@ -1284,7 +1317,7 @@ class Messages {
 	// 		}
 
 	// 		if (!$.isEmptyObject(toCache)) {
-	// 			mw.storage.set(this.storageKey, JSON.stringify(toCache), 3 * 24 * 60 * 60); // 3-day expiry
+	// 			mw.storage.set(this.storageKey, JSON.stringify(toCache), daysInSeconds(3));
 	// 		}
 	// 	});
 	// }
@@ -1654,16 +1687,16 @@ function AjaxBlockDialogFactory() {
 		/**
 		 * @param {PermissionManager} permissionManager
 		 * @param {BlockLookup} blockLookup
+		 * @param {string[]} actionRestrictions
 		 * @param {OO.ui.ProcessDialog.ConfigOptions} [config]
 		 */
-		constructor(permissionManager, blockLookup, config) {
+		constructor(permissionManager, blockLookup, actionRestrictions, config) {
 			super(config);
 
 			this.permissionManager = permissionManager;
 			this.blockLookup = blockLookup;
+			this.actionRestrictions = actionRestrictions;
 
-			this.blockUser = new BlockUser(this);
-			this.unblockUser = new UnblockUser(this);
 			/**
 			 * The currently active field, and a callback registered in {@link getSetupProcess} and
 			 * executed in {@link getReadyProcess}.
@@ -1672,6 +1705,9 @@ function AjaxBlockDialogFactory() {
 			 * @private
 			 */
 			this.readyProcessStore = null;
+
+			this.blockUser = new BlockUser(this);
+			this.unblockUser = new UnblockUser(this);
 
 			this.content = new OO.ui.PanelLayout({
 				padded: true,
@@ -2165,37 +2201,18 @@ class BlockUser extends AjaxBlockDialogContent {
 			})
 		);
 
-		this.partialBlockUpload = new OO.ui.CheckboxInputWidget();
-		partialBlockLayoutItems.push(
-			new OO.ui.FieldLayout(this.partialBlockUpload, {
-				label: Messages.get('ipb-action-upload'),
-				align: 'inline',
-			})
-		);
-
-		this.partialBlockMove = new OO.ui.CheckboxInputWidget();
-		partialBlockLayoutItems.push(
-			new OO.ui.FieldLayout(this.partialBlockMove, {
-				label: Messages.get('ipb-action-move'),
-				align: 'inline',
-			})
-		);
-
-		this.partialBlockCreate = new OO.ui.CheckboxInputWidget();
-		partialBlockLayoutItems.push(
-			new OO.ui.FieldLayout(this.partialBlockCreate, {
-				label: Messages.get('ipb-action-create'),
-				align: 'inline',
-			})
-		);
-
-		this.partialBlockThanks = new OO.ui.CheckboxInputWidget();
-		partialBlockLayoutItems.push(
-			new OO.ui.FieldLayout(this.partialBlockThanks, {
-				label: Messages.get('ipb-action-thanks'),
-				align: 'inline',
-			})
-		);
+		this.partialBlockActions = this.dialog.actionRestrictions.reduce((acc, action) => {
+			const checkbox = new OO.ui.CheckboxInputWidget({ data: action });
+			partialBlockLayoutItems.push(
+				new OO.ui.FieldLayout(checkbox, {
+					// @ts-expect-error
+					label: Messages.get(`ipb-action-${action}`),
+					align: 'inline',
+				})
+			);
+			acc[action] = checkbox;
+			return acc;
+		}, /** @type {Record<string, OO.ui.CheckboxInputWidget>} */ (Object.create(null)));
 
 		partialBlockLayout.addItems(partialBlockLayoutItems);
 		items.push(partialBlockLayout);
@@ -2689,19 +2706,12 @@ class BlockUser extends AjaxBlockDialogContent {
 			options.namespacerestrictions = namespaces.join('|');
 		}
 
-		const actionMap = {
-			partialBlockUpload: 'upload',
-			partialBlockCreate: 'create',
-			partialBlockMove: 'move',
-			partialBlockThanks: 'thanks',
-		};
-		const actions = Object.entries(actionMap).reduce((acc, [key, action]) => {
-			const prop = /** @type {keyof typeof actionMap} */ (key);
-			if (this[prop].isSelected()) {
-				acc.push(action);
+		const actions = /** @type {string[]} */ ([]);
+		for (const [action, checkbox] of Object.entries(this.partialBlockActions)) {
+			if (checkbox.isSelected()) {
+				actions.push(action);
 			}
-			return acc;
-		}, /** @type {string[]} */ ([]));
+		}
 		if (actions.length) {
 			options.actionrestrictions = actions.join('|');
 		}
@@ -3030,6 +3040,7 @@ class BlockLog {
 		}
 		if (actions && actions.length) {
 			const num = String(actions.length);
+			// @ts-expect-error
 			const list = actions.map((action) => Messages.get(`ipb-action-${action}`));
 			const msg = Messages.get('logentry-partialblock-block-action', [num, Messages.listToText(list)]);
 			$7.push(msg);
@@ -3078,6 +3089,28 @@ function clean(str) {
  */
 function sleep(milliseconds) {
 	return new Promise((resolve) => setTimeout(resolve, Math.max(0, milliseconds)));
+}
+
+/**
+ * @param {ApiResponse} res
+ * @param {JQuery.jqXHR<ApiResponse>} jqXHR
+ * @returns {JQuery.Promise<any, any, any>} A rejected $.Deferred
+ */
+function failAsEmptyResult(res, jqXHR) {
+	return $.Deferred().reject(
+		'ok-but-empty',
+		'OK response but empty result',
+		res,
+		jqXHR
+	);
+}
+
+/**
+ * @param {number} days
+ * @returns {number}
+ */
+function daysInSeconds(days) {
+	return days * 24 * 60 * 60;
 }
 
 /**

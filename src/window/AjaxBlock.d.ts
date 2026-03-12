@@ -10,10 +10,81 @@ export interface Initializer {
 	blockPageAliases: Record<'Block' | 'Unblock', string[]>;
 	specialNamespaceAliases: string[];
 	userRights: Set<string>;
+	actionRestrictions: string[];
 }
 
 export interface ApiResponse {
+	paraminfo?: ApiResponseParaminfo;
 	query?: ApiResponseQuery;
+}
+
+interface ApiResponseParaminfo {
+	helpformat: string;
+	modules: ApiResponseParaminfoModules[];
+}
+
+/** @see ApiBase::getHelpFlags */
+type ApiResponseHelpFlags =
+	| 'deprecated'
+	| 'internal'
+	| 'readrights'
+	| 'writerights'
+	| 'mustbeposted';
+
+type ApiResponseParaminfoModulesHelpmessages<K extends string> = {
+	[P in K]:
+		| string
+		| {
+			// helpformat=raw
+			key: string;
+			params: string[];
+			forvalue?: string;
+		};
+};
+
+interface ApiResponseParaminfoModules extends
+	Partial<Record<ApiResponseHelpFlags, true>>,
+	ApiResponseParaminfoModulesHelpmessages<'description'>
+{
+	name: string;
+	classname: string;
+	path: string;
+	group?: string;
+	prefix: string;
+	source?: string;
+	sourcename?: string;
+	licensetag?: string;
+	licenselink?: string;
+	helpurls: string[];
+	examples?: Partial<ApiResponseParaminfoModulesHelpmessages<'description'>> & {
+		query: string;
+	};
+	parameters: ApiResponseParaminfoModulesParameters[];
+	templatedparameters: ApiResponseParaminfoModulesParameters[];
+}
+
+interface ApiResponseParaminfoModulesParameters extends
+	Partial<ApiResponseParaminfoModulesHelpmessages<'description'>>
+{
+	index: number;
+	name: string;
+	// <- templatevars
+	// Delegated to ParamValidator::getParamInfo
+	type: string | string[];
+	required: boolean;
+	deprecated?: true;
+	sensitive?: true;
+	default?: unknown;
+	multi: boolean;
+	lowlimit?: number;
+	highlimit?: number;
+	limit?: number;
+	allowsduplicates?: true;
+	allspecifier?: string;
+	[key: string]: unknown; // TypeDef::getParamInfo (can be articulated)
+	// -- ParamValidator::getParamInfo end --
+	tokentype?: string;
+	// <- info
 }
 
 interface ApiResponseQuery {
@@ -114,7 +185,6 @@ export interface MediaWikiMessages {
 
 	'block': string;
 	'block-target': string;
-	'autoblockid': string;
 	'block-expiry': string;
 	'infiniteblock': string;
 	'ipboptions': string;
@@ -127,10 +197,6 @@ export interface MediaWikiMessages {
 	'block-pages-placeholder': string;
 	'ipb-namespaces-label': string;
 	'block-namespaces-placeholder': string;
-	'ipb-action-create': string;
-	'ipb-action-move': string;
-	'ipb-action-upload': string;
-	'ipb-action-thanks': string; // Added by extensions?
 
 	'block-details': string;
 	'ipbcreateaccount': string;
@@ -149,6 +215,7 @@ export interface MediaWikiMessages {
 
 	// Used in setTarget()
 	'apierror-modify-autoblock': string;
+	'autoblockid': string;
 
 	// Copied from InvestigateHelper
 	'logentry-block-block': string;
@@ -172,10 +239,10 @@ export interface MediaWikiMessages {
 	'and': string;
 	'word-separator': string;
 	'blanknamespace': string;
-	'ipb-action-create': string;
-	'ipb-action-move': string;
-	'ipb-action-thanks': string;
-	'ipb-action-upload': string;
+	// 'ipb-action-create': string;
+	// 'ipb-action-move': string;
+	// 'ipb-action-thanks': string;
+	// 'ipb-action-upload': string;
 	'logentry-partialblock-block-page': string;
 	'logentry-partialblock-block-ns': string;
 	'logentry-partialblock-block-action': string;
