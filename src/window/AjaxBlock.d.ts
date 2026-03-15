@@ -188,6 +188,8 @@ export interface AjaxBlockMessages {
 	'ajaxblock-dialog-block-label-option-autoblock': string;
 	'ajaxblock-dialog-message-nonactive-id': string;
 	'ajaxblock-dialog-message-existingblocks': string;
+	'ajaxblock-dialog-message-existingblocks-canadd': string;
+	'ajaxblock-dialog-message-existingblocks-unblock': string;
 	'ajaxblock-dialog-message-predefinedparams': string;
 	'ajaxblock-dialog-message-predefinedparams-apply': string;
 	'ajaxblock-notify-error-loadblocklogs': string;

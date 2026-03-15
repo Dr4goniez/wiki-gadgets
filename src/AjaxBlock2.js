@@ -1580,13 +1580,15 @@ Messages.i18n = {
 		'ajaxblock-dialog-block-label-reason2': 'Reason 2',
 		'ajaxblock-dialog-block-label-partial': 'Partial block',
 		'ajaxblock-dialog-block-label-option-autoblock': 'Apply autoblock',
-		'ajaxblock-dialog-message-nonactive-id': 'The block ID <b>#$1</b> specified by this link is no longer active and hence disregarded.',
-		'ajaxblock-dialog-message-existingblocks': '<b>This user has active block(s).</b> Select a block you want to update, or check "{{int:block-create}}" to add a new block.',
-		'ajaxblock-dialog-message-predefinedparams': 'This links contains predefined parameters for the form fields.',
+		'ajaxblock-dialog-message-nonactive-id': 'The block with ID <b>#$1</b> specified by this link is no longer active and has been disregarded.',
+		'ajaxblock-dialog-message-existingblocks': '<b>This user already has active block(s).</b> Select the block you want to update.',
+		'ajaxblock-dialog-message-existingblocks-canadd': '<b>This user already has active block(s).</b> Select the block you want to update, or check "{{int:block-create}}" to add a new block.',
+		'ajaxblock-dialog-message-existingblocks-unblock': 'Select the block you want to remove.',
+		'ajaxblock-dialog-message-predefinedparams': 'This link contains predefined parameters for the form fields.',
 		'ajaxblock-dialog-message-predefinedparams-apply': 'apply',
 		'ajaxblock-notify-error-loadblocklogs': 'Failed to load block information ($1)',
-		'ajaxblock-notify-error-idinactivenousername': 'This link cannot be processed because the block for ID <b>#$1</b> is no longer active and also no username is specified.',
-		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> does not have active blocks and cannot be unblocked.',
+		'ajaxblock-notify-error-idinactivenousername': 'This link cannot be processed because the block with ID <b>#$1</b> is no longer active and no username is specified.',
+		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> does not have any active blocks and cannot be unblocked.',
 		'ajaxblock-notify-warning-invalidqueryparam-param': 'Parameter',
 		'ajaxblock-notify-warning-invalidqueryparam-values': 'Filtered invalid values',
 	},
@@ -1599,16 +1601,18 @@ Messages.i18n = {
 		'ajaxblock-dialog-block-label-reason2': '理由2',
 		'ajaxblock-dialog-block-label-partial': '部分ブロック',
 		'ajaxblock-dialog-block-label-option-autoblock': '自動ブロックを適用',
-		'ajaxblock-dialog-message-nonactive-id': 'このリンクにより指定されているID <b>#$1</b> のブロックは、既に解除されているため無視されています。',
-		'ajaxblock-dialog-message-existingblocks': '<b>この利用者は既にブロックされています。</b>更新するブロックを選択するか、「{{int:block-create}}」をチェックしてください。',
-		'ajaxblock-dialog-message-predefinedparams': 'このリンクには事前定義されたフォームフィールド引数があります。',
+		'ajaxblock-dialog-message-nonactive-id': 'このリンクで指定されたID <b>#$1</b> のブロックは既に解除されているため、無視されました。',
+		'ajaxblock-dialog-message-existingblocks': '<b>この利用者は既にブロックされています。</b>更新するブロックを選択してください。',
+		'ajaxblock-dialog-message-existingblocks-canadd': '<b>この利用者は既にブロックされています。</b>更新するブロックを選択するか、「{{int:block-create}}」をチェックして新しいブロックを追加してください。',
+		'ajaxblock-dialog-message-existingblocks-unblock': '解除するブロックを選択してください。',
+		'ajaxblock-dialog-message-predefinedparams': 'このリンクにはフォームフィールドの事前定義パラメータが含まれています。',
 		'ajaxblock-dialog-message-predefinedparams-apply': '適用',
 		'ajaxblock-notify-error-loadblocklogs': 'ブロック情報の取得に失敗しました ($1)',
-		'ajaxblock-notify-error-idinactivenousername': 'このリンクに紐付けられたID <b>#$1</b> のブロックは、既に解除されているかつ利用者名も指定されていないため処理できません。',
+		'ajaxblock-notify-error-idinactivenousername': 'このリンクに紐付けられたID <b>#$1</b> のブロックは既に解除されており、利用者名も指定されていないため処理できません。',
 		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> は現在ブロックされていないため、ブロックを解除できません。',
 		'ajaxblock-notify-warning-invalidqueryparam-param': 'パラメータ',
 		'ajaxblock-notify-warning-invalidqueryparam-values': '無効な値を除外しました',
-	}
+	},
 };
 /**
  * Key for `mw.storage` to cache some messages.
@@ -1835,7 +1839,12 @@ function AjaxBlockDialogFactory() {
 			let /** @type {OO.ui.MessageWidget.ConfigOptions['type']} */ msgType;
 			let /** @type {JQuery<HTMLElement>} */ $logLines;
 			if (Array.isArray(options)) {
-				msgKey = 'ajaxblock-dialog-message-existingblocks';
+				msgKey = data.type === 'unblock'
+					? 'ajaxblock-dialog-message-existingblocks-unblock'
+					: (wgEnableMultiBlocks
+					? 'ajaxblock-dialog-message-existingblocks-canadd'
+					: 'ajaxblock-dialog-message-existingblocks'
+					);
 				msgType = 'warning';
 				field.blockSelector = new OO.ui.RadioSelectWidget({
 					classes: ['ajaxblock-dialog-blockselector'],
