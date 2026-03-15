@@ -95,6 +95,7 @@ interface ApiResponseQuery {
 	logevents?: ApiResponseQueryListLogevents[];
 	specialpagealiases?: ApiResponseQueryMetaSiteinfoSpecialpagealiases[];
 	userinfo?: ApiResponseQueryMetaUserinfoRights;
+	pages?: ApiResponseQueryPages[];
 }
 
 /**
@@ -150,6 +151,20 @@ interface ApiResponseQueryMetaUserinfoRights {
 	rights: string[];
 }
 
+interface ApiResponseQueryPages {
+    invalid?: true;
+    invalidreason?: string;
+    iw?: string;
+    known?: true;
+    missing?: true;
+    ns?: number;
+    pageid?: number;
+    revid?: number;
+    special?: true;
+    title: string;
+    url?: string;
+}
+
 /**
  * Picks method names whose return type extends string.
  */
@@ -162,7 +177,6 @@ export type StringMethodKeys<T> = {
  * List of messsages added by AjaxBlock.
  */
 export interface AjaxBlockMessages {
-	'ajaxblock-title-unprocessable': string;
 	'ajaxblock-dialog-button-label-block': string;
 	'ajaxblock-dialog-button-label-unblock': string;
 	'ajaxblock-dialog-button-label-docs': string;
@@ -173,9 +187,13 @@ export interface AjaxBlockMessages {
 	'ajaxblock-dialog-block-label-option-autoblock': string;
 	'ajaxblock-dialog-message-nonactive-id': string;
 	'ajaxblock-dialog-message-existingblocks': string;
+	'ajaxblock-dialog-message-predefinedparams': string;
+	'ajaxblock-dialog-message-predefinedparams-apply': string;
 	'ajaxblock-notify-error-loadblocklogs': string;
 	'ajaxblock-notify-error-idinactivenousername': string;
 	'ajaxblock-notify-error-cannotunblock': string;
+	'ajaxblock-notify-warning-invalidqueryparam-param': string;
+	'ajaxblock-notify-warning-invalidqueryparam-values': string;
 }
 
 /**

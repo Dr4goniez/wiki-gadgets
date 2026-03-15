@@ -31,6 +31,12 @@ if (
 	return;
 }
 
+// Don't tun the script on Special:Block and Special:Unblock
+const wgCanonicalSpecialPageName = mw.config.get('wgCanonicalSpecialPageName');
+if (wgCanonicalSpecialPageName === 'Block' || wgCanonicalSpecialPageName === 'Unblock') {
+	return;
+}
+
 let /** @type {mw.Api} */ api;
 const wgUserLanguage = mw.config.get('wgUserLanguage');
 let wgEnableMultiBlocks = false;
@@ -105,7 +111,10 @@ class AjaxBlock {
 				mw.loader.using([
 					'oojs-ui',
 					'mediawiki.widgets.TitlesMultiselectWidget',
-					'mediawiki.widgets.NamespacesMultiselectWidget'
+					'mediawiki.widgets.NamespacesMultiselectWidget',
+					// For safety: Already required by mediawiki.api
+					'mediawiki.Title',
+					'mediawiki.jqueryMsg',
 				]),
 				Messages.loadMessagesIfMissing(permissionManager, [
 					'colon-separator',
@@ -191,16 +200,6 @@ class AjaxBlock {
 		}
 		const [multiBlocksEnabled, blockLookup] = dataPromises;
 		wgEnableMultiBlocks = multiBlocksEnabled;
-
-		// Update the title attributes of unprocessable (un)block links as messages are now ready
-		/** @type {NodeListOf<HTMLAnchorElement>} */
-		const unprocessableLinks = document.querySelectorAll(
-			'.ajaxblock-blocklink-unprocessable, .ajaxblock-unblocklink-unprocessable'
-		);
-		const titleAttr = Messages.get('word-separator') + Messages.get('ajaxblock-title-unprocessable');
-		for (const a of unprocessableLinks) {
-			a.title += titleAttr;
-		}
 
 		// Create an AjaxBlock instance
 		this.addStyleTag();
@@ -516,11 +515,6 @@ class AjaxBlock {
 		const style = document.createElement('style');
 		style.id = 'ajaxblock-styles';
 		style.textContent = `
-			.ajaxblock-blocklink-unprocessable,
-			.ajaxblock-unblocklink-unprocessable {
-				text-decoration-line: underline;
-				text-decoration-style: dotted;
-			}
 			${/* Style the logo */''}
 			.ajaxblock-logo {
 				position: fixed;
@@ -534,12 +528,33 @@ class AjaxBlock {
 				height: 100%;
 				width: auto;
 			}
+			${/* Dialog content overlay to disallow user interaction */''}
+			.ajaxblock-dialog .oo-ui-window-body {
+				position: relative;
+			}
+			.ajaxblock-dialog-overlay {
+				position: absolute;
+				top: 0;
+				left: 0;
+				height: 100%;
+				width: 100%;
+				z-index: 1000;
+				overflow: hidden;
+			}
 			${/* Reduce padding for MessageWidget in the dialog */''}
 			.ajaxblock-dialog .ajaxblock-dialog-message {
 				padding: 8px 12px;
 			}
 			.ajaxblock-dialog .oo-ui-messageWidget.oo-ui-messageWidget-block > .oo-ui-iconElement-icon {
 				background-position: 0 8px;
+			}
+			${/* Limit the height of the block selector box */''}
+			.ajaxblock-dialog-blockselector {
+				max-height: 9.3em;
+				overflow-y: auto;
+			}
+			.ajaxblock-dialog-blockselector > .oo-ui-radioOptionWidget > .oo-ui-radioInputWidget {
+				vertical-align: middle;
 			}
 			${/* Increase spacing between log lines in the dialog */''}
 			.ajaxblock-dialog-logline {
@@ -574,10 +589,6 @@ class AjaxBlock {
 				font-weight: normal;
 				font-style: italic;
 				font-size: 1.1em;
-			}
-			${/* Override a top alignment for given radio options */''}
-			.ajaxblock-dialog .ajaxblock-dialog-radiooption-middlealigned .oo-ui-radioInputWidget {
-				vertical-align: middle;
 			}
 		`.replace(/[\t\n\r]+/g, '');
 		document.head.appendChild(style);
@@ -1581,7 +1592,6 @@ class Messages {
  */
 Messages.i18n = {
 	en: {
-		'ajaxblock-title-unprocessable': '(link cannot be processed by AjaxBlock)',
 		'ajaxblock-dialog-button-label-block': 'Block',
 		'ajaxblock-dialog-button-label-unblock': 'Unblock',
 		'ajaxblock-dialog-button-label-docs': 'Docs',
@@ -1592,12 +1602,15 @@ Messages.i18n = {
 		'ajaxblock-dialog-block-label-option-autoblock': 'Apply autoblock',
 		'ajaxblock-dialog-message-nonactive-id': 'The block ID <b>#$1</b> specified by this link is no longer active and hence disregarded.',
 		'ajaxblock-dialog-message-existingblocks': '<b>This user has active block(s).</b> Select a block you want to update, or check "{{int:block-create}}" to add a new block.',
+		'ajaxblock-dialog-message-predefinedparams': 'This links contains predefined parameters for the form fields.',
+		'ajaxblock-dialog-message-predefinedparams-apply': 'apply',
 		'ajaxblock-notify-error-loadblocklogs': 'Failed to load block information ($1)',
 		'ajaxblock-notify-error-idinactivenousername': 'This link cannot be processed because the block for ID <b>#$1</b> is no longer active and also no username is specified.',
 		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> does not have active blocks and cannot be unblocked.',
+		'ajaxblock-notify-warning-invalidqueryparam-param': 'Parameter',
+		'ajaxblock-notify-warning-invalidqueryparam-values': 'Filtered invalid values',
 	},
 	ja: {
-		'ajaxblock-title-unprocessable': '(AjaxBlock非対応のリンク)',
 		'ajaxblock-dialog-button-label-block': 'ブロック',
 		'ajaxblock-dialog-button-label-unblock': 'ブロック解除',
 		'ajaxblock-dialog-button-label-docs': '解説',
@@ -1608,9 +1621,13 @@ Messages.i18n = {
 		'ajaxblock-dialog-block-label-option-autoblock': '自動ブロックを適用',
 		'ajaxblock-dialog-message-nonactive-id': 'このリンクにより指定されているID <b>#$1</b> のブロックは、既に解除されているため無視されています。',
 		'ajaxblock-dialog-message-existingblocks': '<b>この利用者は既にブロックされています。</b>更新するブロックを選択するか、「{{int:block-create}}」をチェックしてください。',
+		'ajaxblock-dialog-message-predefinedparams': 'このリンクには事前定義されたフォームフィールド引数があります。',
+		'ajaxblock-dialog-message-predefinedparams-apply': '適用',
 		'ajaxblock-notify-error-loadblocklogs': 'ブロック情報の取得に失敗しました ($1)',
 		'ajaxblock-notify-error-idinactivenousername': 'このリンクに紐付けられたID <b>#$1</b> のブロックは、既に解除されているかつ利用者名も指定されていないため処理できません。',
 		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> は現在ブロックされていないため、ブロックを解除できません。',
+		'ajaxblock-notify-warning-invalidqueryparam-param': 'パラメータ',
+		'ajaxblock-notify-warning-invalidqueryparam-values': '無効な値を除外しました',
 	}
 };
 /**
@@ -1721,13 +1738,13 @@ function AjaxBlockDialogFactory() {
 			this.actionRestrictions = actionRestrictions;
 
 			/**
-			 * The currently active field, and a {@link BlockLog} instance created in {@link getSetupProcess}
-			 * and used in {@link getReadyProcess}.
+			 * Stores a {@link BlockLog} instance returned by {@link BlockUser.setTarget} or {@link UnblockUser.setTarget},
+			 * for use by {@link getSetupProcess} and {@link getReadyProcess}.
 			 *
-			 * @type {?{ field: BlockUser | UnblockUser; blockLog: BlockLog; }}
+			 * @type {?BlockLog}
 			 * @private
 			 */
-			this.readyProcessStore = null;
+			this.readyProcessBlockLog = null;
 
 			this.blockUser = new BlockUser(this);
 			this.unblockUser = new UnblockUser(this);
@@ -1740,6 +1757,8 @@ function AjaxBlockDialogFactory() {
 				this.blockUser.$element,
 				this.unblockUser.$element
 			);
+
+			this.overlay = new AjaxBlockDialogBodyOverlay();
 		}
 
 		/**
@@ -1751,7 +1770,10 @@ function AjaxBlockDialogFactory() {
 			super.initialize.apply(this, arguments);
 
 			// @ts-expect-error
-			this.$body.append(this.content.$element);
+			this.$body.append(
+				this.overlay.$element,
+				this.content.$element
+			);
 
 			return this;
 		}
@@ -1763,19 +1785,14 @@ function AjaxBlockDialogFactory() {
 		 */
 		getSetupProcess(data) {
 			return super.getSetupProcess().next(() => {
-				// Set mode to determine which buttons to show
+				// Set mode and determine which buttons/fields to show
 				this.getActions().setMode(data.type);
-
-				// Set up the visibility of dialog items
-				this.blockUser.toggle(data.type === 'block');
-				this.unblockUser.toggle(data.type === 'unblock');
-
-				// Set target and check if any additional processes should be handled
-				// to open the dialog
-				const field = data.type === 'block' ? this.blockUser : this.unblockUser;
+				const field = this.setActiveField(data).getActiveField(data);
 				field.blockSelector = null;
-				const targetHandler = field.setTarget(data.target);
+				field.addParamApplier(data);
 
+				// Set target and check if any additional processes should be handled to open the dialog
+				const targetHandler = field.setTarget(data.target);
 				if (Array.isArray(targetHandler)) {
 					// There's a blocker to open the dialog
 					const args = targetHandler;
@@ -1786,16 +1803,9 @@ function AjaxBlockDialogFactory() {
 					return false;
 				} else if (targetHandler instanceof BlockLog) {
 					// Block log lines should be generated asynchronously
-					this.readyProcessStore = {
-						field,
-						blockLog: targetHandler,
-					};
+					this.readyProcessBlockLog = targetHandler;
 					this.pushPending();
 					this.content.toggle(false);
-				} else {
-					this.readyProcessStore = null;
-					this.popPending();
-					this.content.toggle(true);
 				}
 			});
 		}
@@ -1808,12 +1818,10 @@ function AjaxBlockDialogFactory() {
 		getReadyProcess(data) {
 			// @ts-expect-error
 			return super.getReadyProcess().next(async () => {
-				if (this.readyProcessStore) {
+				if (this.readyProcessBlockLog) {
 					const start = Date.now();
-
-					const { field, blockLog } = this.readyProcessStore;
 					try {
-						await this.getReadyProcessInternal(data, field, blockLog);
+						await this.getReadyProcessInternal(data, this.readyProcessBlockLog);
 					} catch (code) {
 						const err =
 							scriptName +
@@ -1823,25 +1831,25 @@ function AjaxBlockDialogFactory() {
 						return false;
 					}
 
-					// Prevent the pending animation from showing for a too short time
-					await sleep(1000 - (Date.now() - start));
+					// Ensure the pending animation has been shown for a certain duration
+					await sleep(800 - (Date.now() - start));
 
 					this.content.toggle(true);
 					this.updateSize().popPending();
-					this.readyProcessStore = null;
+					this.readyProcessBlockLog = null;
 				}
 			});
 		}
 
 		/**
 		 * @param {BlockLink} data
-		 * @param {BlockUser | UnblockUser} field
 		 * @param {BlockLog} blockLog
 		 * @returns {Promise<void>}
 		 * @private
 		 */
-		async getReadyProcessInternal(data, field, blockLog) {
+		async getReadyProcessInternal(data, blockLog) {
 			const options = await blockLog.generate();
+			const field = this.getActiveField(data);
 
 			let /** @type {keyof LoadedMessages} */ msgKey;
 			let /** @type {OO.ui.MessageWidget.ConfigOptions['type']} */ msgType;
@@ -1850,12 +1858,10 @@ function AjaxBlockDialogFactory() {
 				msgKey = 'ajaxblock-dialog-message-existingblocks';
 				msgType = 'warning';
 				field.blockSelector = new OO.ui.RadioSelectWidget({
+					classes: ['ajaxblock-dialog-blockselector'],
 					items: options,
 				});
-				$logLines = field.blockSelector.$element.css({
-					'max-height': '9.3em',
-					'overflow-y': 'auto',
-				});
+				$logLines = field.blockSelector.$element;
 			} else {
 				msgKey = data.target.getType() === 'anon'
 					? 'blocked-notice-logextract-anon'
@@ -1888,8 +1894,10 @@ function AjaxBlockDialogFactory() {
 			return new OO.ui.Process(() => {
 				switch (action) {
 					case 'execute': {
-						if (this.readyProcessStore) {
-							// No-op if the dialog is still getting ready
+						if (this.readyProcessBlockLog || this.overlay.isShown()) {
+							// No-op if:
+							// - the dialog is still getting ready
+							// - the overlay is shown
 							return;
 						}
 						break;
@@ -1902,6 +1910,46 @@ function AjaxBlockDialogFactory() {
 						break;
 					default: this.close();
 				}
+			});
+		}
+
+		/**
+		 * Sets the visibility of dialog fields based on the given data and flags a field as active.
+		 *
+		 * @param {BlockLink} data
+		 * @returns {this}
+		 * @private
+		 * @todo The method name is a bit misleading; Should this store which field is activated?
+		 */
+		setActiveField(data) {
+			this.blockUser.toggle(data.type === 'block');
+			this.unblockUser.toggle(data.type === 'unblock');
+			return this;
+		}
+
+		/**
+		 * @param {BlockLink} data
+		 * @returns {BlockUser | UnblockUser}
+		 * @private
+		 */
+		getActiveField(data) {
+			return data.type === 'block' ? this.blockUser : this.unblockUser;
+		}
+
+		/**
+		 * @inheritdoc
+		 * @override
+		 * @param {BlockLink} [data]
+		 */
+		getTeardownProcess(data) {
+			return super.getTeardownProcess().next(() => {
+				if (!data) {
+					return;
+				}
+				this.getActiveField(data).clearMessages();
+				this.readyProcessBlockLog = null;
+				this.popPending();
+				this.content.toggle(true);
 			});
 		}
 
@@ -1953,6 +2001,36 @@ function AjaxBlockDialogFactory() {
 	})();
 
 	return AjaxBlockDialog;
+}
+
+class AjaxBlockDialogBodyOverlay {
+
+	constructor() {
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = $('<div>').addClass('ajaxblock-dialog-overlay').hide();
+		/**
+		 * @private
+		 */
+		this.shown = false;
+	}
+
+	/**
+	 * @param {boolean} show
+	 * @returns {this}
+	 */
+	toggle(show) {
+		this.shown = show;
+		this.$element.toggle(show);
+		return this;
+	}
+
+	isShown() {
+		return this.shown;
+	}
+
 }
 
 /**
@@ -2101,6 +2179,55 @@ class AjaxBlockDialogContent {
 		return params;
 	}
 
+	/**
+	 * Appends a message box with an "apply parameters" button.
+	 *
+	 * @param {BlockLink} data
+	 * @returns {this}
+	 */
+	addParamApplier(data) {
+		if (!data.params.size) {
+			return this;
+		}
+
+		const applier = document.createElement('a');
+		applier.role = 'button';
+		applier.href = '#';
+		applier.textContent = Messages.get('ajaxblock-dialog-message-predefinedparams-apply');
+		applier.style.fontWeight = 'bold';
+		applier.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			this.applyParams(data);
+		});
+
+		const mainMsg = Messages.get('ajaxblock-dialog-message-predefinedparams');
+		// eslint-disable-next-line no-control-regex
+		const isLastCharFullWidth = !!mainMsg && /[^\u0000-\u00ff]$/.test(mainMsg);
+		this.addMessage({
+			label: $('<span>').append(
+				mainMsg,
+				isLastCharFullWidth ? Messages.get('word-separator') : '',
+				Messages.get('parentheses-start'),
+				applier,
+				Messages.get('parentheses-end')
+			),
+			type: 'notice',
+		});
+
+		return this;
+	}
+
+	/**
+	 * @param {BlockLink} data
+	 * @returns {void}
+	 * @abstract
+	 */
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	applyParams(data) {
+		// Noop
+	}
+
 }
 
 /**
@@ -2216,7 +2343,7 @@ class BlockUser extends AjaxBlockDialogContent {
 			api,
 			placeholder: Messages.get('block-pages-placeholder'),
 			showMissing: false,
-			tagLimit: 50,
+			tagLimit: wgEnableMultiBlocks ? 50 : 10,
 		});
 		partialBlockLayoutItems.push(
 			new OO.ui.FieldLayout(this.partialBlockPages, {
@@ -2358,7 +2485,6 @@ class BlockUser extends AjaxBlockDialogContent {
 		const id = target.getId();
 		const username = target.getUsername();
 		const blocks = username ? this.dialog.blockLookup.getBlocksByUsername(username) : null;
-		this.clearMessages(); // Don't inherit the previous message
 
 		if (id !== null) {
 			const block = this.dialog.blockLookup.getBlockById(id);
@@ -2558,63 +2684,288 @@ class BlockUser extends AjaxBlockDialogContent {
 		return this;
 	}
 
-	// /**
-	//  * @param {URLSearchParams} query
-	//  * @returns {this}
-	//  */
-	// applyParams(query) {
-		// if (query.wpExpiry) {
-		// 	this.setExpiry(query.wpExpiry);
-		// }
+	/**
+	 * @param {BlockLink} data
+	 * @returns {void | JQuery.Promise<void>}
+	 * @override
+	 */
+	applyParams(data) {
+		const { params, target } = data;
+		const targetType = target.getType();
 
-		// const partial = query.wpEditingRestriction === 'partial';
-		// this.partialBlock.setSelected(partial);
-		// if (partial) {
+		/**
+		 * @template T
+		 * @typedef {{
+		 *   getter: (value: string, key: string) => T | JQuery.Promise<T>;
+		 *   setter: (value: T) => any;
+		 *   default: T;
+		 * }} ParamHandler
+		 */
+		const paramMap = {
+			/** @type {ParamHandler<string>} */
+			wpExpiry: {
+				setter: this.setExpiry.bind(this),
+				getter: (v) => v,
+				default: '',
+			},
+			/** @type {ParamHandler<string>} */
+			wpReason: {
+				setter: this.setReason.bind(this),
+				getter: (v) => {
+					const ret = [];
 
-		// }
+					const item = this.reason1.getMenu().findItemFromData(v);
+					if (item instanceof OO.ui.OptionWidget) {
+						ret.push(item.getData());
+					}
 
-		// $this->codexFormData[ 'blockTypePreset' ] =
-		// 	$request->getRawVal( 'wpEditingRestriction' ) === 'partial' ?
-		// 	'partial' :
-		// 	'sitewide';
-		// $reasonPreset = $request->getVal( 'wpReason' );
-		// $reasonOtherPreset = $request->getVal( 'wpReason-other' );
-		// if ( $reasonPreset && $reasonOtherPreset ) {
-		// 	$this->codexFormData[ 'blockReasonPreset' ] = $reasonPreset .
-		// 		$this->msg( 'colon-separator' )->text() . $reasonOtherPreset;
-		// } else {
-		// 	$this->codexFormData[ 'blockReasonPreset' ] =
-		// 		$reasonPreset ?: $reasonOtherPreset ?: '';
-		// }
-		// $this->codexFormData[ 'blockRemovalReasonPreset' ] = $request->getVal( 'wpRemovalReason' );
-		// $blockAdditionalDetailsPreset = $blockDetailsPreset = [];
-		// // Default is to always block account creation.
-		// if ( $request->getBool( 'wpCreateAccount', true ) ) {
-		// 	$blockDetailsPreset[] = 'wpCreateAccount';
-		// }
-		// if ( $request->getBool( 'wpDisableEmail' ) ) {
-		// 	$blockDetailsPreset[] = 'wpDisableEmail';
-		// }
-		// if ( $request->getBool( 'wpDisableUTEdit' ) ) {
-		// 	$blockDetailsPreset[] = 'wpDisableUTEdit';
-		// }
-		// if ( $request->getRawVal( 'wpAutoBlock' ) !== '0' ) {
-		// 	$blockAdditionalDetailsPreset[] = 'wpAutoBlock';
-		// }
-		// if ( $request->getBool( 'wpWatch' ) ) {
-		// 	$blockAdditionalDetailsPreset[] = 'wpWatch';
-		// }
-		// if ( $request->getBool( 'wpHideUser' ) ) {
-		// 	$blockAdditionalDetailsPreset[] = 'wpHideUser';
-		// }
-		// if ( $request->getBool( 'wpHardBlock' ) ) {
-		// 	$blockAdditionalDetailsPreset[] = 'wpHardBlock';
-		// }
-		// $this->codexFormData[ 'blockDetailsPreset' ] = $blockDetailsPreset;
-		// $this->codexFormData[ 'blockAdditionalDetailsPreset' ] = $blockAdditionalDetailsPreset;
-		// $this->codexFormData[ 'blockPageRestrictions' ] = $request->getVal( 'wpPageRestrictions' );
-		// $this->codexFormData[ 'blockNamespaceRestrictions' ] = $request->getVal( 'wpNamespaceRestrictions' );
-	// }
+					ret.push(params.get('wpReason-other'));
+
+					return ret.filter(Boolean).join(Messages.get('colon-separator'));
+				},
+				default: '',
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpEditingRestriction: {
+				setter: this.partialBlock.setSelected.bind(this.partialBlock),
+				getter: (v) => v === 'partial',
+				default: false,
+			},
+			/** @type {ParamHandler<string[]>} */
+			wpPageRestrictions: {
+				setter: (values) => {
+					const menu = this.partialBlockPages.getMenu();
+					const items = [];
+					for (const title of values) {
+						if (!menu.findItemFromData(title)) {
+							items.push(
+								this.partialBlockPages.createMenuOptionWidget(title)
+							);
+						}
+					}
+					menu.addItems(items);
+					this.partialBlockPages.setValue(values);
+					menu.removeItems(items);
+				},
+				getter: (v, k) => {
+					const tempValues = /** @type {Set<string>} */ new Set();
+					const invalidValues = /** @type {Set<string>} */ new Set();
+
+					for (let t of v.split('\n')) {
+						t = t.trim();
+						const title = mw.Title.newFromText(t);
+						if (title && title.getNamespaceId() >= 0) {
+							tempValues.add(title.getPrefixedText());
+						} else {
+							invalidValues.add(t);
+						}
+					}
+
+					if (!tempValues.size) {
+						if (invalidValues.size) {
+							BlockUser.notifyInvalidValues(k, v, invalidValues);
+						}
+						return /** @type {string[]} */ ([]);
+					}
+
+					const apilimit = this.dialog.permissionManager.getApiLimit();
+					const ajaxOptions = AjaxBlock.nonwritePost();
+					return (
+						/**
+						 * @param {string[]} batch
+						 * @param {number} offset
+						 * @param {Set<string>} ret
+						 * @returns {JQuery.Promise<string[]>}
+						 */
+						function request(batch, offset, ret = new Set()) {
+							const titles = batch.slice(offset, offset + apilimit);
+							return api.post({
+								titles,
+								errorformat: 'html',
+								errorlang: wgUserLanguage,
+								errorsuselocal: true,
+							}, ajaxOptions).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+								const pages = res && res.query && res.query.pages;
+								if (!Array.isArray(pages)) {
+									return failAsEmptyResult(res, jqXHR);
+								}
+								for (const page of pages) {
+									const { invalid, iw, missing, special, title } = page;
+									if (invalid || iw || missing || special) {
+										invalidValues.add(title);
+										continue;
+									}
+									ret.add(title);
+								}
+								offset += apilimit;
+								if (batch[offset]) {
+									return request(batch, offset, ret);
+								}
+								return [...ret];
+							});
+						}
+					)(Array.from(tempValues), 0).then((titles) => {
+						if (invalidValues.size) {
+							BlockUser.notifyInvalidValues(k, v, invalidValues);
+						}
+						return titles.slice(0, this.partialBlockPages.limit);
+					});
+				},
+				default: [],
+			},
+			/** @type {ParamHandler<string[]>} */
+			wpNamespaceRestrictions: {
+				setter: this.partialBlockNamespaces.setValue.bind(this.partialBlockNamespaces),
+				getter: /** @param {string} v @param {string} k */ (v, k) => {
+					// XXX: MwWidgetsNamespacesMenuOptionWidget.data is a string
+					const values = /** @type {Set<string>} */ new Set();
+					const invalidValues = /** @type {Set<string>} */ new Set();
+
+					for (let ns of v.split('\n')) {
+						ns = ns.trim();
+						if (/^\d+$/.test(ns) && BlockUser.isValidNamespaceRestrictionValue(+ns)) {
+							values.add(ns); // Namespace IDs are stored as strings
+						} else {
+							invalidValues.add(ns);
+						}
+					}
+
+					if (invalidValues.size) {
+						BlockUser.notifyInvalidValues(k, v, invalidValues);
+					}
+					return [...values];
+				},
+				default: [],
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpCreateAccount: {
+				setter: this.cbCreateAccount.setSelected.bind(this.cbCreateAccount),
+				getter: /** @param {string} v */ (v) => toPHPBool(v),
+				default: true,
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpDisableEmail: {
+				setter: this.cbSendEmail.setSelected.bind(this.cbSendEmail),
+				getter: /** @param {string} v */ (v) => toPHPBool(v),
+				default: false,
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpDisableUTEdit: {
+				setter: this.cbUserTalk.setSelected.bind(this.cbUserTalk),
+				getter: /** @param {string} v */ (v) => toPHPBool(v),
+				default: false,
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpAutoBlock: {
+				setter: this.cbAutoblock.setSelected.bind(this.cbAutoblock),
+				getter: /** @param {string} v */ (v) => targetType !== 'anon' && toPHPBool(v),
+				default: targetType !== 'anon',
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpHideUser: {
+				setter: this.cbHideName.setSelected.bind(this.cbHideName),
+				getter: /** @param {string} v */ (v) => (
+					this.dialog.permissionManager.isAllowed('hideuser') && targetType !== 'anon' && toPHPBool(v)
+				),
+				default: false,
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpHardBlock: {
+				setter: this.cbHardblock.setSelected.bind(this.cbHardblock),
+				getter: /** @param {string} v */ (v) => targetType === 'anon' && toPHPBool(v),
+				default: false,
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpWatch: {
+				setter: this.watchUser.setSelected.bind(this.watchUser),
+				getter: /** @param {string} v */ (v) => toPHPBool(v),
+				default: false,
+			},
+		};
+
+		// Apply values from URL parameters
+		const applied = /** @type {Set<keyof typeof paramMap>} */ (new Set());
+		const promises = [];
+		for (const [key, value] of params) {
+			if (!Object.prototype.hasOwnProperty.call(paramMap, key)) {
+				console.warn('Unrecognized parameter: ' + key);
+				continue;
+			}
+			const param = /** @type {keyof typeof paramMap} */ (key);
+			applied.add(param);
+			const { getter, setter } = paramMap[param];
+			const val = getter(value, param);
+			if (isObject(val) && typeof val.then === 'function') {
+				// @ts-expect-error
+				const p = val.then(setter).catch((_code, _res, res) => api.getErrorMessage(res));
+				promises.push(p);
+			} else {
+				// @ts-expect-error
+				setter(val);
+			}
+		}
+
+		// Apply defaults for parameters that were not provided
+		for (const key in paramMap) {
+			const param = /** @type {keyof typeof paramMap} */ (key);
+			if (!applied.has(param)) {
+				const { setter, default: def } = paramMap[param];
+				// @ts-expect-error
+				setter(def);
+			}
+		}
+
+		// Action restrictions cannot be preset via URL parameters, so reset them all
+		for (const checkbox of Object.values(this.partialBlockActions)) {
+			checkbox.setSelected(false);
+		}
+
+		// If any getter returned a Promise, show the pending animation and "lock"
+		// the dialog using the overlay. Unlock it again when all promises resolve.
+		if (promises.length) {
+			this.dialog.pushPending();
+			this.dialog.overlay.toggle(true);
+
+			return $.when(...promises).always((...args) => {
+				args.forEach(($err) => {
+					if ($err instanceof $) {
+						// @ts-expect-error
+						mw.notify($err, { type: 'error', autoHideSeconds: 'long' });
+					}
+				});
+				this.dialog.popPending();
+				this.dialog.overlay.toggle(false);
+			});
+		}
+	}
+
+	/**
+	 * @param {string} paramKey
+	 * @param {string} paramValue
+	 * @param {Set<string>} invalidValues
+	 * @private
+	 */
+	static notifyInvalidValues(paramKey, paramValue, invalidValues) {
+		const $msg = $('<div>');
+		const colon = Messages.get('colon-separator');
+
+		$msg.append(
+			$('<div>').append(
+				document.createTextNode(Messages.get('ajaxblock-notify-warning-invalidqueryparam-param')),
+				document.createTextNode(colon),
+				$('<code>').text(`${paramKey}=${paramValue.replace(/\n/g, '\\n')}`)
+			),
+			$('<div>').append(
+				document.createTextNode(Messages.get('ajaxblock-notify-warning-invalidqueryparam-values')),
+				document.createTextNode(colon),
+				Messages.listToText(
+					[...invalidValues].map(v => `<code>${v}</code>`)
+				)
+			).css({ 'margin-top': '0.5em' })
+		);
+
+		mw.notify($msg, { type: 'warn', autoHideSeconds: 'long' });
+	}
 
 	getExpiry() {
 		const selected = DropdownUtil.getSelectedOptionValue(this.expiry);
@@ -2739,16 +3090,34 @@ class BlockUser extends AjaxBlockDialogContent {
 		return options;
 	}
 
+	/**
+	 * @param {string} param
+	 * @returns {boolean}
+	 */
+	static supportsParam(param) {
+		return this.supportedQueryParams.has(param);
+	}
+
+	/**
+	 * @param {number} namespace
+	 * @returns {boolean}
+	 */
+	static isValidNamespaceRestrictionValue(namespace) {
+		return this.validNamespaceRestrictionValues.has(namespace);
+	}
+
 }
+/**
+ * @type {Set<string>}
+ */
 BlockUser.supportedQueryParams = new Set([
 	'wpExpiry',
 	'wpReason',
 	'wpReason-other',
-	'wpRemovalReason',
+	// 'wpRemovalReason', // Handled in UnblockUser instead
 	'wpEditingRestriction',
 	'wpPageRestrictions',
 	'wpNamespaceRestrictions',
-	'wpActionRestrictions', // ?
 	'wpCreateAccount', // Default: true
 	'wpDisableEmail',
 	'wpDisableUTEdit',
@@ -2758,12 +3127,17 @@ BlockUser.supportedQueryParams = new Set([
 	'wpWatch',
 ]);
 /**
- * @param {string} param
- * @returns {boolean}
+ * @type {Set<number>}
  */
-BlockUser.supportsParam = function(param) {
-	return this.supportedQueryParams.has(param);
-};
+BlockUser.validNamespaceRestrictionValues = new Set(
+	Object.keys(mw.config.get('wgFormattedNamespaces')).reduce((acc, ns) => {
+		const num = Number(ns);
+		if (num >= 0) {
+			acc.push(num);
+		}
+		return acc;
+	}, /** @type {number[]} */ ([]))
+);
 
 class UnblockUser extends AjaxBlockDialogContent {
 
@@ -2824,7 +3198,6 @@ class UnblockUser extends AjaxBlockDialogContent {
 		const id = target.getId();
 		const username = target.getUsername();
 		const blocks = username ? this.dialog.blockLookup.getBlocksByUsername(username) : null;
-		this.clearMessages(); // Don't inherit the previous message
 
 		if (id !== null) {
 			const block = this.dialog.blockLookup.getBlockById(id);
@@ -3006,8 +3379,24 @@ class UnblockUser extends AjaxBlockDialogContent {
 		return this;
 	}
 
+	/**
+	 * @param {BlockLink} data
+	 * @returns {void}
+	 * @override
+	 */
+	applyParams(data) {
+		const { params } = data;
+
+		const reason = params.get('wpRemovalReason') || params.get('wpReason') || '';
+		this.reason.setValue(reason);
+
+		const watch = toPHPBool(params.get('wpWatch'));
+		this.watchUser.setSelected(watch);
+	}
+
 }
 UnblockUser.supportedQueryParams = new Set([
+	'wpRemovalReason', // XXX: This is actually for Special:Block
 	'wpReason',
 	'wpWatch',
 ]);
@@ -3329,7 +3718,6 @@ class BlockLog {
 				for (const [id, logData] of blockLogMap) {
 					options.push(
 						new OO.ui.RadioOptionWidget({
-							classes: ['ajaxblock-dialog-radiooption-middlealigned'],
 							data: id,
 							label: new OO.ui.HtmlSnippet(
 								BlockLog.create(logData)
@@ -3404,6 +3792,16 @@ function toPHPBool(value) {
 		return false;
 	}
 	return value !== '' && value !== '0';
+}
+
+/**
+ * Checks whether a value is an object. Arrays and `null` are not considered objects.
+ *
+ * @param {unknown} value
+ * @returns {value is Record<string | number | symbol, unknown>}
+ */
+function isObject(value) {
+	return typeof value === 'object' && !Array.isArray(value) && value !== null;
 }
 
 class AjaxBlockLogo {
