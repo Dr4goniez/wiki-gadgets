@@ -75,6 +75,7 @@ class AjaxBlock {
 		if (!permissionManager.isAllowed('block')) {
 			return;
 		}
+		wgEnableMultiBlocks = initializer.multiBlocksEnabled;
 
 		// Parse block/unblock links
 		const linkMaps = this.collectBlockLinks(initializer);
@@ -106,7 +107,6 @@ class AjaxBlock {
 		let dataPromises;
 		try {
 			dataPromises = await Promise.all([
-				this.fetchMultiBlockSettings(),
 				BlockLookup.fetch(permissionManager, users, ids),
 				mw.loader.using([
 					'oojs-ui',
@@ -198,11 +198,10 @@ class AjaxBlock {
 			await logo.setError().remove(800);
 			return;
 		}
-		const [multiBlocksEnabled, blockLookup] = dataPromises;
-		wgEnableMultiBlocks = multiBlocksEnabled;
 
 		// Create an AjaxBlock instance
 		this.addStyleTag();
+		const [blockLookup] = dataPromises;
 		new this(permissionManager, linkMaps, blockLookup, initializer.actionRestrictions);
 		logo.remove(1200);
 	}
@@ -213,7 +212,13 @@ class AjaxBlock {
 	 * @private
 	 */
 	static getInitializer(api) {
-		const data = /** @type {Partial<Initializer>} */ (Object.create(null));
+		const /** @type {Partial<Initializer>} */ data = {
+			blockPageAliases: void 0,
+			specialNamespaceAliases: void 0,
+			userRights: void 0,
+			actionRestrictions: void 0,
+			multiBlocksEnabled: void 0,
+		};
 
 		// Special namespace aliases (always local)
 		const specialNamespaceAliases = [];
@@ -244,6 +249,12 @@ class AjaxBlock {
 		const cachedRestrictions = mw.storage.getObject(this.storageKeys.actionRestrictions);
 		if (Array.isArray(cachedRestrictions) && cachedRestrictions.every(r => typeof r === 'string')) {
 			data.actionRestrictions = cachedRestrictions;
+		}
+
+		// Cached multiblocks configuration
+		const cachedMbEnabled = mw.storage.get(this.storageKeys.enableMultiblocks);
+		if (typeof cachedMbEnabled === 'string') {
+			data.multiBlocksEnabled = Boolean(Number(cachedMbEnabled));
 		}
 
 		/** @type {JQuery.Promise<void>[]} */
@@ -297,12 +308,16 @@ class AjaxBlock {
 						mw.storage.setObject(this.storageKeys.userRights, rights, daysInSeconds(1));
 						data.userRights = new Set(rights);
 					}
+
+					if (!data.blockPageAliases || !data.userRights) {
+						return failAsEmptyResult(res, jqXHR);
+					}
 				})
 			);
 		}
 
 		// Fetch paraminfo if needed
-		if (!data.actionRestrictions) {
+		if (!data.actionRestrictions || typeof data.multiBlocksEnabled !== 'boolean') {
 			requests.push(
 				api.get({
 					action: 'paraminfo',
@@ -313,11 +328,32 @@ class AjaxBlock {
 						return failAsEmptyResult(res, jqXHR);
 					}
 
-					const param = mod.parameters.find(p => p.name === 'actionrestrictions');
-					const actions = param && param.type;
-					if (Array.isArray(actions)) {
-						mw.storage.setObject(this.storageKeys.actionRestrictions, actions, daysInSeconds(7));
-						data.actionRestrictions = actions;
+					const done = () => {
+						return !!data.actionRestrictions && typeof data.multiBlocksEnabled === 'boolean';
+					};
+					for (const { name, type, limit } of mod.parameters) {
+						if (name === 'pagerestrictions' && typeof limit === 'number') {
+							// Hack: There's no other way to retrieve the value of wgEnableMultiBlocks (T404508),
+							// but the limit of page restrictions is 50 when multiblocks is enabled, otherwise 10
+							const multiBlocksEnabled = limit === 50;
+							mw.storage.set(
+								this.storageKeys.enableMultiblocks,
+								multiBlocksEnabled ? '1' : '0',
+								daysInSeconds(7)
+							);
+							data.multiBlocksEnabled = multiBlocksEnabled;
+						}
+						if (name === 'actionrestrictions' && Array.isArray(type)) {
+							const actions = type;
+							mw.storage.setObject(this.storageKeys.actionRestrictions, actions, daysInSeconds(7));
+							data.actionRestrictions = actions;
+						}
+						if (done()) {
+							break;
+						}
+					}
+					if (!done()) {
+						return failAsEmptyResult(res, jqXHR);
 					}
 				})
 			);
@@ -450,62 +486,6 @@ class AjaxBlock {
 		}
 
 		return [blockLinkMap, unblockLinkMap];
-	}
-
-	/**
-	 * Retrieves the configuration value of `wgEnableMultiBlocks`.
-	 *
-	 * @returns {JQuery.Promise<boolean>}
-	 * @private
-	 */
-	static fetchMultiBlockSettings() {
-		const cache = mw.storage.get(this.storageKeys.enableMultiblocks);
-		if (typeof cache === 'string') {
-			return $.Deferred().resolve(cache === '1').promise();
-		}
-
-		const m = /(?:^|\b)1\.(\d+)/.exec(mw.config.get('wgVersion'));
-		const minor = m ? Number(m[1]) : 0;
-		if (minor < 44) {
-			// No multiblocks in MW < 1.44
-			return $.Deferred().resolve(false).promise();
-		}
-
-		// XXX: There's no other way to retrieve the value of wgEnableMultiBlocks (see also T404508)
-		return $.get(mw.util.getUrl('Special:Block', { usecodex: 1 })).then((html) => {
-			if (typeof html !== 'string') {
-				return false;
-			}
-
-			const doc = Document.parseHTMLUnsafe(html);
-			for (const script of doc.querySelectorAll('script')) {
-				const text = script.textContent || '';
-				if (!text.includes('blockEnableMultiblocks')) {
-					continue;
-				}
-
-				// We intentionally search only for the single config key instead of parsing
-				// the full RLCONF object to reduce fragility if the bootstrap format changes.
-				const match = text.match(/["']?blockEnableMultiblocks["']?\s*:\s*(true|false)\b/);
-				if (!match) {
-					continue;
-				}
-
-				const enabled = match[1] === 'true';
-				mw.storage.set(
-					this.storageKeys.enableMultiblocks,
-					enabled ? '1' : '0',
-					daysInSeconds(enabled ? 7 : 3)
-				);
-				return enabled;
-			}
-
-			console.warn('blockEnableMultiblocks not found');
-			return false;
-		}).catch((jqXHR) => {
-			console.error(jqXHR);
-			return false;
-		});
 	}
 
 	/**

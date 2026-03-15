@@ -13,6 +13,7 @@ export interface Initializer {
 	specialNamespaceAliases: string[];
 	userRights: Set<string>;
 	actionRestrictions: string[];
+	multiBlocksEnabled: boolean;
 }
 
 export interface ApiResponse {
