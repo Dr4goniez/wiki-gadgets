@@ -78,23 +78,10 @@ class AjaxBlock {
 		wgEnableMultiBlocks = initializer.multiBlocksEnabled;
 
 		// Parse block/unblock links
-		const linkMaps = this.collectBlockLinks(initializer);
-		if (linkMaps.every((map) => $.isEmptyObject(map))) {
+		const { links, users, ids } = this.collectBlockLinks(initializer);
+		if (!links.length) {
 			return;
 		}
-
-		// Extract block targets and block IDs
-		const /** @type {Set<string>} */ users = new Set();
-		const /** @type {Set<string>} */ ids = new Set();
-		linkMaps.forEach((map) => {
-			Object.keys(map).forEach((key) => {
-				if (key.startsWith('#')) {
-					ids.add(key.slice(1));
-				} else {
-					users.add(key);
-				}
-			});
-		});
 
 		// Show logo while loading
 		const logo = new AjaxBlockLogo().insert();
@@ -201,11 +188,53 @@ class AjaxBlock {
 			await logo.setError().remove(800);
 			return;
 		}
+		const [blockLookup] = dataPromises;
+
+		// Format the array of BlockLink objects to a Map
+		const /** @type {BlockLinkMap} */ linkMap = new Map();
+		for (const obj of links) {
+			const id = obj.target.getId();
+			const username = obj.target.getUsername();
+			let /** @type {string | number | null} */ key = null;
+
+			if (id && username) {
+				key = username;
+			} else if (id) {
+				// ID-based (un)block links must have associated active blocks
+				const block = blockLookup.getBlockById(id);
+				if (block) {
+					if (block.user) {
+						key = block.user;
+						obj.target.setUsername(key);
+					} else if (block.automatic && obj.type === 'unblock') {
+						key = id;
+					}
+				}
+			} else if (username) {
+				// We don't try to associate the username to block IDs here
+				// That should be handled in setTarget()
+				key = username;
+			} else {
+				// collectBlockLinks() should have already handled this path
+				throw new Error('Logic exception', { cause: obj });
+			}
+			if (key === null) {
+				this.markLinkAsUnprocessable(obj.anchor, obj.type);
+				continue;
+			}
+
+			if (!linkMap.has(key)) {
+				linkMap.set(key, []);
+			}
+			/** @type {BlockLink[]} */ (linkMap.get(key)).push(obj);
+		}
 
 		// Create an AjaxBlock instance
-		this.addStyleTag();
-		const [blockLookup] = dataPromises;
-		new this(permissionManager, linkMaps, blockLookup, initializer.actionRestrictions);
+		// TODO: Use mw.hook
+		if (linkMap.size) {
+			this.addStyleTag();
+			new this(permissionManager, linkMap, blockLookup, initializer.actionRestrictions);
+		}
 		logo.remove(1200);
 	}
 
@@ -372,7 +401,7 @@ class AjaxBlock {
 
 	/**
 	 * @param {Initializer} init
-	 * @return {[BlockLinkMap, UnblockLinkMap]}
+	 * @return {{ links: BlockLink[]; users: Set<string>; ids: Set<number>; }}
 	 * @private
 	 */
 	static collectBlockLinks(init) {
@@ -405,10 +434,10 @@ class AjaxBlock {
 			 */
 			unblock: new RegExp('^(' + toEscaped(init.blockPageAliases.Unblock) + ')$', 'i'),
 		};
-		/** @type {BlockLinkMap} */
-		const blockLinkMap = Object.create(null);
-		/** @type {UnblockLinkMap} */
-		const unblockLinkMap = Object.create(null);
+
+		const /** @type {BlockLink[]} */ links = [];
+		const /** @type {Set<string>} */ users = new Set();
+		const /** @type {Set<number>} */ ids = new Set();
 
 		for (const a of /** @type {NodeListOf<HTMLAnchorElement>} */ (document.querySelectorAll('#bodyContent a'))) {
 			let href = a.href;
@@ -454,6 +483,9 @@ class AjaxBlock {
 			const query = new URLSearchParams(a.search);
 			const isUnblockLink = specialPageName === 'Unblock' || query.get('remove') === '1';
 			const linkType = isUnblockLink ? 'unblock' : 'block';
+			// Class attributes used here:
+			// - ajaxblock-blocklink
+			// - ajaxblock-unblocklink
 			const clss = `ajaxblock-${linkType}link`;
 			a.classList.add(clss);
 
@@ -461,8 +493,12 @@ class AjaxBlock {
 			const subpage = mSpecial[2] ? decodeURIComponent(mSpecial[2]) : null;
 			const [id, username] = BlockTarget.validate(subpage, query);
 			if (!id && !username) {
-				a.classList.add(clss + '-unprocessable');
+				this.markLinkAsUnprocessable(a, linkType);
 				continue;
+			} else if (username) {
+				users.add(username);
+			} else if (id) {
+				ids.add(id);
 			}
 
 			// Create a map of supported parameters to their values
@@ -475,11 +511,7 @@ class AjaxBlock {
 			}
 
 			// Register the valid link
-			// TODO: Do we need two separate maps for block and unblock links?
-			const key = /** @type {string} */ (id ? `#${id}` : username); // Prioritize block ID
-			const map = isUnblockLink ? unblockLinkMap : blockLinkMap;
-			map[key] = map[key] || [];
-			map[key].push({
+			links.push({
 				anchor: a,
 				params,
 				target: new BlockTarget(id, username),
@@ -487,7 +519,33 @@ class AjaxBlock {
 			});
 		}
 
-		return [blockLinkMap, unblockLinkMap];
+		return { links, users, ids };
+	}
+
+	/**
+	 * @param {HTMLAnchorElement} anchor
+	 * @param {BlockLink['type']} type
+	 * @returns {void}
+	 * @private
+	 */
+	static markLinkAsUnprocessable(anchor, type) {
+		// Class attributes used here:
+		// - ajaxblock-blocklink-unprocessable
+		// - ajaxblock-unblocklink-unprocessable
+		const clss = `ajaxblock-${type}link-unprocessable`;
+		if (anchor.classList.contains(clss)) {
+			return;
+		}
+		anchor.classList.add(clss);
+
+		if (!this.unprocessableLinkTitleAttr) {
+			const sep = Messages.get('word-separator');
+			const parentheses = Messages.get('parentheses');
+			const title = Messages.get('ajaxblock-link-title-unprocessable', [scriptName]);
+			this.unprocessableLinkTitleAttr = sep + mw.format(parentheses, title);
+		}
+
+		anchor.title += this.unprocessableLinkTitleAttr;
 	}
 
 	/**
@@ -497,6 +555,11 @@ class AjaxBlock {
 		const style = document.createElement('style');
 		style.id = 'ajaxblock-styles';
 		style.textContent = `
+			.ajaxblock-blocklink-unprocessable,
+			.ajaxblock-unblocklink-unprocessable {
+				text-decoration-line: underline;
+				text-decoration-style: dotted;
+			}
 			${/* Style the logo */''}
 			.ajaxblock-logo {
 				position: fixed;
@@ -578,24 +641,22 @@ class AjaxBlock {
 
 	/**
 	 * @param {PermissionManager} permissionManager
-	 * @param {[BlockLinkMap, UnblockLinkMap]} linkMaps
+	 * @param {BlockLinkMap} linkMap
 	 * @param {BlockLookup} blockLookup
 	 * @param {string[]} actionRestrictions
 	 * @private
 	 */
-	constructor(permissionManager, linkMaps, blockLookup, actionRestrictions) {
+	constructor(permissionManager, linkMap, blockLookup, actionRestrictions) {
 		this.permissionManager = permissionManager;
-		this.linkMaps = linkMaps;
+		this.linkMaps = linkMap;
 		this.blockLookup = blockLookup;
 
 		// Add a click event to each link
-		linkMaps.forEach((linkMap) => {
-			Object.values(linkMap).forEach((arr) => {
-				arr.forEach((data) => {
-					data.anchor.addEventListener('click', (e) => this.handleClick(e, data));
-				});
-			});
-		});
+		for (const [_key, links] of linkMap) {
+			for (const data of links) {
+				data.anchor.addEventListener('click', (e) => this.handleClick(e, data));
+			}
+		}
 
 		const AjaxBlockDialog = AjaxBlockDialogFactory();
 		this.dialog = new AjaxBlockDialog(permissionManager, blockLookup, actionRestrictions, {
@@ -793,6 +854,34 @@ class AjaxBlock {
 		return this.confirmWindowManager;
 	}
 
+	/**
+	 * @overload
+	 * @param {BlockParams} params
+	 * @returns {JQuery.Promise<ApiResponseBlock>}
+	 */
+	/**
+	 * @overload
+	 * @param {UnblockParams} params
+	 * @returns {JQuery.Promise<ApiResponseUnblock>}
+	 */
+	/**
+	 * @param {BlockParams | UnblockParams} params
+	 * @returns {JQuery.Promise<ApiResponseBlock | ApiResponseUnblock>}
+	 */
+	static execute(params) {
+		// @ts-expect-error
+		return api.postWithEditToken(params).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+			if (res) {
+				if (res.block) {
+					return res.block;
+				} else if (res.unblock) {
+					return res.unblock;
+				}
+			}
+			failAsEmptyResult(res, jqXHR);
+		});
+	}
+
 }
 AjaxBlock.storageKeys = {
 	blockPageAliases: 'mw-AjaxBlock-blockPageAliases',
@@ -800,6 +889,10 @@ AjaxBlock.storageKeys = {
 	enableMultiblocks: 'mw-AjaxBlock-enableMultiblocks',
 	actionRestrictions: 'mw-AjaxBlock-actionRestrictions',
 };
+/**
+ * @type {?string}
+ */
+AjaxBlock.unprocessableLinkTitleAttr = null;
 /**
  * @type {?OO.ui.WindowManager}
  */
@@ -837,15 +930,14 @@ class BlockLookup {
 	/**
 	 * @param {PermissionManager} permissionManager
 	 * @param {Set<string>} users
-	 * @param {Set<string>} ids
+	 * @param {Set<number>} ids
 	 * @returns {JQuery.Promise<BlockLookup>}
 	 */
 	static fetch(permissionManager, users, ids) {
-		// TODO: `users` and `ids` should instead be `targets` as a single argument
 		const apilimit = permissionManager.getApiLimit();
 		const ajaxOptions = nonwritePost();
 		/**
-		 * @param {string[]} batch
+		 * @param {(string | number)[]} batch
 		 * @param {'ids' | 'users'} batchParam
 		 * @param {ApiResponseQueryListBlocks[]} [ret]
 		 * @param {number} [offset]
@@ -871,7 +963,7 @@ class BlockLookup {
 			});
 		};
 		/**
-		 * @param {Set<string>} batchSet
+		 * @param {Set<string> | Set<number>} batchSet
 		 * @param {'ids' | 'users'} batchParam
 		 * @returns {JQuery.Promise<ApiResponseQueryListBlocks[]>}
 		 */
@@ -1056,8 +1148,10 @@ class BlockTarget {
 	}
 
 	/**
+	 * Both arguments must already be validated via {@link validate}.
+	 *
 	 * @param {?number} id
-	 * @param {?string} username A value of null must indicate an autoblock
+	 * @param {?string} username
 	 */
 	constructor(id, username) {
 		if (!id && !username) {
@@ -1086,21 +1180,6 @@ class BlockTarget {
 	 */
 	getId() {
 		return this.id;
-	}
-
-	/**
-	 * Sets a block ID.
-	 *
-	 * @param {number} id
-	 * @returns {this}
-	 */
-	setId(id) {
-		const num = BlockTarget.validateBlockId(id);
-		if (!num) {
-			throw new Error('Invalid block ID: ' + id);
-		}
-		this.id = num;
-		return this;
 	}
 
 	/**
@@ -1717,6 +1796,7 @@ class Messages {
  */
 Messages.i18n = {
 	en: {
+		'ajaxblock-link-title-unprocessable': '$1 cannot process this link',
 		'ajaxblock-dialog-button-label-block': 'Block',
 		'ajaxblock-dialog-button-label-unblock': 'Unblock',
 		'ajaxblock-dialog-button-label-docs': 'Docs',
@@ -1752,6 +1832,7 @@ Messages.i18n = {
 		'ajaxblock-confirm-dialog-label-opendialog': 'Open the $1 dialog when cancelled',
 	},
 	ja: {
+		'ajaxblock-link-title-unprocessable': '$1非対応のリンク',
 		'ajaxblock-dialog-button-label-block': 'ブロック',
 		'ajaxblock-dialog-button-label-unblock': 'ブロック解除',
 		'ajaxblock-dialog-button-label-docs': '解説',
@@ -2182,13 +2263,17 @@ function AjaxBlockDialogFactory() {
 				if (!data) {
 					return;
 				}
-				this.currentData = Object.create(null);
-				this.getActiveField().clearMessages();
-				this.setLocked(false);
-				this.readyProcessBlockLog = null;
-				this.popPending();
-				this.content.toggle(true);
+				this.resetDialog();
 			});
+		}
+
+		resetDialog() {
+			this.currentData = Object.create(null);
+			this.getActiveField().clearMessages().resetCurrentTarget();
+			this.setLocked(false);
+			this.readyProcessBlockLog = null;
+			this.popPending();
+			this.content.toggle(true);
 		}
 
 	}
@@ -2276,12 +2361,22 @@ class AjaxBlockDialogBodyOverlay {
  */
 class AjaxBlockDialogContent {
 
-	constructor() {
+	/**
+	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+	 */
+	constructor(dialog) {
+		this.dialog = dialog;
+
 		this.$element = $('<div>').addClass('ajaxblock-dialog-content');
 
 		this.messageContainer = new OO.ui.Element({
 			$element: $('<div>')
 		});
+		/**
+		 * @type {[?number, ?string]}
+		 * @protected
+		 */
+		this.currentTarget = [null, null];
 		/**
 		 * @protected
 		 */
@@ -2302,15 +2397,6 @@ class AjaxBlockDialogContent {
 		this.target = new OO.ui.LabelWidget({
 			label: $targetContainer
 		});
-		/**
-		 * @type {Target}
-		 * @readonly
-		 * @protected
-		 */
-		this.currentTarget = {
-			id: null,
-			username: null,
-		};
 
 		this.watchUser = new OO.ui.CheckboxInputWidget();
 
@@ -2367,25 +2453,17 @@ class AjaxBlockDialogContent {
 		});
 	}
 
-	getTarget() {
-		return Object.assign({}, this.currentTarget);
+	getCurrentTargetId() {
+		return this.currentTarget[0];
 	}
 
-	/**
-	 * Gets a new {@link BlockTarget} instance initialized from the current target.
-	 *
-	 * This differs from {@link BlockLink.target}, which is initialized from the
-	 * block ID and username parsed directly from (un)block links. In contrast,
-	 * this method creates a new instance based on the data in BlockLink.target
-	 * **and** the currently active blocks. As a result, it is more likely that
-	 * *both* the block ID and the username are set in the new instance, since
-	 * they may be supplemented via `list=blocks` API queries.
-	 *
-	 * @returns {BlockTarget}
-	 */
-	getTargetInstance() {
-		const { id, username } = this.currentTarget;
-		return new BlockTarget(id, username);
+	getCurrentTargetUsername() {
+		return this.currentTarget[1];
+	}
+
+	resetCurrentTarget() {
+		this.currentTarget = [null, null];
+		return this;
 	}
 
 	/**
@@ -2511,11 +2589,13 @@ class AjaxBlockDialogContent {
 			id = /** @type {number} */ (item.getData());
 		}
 
-		const target = this.getTarget();
+		// Use the dialog's current target instead of data.target here to reflect
+		// what's been set by setTarget()
 		if (!id) {
-			id = target.id;
+			const field = this.dialog.getActiveField();
+			id = field.getCurrentTargetId();
 			if (!id) {
-				user = target.username;
+				user = field.getCurrentTargetUsername();
 			}
 		}
 
@@ -2553,8 +2633,7 @@ class BlockUser extends AjaxBlockDialogContent {
 	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
 	 */
 	constructor(dialog) {
-		super();
-		this.dialog = dialog;
+		super(dialog);
 
 		/** @type {OO.ui.Element[]} */
 		let items = [
@@ -2813,8 +2892,7 @@ class BlockUser extends AjaxBlockDialogContent {
 					this.setTargetInternal({
 						target: [username],
 						targetAux: [''],
-						id: null,
-						username,
+						currentTarget: [null, username],
 						oneClick: false,
 						addBlock: true,
 					});
@@ -2822,9 +2900,9 @@ class BlockUser extends AjaxBlockDialogContent {
 						// `user` is never missing for non-autoblocks
 						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
 					);
-					return new BlockLog(username, idMap);
+					return new BlockLog(username, idMap, true);
 				} else if (block.user) {
-					// Ordinary block
+					// Unambiguous block
 					this.setTargetInternal({
 						target: [block.user],
 						targetAux: [
@@ -2832,8 +2910,7 @@ class BlockUser extends AjaxBlockDialogContent {
 							BlockTarget.createBlockListLink(id),
 							Messages.get('parentheses-end'),
 						],
-						id,
-						username: block.user,
+						currentTarget: [id, username],
 						oneClick: true,
 						addBlock: true,
 					});
@@ -2841,15 +2918,11 @@ class BlockUser extends AjaxBlockDialogContent {
 					const idMap = BlockLookup.toIdMap([block]);
 					return new BlockLog(block.user, idMap, false);
 				} else {
-					// Autoblock (this code path is presumably never reached)
-					if (!block.automatic) {
-						console.error('The associated block is not an autoblock.', block);
-					}
+					// Autoblock (cannot reblock)
 					this.setTargetInternal({
 						target: [''],
 						targetAux: [''],
-						id,
-						username: null,
+						currentTarget: [null, null],
 						oneClick: false,
 						addBlock: false,
 					});
@@ -2871,23 +2944,19 @@ class BlockUser extends AjaxBlockDialogContent {
 						this.setTargetInternal({
 							target: [username],
 							targetAux: [''],
-							id: null,
-							username,
+							currentTarget: [null, username],
 							oneClick: false,
 							addBlock: true,
 						});
-						const idMap = BlockLookup.toIdMap(
-							// `user` is never missing for non-autoblocks
-							/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
-						);
-						return new BlockLog(username, idMap);
+						// @ts-expect-error
+						const idMap = BlockLookup.toIdMap(blocks);
+						return new BlockLog(username, idMap, true);
 					} else {
-						// No other active blocks either
+						// No other active blocks: Allow a username-based block
 						this.setTargetInternal({
 							target: [username],
 							targetAux: [''],
-							id: null,
-							username,
+							currentTarget: [null, username],
 							oneClick: true,
 							addBlock: false,
 						});
@@ -2897,8 +2966,7 @@ class BlockUser extends AjaxBlockDialogContent {
 					this.setTargetInternal({
 						target: [''],
 						targetAux: [''],
-						id,
-						username: null,
+						currentTarget: [null, null],
 						oneClick: false,
 						addBlock: false,
 					});
@@ -2915,16 +2983,13 @@ class BlockUser extends AjaxBlockDialogContent {
 					this.setTargetInternal({
 						target: [username],
 						targetAux: [''],
-						id: null,
-						username,
+						currentTarget: [null, username],
 						oneClick: false,
 						addBlock: true,
 					});
-					const idMap = BlockLookup.toIdMap(
-						// `user` is never missing for non-autoblocks
-						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
-					);
-					return new BlockLog(username, idMap);
+					// @ts-expect-error
+					const idMap = BlockLookup.toIdMap(blocks);
+					return new BlockLog(username, idMap, true);
 				} else {
 					// Single active block
 					this.setTargetInternal({
@@ -2934,8 +2999,7 @@ class BlockUser extends AjaxBlockDialogContent {
 							BlockTarget.createBlockListLink(blocks[0].id),
 							Messages.get('parentheses-end'),
 						],
-						id: blocks[0].id,
-						username,
+						currentTarget: [blocks[0].id, username],
 						oneClick: true,
 						addBlock: true,
 					});
@@ -2948,8 +3012,7 @@ class BlockUser extends AjaxBlockDialogContent {
 				this.setTargetInternal({
 					target: [username],
 					targetAux: [''],
-					id: null,
-					username,
+					currentTarget: [null, username],
 					oneClick: true,
 					addBlock: false,
 				});
@@ -2960,8 +3023,7 @@ class BlockUser extends AjaxBlockDialogContent {
 		this.setTargetInternal({
 			target: [''],
 			targetAux: [''],
-			id: null,
-			username: null,
+			currentTarget: [null, null],
 			oneClick: false,
 			addBlock: false,
 		});
@@ -2974,18 +3036,17 @@ class BlockUser extends AjaxBlockDialogContent {
 	 * the main target text for {@link $target}.
 	 * @param {Array<JQuery.htmlString | JQuery.TypeOrArray<JQuery.Node | JQuery<JQuery.Node>>>} data.targetAux
 	 * Parameters for JQuery.append, which sets the auxiliary target text for {@link $targetAux}.
-	 * @param {?number} data.id The block ID of the target.
-	 * @param {?string} data.username The username of the target.
+	 * @param {AjaxBlockDialogContent['currentTarget']} data.currentTarget A tuple representing
+	 * the currently shown target in `[id, username]` format.
 	 * @param {boolean} data.oneClick Whether the target can be processed in the one-click mode.
 	 * @param {boolean} data.addBlock Whether to show the "Add block" checkbox.
 	 * @returns {this}
 	 * @private
 	 */
-	setTargetInternal({ target, targetAux, id, username, oneClick, addBlock }) {
+	setTargetInternal({ target, targetAux, currentTarget, oneClick, addBlock }) {
 		this.$target.text(...target);
 		this.$targetAux.empty().append(...targetAux);
-		this.currentTarget.id = id;
-		this.currentTarget.username = username;
+		this.currentTarget = currentTarget;
 		this.oneClickAllowed = oneClick;
 		if (wgEnableMultiBlocks) {
 			this.cbAddBlockContainer.toggle(addBlock);
@@ -3301,8 +3362,7 @@ class BlockUser extends AjaxBlockDialogContent {
 		const params = /** @type {BlockParams} */ (base.params);
 		const warnings = base.warnings;
 
-		const target = this.getTargetInstance();
-		if (target.getUsername() === mw.config.get('wgUserName')) {
+		if (data.target.getUsername() === mw.config.get('wgUserName')) {
 			warnings.push('ajaxblock-confirm-block-self');
 		}
 
@@ -3330,7 +3390,7 @@ class BlockUser extends AjaxBlockDialogContent {
 				nocreate: this.cbCreateAccount.isSelected(),
 				noemail: this.cbSendEmail.isSelected(),
 				allowusertalk: !this.cbUserTalk.isSelected(),
-				anononly: target.getType() === 'anon' && !this.cbHardblock.isSelected(),
+				anononly: data.target.getType() === 'anon' && !this.cbHardblock.isSelected(),
 				autoblock: this.cbAutoblock.isSelected(),
 				newblock: params.id === undefined && this.cbAddBlock.isSelected(),
 			},
@@ -3550,8 +3610,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
 	 */
 	constructor(dialog) {
-		super();
-		this.dialog = dialog;
+		super(dialog);
 
 		/** @type {OO.ui.Element[]} */
 		let items = [
@@ -3609,17 +3668,14 @@ class UnblockUser extends AjaxBlockDialogContent {
 					this.setTargetInternal({
 						target: [username],
 						targetAux: [''],
-						id: null,
-						username,
+						currentTarget: [null, username],
 						oneClick: false,
 					});
-					const idMap = BlockLookup.toIdMap(
-						// `user` is never missing for non-autoblocks
-						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
-					);
-					return new BlockLog(username, idMap);
+					// @ts-expect-error
+					const idMap = BlockLookup.toIdMap(blocks);
+					return new BlockLog(username, idMap, true);
 				} else if (block.user) {
-					// Ordinary block
+					// Unambiguous block
 					this.setTargetInternal({
 						target: [block.user],
 						targetAux: [
@@ -3627,8 +3683,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 							BlockTarget.createBlockListLink(id),
 							Messages.get('parentheses-end'),
 						],
-						id,
-						username: block.user,
+						currentTarget: [id, username],
 						oneClick: true,
 					});
 					// @ts-expect-error
@@ -3644,8 +3699,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 							Messages.get('autoblockid').replace(`#${id}`, BlockTarget.createBlockListLink(id).outerHTML)
 						],
 						targetAux: [''],
-						id,
-						username: null,
+						currentTarget: [id, null],
 						oneClick: true,
 					});
 				}
@@ -3665,22 +3719,18 @@ class UnblockUser extends AjaxBlockDialogContent {
 						this.setTargetInternal({
 							target: [username],
 							targetAux: [''],
-							id: null,
-							username,
+							currentTarget: [null, username],
 							oneClick: false,
 						});
-						const idMap = BlockLookup.toIdMap(
-							// `user` is never missing for non-autoblocks
-							/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
-						);
-						return new BlockLog(username, idMap);
+						// @ts-expect-error
+						const idMap = BlockLookup.toIdMap(blocks);
+						return new BlockLog(username, idMap, true);
 					} else {
 						// No other active blocks (cannot be unblocked)
 						this.setTargetInternal({
 							target: [username],
 							targetAux: [''],
-							id: null,
-							username,
+							currentTarget: [null, username],
 							oneClick: false,
 						});
 						return ['ajaxblock-notify-error-cannotunblock', [username]];
@@ -3690,8 +3740,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 					this.setTargetInternal({
 						target: [''],
 						targetAux: [''],
-						id,
-						username: null,
+						currentTarget: [null, null],
 						oneClick: false,
 					});
 					return ['ajaxblock-notify-error-idinactivenousername', [id]];
@@ -3707,15 +3756,12 @@ class UnblockUser extends AjaxBlockDialogContent {
 					this.setTargetInternal({
 						target: [username],
 						targetAux: [''],
-						id: null,
-						username,
+						currentTarget: [null, username],
 						oneClick: false,
 					});
-					const idMap = BlockLookup.toIdMap(
-						// `user` is never missing for non-autoblocks
-						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
-					);
-					return new BlockLog(username, idMap);
+					// @ts-expect-error
+					const idMap = BlockLookup.toIdMap(blocks);
+					return new BlockLog(username, idMap, true);
 				} else {
 					// Single active block
 					this.setTargetInternal({
@@ -3725,8 +3771,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 							BlockTarget.createBlockListLink(blocks[0].id),
 							Messages.get('parentheses-end'),
 						],
-						id: blocks[0].id,
-						username,
+						currentTarget: [blocks[0].id, username],
 						oneClick: true,
 					});
 					// @ts-expect-error
@@ -3738,8 +3783,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 				this.setTargetInternal({
 					target: [username],
 					targetAux: [''],
-					id: null,
-					username,
+					currentTarget: [null, username],
 					oneClick: false,
 				});
 				return ['ajaxblock-notify-error-cannotunblock', [username]];
@@ -3749,8 +3793,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 		this.setTargetInternal({
 			target: [''],
 			targetAux: [''],
-			id: null,
-			username: null,
+			currentTarget: [null, null],
 			oneClick: false,
 		});
 		throw new Error('Either the ID or username must be non-null');
@@ -3762,17 +3805,16 @@ class UnblockUser extends AjaxBlockDialogContent {
 	 * Parameters for JQuery.append, which sets the auxiliary target text for {@link $target}.
 	 * @param {Array<JQuery.htmlString | JQuery.TypeOrArray<JQuery.Node | JQuery<JQuery.Node>>>} data.targetAux
 	 * Parameters for JQuery.append, which sets the auxiliary target text for {@link $targetAux}.
-	 * @param {?number} data.id The block ID of the target.
-	 * @param {?string} data.username The username of the target.
+	 * @param {AjaxBlockDialogContent['currentTarget']} data.currentTarget A tuple representing
+	 * the currently shown target in `[id, username]` format.
 	 * @param {boolean} data.oneClick Whether the target can be processed in the one-click mode.
 	 * @returns {this}
 	 * @private
 	 */
-	setTargetInternal({ target, targetAux, id, username, oneClick }) {
+	setTargetInternal({ target, targetAux, currentTarget, oneClick }) {
 		this.$target.empty().append(...target);
 		this.$targetAux.empty().append(...targetAux);
-		this.currentTarget.id = id;
-		this.currentTarget.username = username;
+		this.currentTarget = currentTarget;
 		this.oneClickAllowed = oneClick;
 		return this;
 	}
@@ -3811,7 +3853,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 		if (false) {
 			warnings.push('ajaxblock-confirm-unblock');
 		}
-		if (this.getTarget().username === mw.config.get('wgUserName')) {
+		if (data.target.getUsername() === mw.config.get('wgUserName')) {
 			warnings.push('ajaxblock-confirm-unblock-self');
 		}
 
@@ -4121,11 +4163,13 @@ class BlockLog {
 	/**
 	 * @param {string} username
 	 * @param {BlockIdMapValue} data
-	 * @param {boolean} [useRadio=true] By default (i.e., true), {@link generate} returns `OO.ui.RadioOptionWidget[]`
-	 * with no option selected so that the user can choose which block to interact with. **If false**, {@link generate}
-	 * instead returns `JQuery<HTMLDivElement>` with a block log, **only if** there is only one active block.
+	 * @param {boolean} useRadio Whether to use OO.ui.RadioSelectWidget in the logs:
+	 * - `true`: {@link generate} returns `OO.ui.RadioOptionWidget[]` with no option selected
+	 *   so that the user can choose which block to update.
+	 * - `false`: {@link generate} returns `JQuery<HTMLDivElement>` with a block log, **only if**
+	 *   there is only one active block.
 	 */
-	constructor(username, data, useRadio = true) {
+	constructor(username, data, useRadio) {
 		/**
 		 * @readonly
 		 * @private
@@ -4324,18 +4368,18 @@ AjaxBlockLogo.svg = `
  * @typedef {import('./window/AjaxBlock').LoadedMessages} LoadedMessages
  * @typedef {import('./window/AjaxBlock').CachedMessage} CachedMessage
  * @typedef {import('./window/AjaxBlock').BlockTargetType} BlockTargetType
- * @typedef {import('./window/AjaxBlock').Target} Target
  * @typedef {import('./window/AjaxBlock').PartialBlockParams} PartialBlockParams
  * @typedef {import('./window/AjaxBlock').WatchUserParams} WatchUserParams
  * @typedef {import('./window/AjaxBlock').BaseParams} BaseParams
  * @typedef {import('./window/AjaxBlock').BlockParams} BlockParams
  * @typedef {import('./window/AjaxBlock').UnblockParams} UnblockParams
+ * @typedef {import('./window/AjaxBlock').ApiResponseBlock} ApiResponseBlock
+ * @typedef {import('./window/AjaxBlock').ApiResponseUnblock} ApiResponseUnblock
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogevents} ApiResponseQueryListLogevents
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
  * @typedef {import('./window/InvestigateHelper').BlockIdMapValue} BlockIdMapValue
  * @typedef {import('./window/InvestigateHelper').BlockLogMap} BlockLogMap
  * @typedef {import('./window/InvestigateHelper').BlockLogMapValue} BlockLogMapValue
- * @typedef {import('./window/InvestigateHelper').BlockLoglineMap} BlockLoglineMap
  * @typedef {import('./window/InvestigateHelper').BlockFlags} BlockFlags
  */
 /**
@@ -4344,12 +4388,12 @@ AjaxBlockLogo.svg = `
  * @prop {Map<string, string>} params
  * @prop {BlockTarget} target
  * @prop {'block' | 'unblock'} type
+ */
+/**
+ * The keys are usernames as strings or block IDs as numbers.
+ * A number key always indicates it's mapped to autoblock-unblock links.
  *
- * @typedef {{ [idOrUser: string]: BlockLink[]; }} BlockLinkMap
- *
- * @typedef {BlockLink} UnblockLink
- *
- * @typedef {{ [idOrUser: string]: UnblockLink[]; }} UnblockLinkMap
+ * @typedef {Map<string | number, BlockLink[]>} BlockLinkMap
  */
 /**
  * @typedef {BlockLog | Parameters<typeof Messages['get']> | null} TargetHandler

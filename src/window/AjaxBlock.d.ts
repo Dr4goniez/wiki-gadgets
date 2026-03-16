@@ -17,8 +17,10 @@ export interface Initializer {
 }
 
 export interface ApiResponse {
+	block?: ApiResponseBlock;
 	paraminfo?: ApiResponseParaminfo;
 	query?: ApiResponseQuery;
+	unblock?: ApiResponseUnblock;
 }
 
 interface ApiResponseParaminfo {
@@ -173,6 +175,36 @@ interface ApiResponseQueryInterwikiTitles {
 	url?: string;
 }
 
+export interface ApiResponseBlock {
+	user: string;
+	userID: number;
+	expiry: string;
+	id: number;
+	reason: string;
+	anononly: boolean;
+	nocreate: boolean;
+	autoblock: boolean;
+	noemail: boolean;
+	hidename: boolean;
+	allowusertalk: boolean;
+	watchuser: boolean;
+	watchlistexpiry?: string;
+	partial: boolean;
+	pagerestrictions: string[];
+	namespacerestrictions: number[];
+	actionrestrictions: string[];
+}
+
+export interface ApiResponseUnblock {
+	user: string;
+	userid: number;
+	expiry: string;
+	id: number;
+	reason: string;
+	watchuser: boolean;
+	watchlistexpiry?: string;
+}
+
 /**
  * Picks method names whose return type extends string.
  */
@@ -185,6 +217,7 @@ export type StringMethodKeys<T> = {
  * List of messsages added by AjaxBlock.
  */
 export interface AjaxBlockMessages {
+	'ajaxblock-link-title-unprocessable': string;
 	'ajaxblock-dialog-button-label-block': string;
 	'ajaxblock-dialog-button-label-unblock': string;
 	'ajaxblock-dialog-button-label-docs': string;
@@ -311,11 +344,6 @@ export interface CachedMessage {
 }
 
 export type BlockTargetType = 'anon' | 'temp' | 'named' | null;
-
-export interface Target {
-	id: number | null;
-	username: string | null;
-}
 
 export interface PartialBlockParams {
 	partial: boolean;
