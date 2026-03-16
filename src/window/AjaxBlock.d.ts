@@ -93,6 +93,7 @@ interface ApiResponseParaminfoModulesParameters extends
 interface ApiResponseQuery {
 	allmessages?: ApiResponseQueryMetaAllmessages[];
 	blocks?: ApiResponseQueryListBlocks[];
+	interwiki?: ApiResponseQueryInterwikiTitles[];
 	logevents?: ApiResponseQueryListLogevents[];
 	specialpagealiases?: ApiResponseQueryMetaSiteinfoSpecialpagealiases[];
 	userinfo?: ApiResponseQueryMetaUserinfoRights;
@@ -166,6 +167,12 @@ interface ApiResponseQueryPages {
     url?: string;
 }
 
+interface ApiResponseQueryInterwikiTitles {
+	title: string;
+	iw: string;
+	url?: string;
+}
+
 /**
  * Picks method names whose return type extends string.
  */
@@ -195,8 +202,22 @@ export interface AjaxBlockMessages {
 	'ajaxblock-notify-error-loadblocklogs': string;
 	'ajaxblock-notify-error-idinactivenousername': string;
 	'ajaxblock-notify-error-cannotunblock': string;
+	'ajaxblock-notify-error-ambiguousblock': string;
+	'ajaxblock-notify-error-ambiguousblock-canadd': string;
+	'ajaxblock-notify-error-notarget': string;
 	'ajaxblock-notify-warning-invalidqueryparam-param': string;
 	'ajaxblock-notify-warning-invalidqueryparam-values': string;
+	'ajaxblock-confirm-block-self': string;
+	'ajaxblock-confirm-block-noexpiry': string;
+	'ajaxblock-confirm-block-noreason': string;
+	'ajaxblock-confirm-block-hideuser': string;
+	'ajaxblock-confirm-unblock': string;
+	'ajaxblock-confirm-unblock-self': string;
+	'ajaxblock-confirm-unblock-noreason': string;
+	'ajaxblock-confirm-dialog-title-block': string;
+	'ajaxblock-confirm-dialog-title-unblock': string;
+	'ajaxblock-confirm-dialog-label-instruction': string;
+	'ajaxblock-confirm-dialog-label-opendialog': string;
 }
 
 /**
@@ -206,6 +227,7 @@ export interface MediaWikiMessages {
 	'colon-separator': string;
 	'parentheses-start': string;
 	'parentheses-end': string;
+	'internalerror_info': string;
 
 	'block': string;
 	'block-target': string;
@@ -240,6 +262,9 @@ export interface MediaWikiMessages {
 	// Used in setTarget()
 	'apierror-modify-autoblock': string;
 	'autoblockid': string;
+
+	'confirm': string;
+	'cancel': string;
 
 	// Copied from InvestigateHelper
 	'logentry-block-block': string;
@@ -309,18 +334,27 @@ type UserParams = XOR<
 	{ user: string; }
 >;
 
-export interface BlockParams extends UserParams, PartialBlockParams, WatchUserParams {
-	expiry: string;
-	reason: string;
-	anononly: boolean;
-	autoblock: boolean;
-	noemail: boolean;
-	hidename: boolean;
-	allowusertalk: boolean;
-	reblock: boolean;
-	newblock: boolean;
-}
+export type BaseParams =
+	UserParams &
+	WatchUserParams &
+	{ action: 'block' | 'unblock'; };
 
-export interface UnblockParams extends UserParams, WatchUserParams {
-	reason: string;
-}
+export type BlockParams =
+	BaseParams &
+	{
+		action: 'block';
+		expiry: string;
+		reason: string;
+		nocreate: boolean;
+		noemail: boolean;
+		allowusertalk: boolean;
+		anononly?: boolean;
+		autoblock?: boolean;
+		hidename?: boolean;
+		reblock?: true;
+		newblock: boolean;
+	};
+
+export type UnblockParams =
+	BaseParams &
+	{ reason: string; };

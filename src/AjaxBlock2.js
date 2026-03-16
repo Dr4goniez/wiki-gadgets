@@ -155,6 +155,9 @@ class AjaxBlock {
 					'apierror-modify-autoblock',
 					'autoblockid',
 
+					'confirm',
+					'cancel',
+
 					// Copied from InvestigateHelper
 					'logentry-block-block',
 					'logentry-block-block-multi',
@@ -466,7 +469,6 @@ class AjaxBlock {
 			const params = /** @type {Map<string, string>} */ (new Map());
 			const SpecialPage = isUnblockLink ? UnblockUser : BlockUser;
 			for (const [key, value] of query.entries()) {
-				// TODO: Determine how wpRemovalReason should be handled
 				if (SpecialPage.supportsParam(key)) {
 					params.set(key, clean(value));
 				}
@@ -509,7 +511,7 @@ class AjaxBlock {
 				width: auto;
 			}
 			${/* Dialog content overlay to disallow user interaction */''}
-			.ajaxblock-dialog .oo-ui-window-body {
+			.ajaxblock-dialog .ajaxblock-dialog-overlayedbody {
 				position: relative;
 			}
 			.ajaxblock-dialog-overlay {
@@ -589,8 +591,8 @@ class AjaxBlock {
 		// Add a click event to each link
 		linkMaps.forEach((linkMap) => {
 			Object.values(linkMap).forEach((arr) => {
-				arr.forEach((obj) => {
-					obj.anchor.addEventListener('click', (e) => this.handleClick(e, obj));
+				arr.forEach((data) => {
+					data.anchor.addEventListener('click', (e) => this.handleClick(e, data));
 				});
 			});
 		});
@@ -607,23 +609,23 @@ class AjaxBlock {
 
 	/**
 	 * @param {PointerEvent} e
-	 * @param {BlockLink} obj
+	 * @param {BlockLink} data
 	 * @private
 	 */
-	handleClick(e, obj) {
+	handleClick(e, data) {
 		let callback;
 		if (e.shiftKey && e.ctrlKey) {
 			// One click execution with all warnings suppressed
-			callback = () => this.execute(obj, true);
+			callback = () => this.handleOneClick(data, true);
 		} else if (e.shiftKey) {
 			// One click execution with warnings
-			callback = () => this.execute(obj, false);
+			callback = () => this.handleOneClick(data, false);
 		} else if (e.ctrlKey) {
 			// Navigate to the linked page
 			return;
 		} else {
 			// Open the dialog
-			callback = () => this.dialog.open(obj);
+			callback = () => this.dialog.open(data);
 		}
 
 		e.preventDefault();
@@ -632,12 +634,163 @@ class AjaxBlock {
 	}
 
 	/**
-	 * @param {BlockLink} link
+	 * @param {BlockLink} data
 	 * @param {boolean} suppressWarnings
 	 * @private
+	 * @todo This should be guraded for race conditions
 	 */
-	execute(link, suppressWarnings) {
+	async handleOneClick(data, suppressWarnings) {
+		const processable = this.dialog.prepareDialog(data);
+		if (!processable) {
+			// When prepareDialog() returns false, it issues error notifications to
+			// indicate that the (un)block link is completely unprocessable
+			return;
+		}
+		const field = this.dialog.getActiveField();
+		if (!field.isOneClickAllowed()) {
+			// When one-click execution is disallowed, the (un)block must be executed
+			// via the dialog
+			this.dialog.open(data);
+			return;
+		}
 
+		const paramObj = field.buildParams(data);
+		if (!paramObj) {
+			// When buildParams() returns null, it issues mw.notify messages to indicate
+			// that something needs to be modified on the dialog
+			this.dialog.open(data);
+			return;
+		}
+
+		// No critical blockers caught: Issue warnings if any
+		const { params, warnings } = paramObj;
+		console.log(params, warnings);
+		if (warnings.length && !suppressWarnings) {
+			const confirmed = await AjaxBlock.confirmWarnings(warnings, data);
+			if (!confirmed) {
+				if (confirmed === null) {
+					this.dialog.open(data);
+				}
+				return;
+			}
+		}
+
+		// TODO: Execute block/unblock here
+	}
+
+	/**
+	 * @param {(keyof LoadedMessages)[]} warnings
+	 * @param {BlockLink} data
+	 * @param {boolean} isCallerDialog If `true` is passed, omit the "open dialog when cancelled" option
+	 * @returns {JQuery.Promise<?boolean>} `null` if cancelled and the AjaxBlockDialog should be opened
+	 */
+	static confirmWarnings(warnings, data, isCallerDialog = false) {
+		// Not using OO.ui.confirm to set the disabled state of the Confirm button
+		const deferred = $.Deferred();
+
+		const dialog = new OO.ui.MessageDialog({
+			$element: $('<div>').css({ 'font-size': '90%', 'z-index': 9999 }),
+			classes: ['ajaxblock-dialog'],
+		});
+		const $message = $('<div>').addClass('ajaxblock-dialog-content');
+
+		// Add an instruction message
+		const /** @type {OO.ui.FieldLayout[]} */ items = [
+			new OO.ui.FieldLayout(
+				new OO.ui.MessageWidget({
+					classes: ['ajaxblock-dialog-message'],
+					label: new OO.ui.HtmlSnippet(Messages.get('ajaxblock-confirm-dialog-label-instruction')),
+					type: 'warning',
+				}),
+				{
+					$element: $('<div>').css({ 'margin-bottom': '0.5em' })
+				}
+			)
+		];
+
+		// Add warning checkboxes
+		const /** @type {OO.ui.CheckboxInputWidget[]} */ checkboxes = [];
+		for (const w of warnings) {
+			const cb = new OO.ui.CheckboxInputWidget();
+			cb.on('change', (selected) => {
+				dialog.getActions().setAbilities({
+					// Micro optimization to avoid array iteration when deselected
+					accept: !!selected && checkboxes.every(box => box.isSelected()),
+					reject: true,
+				});
+			});
+			checkboxes.push(cb);
+
+			items.push(
+				new OO.ui.FieldLayout(cb, {
+					label: $('<span>').append(Messages.get(w)),
+					align: 'inline',
+				})
+			);
+		}
+
+		$message.append(
+			new OO.ui.FieldsetLayout({ items }).$element
+		);
+
+		// Add the "open dialog when cancelled" option, only if isCallerDialog is false
+		const cbOpenDialog = new OO.ui.CheckboxInputWidget({
+			selected: true,
+		});
+		if (!isCallerDialog) {
+			$message.append(
+				new OO.ui.FieldsetLayout({
+					label: Messages.get('block-options'),
+					items: [
+						new OO.ui.FieldLayout(cbOpenDialog, {
+							label: Messages.get('ajaxblock-confirm-dialog-label-opendialog', [scriptName]),
+							align: 'inline',
+						})
+					],
+				}).$element
+			);
+		}
+
+		const windowManager = this.getConfirmWindowManager();
+		windowManager.addWindows([dialog]);
+		const window = windowManager.openWindow(dialog, {
+			actions: [
+				{ action: 'accept', label: Messages.get('confirm'), flags: ['primary', 'progressive'] },
+				{ action: 'reject', label: Messages.get('cancel'),  flags: 'safe' }
+			],
+			message: $message,
+			size: 'medium',
+			title: Messages.get(`ajaxblock-confirm-dialog-title-${data.type}`),
+		});
+		window.opening.then(() => {
+			dialog.getActions().setAbilities({
+				accept: false,
+				reject: true,
+			});
+		});
+		window.closed.then(/** @param {any} [data] */ (data) => {
+			/** @type {?boolean} */
+			let confirmed = !!(data && data.action === 'accept');
+			if (!confirmed && cbOpenDialog.isSelected()) {
+				confirmed = null;
+			}
+			windowManager.clearWindows();
+			deferred.resolve(confirmed);
+		});
+
+		return deferred.promise();
+	}
+
+	/**
+	 * @returns {OO.ui.WindowManager}
+	 * @private
+	 */
+	static getConfirmWindowManager() {
+		if (!this.confirmWindowManager) {
+			this.confirmWindowManager = new OO.ui.WindowManager();
+			$(document.body).append(this.confirmWindowManager.$element);
+		}
+		return this.confirmWindowManager;
 	}
 
 	/**
@@ -659,6 +812,10 @@ AjaxBlock.storageKeys = {
 	enableMultiblocks: 'mw-AjaxBlock-enableMultiblocks',
 	actionRestrictions: 'mw-AjaxBlock-actionRestrictions',
 };
+/**
+ * @type {?OO.ui.WindowManager}
+ */
+AjaxBlock.confirmWindowManager = null;
 
 class PermissionManager {
 
@@ -1589,8 +1746,22 @@ Messages.i18n = {
 		'ajaxblock-notify-error-loadblocklogs': 'Failed to load block information ($1)',
 		'ajaxblock-notify-error-idinactivenousername': 'This link cannot be processed because the block with ID <b>#$1</b> is no longer active and no username is specified.',
 		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> does not have any active blocks and cannot be unblocked.',
+		'ajaxblock-notify-error-ambiguousblock': 'Select the block you want to update.',
+		'ajaxblock-notify-error-ambiguousblock-canadd': 'Select the block you want to update, or check "{{int:block-create}}" to add a new block.',
+		'ajaxblock-notify-error-notarget': 'This (un)block operation cannot be processed.',
 		'ajaxblock-notify-warning-invalidqueryparam-param': 'Parameter',
 		'ajaxblock-notify-warning-invalidqueryparam-values': 'Filtered invalid values',
+		'ajaxblock-confirm-block-self': 'Block <b>yourself</b>',
+		'ajaxblock-confirm-block-noexpiry': 'Perform the block with an <b>empty expiry</b> (defaults to "{{int:infiniteblock}}")',
+		'ajaxblock-confirm-block-noreason': 'Perform the block with an <b>empty reason</b>',
+		'ajaxblock-confirm-block-hideuser': 'Perform the block with <b>"hide user" enabled</b>',
+		'ajaxblock-confirm-unblock': '<b>Unblock</b> user',
+		'ajaxblock-confirm-unblock-self': 'Unblock <b>yourself</b>',
+		'ajaxblock-confirm-unblock-noreason': 'Perform the unblock with an <b>empty reason</b>',
+		'ajaxblock-confirm-dialog-title-block': 'Confirm block',
+		'ajaxblock-confirm-dialog-title-unblock': 'Confirm unblock',
+		'ajaxblock-confirm-dialog-label-instruction': 'Please confirm the following warnings by <b>checking all the associated checkboxes</b> to proceed.',
+		'ajaxblock-confirm-dialog-label-opendialog': 'Open the $1 dialog when cancelled',
 	},
 	ja: {
 		'ajaxblock-dialog-button-label-block': 'ブロック',
@@ -1610,8 +1781,22 @@ Messages.i18n = {
 		'ajaxblock-notify-error-loadblocklogs': 'ブロック情報の取得に失敗しました ($1)',
 		'ajaxblock-notify-error-idinactivenousername': 'このリンクに紐付けられたID <b>#$1</b> のブロックは既に解除されており、利用者名も指定されていないため処理できません。',
 		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> は現在ブロックされていないため、ブロックを解除できません。',
+		'ajaxblock-notify-error-ambiguousblock': '更新するブロックを選択してください。',
+		'ajaxblock-notify-error-ambiguousblock-canadd': '更新するブロックを選択するか、「{{int:block-create}}」をチェックして新しいブロックを追加してください。',
+		'ajaxblock-notify-error-notarget': 'このブロック・ブロック解除操作は処理できません。',
 		'ajaxblock-notify-warning-invalidqueryparam-param': 'パラメータ',
 		'ajaxblock-notify-warning-invalidqueryparam-values': '無効な値を除外しました',
+		'ajaxblock-confirm-block-self': '<b>自身</b>をブロック',
+		'ajaxblock-confirm-block-noexpiry': '<b>期限未指定</b>でブロック (既定値の「{{int:infiniteblock}}」を適用)',
+		'ajaxblock-confirm-block-noreason': '<b>理由未指定</b>でブロック',
+		'ajaxblock-confirm-block-hideuser': '<b>「利用者名を隠す」を有効化</b>しブロック',
+		'ajaxblock-confirm-unblock': '利用者のブロックを<b>解除</b>',
+		'ajaxblock-confirm-unblock-self': '<b>自身</b>のブロックを解除',
+		'ajaxblock-confirm-unblock-noreason': '<b>理由未指定</b>でブロックを解除',
+		'ajaxblock-confirm-dialog-title-block': 'ブロックの確認',
+		'ajaxblock-confirm-dialog-title-unblock': 'ブロック解除の確認',
+		'ajaxblock-confirm-dialog-label-instruction': '以下の警告を確認し、操作を続行するには<b>全ての該当チェックボックスをチェック</b>してください。',
+		'ajaxblock-confirm-dialog-label-opendialog': 'キャンセル時に$1ダイアログを開く',
 	},
 };
 /**
@@ -1743,6 +1928,17 @@ function AjaxBlockDialogFactory() {
 			);
 
 			this.overlay = new AjaxBlockDialogBodyOverlay();
+
+			/**
+			 * @type {BlockLink}
+			 * @private
+			 */
+			this.currentData = Object.create(null);
+			this.locked = false;
+		}
+
+		getCurrentData() {
+			return this.currentData;
 		}
 
 		/**
@@ -1754,7 +1950,7 @@ function AjaxBlockDialogFactory() {
 			super.initialize.apply(this, arguments);
 
 			// @ts-expect-error
-			this.$body.append(
+			this.$body.addClass('ajaxblock-dialog-overlayedbody').append(
 				this.overlay.$element,
 				this.content.$element
 			);
@@ -1769,43 +1965,85 @@ function AjaxBlockDialogFactory() {
 		 */
 		getSetupProcess(data) {
 			return super.getSetupProcess().next(() => {
-				// Set mode and determine which buttons/fields to show
-				this.getActions().setMode(data.type);
-				const field = this.setActiveField(data).getActiveField(data);
-				field.blockSelector = null;
-				field.addParamApplier(data);
-
-				// Set target and check if any additional processes should be handled to open the dialog
-				const targetHandler = field.setTarget(data.target);
-				if (Array.isArray(targetHandler)) {
-					// There's a blocker to open the dialog
-					const args = targetHandler;
-					mw.notify(
-						$('<span>').append(Messages.get(...args)),
-						{ type: 'error' }
-					);
+				const proceed = this.prepareDialog(data);
+				if (!proceed) {
 					return false;
-				} else if (targetHandler instanceof BlockLog) {
-					// Block log lines should be generated asynchronously
-					this.readyProcessBlockLog = targetHandler;
+				}
+				this.getActiveField().addParamApplier(data);
+				if (this.readyProcessBlockLog) {
 					this.pushPending();
 					this.content.toggle(false);
 				}
+				return true;
 			});
+		}
+
+		/**
+		 * @param {BlockLink} data
+		 * @returns {boolean}
+		 */
+		prepareDialog(data) {
+			// Set mode and determine which buttons/fields to show
+			this.currentData = data;
+			this.getActions().setMode(data.type);
+			const field = this.setActiveField().getActiveField().clearMessages();
+			field.blockSelector = null;
+			this.readyProcessBlockLog = null;
+			this.popPending();
+			this.content.toggle(true);
+
+			// Set target and check if any additional processes should be handled to open the dialog
+			const targetHandler = field.setTarget(data.target);
+			if (Array.isArray(targetHandler)) {
+				// There's a blocker to open the dialog
+				const args = targetHandler;
+				mw.notify(
+					$('<span>').append(Messages.get(...args)),
+					{ type: 'error' }
+				);
+				return false;
+			} else if (targetHandler instanceof BlockLog) {
+				// Block log lines should be generated asynchronously
+				this.readyProcessBlockLog = targetHandler;
+			}
+			return true;
+		}
+
+		/**
+		 * Sets the visibility of dialog fields based on the given data and flags a field as active.
+		 *
+		 * **This method is for use only by {@link AjaxBlockDialog.prepareDialog}**.
+		 *
+		 * @returns {this}
+		 * @private
+		 */
+		setActiveField() {
+			const data = this.getCurrentData();
+			this.blockUser.toggle(data.type === 'block');
+			this.unblockUser.toggle(data.type === 'unblock');
+			return this;
+		}
+
+		/**
+		 * @returns {BlockUser | UnblockUser}
+		 */
+		getActiveField() {
+			const data = this.getCurrentData();
+			return data.type === 'block' ? this.blockUser : this.unblockUser;
 		}
 
 		/**
 		 * @inheritdoc
 		 * @override
-		 * @param {BlockLink} data
+		 * @param {BlockLink} _data
 		 */
-		getReadyProcess(data) {
+		getReadyProcess(_data) {
 			// @ts-expect-error
 			return super.getReadyProcess().next(async () => {
 				if (this.readyProcessBlockLog) {
 					const start = Date.now();
 					try {
-						await this.getReadyProcessInternal(data, this.readyProcessBlockLog);
+						await this.getReadyProcessInternal(this.readyProcessBlockLog);
 					} catch (code) {
 						const err =
 							scriptName +
@@ -1826,14 +2064,14 @@ function AjaxBlockDialogFactory() {
 		}
 
 		/**
-		 * @param {BlockLink} data
 		 * @param {BlockLog} blockLog
 		 * @returns {Promise<void>}
 		 * @private
 		 */
-		async getReadyProcessInternal(data, blockLog) {
+		async getReadyProcessInternal(blockLog) {
+			const data = this.getCurrentData();
 			const options = await blockLog.generate();
-			const field = this.getActiveField(data);
+			const field = this.getActiveField();
 
 			let /** @type {keyof LoadedMessages} */ msgKey;
 			let /** @type {OO.ui.MessageWidget.ConfigOptions['type']} */ msgType;
@@ -1880,15 +2118,37 @@ function AjaxBlockDialogFactory() {
 		 * @param {string} [action]
 		 */
 		getActionProcess(action) {
-			return new OO.ui.Process(() => {
+			// @ts-expect-error
+			return new OO.ui.Process(async () => {
 				switch (action) {
-					case 'execute': {
-						if (this.readyProcessBlockLog || this.overlay.isShown()) {
-							// No-op if:
-							// - the dialog is still getting ready
-							// - the overlay is shown
+					case 'block':
+					case 'unblock': {
+						if (this.isLocked()) {
 							return;
 						}
+						this.setLocked(true);
+
+						const data = this.getCurrentData();
+						const field = this.getActiveField();
+						const paramObj = field.buildParams(data);
+						if (!paramObj) {
+							this.setLocked(false);
+							return;
+						}
+
+						const { params, warnings } = paramObj;
+						console.log(params, warnings);
+						if (warnings.length) {
+							const confirmed = await AjaxBlock.confirmWarnings(warnings, data, true);
+							if (!confirmed) {
+								this.setLocked(false);
+								return;
+							}
+						}
+
+						// TODO: Execute block/unblock here
+
+						this.setLocked(false);
 						break;
 					}
 					case 'documentation':
@@ -1903,26 +2163,25 @@ function AjaxBlockDialogFactory() {
 		}
 
 		/**
-		 * Sets the visibility of dialog fields based on the given data and flags a field as active.
-		 *
-		 * @param {BlockLink} data
-		 * @returns {this}
-		 * @private
-		 * @todo The method name is a bit misleading; Should this store which field is activated?
+		 * @param {boolean} locked
+		 * @returns
 		 */
-		setActiveField(data) {
-			this.blockUser.toggle(data.type === 'block');
-			this.unblockUser.toggle(data.type === 'unblock');
+		setLocked(locked) {
+			this.locked = locked;
 			return this;
 		}
 
 		/**
-		 * @param {BlockLink} data
-		 * @returns {BlockUser | UnblockUser}
-		 * @private
+		 * Checks whether there is any blocker to perform the (un)block action.
+		 *
+		 * @returns {boolean}
 		 */
-		getActiveField(data) {
-			return data.type === 'block' ? this.blockUser : this.unblockUser;
+		isLocked() {
+			// Consider the dialog to be locked if:
+			// - `locked` is explicitly set to true, or
+			// - the dialog is still getting ready, or
+			// - the overlay is shown
+			return this.locked || !!this.readyProcessBlockLog || this.overlay.isShown();
 		}
 
 		/**
@@ -1935,7 +2194,9 @@ function AjaxBlockDialogFactory() {
 				if (!data) {
 					return;
 				}
-				this.getActiveField(data).clearMessages();
+				this.currentData = Object.create(null);
+				this.getActiveField().clearMessages();
+				this.setLocked(false);
 				this.readyProcessBlockLog = null;
 				this.popPending();
 				this.content.toggle(true);
@@ -2034,10 +2295,9 @@ class AjaxBlockDialogContent {
 			$element: $('<div>')
 		});
 		/**
-		 * @type {?boolean} `false` means unprocessable, `null` means the dialog should be opened.
 		 * @protected
 		 */
-		this.oneClickAllowed = null;
+		this.oneClickAllowed = true;
 		/**
 		 * @type {?OO.ui.RadioSelectWidget}
 		 */
@@ -2121,6 +2381,23 @@ class AjaxBlockDialogContent {
 
 	getTarget() {
 		return Object.assign({}, this.currentTarget);
+	}
+
+	/**
+	 * Gets a new {@link BlockTarget} instance initialized from the current target.
+	 *
+	 * This differs from {@link BlockLink.target}, which is initialized from the
+	 * block ID and username parsed directly from (un)block links. In contrast,
+	 * this method creates a new instance based on the data in BlockLink.target
+	 * **and** the currently active blocks. As a result, it is more likely that
+	 * *both* the block ID and the username are set in the new instance, since
+	 * they may be supplemented via `list=blocks` API queries.
+	 *
+	 * @returns {BlockTarget}
+	 */
+	getTargetInstance() {
+		const { id, username } = this.currentTarget;
+		return new BlockTarget(id, username);
 	}
 
 	/**
@@ -2208,6 +2485,8 @@ class AjaxBlockDialogContent {
 	}
 
 	/**
+	 * Applies URL parameters to dialog fields.
+	 *
 	 * @param {BlockLink} data
 	 * @returns {void}
 	 * @abstract
@@ -2215,6 +2494,62 @@ class AjaxBlockDialogContent {
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	applyParams(data) {
 		// Noop
+	}
+
+	/**
+	 * Builds base parameters to the API.
+	 *
+	 * @param {BlockLink} data
+	 * @returns {?{ params: BaseParams; warnings: (keyof LoadedMessages)[]; }}
+	 */
+	buildParams(data) {
+		let /** @type {?number} */ id = null;
+		let /** @type {?string} */ user = null;
+		const /** @type {BaseParams} */ params = Object.create(null);
+
+		params.action === data.type;
+		const isUnblock = data.type === 'unblock';
+
+		if (this.blockSelector) {
+			const item = this.blockSelector.findFirstSelectedItem();
+			if (!item) {
+				// When the block selector is present, the target of the (un)block must be selected
+				const msgKey = isUnblock || !wgEnableMultiBlocks
+					? 'ajaxblock-notify-error-ambiguousblock'
+					: 'ajaxblock-notify-error-ambiguousblock-canadd';
+				mw.notify(Messages.get(msgKey), { type: 'error' });
+				return null;
+			}
+			id = /** @type {number} */ (item.getData());
+		}
+
+		const target = this.getTarget();
+		if (!id) {
+			id = target.id;
+			if (!id) {
+				user = target.username;
+			}
+		}
+
+		if (id) {
+			params.id = id;
+		} else if (user) {
+			params.user = user;
+		} else {
+			// This code path should never be reached
+			mw.notify(
+				$('<span>').append(
+					mw.message(
+						'internalerror_info',
+						Messages.get('ajaxblock-notify-error-notarget')
+					).parseDom()
+				),
+				{ type: 'error' }
+			);
+			return null;
+		}
+
+		return { params, warnings: [] };
 	}
 
 }
@@ -2432,6 +2767,12 @@ class BlockUser extends AjaxBlockDialogContent {
 		);
 
 		this.cbAddBlock = new OO.ui.CheckboxInputWidget();
+		this.cbAddBlock.on('change', (selected) => {
+			if (selected && this.blockSelector) {
+				// `newblock` cannot be used together with `id`: Deselect radio options
+				this.blockSelector.selectItem();
+			}
+		});
 		this.cbAddBlockContainer = new OO.ui.FieldLayout(this.cbAddBlock, {
 			label: $('<b>').text(Messages.get('block-create')),
 			align: 'inline',
@@ -2486,7 +2827,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						targetAux: [''],
 						id: null,
 						username,
-						oneClick: null,
+						oneClick: false,
 						addBlock: true,
 					});
 					const idMap = BlockLookup.toIdMap(
@@ -2544,7 +2885,7 @@ class BlockUser extends AjaxBlockDialogContent {
 							targetAux: [''],
 							id: null,
 							username,
-							oneClick: null,
+							oneClick: false,
 							addBlock: true,
 						});
 						const idMap = BlockLookup.toIdMap(
@@ -2588,7 +2929,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						targetAux: [''],
 						id: null,
 						username,
-						oneClick: null,
+						oneClick: false,
 						addBlock: true,
 					});
 					const idMap = BlockLookup.toIdMap(
@@ -2647,10 +2988,7 @@ class BlockUser extends AjaxBlockDialogContent {
 	 * Parameters for JQuery.append, which sets the auxiliary target text for {@link $targetAux}.
 	 * @param {?number} data.id The block ID of the target.
 	 * @param {?string} data.username The username of the target.
-	 * @param {?boolean} data.oneClick Whether the target can be processed in the one-click mode:
-	 * - `true`: No blocker for a one-click processing.
-	 * - `false`: The target cannot be processed.
-	 * - `null`: There is a blocker for a one-click processing (i.e., warnings).
+	 * @param {boolean} data.oneClick Whether the target can be processed in the one-click mode.
 	 * @param {boolean} data.addBlock Whether to show the "Add block" checkbox.
 	 * @returns {this}
 	 * @private
@@ -2774,9 +3112,14 @@ class BlockUser extends AjaxBlockDialogContent {
 								errorlang: wgUserLanguage,
 								errorsuselocal: true,
 							}, ajaxOptions).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
-								const pages = res && res.query && res.query.pages;
-								if (!Array.isArray(pages)) {
+								let pages = res && res.query && res.query.pages;
+								const interwiki = res && res.query && res.query.interwiki;
+								if (!Array.isArray(pages) && !Array.isArray(interwiki)) {
 									return failAsEmptyResult(res, jqXHR);
+								}
+								pages = pages || [];
+								if (Array.isArray(interwiki)) {
+									pages.push(...interwiki);
 								}
 								for (const page of pages) {
 									const { invalid, iw, missing, special, title } = page;
@@ -2954,6 +3297,91 @@ class BlockUser extends AjaxBlockDialogContent {
 		);
 
 		mw.notify($msg, { type: 'warn', autoHideSeconds: 'long' });
+	}
+
+	/**
+	 * Builds parameters to the unblock API.
+	 *
+	 * @param {BlockLink} data
+	 * @returns {?{ params: BlockParams; warnings: (keyof LoadedMessages)[]; }}
+	 */
+	buildParams(data) {
+		const base = super.buildParams(data);
+		if (!base) {
+			return null;
+		}
+		const params = /** @type {BlockParams} */ (base.params);
+		const warnings = base.warnings;
+
+		const target = this.getTargetInstance();
+		if (target.getUsername() === mw.config.get('wgUserName')) {
+			warnings.push('ajaxblock-confirm-block-self');
+		}
+
+		let expiry = this.getExpiry();
+		if (!expiry) {
+			warnings.push('ajaxblock-confirm-block-noexpiry');
+			expiry = infinity;
+		}
+		params.expiry = expiry;
+
+		const reason = this.getReason();
+		if (!reason) {
+			warnings.push('ajaxblock-confirm-block-noreason');
+		}
+		params.reason = reason;
+
+		// Note:
+		// - Incompatible fields are hidden and deselected by AjaxBlockDialog.setActiveField()
+		//   called in .prepareDialog()
+		// - Inverted booleans used as additional options need an extra condition so that
+		//   mw.Api.preprocessParameters filter out `false` properties
+		Object.assign(
+			params,
+			{
+				nocreate: this.cbCreateAccount.isSelected(),
+				noemail: this.cbSendEmail.isSelected(),
+				allowusertalk: !this.cbUserTalk.isSelected(),
+				anononly: target.getType() === 'anon' && !this.cbHardblock.isSelected(),
+				autoblock: this.cbAutoblock.isSelected(),
+				newblock: params.id === undefined && this.cbAddBlock.isSelected(),
+			},
+			this.getPartialBlockParams(),
+		);
+
+		const hidename = this.cbHideName.isSelected();
+		if (hidename) {
+			let needsWarning = false;
+			if (params.id !== undefined) {
+				const block = this.dialog.blockLookup.getBlockById(params.id);
+				if (block) {
+					needsWarning = !block.hidden;
+				} else {
+					// Logic exception (setTarget should have already handled this)
+					console.error('Block ID found, but block not found', data);
+				}
+			} else {
+				const blocks = this.dialog.blockLookup.getBlocksByUsername(params.user);
+				if (blocks) {
+					// Logic exception (setTarget should have already handled this)
+					console.error('Ambiguous blocks found', data, blocks);
+				} else {
+					needsWarning = true; // Not blocked
+				}
+			}
+			if (needsWarning) {
+				warnings.push('ajaxblock-confirm-block-hideuser');
+			}
+		}
+
+		if (params.user && !params.newblock) {
+			const blocks = this.dialog.blockLookup.getBlocksByUsername(params.user);
+			if (blocks && blocks.length === 1) {
+				params.reblock = true;
+			}
+		}
+
+		return { params, warnings };
 	}
 
 	getExpiry() {
@@ -3173,10 +3601,6 @@ class UnblockUser extends AjaxBlockDialogContent {
 		this.$element.append(optionsFieldset.$element);
 	}
 
-	getReason() {
-		return clean(this.reason.getValue());
-	}
-
 	/**
 	 * Sets a target to the target field.
 	 *
@@ -3199,7 +3623,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						targetAux: [''],
 						id: null,
 						username,
-						oneClick: null,
+						oneClick: false,
 					});
 					const idMap = BlockLookup.toIdMap(
 						// `user` is never missing for non-autoblocks
@@ -3255,7 +3679,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 							targetAux: [''],
 							id: null,
 							username,
-							oneClick: null,
+							oneClick: false,
 						});
 						const idMap = BlockLookup.toIdMap(
 							// `user` is never missing for non-autoblocks
@@ -3297,7 +3721,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						targetAux: [''],
 						id: null,
 						username,
-						oneClick: null,
+						oneClick: false,
 					});
 					const idMap = BlockLookup.toIdMap(
 						// `user` is never missing for non-autoblocks
@@ -3352,10 +3776,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 	 * Parameters for JQuery.append, which sets the auxiliary target text for {@link $targetAux}.
 	 * @param {?number} data.id The block ID of the target.
 	 * @param {?string} data.username The username of the target.
-	 * @param {?boolean} data.oneClick Whether the target can be processed in the one-click mode:
-	 * - `true`: No blocker for a one-click processing.
-	 * - `false`: The target cannot be processed.
-	 * - `null`: There is a blocker for a one-click processing (i.e., warnings).
+	 * @param {boolean} data.oneClick Whether the target can be processed in the one-click mode.
 	 * @returns {this}
 	 * @private
 	 */
@@ -3381,6 +3802,45 @@ class UnblockUser extends AjaxBlockDialogContent {
 
 		const watch = toPHPBool(params.get('wpWatch'));
 		this.watchUser.setSelected(watch);
+	}
+
+	/**
+	 * Builds parameters to the unblock API.
+	 *
+	 * @param {BlockLink} data
+	 * @returns {?{ params: UnblockParams; warnings: (keyof LoadedMessages)[]; }}
+	 */
+	buildParams(data) {
+		const base = super.buildParams(data);
+		if (!base) {
+			return null;
+		}
+		const params = /** @type {UnblockParams} */ (base.params);
+		const warnings = base.warnings;
+
+		// TODO: Update this condition after implementing AjaxBlockConfig
+		// eslint-disable-next-line no-constant-condition
+		if (false) {
+			warnings.push('ajaxblock-confirm-unblock');
+		}
+		if (this.getTarget().username === mw.config.get('wgUserName')) {
+			warnings.push('ajaxblock-confirm-unblock-self');
+		}
+
+		const reason = this.getReason();
+		if (!reason) {
+			warnings.push('ajaxblock-confirm-unblock-noreason');
+		}
+		params.reason = reason;
+
+		// TODO: Warn deviation from the predefined params
+		Object.assign(params, this.getWatchUserParams());
+
+		return { params, warnings };
+	}
+
+	getReason() {
+		return clean(this.reason.getValue());
 	}
 
 }
@@ -3867,6 +4327,9 @@ AjaxBlockLogo.svg = `
  * @typedef {import('./window/AjaxBlock').Target} Target
  * @typedef {import('./window/AjaxBlock').PartialBlockParams} PartialBlockParams
  * @typedef {import('./window/AjaxBlock').WatchUserParams} WatchUserParams
+ * @typedef {import('./window/AjaxBlock').BaseParams} BaseParams
+ * @typedef {import('./window/AjaxBlock').BlockParams} BlockParams
+ * @typedef {import('./window/AjaxBlock').UnblockParams} UnblockParams
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogevents} ApiResponseQueryListLogevents
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
  * @typedef {import('./window/InvestigateHelper').BlockIdMapValue} BlockIdMapValue
