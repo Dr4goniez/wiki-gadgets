@@ -793,18 +793,6 @@ class AjaxBlock {
 		return this.confirmWindowManager;
 	}
 
-	/**
-	 * Gets a `{ 'Promise-Non-Write-API-Action': '1' }` header for a non-write POST request.
-	 * @returns
-	 */
-	static nonwritePost() {
-		return {
-			headers: {
-				'Promise-Non-Write-API-Action': '1'
-			}
-		};
-	}
-
 }
 AjaxBlock.storageKeys = {
 	blockPageAliases: 'mw-AjaxBlock-blockPageAliases',
@@ -855,7 +843,7 @@ class BlockLookup {
 	static fetch(permissionManager, users, ids) {
 		// TODO: `users` and `ids` should instead be `targets` as a single argument
 		const apilimit = permissionManager.getApiLimit();
-		const ajaxOptions = AjaxBlock.nonwritePost();
+		const ajaxOptions = nonwritePost();
 		/**
 		 * @param {string[]} batch
 		 * @param {'ids' | 'users'} batchParam
@@ -1269,7 +1257,7 @@ class Messages {
 				ajaxOptions = {};
 			} else {
 				request = api.post.bind(api);
-				ajaxOptions = AjaxBlock.nonwritePost();
+				ajaxOptions = nonwritePost();
 			}
 
 			return request({
@@ -1471,7 +1459,7 @@ class Messages {
 	// 		disableeditsection: true,
 	// 		disabletoc: true,
 	// 		contentmodel: 'wikitext'
-	// 	}, AjaxBlock.nonwritePost()).then((res) => {
+	// 	}, nonwritePost()).then((res) => {
 	// 		const $res = $(res.parse.text);
 	// 		const toCache = Object.create(null);
 
@@ -3096,7 +3084,7 @@ class BlockUser extends AjaxBlockDialogContent {
 					}
 
 					const apilimit = this.dialog.permissionManager.getApiLimit();
-					const ajaxOptions = AjaxBlock.nonwritePost();
+					const ajaxOptions = nonwritePost();
 					return (
 						/**
 						 * @param {string[]} batch
@@ -4206,6 +4194,18 @@ function clean(str) {
  */
 function sleep(milliseconds) {
 	return new Promise((resolve) => setTimeout(resolve, Math.max(0, milliseconds)));
+}
+
+/**
+ * Gets a `{ 'Promise-Non-Write-API-Action': '1' }` header for a non-write POST request.
+ * @returns
+ */
+function nonwritePost() {
+	return {
+		headers: {
+			'Promise-Non-Write-API-Action': '1'
+		}
+	};
 }
 
 /**
