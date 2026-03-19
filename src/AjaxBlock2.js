@@ -15,8 +15,9 @@
 (() => {
 //**********************************************************************
 
-const version = '2.0.0';
-const scriptName = 'AjaxBlock';
+const VERSION = '2.0.0';
+const SCRIPT_NAME = 'AjaxBlock';
+const DEBUG_MODE = false;
 
 // Ensure the user is registered
 if (!mw.config.get('wgUserId') || mw.config.get('wgUserIsTemp')) {
@@ -31,7 +32,7 @@ if (
 	return;
 }
 
-// Don't tun the script on Special:Block and Special:Unblock
+// Don't run the script on Special:Block and Special:Unblock
 const wgCanonicalSpecialPageName = mw.config.get('wgCanonicalSpecialPageName');
 if (wgCanonicalSpecialPageName === 'Block' || wgCanonicalSpecialPageName === 'Unblock') {
 	return;
@@ -39,8 +40,9 @@ if (wgCanonicalSpecialPageName === 'Block' || wgCanonicalSpecialPageName === 'Un
 
 let /** @type {mw.Api} */ api;
 const wgUserLanguage = mw.config.get('wgUserLanguage');
+const wgUserName = /** @type {string} */ (mw.config.get('wgUserName'));
 let wgEnableMultiBlocks = false;
-const infinity = 'infinity';
+const EXPIRY_INFINITE = 'infinity';
 
 class AjaxBlock {
 
@@ -219,7 +221,7 @@ class AjaxBlock {
 				throw new Error('Logic exception', { cause: obj });
 			}
 			if (key === null) {
-				this.markLinkAsUnprocessable(obj.anchor, obj.type);
+				this.markLinkAsUnprocessable(obj.anchor);
 				continue;
 			}
 
@@ -493,7 +495,7 @@ class AjaxBlock {
 			const subpage = mSpecial[2] ? decodeURIComponent(mSpecial[2]) : null;
 			const [id, username] = BlockTarget.validate(subpage, query);
 			if (!id && !username) {
-				this.markLinkAsUnprocessable(a, linkType);
+				this.markLinkAsUnprocessable(a);
 				continue;
 			} else if (username) {
 				users.add(username);
@@ -516,6 +518,7 @@ class AjaxBlock {
 				params,
 				target: new BlockTarget(id, username),
 				type: linkType,
+				locked: false,
 			});
 		}
 
@@ -524,15 +527,11 @@ class AjaxBlock {
 
 	/**
 	 * @param {HTMLAnchorElement} anchor
-	 * @param {BlockLink['type']} type
 	 * @returns {void}
 	 * @private
 	 */
-	static markLinkAsUnprocessable(anchor, type) {
-		// Class attributes used here:
-		// - ajaxblock-blocklink-unprocessable
-		// - ajaxblock-unblocklink-unprocessable
-		const clss = `ajaxblock-${type}link-unprocessable`;
+	static markLinkAsUnprocessable(anchor) {
+		const clss = 'ajaxblock-unprocessable';
 		if (anchor.classList.contains(clss)) {
 			return;
 		}
@@ -541,7 +540,7 @@ class AjaxBlock {
 		if (!this.unprocessableLinkTitleAttr) {
 			const sep = Messages.get('word-separator');
 			const parentheses = Messages.get('parentheses');
-			const title = Messages.get('ajaxblock-link-title-unprocessable', [scriptName]);
+			const title = Messages.get('ajaxblock-link-title-unprocessable', [SCRIPT_NAME]);
 			this.unprocessableLinkTitleAttr = sep + mw.format(parentheses, title);
 		}
 
@@ -555,10 +554,45 @@ class AjaxBlock {
 		const style = document.createElement('style');
 		style.id = 'ajaxblock-styles';
 		style.textContent = `
-			.ajaxblock-blocklink-unprocessable,
-			.ajaxblock-unblocklink-unprocessable {
+			.ajaxblock-unprocessable {
 				text-decoration-line: underline;
 				text-decoration-style: dotted;
+			}
+			.ajaxblock-hiddenlink {
+				display: none;
+			}
+			${/* Format processed links (used for anchors' containers) */''}
+			.ajaxblock-processed::before {
+				content: "[";
+			}
+			.ajaxblock-processed::after {
+				content: "]";
+			}
+			.ajaxblock-processed-success {
+				background-color: lightgreen;
+			}
+			@media screen {
+				html.skin-theme-clientpref-night .ajaxblock-processed-success {
+					background-color: #099979;
+				}
+			}
+			@media screen and (prefers-color-scheme: dark) {
+				html.skin-theme-clientpref-os .ajaxblock-processed-success {
+					background-color: #099979;
+				}
+			}
+			.ajaxblock-processed-failure {
+				background-color: lightpink;
+			}
+			@media screen {
+				html.skin-theme-clientpref-night .ajaxblock-processed-failure {
+					background-color: #f54739;
+				}
+			}
+			@media screen and (prefers-color-scheme: dark) {
+				html.skin-theme-clientpref-os .ajaxblock-processed-failure {
+					background-color: #f54739;
+				}
 			}
 			${/* Style the logo */''}
 			.ajaxblock-logo {
@@ -573,18 +607,23 @@ class AjaxBlock {
 				height: 100%;
 				width: auto;
 			}
+			${/* Style the loading icon */''}
+			.ajaxblock-loading {
+				vertical-align: middle;
+				height: 1em;
+				border: 0;
+			}
 			${/* Dialog content overlay to disallow user interaction */''}
-			.ajaxblock-dialog .ajaxblock-dialog-overlayedbody {
+			.ajaxblock-dialog .ajaxblock-dialog-overlay-container {
 				position: relative;
 			}
 			.ajaxblock-dialog-overlay {
 				position: absolute;
 				top: 0;
+				right: 0;
+				bottom: 0;
 				left: 0;
-				height: 100%;
-				width: 100%;
 				z-index: 1000;
-				overflow: hidden;
 			}
 			${/* Reduce padding for MessageWidget in the dialog */''}
 			.ajaxblock-dialog .ajaxblock-dialog-message {
@@ -647,8 +686,20 @@ class AjaxBlock {
 	 * @private
 	 */
 	constructor(permissionManager, linkMap, blockLookup, actionRestrictions) {
+		/**
+		 * @private
+		 * @readonly
+		 */
 		this.permissionManager = permissionManager;
-		this.linkMaps = linkMap;
+		/**
+		 * @private
+		 * @readonly
+		 */
+		this.linkMap = linkMap;
+		/**
+		 * @private
+		 * @readonly
+		 */
 		this.blockLookup = blockLookup;
 
 		// Add a click event to each link
@@ -658,7 +709,24 @@ class AjaxBlock {
 			}
 		}
 
+		/**
+		 * @private
+		 */
+		this.processingOneClickEvent = false;
+		/**
+		 * @private
+		 */
+		this.lastExecution = Promise.resolve();
+		/**
+		 * @private
+		 */
+		this.pendingCount = 0;
+
 		const AjaxBlockDialog = AjaxBlockDialogFactory();
+		/**
+		 * @private
+		 * @readonly
+		 */
 		this.dialog = new AjaxBlockDialog(permissionManager, blockLookup, actionRestrictions, {
 			$element: $('<div>').css({ 'font-size': '90%' }),
 			classes: ['ajaxblock-dialog'],
@@ -674,6 +742,12 @@ class AjaxBlock {
 	 * @private
 	 */
 	handleClick(e, data) {
+		if (data.anchor.classList.contains('ajaxblock-hiddenlink')) {
+			// Unexpected click on the hidden anchor
+			mw.notify(Messages.get('ajaxblock-notify-error-processing'), { type: 'error' });
+			return;
+		}
+
 		let callback;
 		if (e.shiftKey && e.ctrlKey) {
 			// One click execution with all warnings suppressed
@@ -686,7 +760,7 @@ class AjaxBlock {
 			return;
 		} else {
 			// Open the dialog
-			callback = () => this.dialog.open(data);
+			callback = () => this.openDialogIfAllSettled(data);
 		}
 
 		e.preventDefault();
@@ -694,24 +768,64 @@ class AjaxBlock {
 		callback();
 	}
 
+	isAllSettled() {
+		return this.pendingCount === 0;
+	}
+
+	/**
+	 * Opens the AjaxBlock dialog if there are no pending operations currently being processed.
+	 * If the dialog cannot be opened, this issues a `mw.notify` error notification unless
+	 * `errorMsg` is provided as `null`.
+	 *
+	 * The purpose of this method is to prevent race conditions. `AjaxBlockDialog` may, in its
+	 * initialization process, refer to the data in the `BlockLookup` instance, which may be
+	 * updated by the pending operations. The dialog should be opened only after those operations
+	 * are finished, to prevent data corruption.
+	 *
+	 * @param {BlockLink} data
+	 * @param {?keyof LoadedMessages} [errorMsg] The key of the message to use for a `mw.notify`
+	 * error notification. If `null` is provided, no notification will be issued. (default:
+	 * `ajaxblock-notify-error-cannotopendialog`)
+	 * @returns {void}
+	 */
+	openDialogIfAllSettled(data, errorMsg = 'ajaxblock-notify-error-cannotopendialog') {
+		if (this.isAllSettled()) {
+			this.dialog.updateSize().open(data);
+		} else if (errorMsg !== null) {
+			mw.notify(Messages.get(errorMsg, [SCRIPT_NAME]), { type: 'warn' });
+		}
+	}
+
 	/**
 	 * @param {BlockLink} data
 	 * @param {boolean} suppressWarnings
 	 * @private
-	 * @todo This should be guraded for race conditions
 	 */
 	async handleOneClick(data, suppressWarnings) {
+		if (this.processingOneClickEvent) {
+			// Disallow concurrent operations while collecting data from the dialog
+			return;
+		}
+		this.processingOneClickEvent = true;
+
+		const reset = () => {
+			this.dialog.resetDialog();
+			this.processingOneClickEvent = false;
+		};
+
 		const processable = this.dialog.prepareDialog(data);
 		if (!processable) {
 			// When prepareDialog() returns false, it issues error notifications to
 			// indicate that the (un)block link is completely unprocessable
+			reset();
 			return;
 		}
 		const field = this.dialog.getActiveField();
 		if (!field.isOneClickAllowed()) {
 			// When one-click execution is disallowed, the (un)block must be executed
 			// via the dialog
-			this.dialog.open(data);
+			reset();
+			this.openDialogIfAllSettled(data, 'ajaxblock-notify-error-cannotopendialog-oneclick');
 			return;
 		}
 
@@ -719,7 +833,8 @@ class AjaxBlock {
 		if (!paramObj) {
 			// When buildParams() returns null, it issues mw.notify messages to indicate
 			// that something needs to be modified on the dialog
-			this.dialog.open(data);
+			reset();
+			this.openDialogIfAllSettled(data, 'ajaxblock-notify-error-cannotopendialog-oneclick');
 			return;
 		}
 
@@ -729,14 +844,188 @@ class AjaxBlock {
 		if (warnings.length && !suppressWarnings) {
 			const confirmed = await AjaxBlock.confirmWarnings(warnings, data);
 			if (!confirmed) {
+				reset();
 				if (confirmed === null) {
-					this.dialog.open(data);
+					this.openDialogIfAllSettled(data);
 				}
 				return;
 			}
 		}
 
-		// TODO: Execute block/unblock here
+		// Username is always set unless this is an unblock link for an autoblock
+		const key = data.target.getUsername() || /** @type {number} */ (data.target.getId());
+		const links = this.linkMap.get(key);
+		if (!links) {
+			mw.notify(
+				Messages.get('internalerror_info', [Messages.get('ajaxblock-notify-error-noblocklinks')]),
+				{ type: 'error' }
+			);
+			reset();
+			return;
+		}
+
+		let existingTimeout = AjaxBlock.linkRestorationTimeoutMap.get(key);
+		if (existingTimeout !== undefined) {
+			clearTimeout(existingTimeout);
+			AjaxBlock.linkRestorationTimeoutMap.delete(key);
+		}
+
+		const /** @type {ProcessingBlockLink[]} */ processing = [];
+		for (const linkObj of links) {
+			if (!linkObj.locked) {
+				processing.push(BlockLinkUtil.insertSpinner(linkObj));
+			}
+		}
+		if (!processing.length) {
+			mw.notify(
+				Messages.get('internalerror_info', [Messages.get('ajaxblock-notify-error-noblocklinks')]),
+				{ type: 'error' }
+			);
+			reset();
+			return;
+		}
+
+		// Allow concurrent operations again now that all required data has been collected
+		// from the dialog. Note that it's safe to release the lock here because (un)block
+		// links are bundled by usernames or block IDs (for autoblocks), meaning `links`
+		// is always disjoint even on concurrent operations.
+		//
+		// The remaining race conditions to handle are:
+		// - Execute (un)block operations sequentially to keep the BlockLookup index maps
+		//   in a consistent state
+		// - Clear any existing link restoration timeout before interacting with (un)block
+		//   links (handled above)
+		reset();
+
+		this.pendingCount++;
+		const current = this.lastExecution
+			// Note: lastExecution could become rejected; always chain from it using .catch()
+			// to avoid breaking the execution chain.
+			.catch(() => {})
+			.then(() => this.handleOneClickInternal(data, params, key, processing));
+		this.lastExecution = current;
+
+		const finalize = () => { this.pendingCount--; };
+		current.then(finalize, finalize);
+	}
+
+	/**
+	 * @param {BlockLink} data
+	 * @param {BlockParams | UnblockParams} params
+	 * @param {string | number} key
+	 * @param {ProcessingBlockLink[]} processing
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async handleOneClickInternal(data, params, key, processing) {
+		// Perform the block/unblock
+		const request = DEBUG_MODE ? AjaxBlock.testExecute : AjaxBlock.execute;
+		let code = '';
+		/** @type {JQuery<HTMLElement> | ApiResponseBlock | ApiResponseUnblock} */
+		// @ts-expect-error
+		const result = await request(params, data).catch((c, err) => {
+			code = c;
+			console.error(err);
+			return api.getErrorMessage(err);
+		});
+
+		// Process the result
+		let /** @type {ProcessedBlockLink[]} */ processed;
+		if (result instanceof $) {
+			const linksRestorable = params.action === 'block'
+				? this.blockLookup.updateFromFailedBlock(code, params)
+				: this.blockLookup.updateFromFailedUnblock(code, params);
+
+			mw.notify(result, { type: 'error', autoHideSeconds: 'long' });
+			processed = AjaxBlock.postProcessLinks(processing, params, { code, shouldLock: !linksRestorable });
+		} else {
+			let otherBlocks;
+			if (params.action === 'block') {
+				// @ts-expect-error
+				const res = /** @type {ApiResponseBlock} */ (result);
+				otherBlocks = this.blockLookup.updateFromSuccessfulBlock(res);
+			} else {
+				// @ts-expect-error
+				const res = /** @type {ApiResponseUnblock} */ (result);
+				otherBlocks = this.blockLookup.updateFromSuccessfulUnblock(res);
+			}
+
+			const shouldLock = !otherBlocks
+				? false
+				: /** @type {(obj: ProcessedBlockLink) => boolean} */ ({ link }) => {
+					// Find (un)block links that target an ID of a still active block
+					const targetId = link.target.getId();
+					return targetId !== null && otherBlocks.some((obj) => obj.id === targetId);
+				};
+			processed = AjaxBlock.postProcessLinks(processing, params, { shouldLock });
+		}
+
+		const restorable = processed.filter(({ link }) => !link.locked);
+		if (!restorable.length) {
+			return;
+		}
+
+		const existingTimeout = AjaxBlock.linkRestorationTimeoutMap.get(key);
+		if (existingTimeout !== undefined) {
+			clearTimeout(existingTimeout);
+			AjaxBlock.linkRestorationTimeoutMap.delete(key);
+		}
+		AjaxBlock.linkRestorationTimeoutMap.set(
+			key,
+			setTimeout(() => {
+				restorable.forEach(BlockLinkUtil.restoreLink);
+				AjaxBlock.linkRestorationTimeoutMap.delete(key);
+			}, 5000)
+		);
+	}
+
+	/**
+	 * @param {ProcessingBlockLink[]} processing
+	 * @param {BlockParams | UnblockParams} params
+	 * @param {object} options
+	 * @param {string} [options.code] An error code on failure
+	 * @param {boolean | ((obj: ProcessedBlockLink) => boolean)} options.shouldLock
+	 * A boolean indicating whether the processed link should be locked (i.e., excluded
+	 * from future processing and not restored), or a function returning such a boolean
+	 * @returns {ProcessedBlockLink[]}
+	 * @private
+	 */
+	static postProcessLinks(processing, params, options) {
+		const { code, shouldLock } = options;
+		const processed = [];
+
+		for (const obj of processing) {
+			const { link } = obj;
+
+			// Should we mark this link as processed?
+			let targetId;
+			if (
+				// The action matches, and
+				link.type === params.action && (
+					// The operation is username-based (a username-based operation indicates
+					// the target wasn't blocked; see BlockUser.setTarget), or
+					params.user !== undefined ||
+					// --- The operation is ID-based ---
+					// The link doesn't target a block ID (i.e., targets the username), or
+					(targetId = link.target.getId()) === null ||
+					// The link targets the same block ID
+					params.id === targetId
+				)
+				// Note: this condition also matches the originally clicked link
+			) {
+				const result = code === undefined
+					? BlockLinkUtil.markAsSuccess(obj, params.action)
+					: BlockLinkUtil.markAsFailure(obj, params.action, code);
+				if (typeof shouldLock === 'function' ? shouldLock(result) : shouldLock) {
+					result.link.locked = true;
+				}
+				processed.push(result);
+				continue;
+			}
+			BlockLinkUtil.restoreLink(obj);
+		}
+
+		return processed;
 	}
 
 	/**
@@ -804,7 +1093,7 @@ class AjaxBlock {
 					label: Messages.get('block-options'),
 					items: [
 						new OO.ui.FieldLayout(cbOpenDialog, {
-							label: Messages.get('ajaxblock-confirm-dialog-label-opendialog', [scriptName]),
+							label: Messages.get('ajaxblock-confirm-dialog-label-opendialog', [SCRIPT_NAME]),
 							align: 'inline',
 						})
 					],
@@ -817,7 +1106,7 @@ class AjaxBlock {
 		const window = windowManager.openWindow(dialog, {
 			actions: [
 				{ action: 'accept', label: Messages.get('confirm'), flags: ['primary', 'progressive'] },
-				{ action: 'reject', label: Messages.get('cancel'),  flags: 'safe' }
+				{ action: 'reject', label: Messages.get('cancel'), flags: 'safe' }
 			],
 			message: $message,
 			size: 'medium',
@@ -857,29 +1146,122 @@ class AjaxBlock {
 	/**
 	 * @overload
 	 * @param {BlockParams} params
+	 * @param {BlockLink} _data
 	 * @returns {JQuery.Promise<ApiResponseBlock>}
 	 */
 	/**
 	 * @overload
 	 * @param {UnblockParams} params
+	 * @param {BlockLink} _data
 	 * @returns {JQuery.Promise<ApiResponseUnblock>}
 	 */
 	/**
-	 * @param {BlockParams | UnblockParams} params
-	 * @returns {JQuery.Promise<ApiResponseBlock | ApiResponseUnblock>}
+	 * @param {import('ts-essentials').XOR<BlockParams, UnblockParams>} params
+	 * @param {BlockLink} _data
+	 * @returns {JQuery.Promise<import('ts-essentials').XOR<ApiResponseBlock, ApiResponseUnblock>>}
 	 */
-	static execute(params) {
+	static execute(params, _data) {
 		// @ts-expect-error
-		return api.postWithEditToken(params).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+		return api.postWithEditToken(Object.assign(
+			{
+				errorformat: 'html',
+				errorlang: wgUserLanguage,
+				errorsuselocal: true,
+				curtimestamp: true,
+			},
+			params
+		)).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
 			if (res) {
 				if (res.block) {
-					return res.block;
+					return Object.assign(res.block, { timestamp: res.curtimestamp });
 				} else if (res.unblock) {
 					return res.unblock;
 				}
 			}
 			failAsEmptyResult(res, jqXHR);
 		});
+	}
+
+	/**
+	 * @overload
+	 * @param {BlockParams} params
+	 * @param {BlockLink} data
+	 * @returns {JQuery.Promise<ApiResponseBlock>}
+	 */
+	/**
+	 * @overload
+	 * @param {UnblockParams} params
+	 * @param {BlockLink} data
+	 * @returns {JQuery.Promise<ApiResponseUnblock>}
+	 */
+	/**
+	 * @param {import('ts-essentials').XOR<BlockParams, UnblockParams>} params
+	 * @param {BlockLink} data
+	 * @returns {JQuery.Promise<import('ts-essentials').XOR<ApiResponseBlock, ApiResponseUnblock>>}
+	 */
+	static testExecute(params, data) {
+		const def = $.Deferred();
+
+		const rand = Math.random();
+		const mockApiResponse = () => {
+			if (rand < 0.1) {
+				const code = 'mockederror';
+				const info = 'An error has been fabricated.';
+				def.reject(code, info, { error: { code, info } });
+				return;
+			}
+
+			const username = /** @type {string} */ (data.target.getUsername());
+			if (params.action === 'block') {
+				/** @type {ApiResponseBlock} */
+				const resBlock = {
+					user: params.user || username,
+					userID: 7777,
+					timestamp: new Date().toISOString(),
+					expiry: params.expiry,
+					id: params.id || Math.floor(rand * 1000),
+					reason: params.reason,
+					anononly: !!params.anononly,
+					nocreate: !!params.nocreate,
+					autoblock: !!params.autoblock,
+					noemail: !!params.noemail,
+					hidename: !!params.hidename,
+					allowusertalk: !!params.allowusertalk,
+					watchuser: !!params.watchuser,
+					partial: !!params.partial,
+					pagerestrictions: params.pagerestrictions ? params.pagerestrictions.split('|') : [],
+					namespacerestrictions: params.namespacerestrictions ? params.namespacerestrictions.split('|').map(n => +n) : [],
+					actionrestrictions: params.actionrestrictions ? params.actionrestrictions.split('|') : [],
+				};
+				if (params.watchlistexpiry) {
+					resBlock.watchlistexpiry = params.watchlistexpiry;
+				}
+				def.resolve({
+					block: resBlock,
+				});
+			} else {
+				const isAutoblock = !data.target.getUsername() && !!data.target.getId();
+				/** @type {ApiResponseUnblock} */
+				const resUnblock = {
+					user: isAutoblock ? '' : (params.user || username),
+					userid: isAutoblock ? 0 : 7777,
+					expiry: 'Unknown expiry',
+					id: params.id || Math.floor(rand * 1000),
+					reason: params.reason,
+					watchuser: !!params.watchuser,
+				};
+				if (params.watchlistexpiry) {
+					resUnblock.watchlistexpiry = params.watchlistexpiry;
+				}
+				def.resolve({
+					unblock: resUnblock
+				});
+			}
+		};
+
+		setTimeout(mockApiResponse, 500 + rand * 1000);
+
+		return def.promise();
 	}
 
 }
@@ -897,6 +1279,141 @@ AjaxBlock.unprocessableLinkTitleAttr = null;
  * @type {?OO.ui.WindowManager}
  */
 AjaxBlock.confirmWindowManager = null;
+/**
+ * @type {Map<string | number, NodeJS.Timeout>}
+ */
+AjaxBlock.linkRestorationTimeoutMap = new Map();
+
+class BlockLinkUtil {
+
+	/**
+	 * @typedef {object} ProcessingBlockLink
+	 * @prop {BlockLink} link
+	 * @prop {HTMLSpanElement} wrapper
+	 * @prop {HTMLImageElement} spinner
+	 */
+	/**
+	 * @typedef {object} ProcessedBlockLink
+	 * @prop {BlockLink} link
+	 * @prop {HTMLSpanElement} wrapper
+	 * @prop {HTMLElement} result
+	 */
+	/**
+	 * Inserts a loading spinner before the given (un)block link, wrapping both in a span element.
+	 *
+	 * The (un)block link will only be hidden and not removed from the DOM.
+	 *
+	 * @param {BlockLink} linkObj
+	 * @returns {ProcessingBlockLink}
+	 */
+	static insertSpinner(linkObj) {
+		// If the link is already wrapped, reset it to the original shape
+		if (linkObj.anchor.classList.contains('ajaxblock-hiddenlink') && linkObj.anchor.parentElement) {
+			linkObj.anchor.parentElement.before(linkObj.anchor);
+			linkObj.anchor.parentElement.remove();
+		}
+
+		// Create a <span> element with a loading spinner
+		const wrapper = document.createElement('span');
+		const spinner = new Image();
+		spinner.src = '//upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif';
+		spinner.classList.add('ajaxblock-loading');
+		wrapper.appendChild(spinner);
+
+		// Insert the <span> immediately before the anchor and also move the anchor into the span
+		linkObj.anchor.before(wrapper);
+		linkObj.anchor.classList.add('ajaxblock-hiddenlink'); // Hide the anchor
+		wrapper.appendChild(linkObj.anchor);
+
+		return {
+			link: linkObj,
+			wrapper,
+			spinner,
+		};
+	}
+
+	/**
+	 * Restores a (un)block link previously wrapped by {@link insertSpinner},
+	 * removing the wrapper span and loading spinner.
+	 *
+	 * @param {ProcessingBlockLink | ProcessedBlockLink} linkObj
+	 * @returns {void}
+	 */
+	static restoreLink(linkObj) {
+		const { link, wrapper } = linkObj;
+		wrapper.before(link.anchor);
+		wrapper.remove();
+		link.anchor.classList.remove('ajaxblock-hiddenlink');
+	}
+
+	/**
+	 * Marks the given (un)block link currently being processed as failure.
+	 *
+	 * @param {ProcessingBlockLink} linkObj
+	 * @param {BlockLink['type']} action
+	 * @param {string} code
+	 * @returns {ProcessedBlockLink}
+	 */
+	static markAsFailure(linkObj, action, code) {
+		if (this.failureMessage[action] === null) {
+			// Messages used here:
+			// - ajaxblock-result-block-failure
+			// - ajaxblock-result-unblock-failure
+			this.failureMessage[action] = Messages.get(`ajaxblock-result-${action}-failure`);
+		}
+		const errorMsg = mw.format(this.failureMessage[action], code);
+
+		const { link, spinner, wrapper } = linkObj;
+		wrapper.classList.add('ajaxblock-processed');
+		const result = document.createElement('span');
+		result.classList.add('ajaxblock-processed-failure');
+		result.textContent = errorMsg;
+		spinner.replaceWith(result);
+
+		return { link, wrapper, result };
+	}
+
+	/**
+	 * Marks the given (un)block link currently being processed as success.
+	 *
+	 * @param {ProcessingBlockLink} linkObj
+	 * @param {BlockLink['type']} action
+	 * @returns {ProcessedBlockLink}
+	 */
+	static markAsSuccess(linkObj, action) {
+		if (this.successMessage[action] === null) {
+			// Messages used here:
+			// - ajaxblock-result-block-success
+			// - ajaxblock-result-unblock-success
+			this.successMessage[action] = Messages.get(`ajaxblock-result-${action}-success`);
+		}
+		const successMsg = this.successMessage[action];
+
+		const { link, spinner, wrapper } = linkObj;
+		wrapper.classList.add('ajaxblock-processed');
+		const result = document.createElement('span');
+		result.classList.add('ajaxblock-processed-success');
+		result.textContent = successMsg;
+		spinner.replaceWith(result);
+
+		return { link, wrapper, result };
+	}
+
+}
+/**
+ * @type {Record<BlockLink['type'], ?string>}
+ */
+BlockLinkUtil.failureMessage = {
+	block: null,
+	unblock: null,
+};
+/**
+ * @type {Record<BlockLink['type'], ?string>}
+ */
+BlockLinkUtil.successMessage = {
+	block: null,
+	unblock: null,
+};
 
 class PermissionManager {
 
@@ -926,6 +1443,167 @@ class PermissionManager {
 }
 
 class BlockLookup {
+
+	/**
+	 * @param {ApiResponseBlock} res
+	 * @returns {?ApiResponseQueryListBlocks[]} Other active blocks, or null if none
+	 */
+	updateFromSuccessfulBlock(res) {
+		const datum = BlockLookup.convertBlockResponseToQueryBlocksResponse(res);
+
+		const index = this.idMap.get(res.id);
+		if (index === undefined) {
+			// New block
+			this.data.push(datum);
+			this.mapData();
+		} else {
+			// Reblock
+			this.data[index] = datum;
+		}
+
+		// Does the user have other active blocks?
+		const blocks = /** @type {ApiResponseQueryListBlocks[]} */ (this.getBlocksByUsername(res.user))
+			.filter(obj => obj !== datum);
+		return blocks.length ? blocks : null;
+	}
+
+	/**
+	 * @param {ApiResponseBlock} res
+	 * @returns {ApiResponseQueryListBlocks}
+	 */
+	static convertBlockResponseToQueryBlocksResponse(res) {
+		/** @type {ApiResponseQueryListBlocks} */
+		const ret = {
+			id: res.id,
+			user: res.user,
+			by: wgUserName,
+			timestamp: res.timestamp, // TODO: The API module should itself return this
+			expiry: res.expiry,
+			// 'duration-l10n': string; // Cannot be fabricated from ApiResponseBlock
+			reason: res.reason,
+			automatic: false,
+			anononly: res.anononly,
+			nocreate: res.nocreate,
+			autoblock: res.autoblock,
+			noemail: res.noemail,
+			hidden: res.hidename,
+			allowusertalk: res.allowusertalk,
+			partial: res.partial,
+			restrictions: [],
+		};
+		if (res.pagerestrictions || res.namespacerestrictions || res.actionrestrictions) {
+			/** @type {ApiResponseQueryListBlocksRestrictions} */
+			const restr = Object.create(null);
+			if (res.pagerestrictions) {
+				restr.pages = res.pagerestrictions.map((page) => {
+					const title = new mw.Title(page);
+					return { ns: title.getNamespaceId(), title: title.getPrefixedText() };
+				});
+			}
+			if (res.namespacerestrictions) {
+				restr.namespaces = res.namespacerestrictions;
+			}
+			if (res.actionrestrictions) {
+				restr.actions = res.actionrestrictions;
+			}
+			ret.restrictions = restr;
+		}
+		return ret;
+	}
+
+	/**
+	 * @param {ApiResponseUnblock} res
+	 * @returns {?ApiResponseQueryListBlocks[]} Other active blocks, or null if none
+	 */
+	updateFromSuccessfulUnblock(res) {
+		const { id, user } = res;
+
+		const index = this.idMap.get(id);
+		if (index === undefined) {
+			console.warn(`Block with ID #${id} not found`);
+			return null;
+		}
+
+		// Remove the lifted block entry
+		this.data.splice(index, 1);
+		this.mapData();
+
+		// Does the user have other active blocks?
+		if (!user) {
+			// `user` is an empty string when lifting an autoblock
+			return null;
+		}
+		return this.getBlocksByUsername(user);
+	}
+
+	/**
+	 * @param {string} code
+	 * @param {BlockParams} params
+	 * @returns {boolean} Whether failed links should be restored after a delay,
+	 * allowing the user to retry the operation. `false` indicates a terminal failure.
+	 */
+	updateFromFailedBlock(code, params) {
+		if (!BlockLookup.retryableBlockErrors.has(code)) {
+			return false;
+		}
+
+		if (code === 'ipb_already_blocked') {
+			// This error happens when:
+			// 1. Someone else has blocked the user after the page was opened, or
+			// 2. The new block doesn't change any restrictions of the currently active blocks
+			//
+			// Since this script always performs an ID-based block when the target is already
+			// blocked, #1 is the case when `params.user` is set; otherwise #2 is the case
+
+			// true when #2 is the case: A retry can be performed after updating block settings
+			// on the dialog
+			// TODO: Request should be prevented when #2 is expected
+			return params.user === undefined;
+		}
+
+		return true;
+	}
+
+	/**
+	 * @param {string} code
+	 * @param {UnblockParams} params
+	 * @returns {boolean} Whether failed links should be restored after a delay,
+	 * allowing the user to retry the operation. `false` indicates a terminal failure.
+	 */
+	updateFromFailedUnblock(code, params) {
+		if (!BlockLookup.retryableUnblockErrors.has(code)) {
+			return false;
+		}
+
+		if (code === 'nosuchblockid') {
+			if (params.id === undefined) {
+				// For type safety; not expected to reach this code path
+				return false;
+			}
+			const index = this.idMap.get(params.id);
+			if (index !== undefined) {
+				this.data.splice(index, 1);
+				this.mapData();
+			}
+		} else if (code === 'ipb_cant_unblock') {
+			if (params.id !== undefined) {
+				const index = this.idMap.get(params.id);
+				if (index !== undefined) {
+					this.data.splice(index, 1);
+					this.mapData();
+				}
+			} else {
+				const indexes = this.usernameMap.get(params.user);
+				if (indexes !== undefined) {
+					const indexSet = new Set(indexes);
+					this.data = this.data.filter((_, i) => !indexSet.has(i));
+					this.mapData();
+				}
+			}
+		}
+
+		return true;
+	}
 
 	/**
 	 * @param {PermissionManager} permissionManager
@@ -1011,14 +1689,24 @@ class BlockLookup {
 		 * @type {Map<number, number>}
 		 * @private
 		 */
-		this.idMap = new Map();
+		this.idMap;
 		/**
 		 * @type {Map<string, number[]>}
 		 * @private
 		 */
+		this.usernameMap;
+
+		this.mapData();
+	}
+
+	/**
+	 * @private
+	 */
+	mapData() {
+		this.idMap = new Map();
 		this.usernameMap = new Map();
 
-		data.forEach(({ id, user }, i) => {
+		this.data.forEach(({ id, user }, i) => {
 			this.idMap.set(id, i);
 			if (!user) {
 				return;
@@ -1028,7 +1716,6 @@ class BlockLookup {
 			}
 			/** @type {number[]} */ (this.usernameMap.get(user)).push(i);
 		});
-		console.log(this);
 	}
 
 	/**
@@ -1079,6 +1766,30 @@ class BlockLookup {
 	}
 
 }
+/*!
+ * TODO: When the following errors should be handled on the dialog before performing (un)block operations
+ *
+ * - ipb-prevent-user-talk-edit: `!allowusertalk` can be applied only if sitewide, or partial affecting NS_USER_TALK
+ * - ipb_hide_partial: A "hide user" block must be sitewide
+ * - ipb_expiry_temp: A "hide user" block must have an indefinite expiry
+ * - ipb-empty-block: partial, no retrictions, createaccount/sendemail/usertalk all allowed
+ */
+BlockLookup.retryableBlockErrors = new Set([
+	'http',
+	// See comment in BlockLookup.updateFromFailedBlock()
+	'ipb_already_blocked',
+	// Needs modifications on the dialog
+	'ipb_expiry_invalid',
+	'ipb_expiry_old',
+	'cant-block-nonexistent-page',
+]);
+BlockLookup.retryableUnblockErrors = new Set([
+	'http',
+	// The block ID is incorrect or the block with the ID has already been lifted
+	'nosuchblockid',
+	// The block may have already been lifted
+	'ipb_cant_unblock',
+]);
 
 class BlockTarget {
 
@@ -1239,7 +1950,7 @@ class BlockTarget {
 	}
 
 	/**
-	 * @param {string | number} id `'#ID` as a string or a block ID as a number.
+	 * @param {string | number} id `#ID` as a string or a block ID as a number.
 	 * @returns {HTMLAnchorElement}
 	 */
 	static createBlockListLink(id) {
@@ -1685,7 +2396,7 @@ class Messages {
 			value.trim();
 			if (mw.util.isInfinity(value)) {
 				// Consistently use 'infinity' for a value of infinity
-				value = infinity;
+				value = EXPIRY_INFINITE;
 			}
 			ret.set(label, value);
 		});
@@ -1710,7 +2421,7 @@ class Messages {
 		];
 		let indefFound = false;
 		for (const [label, value] of map) {
-			indefFound = indefFound || value === infinity;
+			indefFound = indefFound || value === EXPIRY_INFINITE;
 			options.push(
 				new OO.ui.MenuOptionWidget({ label, data: value })
 			);
@@ -1718,7 +2429,7 @@ class Messages {
 		if (!indefFound) {
 			// Ensure the presence of an "indefinite" option
 			options.push(
-				new OO.ui.MenuOptionWidget({ label: Messages.get('infiniteblock'), data: infinity })
+				new OO.ui.MenuOptionWidget({ label: Messages.get('infiniteblock'), data: EXPIRY_INFINITE })
 			);
 		}
 		return options;
@@ -1809,6 +2520,7 @@ Messages.i18n = {
 		'ajaxblock-dialog-message-existingblocks': '<b>This user already has active block(s).</b> Select the block you want to update.',
 		'ajaxblock-dialog-message-existingblocks-canadd': '<b>This user already has active block(s).</b> Select the block you want to update, or check "{{int:block-create}}" to add a new block.',
 		'ajaxblock-dialog-message-existingblocks-unblock': 'Select the block you want to remove.',
+		'ajaxblock-dialog-message-existingblocks-dialogonly': '<b>This action must be performed via this dialog.</b> One-click execution is not supported.',
 		'ajaxblock-dialog-message-predefinedparams': 'This link contains predefined parameters for the form fields.',
 		'ajaxblock-dialog-message-predefinedparams-apply': 'apply',
 		'ajaxblock-notify-error-loadblocklogs': 'Failed to load block information ($1)',
@@ -1817,6 +2529,10 @@ Messages.i18n = {
 		'ajaxblock-notify-error-ambiguousblock': 'Select the block you want to update.',
 		'ajaxblock-notify-error-ambiguousblock-canadd': 'Select the block you want to update, or check "{{int:block-create}}" to add a new block.',
 		'ajaxblock-notify-error-notarget': 'This (un)block operation cannot be processed.',
+		'ajaxblock-notify-error-processing': 'This link is temporarily unprocessable because another operation is currently processing it.',
+		'ajaxblock-notify-error-noblocklinks': 'No associated block links found',
+		'ajaxblock-notify-error-cannotopendialog': 'Unable to open the $1 dialog because there are pending operations currently being processed. Please wait for them to finish and try again.',
+		'ajaxblock-notify-error-cannotopendialog-oneclick': 'This link must be executed via the dialog, but could not open it because there are pending operations currently being processed. Please wait for them to finish and try again.',
 		'ajaxblock-notify-warning-invalidqueryparam-param': 'Parameter',
 		'ajaxblock-notify-warning-invalidqueryparam-values': 'Filtered invalid values',
 		'ajaxblock-confirm-block-self': 'Block <b>yourself</b>',
@@ -1830,6 +2546,10 @@ Messages.i18n = {
 		'ajaxblock-confirm-dialog-title-unblock': 'Confirm unblock',
 		'ajaxblock-confirm-dialog-label-instruction': 'Please confirm the following warnings by <b>checking all the associated checkboxes</b> to proceed.',
 		'ajaxblock-confirm-dialog-label-opendialog': 'Open the $1 dialog when cancelled',
+		'ajaxblock-result-block-success': 'blocked',
+		'ajaxblock-result-block-failure': 'block failed ($1)',
+		'ajaxblock-result-unblock-success': 'unblocked',
+		'ajaxblock-result-unblock-failure': 'unblock failed ($1)',
 	},
 	ja: {
 		'ajaxblock-link-title-unprocessable': '$1非対応のリンク',
@@ -1845,6 +2565,7 @@ Messages.i18n = {
 		'ajaxblock-dialog-message-existingblocks': '<b>この利用者は既にブロックされています。</b>更新するブロックを選択してください。',
 		'ajaxblock-dialog-message-existingblocks-canadd': '<b>この利用者は既にブロックされています。</b>更新するブロックを選択するか、「{{int:block-create}}」をチェックして新しいブロックを追加してください。',
 		'ajaxblock-dialog-message-existingblocks-unblock': '解除するブロックを選択してください。',
+		'ajaxblock-dialog-message-existingblocks-dialogonly': '<b>この操作はダイアログから行う必要があります。</b>ワンクリック操作は実行できません。',
 		'ajaxblock-dialog-message-predefinedparams': 'このリンクにはフォームフィールドの事前定義パラメータが含まれています。',
 		'ajaxblock-dialog-message-predefinedparams-apply': '適用',
 		'ajaxblock-notify-error-loadblocklogs': 'ブロック情報の取得に失敗しました ($1)',
@@ -1853,6 +2574,10 @@ Messages.i18n = {
 		'ajaxblock-notify-error-ambiguousblock': '更新するブロックを選択してください。',
 		'ajaxblock-notify-error-ambiguousblock-canadd': '更新するブロックを選択するか、「{{int:block-create}}」をチェックして新しいブロックを追加してください。',
 		'ajaxblock-notify-error-notarget': 'このブロック・ブロック解除操作は処理できません。',
+		'ajaxblock-notify-error-processing': '別プロセスがこのリンクを処理中のため、操作が一時的に無効化されています。',
+		'ajaxblock-notify-error-noblocklinks': '関連するブロックリンクが存在しません',
+		'ajaxblock-notify-error-cannotopendialog': '実行中の処理が存在するため、$1ダイアログを開けません。処理の完了後に再度お試しください。',
+		'ajaxblock-notify-error-cannotopendialog-oneclick': 'このリンクはダイアログからの実行が必要ですが、実行中の処理が存在するためダイアログを開けませんでした。処理の完了後に再度お試しください。',
 		'ajaxblock-notify-warning-invalidqueryparam-param': 'パラメータ',
 		'ajaxblock-notify-warning-invalidqueryparam-values': '無効な値を除外しました',
 		'ajaxblock-confirm-block-self': '<b>自身</b>をブロック',
@@ -1866,6 +2591,10 @@ Messages.i18n = {
 		'ajaxblock-confirm-dialog-title-unblock': 'ブロック解除の確認',
 		'ajaxblock-confirm-dialog-label-instruction': '以下の警告を確認し、操作を続行するには<b>全ての該当チェックボックスをチェック</b>してください。',
 		'ajaxblock-confirm-dialog-label-opendialog': 'キャンセル時に$1ダイアログを開く',
+		'ajaxblock-result-block-success': 'ブロック済み',
+		'ajaxblock-result-block-failure': 'ブロック失敗 ($1)',
+		'ajaxblock-result-unblock-success': 'ブロック解除済み',
+		'ajaxblock-result-unblock-failure': 'ブロック解除失敗 ($1)',
 	},
 };
 /**
@@ -1900,7 +2629,7 @@ class DropdownUtil {
 	 * @param {OO.ui.DropdownWidget} dropdown
 	 */
 	static selectInfinity(dropdown) {
-		dropdown.getMenu().selectItemByData(infinity);
+		dropdown.getMenu().selectItemByData(EXPIRY_INFINITE);
 		this.assertOneOptionIsSelected(dropdown);
 	}
 
@@ -1986,17 +2715,18 @@ function AjaxBlockDialogFactory() {
 
 			this.blockUser = new BlockUser(this);
 			this.unblockUser = new UnblockUser(this);
+			this.overlay = new AjaxBlockDialogBodyOverlay();
 
 			this.content = new OO.ui.PanelLayout({
+				$element: $('<div>').addClass('ajaxblock-dialog-overlay-container'),
 				padded: true,
 				expanded: false
 			});
 			this.content.$element.append(
+				this.overlay.$element,
 				this.blockUser.$element,
 				this.unblockUser.$element
 			);
-
-			this.overlay = new AjaxBlockDialogBodyOverlay();
 
 			/**
 			 * @type {BlockLink}
@@ -2019,10 +2749,7 @@ function AjaxBlockDialogFactory() {
 			super.initialize.apply(this, arguments);
 
 			// @ts-expect-error
-			this.$body.addClass('ajaxblock-dialog-overlayedbody').append(
-				this.overlay.$element,
-				this.content.$element
-			);
+			this.$body.append(this.content.$element);
 
 			return this;
 		}
@@ -2115,7 +2842,7 @@ function AjaxBlockDialogFactory() {
 						await this.getReadyProcessInternal(this.readyProcessBlockLog);
 					} catch (code) {
 						const err =
-							scriptName +
+							SCRIPT_NAME +
 							Messages.get('colon-separator') +
 							Messages.get('ajaxblock-notify-error-loadblocklogs', [/** @type {string} */ (code)]);
 						mw.notify(err, { type: 'error' });
@@ -2175,6 +2902,12 @@ function AjaxBlockDialogFactory() {
 				document.createElement('br'),
 				$logLines
 			);
+			if (field.blockSelector) {
+				field.addMessage({
+					label: new OO.ui.HtmlSnippet(Messages.get('ajaxblock-dialog-message-existingblocks-dialogonly')),
+					type: 'warning',
+				});
+			}
 			field.addMessage({
 				label: $label,
 				type: msgType,
@@ -2256,6 +2989,16 @@ function AjaxBlockDialogFactory() {
 		/**
 		 * @inheritdoc
 		 * @override
+		 * @param {BlockLink} _data
+		 */
+		getHoldProcess(_data) {
+			// TODO: Validate block settings before closure
+			return super.getHoldProcess();
+		}
+
+		/**
+		 * @inheritdoc
+		 * @override
 		 * @param {BlockLink} [data]
 		 */
 		getTeardownProcess(data) {
@@ -2278,15 +3021,15 @@ function AjaxBlockDialogFactory() {
 
 	}
 
-	AjaxBlockDialog.static.name = scriptName;
+	AjaxBlockDialog.static.name = SCRIPT_NAME;
 	AjaxBlockDialog.static.title = $('<label>').append(
-		`${scriptName} (`,
+		`${SCRIPT_NAME} (`,
 		$('<a>')
 			.prop({
 				target: '_blank',
 				href: 'https://meta.wikimedia.org/w/index.php?title=User:Dragoniez/AjaxBlock.js&action=history'
 			})
-			.text(`v${version}`),
+			.text(`v${VERSION}`),
 		')'
 	);
 	AjaxBlockDialog.static.actions = [
@@ -2573,7 +3316,7 @@ class AjaxBlockDialogContent {
 		let /** @type {?string} */ user = null;
 		const /** @type {BaseParams} */ params = Object.create(null);
 
-		params.action === data.type;
+		params.action = data.type;
 		const isUnblock = data.type === 'unblock';
 
 		if (this.blockSelector) {
@@ -3362,14 +4105,14 @@ class BlockUser extends AjaxBlockDialogContent {
 		const params = /** @type {BlockParams} */ (base.params);
 		const warnings = base.warnings;
 
-		if (data.target.getUsername() === mw.config.get('wgUserName')) {
+		if (data.target.getUsername() === wgUserName) {
 			warnings.push('ajaxblock-confirm-block-self');
 		}
 
 		let expiry = this.getExpiry();
 		if (!expiry) {
 			warnings.push('ajaxblock-confirm-block-noexpiry');
-			expiry = infinity;
+			expiry = EXPIRY_INFINITE;
 		}
 		params.expiry = expiry;
 
@@ -3448,7 +4191,7 @@ class BlockUser extends AjaxBlockDialogContent {
 	setExpiry(expiry) {
 		expiry = clean(expiry);
 		if (mw.util.isInfinity(expiry)) {
-			expiry = infinity;
+			expiry = EXPIRY_INFINITE;
 		}
 
 		const menu = this.expiry.getMenu();
@@ -3853,7 +4596,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 		if (false) {
 			warnings.push('ajaxblock-confirm-unblock');
 		}
-		if (data.target.getUsername() === mw.config.get('wgUserName')) {
+		if (data.target.getUsername() === wgUserName) {
 			warnings.push('ajaxblock-confirm-unblock-self');
 		}
 
@@ -4065,11 +4808,12 @@ class BlockLog {
 	 *     * `$1` - number of actions
 	 *     * `$2` - list of actions
 	 *
+	 * @param {number} blockId
 	 * @param {BlockLogMapValue} data
 	 * @returns {string}
 	 * @private
 	 */
-	static create(data) {
+	static create(blockId, data) {
 		const { subtype, timestamp, sitewide, count, performer, target, duration, flags, restrictions, parsedcomment } = data;
 
 		/** @type {[string, string, string, string, string, string, string?]} */
@@ -4105,8 +4849,11 @@ class BlockLog {
 		// @ts-expect-error
 		const logline = Messages.get(key, parameters);
 		const comment = parsedcomment && Messages.get('parentheses', [parsedcomment]);
+		const idLink = Messages.get('parentheses', [
+			`<b>${BlockTarget.createBlockListLink(blockId).outerHTML}</b>`
+		]);
 
-		const ret = [timestamp, logline, comment].filter(Boolean);
+		const ret = [timestamp, logline, comment, idLink].filter(Boolean);
 		return ret.join('&nbsp;');
 	}
 
@@ -4201,7 +4948,7 @@ class BlockLog {
 						new OO.ui.RadioOptionWidget({
 							data: id,
 							label: new OO.ui.HtmlSnippet(
-								BlockLog.create(logData)
+								BlockLog.create(id, logData)
 							),
 						})
 					);
@@ -4213,7 +4960,7 @@ class BlockLog {
 					$wrapper.append(
 						$(`<div data-blockid="${id}">`)
 							.addClass('ajaxblock-dialog-logline')
-							.append(BlockLog.create(logData))
+							.append(BlockLog.create(id, logData))
 					);
 				}
 				return $wrapper;
@@ -4363,6 +5110,7 @@ AjaxBlockLogo.svg = `
  * @typedef {import('./window/AjaxBlock').Initializer} Initializer
  * @typedef {import('./window/AjaxBlock').ApiResponse} ApiResponse
  * @typedef {import('./window/AjaxBlock').ApiResponseQueryListBlocks} ApiResponseQueryListBlocks
+ * @typedef {import('./window/AjaxBlock').ApiResponseQueryListBlocksRestrictions} ApiResponseQueryListBlocksRestrictions
  * @typedef {import('./window/AjaxBlock').AjaxBlockMessages} AjaxBlockMessages
  * @typedef {import('./window/AjaxBlock').MediaWikiMessages} MediaWikiMessages
  * @typedef {import('./window/AjaxBlock').LoadedMessages} LoadedMessages
@@ -4388,6 +5136,7 @@ AjaxBlockLogo.svg = `
  * @prop {Map<string, string>} params
  * @prop {BlockTarget} target
  * @prop {'block' | 'unblock'} type
+ * @prop {boolean} locked Whether the link is permanently locked and excluded from future processing
  */
 /**
  * The keys are usernames as strings or block IDs as numbers.

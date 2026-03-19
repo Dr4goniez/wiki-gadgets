@@ -21,6 +21,8 @@ export interface ApiResponse {
 	paraminfo?: ApiResponseParaminfo;
 	query?: ApiResponseQuery;
 	unblock?: ApiResponseUnblock;
+
+	curtimestamp?: string;
 }
 
 interface ApiResponseParaminfo {
@@ -110,9 +112,9 @@ export interface ApiResponseQueryListBlocks {
 	/** Missing for autoblocks */
 	user?: string;
 	by: string;
-	timestamp: string;
+	timestamp: string; // Cannot be fabricated from ApiResponseBlock
 	expiry: string;
-	'duration-l10n': string;
+	// 'duration-l10n': string; // Cannot be fabricated from ApiResponseBlock
 	reason: string;
 	automatic: boolean;
 	anononly: boolean;
@@ -125,14 +127,14 @@ export interface ApiResponseQueryListBlocks {
 	restrictions: [] | ApiResponseQueryListBlocksRestrictions;
 }
 
-interface ApiResponseQueryListBlocksRestrictions {
+export interface ApiResponseQueryListBlocksRestrictions {
 	pages?: ApiResponseQueryListBlocksPages[];
 	namespaces?: number[];
 	actions?: string[];
 }
 
 interface ApiResponseQueryListBlocksPages {
-	id: number;
+	id?: number; // Generally defined, but missing when converted from ApiResponseBlock
 	ns: number;
 	title: string;
 }
@@ -175,7 +177,12 @@ interface ApiResponseQueryInterwikiTitles {
 	url?: string;
 }
 
-export interface ApiResponseBlock {
+// Temporary hack around T420404
+interface CurtimestampToTimestamp {
+	timestamp: string;
+}
+
+export interface ApiResponseBlock extends CurtimestampToTimestamp {
 	user: string;
 	userID: number;
 	expiry: string;
@@ -190,9 +197,9 @@ export interface ApiResponseBlock {
 	watchuser: boolean;
 	watchlistexpiry?: string;
 	partial: boolean;
-	pagerestrictions: string[];
-	namespacerestrictions: number[];
-	actionrestrictions: string[];
+	pagerestrictions: string[] | null;
+	namespacerestrictions: number[] | null;
+	actionrestrictions: string[] | null;
 }
 
 export interface ApiResponseUnblock {
@@ -230,6 +237,7 @@ export interface AjaxBlockMessages {
 	'ajaxblock-dialog-message-existingblocks': string;
 	'ajaxblock-dialog-message-existingblocks-canadd': string;
 	'ajaxblock-dialog-message-existingblocks-unblock': string;
+	'ajaxblock-dialog-message-existingblocks-dialogonly': string;
 	'ajaxblock-dialog-message-predefinedparams': string;
 	'ajaxblock-dialog-message-predefinedparams-apply': string;
 	'ajaxblock-notify-error-loadblocklogs': string;
@@ -238,6 +246,10 @@ export interface AjaxBlockMessages {
 	'ajaxblock-notify-error-ambiguousblock': string;
 	'ajaxblock-notify-error-ambiguousblock-canadd': string;
 	'ajaxblock-notify-error-notarget': string;
+	'ajaxblock-notify-error-processing': string;
+	'ajaxblock-notify-error-noblocklinks': string;
+	'ajaxblock-notify-error-cannotopendialog': string;
+	'ajaxblock-notify-error-cannotopendialog-oneclick': string;
 	'ajaxblock-notify-warning-invalidqueryparam-param': string;
 	'ajaxblock-notify-warning-invalidqueryparam-values': string;
 	'ajaxblock-confirm-block-self': string;
@@ -251,6 +263,10 @@ export interface AjaxBlockMessages {
 	'ajaxblock-confirm-dialog-title-unblock': string;
 	'ajaxblock-confirm-dialog-label-instruction': string;
 	'ajaxblock-confirm-dialog-label-opendialog': string;
+	'ajaxblock-result-block-success': string;
+	'ajaxblock-result-block-failure': string;
+	'ajaxblock-result-unblock-success': string;
+	'ajaxblock-result-unblock-failure': string;
 }
 
 /**
@@ -369,6 +385,7 @@ export type BaseParams =
 
 export type BlockParams =
 	BaseParams &
+	PartialBlockParams &
 	{
 		action: 'block';
 		expiry: string;
@@ -385,4 +402,7 @@ export type BlockParams =
 
 export type UnblockParams =
 	BaseParams &
-	{ reason: string; };
+	{
+		action: 'unblock';
+		reason: string;
+	};
