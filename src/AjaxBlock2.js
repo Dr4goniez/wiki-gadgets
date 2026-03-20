@@ -1730,30 +1730,12 @@ class BlockLookup {
 
 	/**
 	 * @param {string} code
-	 * @param {BlockParams} params
+	 * @param {BlockParams} _params
 	 * @returns {boolean} Whether failed links should be restored after a delay,
 	 * allowing the user to retry the operation. `false` indicates a terminal failure.
 	 */
-	updateFromFailedBlock(code, params) {
-		if (!BlockLookup.retryableBlockErrors.has(code)) {
-			return false;
-		}
-
-		if (code === 'ipb_already_blocked') {
-			// This error happens when:
-			// 1. Someone else has blocked the user after the page was opened, or
-			// 2. The new block doesn't change any restrictions of the currently active blocks
-			//
-			// Since this script always performs an ID-based block when the target is already
-			// blocked, #1 is the case when `params.user` is set; otherwise #2 is the case
-
-			// true when #2 is the case: A retry can be performed after updating block settings
-			// on the dialog
-			// TODO: Request should be prevented when #2 is expected
-			return params.user === undefined;
-		}
-
-		return true;
+	updateFromFailedBlock(code, _params) {
+		return BlockLookup.retryableBlockErrors.has(code);
 	}
 
 	/**
@@ -1831,12 +1813,18 @@ class BlockLookup {
  */
 BlockLookup.retryableBlockErrors = new Set([
 	'http',
-	// See comment in BlockLookup.updateFromFailedBlock()
-	'ipb_already_blocked',
-	// Needs modifications on the dialog
+	// Requires user modifications via the dialog
 	'ipb_expiry_invalid',
 	'ipb_expiry_old',
 	'cant-block-nonexistent-page',
+
+	// Note: "ipb_already_blocked" is NOT retryable. This error occurs when:
+	// 1. Another user has blocked the target after the page was loaded, or
+	// 2. The requested block does not change any existing restrictions
+	//
+	// - Case #1 would require fetching the latest block state asynchronously,
+	//   which is not currently supported.
+	// - Case #2 is prevented by validation, so it should not occur.
 ]);
 BlockLookup.retryableUnblockErrors = new Set([
 	'http',
