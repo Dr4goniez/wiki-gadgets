@@ -41,6 +41,7 @@ if (wgCanonicalSpecialPageName === 'Block' || wgCanonicalSpecialPageName === 'Un
 let /** @type {mw.Api} */ api;
 const wgUserLanguage = mw.config.get('wgUserLanguage');
 const wgUserName = /** @type {string} */ (mw.config.get('wgUserName'));
+const wgNamespaceIds = mw.config.get('wgNamespaceIds');
 let wgEnableMultiBlocks = false;
 const EXPIRY_INFINITE = 'infinity';
 
@@ -256,7 +257,7 @@ class AjaxBlock {
 
 		// Special namespace aliases (always local)
 		const specialNamespaceAliases = [];
-		for (const [alias, ns] of Object.entries(mw.config.get('wgNamespaceIds'))) {
+		for (const [alias, ns] of Object.entries(wgNamespaceIds)) {
 			if (ns === -1) {
 				specialNamespaceAliases.push(alias);
 			}
@@ -1475,6 +1476,11 @@ class PermissionManager {
 	 * @param {Set<string>} permissions
 	 */
 	constructor(permissions) {
+		if (DEBUG_MODE) {
+			permissions.add('block');
+			permissions.add('hideuser');
+		}
+
 		/**
 		 * @readonly
 		 * @private
@@ -1803,14 +1809,6 @@ class BlockLookup {
 	}
 
 }
-/*!
- * TODO: When the following errors should be handled on the dialog before performing (un)block operations
- *
- * - ipb-prevent-user-talk-edit: `!allowusertalk` can be applied only if sitewide, or partial affecting NS_USER_TALK
- * - ipb_hide_partial: A "hide user" block must be sitewide
- * - ipb_expiry_temp: A "hide user" block must have an indefinite expiry
- * - ipb-empty-block: partial, no retrictions, createaccount/sendemail/usertalk all allowed
- */
 BlockLookup.retryableBlockErrors = new Set([
 	'http',
 	// Requires user modifications via the dialog
@@ -3431,12 +3429,6 @@ class BlockUser extends AjaxBlockDialogContent {
 				align: 'left',
 			})
 		);
-		this.expiryOther.on('change', (value) => {
-			if (!clean(value)) {
-				return;
-			}
-			DropdownUtil.selectOther(this.expiry);
-		});
 
 		this.reason1 = new OO.ui.DropdownWidget({
 			menu: {
@@ -3487,10 +3479,6 @@ class BlockUser extends AjaxBlockDialogContent {
 
 		const partialBlockLayout = new OO.ui.FieldsetLayout();
 		partialBlockLayout.$element.css({ 'margin-left': '1.8em' });
-		this.partialBlock.on('change', (selected) => {
-			partialBlockLayout.toggle(!!selected);
-			this.dialog.updateSize();
-		});
 		partialBlockLayout.toggle(this.partialBlock.isSelected());
 
 		/** @type {OO.ui.Element[]} */
@@ -3611,6 +3599,82 @@ class BlockUser extends AjaxBlockDialogContent {
 			align: 'inline',
 		});
 		items.push(this.cbAddBlockContainer);
+
+		// --- Start: set up complex event listeners ---
+		this.partialBlock.on('change', (selected) => {
+			partialBlockLayout.toggle(!!selected);
+			this.dialog.updateSize();
+
+			// ipb-prevent-user-talk-edit:
+			// `!allowusertalk` can be applied only if sitewide, or partial affecting NS_USER_TALK
+			if (selected && !this.partialBlockNamespaces.getValue().includes(wgNamespaceIds.user_talk.toString())) {
+				this.cbUserTalk.setSelected(false).setDisabled(true);
+			} else {
+				this.cbUserTalk.setDisabled(false);
+			}
+
+			// ipb_hide_partial: A "hide user" block must be sitewide
+			if (selected) {
+				this.cbHideName.setSelected(false).setDisabled(true);
+			} else {
+				this.cbHideName.setDisabled(false);
+			}
+		});
+
+		this.partialBlockNamespaces.on('change', (items) => {
+			// ipb-prevent-user-talk-edit
+			if (!items.map(item => item.getData()).includes(wgNamespaceIds.user_talk.toString())) {
+				this.cbUserTalk.setSelected(false).setDisabled(true);
+			} else {
+				this.cbUserTalk.setDisabled(false);
+			}
+		});
+
+		this.cbHideName.on('change', (selected) => {
+			// ipb_hide_partial
+			// ipb_expiry_temp: A "hide user" block must have an indefinite expiry
+			if (selected) {
+				this.partialBlock.setSelected(false).setDisabled(true);
+
+				this.setExpiry(EXPIRY_INFINITE);
+				this.expiry.setDisabled(true);
+				this.expiryOther.setDisabled(true);
+			} else {
+				this.partialBlock.setDisabled(false);
+
+				this.expiry.setDisabled(false);
+				this.expiryOther.setDisabled(false);
+			}
+		});
+
+		this.expiry.on('labelChange', () => {
+			const selected = DropdownUtil.getSelectedOptionValue(this.expiry);
+			console.log(selected);
+			if (selected !== '') {
+				this.expiryOther.setValue('');
+			}
+
+			// ipb_expiry_temp
+			if (this.getExpiry() !== EXPIRY_INFINITE) {
+				this.cbHideName.setSelected(false).setDisabled(true);
+			} else {
+				this.cbHideName.setDisabled(false);
+			}
+		});
+
+		this.expiryOther.on('change', (value) => {
+			if (clean(value)) {
+				DropdownUtil.selectOther(this.expiry);
+			}
+
+			// ipb_expiry_temp
+			if (this.getExpiry() !== EXPIRY_INFINITE) {
+				this.cbHideName.setSelected(false).setDisabled(true);
+			} else {
+				this.cbHideName.setDisabled(false);
+			}
+		});
+		// --- End: set up complex event listeners ---
 
 		const optionsFieldset = new OO.ui.FieldsetLayout({
 			label: Messages.get('block-options'),
@@ -3830,6 +3894,7 @@ class BlockUser extends AjaxBlockDialogContent {
 	 * @param {BlockLink} data
 	 * @returns {void | JQuery.Promise<void>}
 	 * @override
+	 * @todo Verify whether this is compatible with the event listeners of form fields
 	 */
 	applyParams(data) {
 		const { params, target } = data;
