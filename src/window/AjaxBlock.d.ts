@@ -246,6 +246,7 @@ export interface AjaxBlockMessages {
 	'ajaxblock-notify-error-ambiguousblock': string;
 	'ajaxblock-notify-error-ambiguousblock-canadd': string;
 	'ajaxblock-notify-error-notarget': string;
+	'ajaxblock-notify-error-emptyblock': string;
 	'ajaxblock-notify-error-processing': string;
 	'ajaxblock-notify-error-noblocklinks': string;
 	'ajaxblock-notify-error-cannotopendialog': string;
@@ -406,3 +407,17 @@ export type UnblockParams =
 		action: 'unblock';
 		reason: string;
 	};
+
+export type AbortCallback = (reason: AbortReason) => void;
+
+type AbortReason =
+	| 'unprocessable'
+	| 'nooneclick'
+	| 'invalidparams'
+	| 'unconfirmed'
+	| 'unconfirmed-dialog'
+	| 'noblocklinks'; // Internal error
+
+export type WarningContext =
+	| 'dialog'
+	| 'oneclick';
