@@ -1056,10 +1056,10 @@ class AjaxBlock {
 				// The action matches, and
 				link.type === params.action && (
 					// The operation is username-based (a username-based operation indicates
-					// the target wasn't blocked; see BlockUser.setTarget), or
+					// the target wasn't blocked, or adding a new block; see BlockUser.setTarget)
 					params.user !== undefined ||
 					// --- The operation is ID-based ---
-					// The link doesn't target a block ID (i.e., targets the username), or
+					// The link doesn't target a block ID (i.e., targets the username)
 					(targetId = link.target.getId()) === null ||
 					// The link targets the same block ID
 					params.id === targetId
@@ -4170,7 +4170,7 @@ class BlockUser extends AjaxBlockDialogContent {
 				allowusertalk: !this.cbUserTalk.isSelected(),
 				anononly: data.target.getType() === 'anon' && !this.cbHardblock.isSelected(),
 				autoblock: this.cbAutoblock.isSelected(),
-				newblock: params.id === undefined && this.cbAddBlock.isSelected(),
+				newblock: this.cbAddBlock.isSelected(),
 			},
 			this.getPartialBlockParams(),
 		);
@@ -4206,6 +4206,20 @@ class BlockUser extends AjaxBlockDialogContent {
 			if (needsWarning) {
 				warnings.push('ajaxblock-confirm-block-hideuser');
 			}
+		}
+
+		if (params.newblock && !params.user) {
+			delete params.id;
+			const username = this.getCurrentTargetUsername();
+			if (!username) {
+				// There's a bug in setTarget()
+				mw.notify(
+					Messages.get('internalerror_info', ['The "user" parameter must be non-null.']),
+					{ type: 'error' }
+				);
+				return null;
+			}
+			params.user = username;
 		}
 
 		if (params.user && !params.newblock) {
