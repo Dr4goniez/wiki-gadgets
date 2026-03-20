@@ -768,6 +768,9 @@ class AjaxBlock {
 		callback();
 	}
 
+	/**
+	 * @private
+	 */
 	isAllSettled() {
 		return this.pendingCount === 0;
 	}
@@ -787,6 +790,7 @@ class AjaxBlock {
 	 * error notification. If `null` is provided, no notification will be issued. (default:
 	 * `ajaxblock-notify-error-cannotopendialog`)
 	 * @returns {void}
+	 * @private
 	 */
 	openDialogIfAllSettled(data, errorMsg = 'ajaxblock-notify-error-cannotopendialog') {
 		if (this.isAllSettled()) {
@@ -1159,6 +1163,7 @@ class AjaxBlock {
 	 * @param {import('ts-essentials').XOR<BlockParams, UnblockParams>} params
 	 * @param {BlockLink} _data
 	 * @returns {JQuery.Promise<import('ts-essentials').XOR<ApiResponseBlock, ApiResponseUnblock>>}
+	 * @private
 	 */
 	static execute(params, _data) {
 		// @ts-expect-error
@@ -1198,6 +1203,7 @@ class AjaxBlock {
 	 * @param {import('ts-essentials').XOR<BlockParams, UnblockParams>} params
 	 * @param {BlockLink} data
 	 * @returns {JQuery.Promise<import('ts-essentials').XOR<ApiResponseBlock, ApiResponseUnblock>>}
+	 * @private
 	 */
 	static testExecute(params, data) {
 		const def = $.Deferred();
@@ -1355,13 +1361,13 @@ class BlockLinkUtil {
 	 * @returns {ProcessedBlockLink}
 	 */
 	static markAsFailure(linkObj, action, code) {
-		if (this.failureMessage[action] === null) {
+		if (this.messageCache.failure[action] === null) {
 			// Messages used here:
 			// - ajaxblock-result-block-failure
 			// - ajaxblock-result-unblock-failure
-			this.failureMessage[action] = Messages.get(`ajaxblock-result-${action}-failure`);
+			this.messageCache.failure[action] = Messages.get(`ajaxblock-result-${action}-failure`);
 		}
-		const errorMsg = mw.format(this.failureMessage[action], code);
+		const errorMsg = mw.format(this.messageCache.failure[action], code);
 
 		const { link, spinner, wrapper } = linkObj;
 		wrapper.classList.add('ajaxblock-processed');
@@ -1381,13 +1387,13 @@ class BlockLinkUtil {
 	 * @returns {ProcessedBlockLink}
 	 */
 	static markAsSuccess(linkObj, action) {
-		if (this.successMessage[action] === null) {
+		if (this.messageCache.success[action] === null) {
 			// Messages used here:
 			// - ajaxblock-result-block-success
 			// - ajaxblock-result-unblock-success
-			this.successMessage[action] = Messages.get(`ajaxblock-result-${action}-success`);
+			this.messageCache.success[action] = Messages.get(`ajaxblock-result-${action}-success`);
 		}
-		const successMsg = this.successMessage[action];
+		const successMsg = this.messageCache.success[action];
 
 		const { link, spinner, wrapper } = linkObj;
 		wrapper.classList.add('ajaxblock-processed');
@@ -1401,18 +1407,17 @@ class BlockLinkUtil {
 
 }
 /**
- * @type {Record<BlockLink['type'], ?string>}
+ * @type {Record<'failure' | 'success', Record<BlockLink['type'], ?string>>}
  */
-BlockLinkUtil.failureMessage = {
-	block: null,
-	unblock: null,
-};
-/**
- * @type {Record<BlockLink['type'], ?string>}
- */
-BlockLinkUtil.successMessage = {
-	block: null,
-	unblock: null,
+BlockLinkUtil.messageCache = {
+	failure: {
+		block: null,
+		unblock: null,
+	},
+	success: {
+		block: null,
+		unblock: null,
+	},
 };
 
 class PermissionManager {
@@ -1443,167 +1448,6 @@ class PermissionManager {
 }
 
 class BlockLookup {
-
-	/**
-	 * @param {ApiResponseBlock} res
-	 * @returns {?ApiResponseQueryListBlocks[]} Other active blocks, or null if none
-	 */
-	updateFromSuccessfulBlock(res) {
-		const datum = BlockLookup.convertBlockResponseToQueryBlocksResponse(res);
-
-		const index = this.idMap.get(res.id);
-		if (index === undefined) {
-			// New block
-			this.data.push(datum);
-			this.mapData();
-		} else {
-			// Reblock
-			this.data[index] = datum;
-		}
-
-		// Does the user have other active blocks?
-		const blocks = /** @type {ApiResponseQueryListBlocks[]} */ (this.getBlocksByUsername(res.user))
-			.filter(obj => obj !== datum);
-		return blocks.length ? blocks : null;
-	}
-
-	/**
-	 * @param {ApiResponseBlock} res
-	 * @returns {ApiResponseQueryListBlocks}
-	 */
-	static convertBlockResponseToQueryBlocksResponse(res) {
-		/** @type {ApiResponseQueryListBlocks} */
-		const ret = {
-			id: res.id,
-			user: res.user,
-			by: wgUserName,
-			timestamp: res.timestamp, // TODO: The API module should itself return this
-			expiry: res.expiry,
-			// 'duration-l10n': string; // Cannot be fabricated from ApiResponseBlock
-			reason: res.reason,
-			automatic: false,
-			anononly: res.anononly,
-			nocreate: res.nocreate,
-			autoblock: res.autoblock,
-			noemail: res.noemail,
-			hidden: res.hidename,
-			allowusertalk: res.allowusertalk,
-			partial: res.partial,
-			restrictions: [],
-		};
-		if (res.pagerestrictions || res.namespacerestrictions || res.actionrestrictions) {
-			/** @type {ApiResponseQueryListBlocksRestrictions} */
-			const restr = Object.create(null);
-			if (res.pagerestrictions) {
-				restr.pages = res.pagerestrictions.map((page) => {
-					const title = new mw.Title(page);
-					return { ns: title.getNamespaceId(), title: title.getPrefixedText() };
-				});
-			}
-			if (res.namespacerestrictions) {
-				restr.namespaces = res.namespacerestrictions;
-			}
-			if (res.actionrestrictions) {
-				restr.actions = res.actionrestrictions;
-			}
-			ret.restrictions = restr;
-		}
-		return ret;
-	}
-
-	/**
-	 * @param {ApiResponseUnblock} res
-	 * @returns {?ApiResponseQueryListBlocks[]} Other active blocks, or null if none
-	 */
-	updateFromSuccessfulUnblock(res) {
-		const { id, user } = res;
-
-		const index = this.idMap.get(id);
-		if (index === undefined) {
-			console.warn(`Block with ID #${id} not found`);
-			return null;
-		}
-
-		// Remove the lifted block entry
-		this.data.splice(index, 1);
-		this.mapData();
-
-		// Does the user have other active blocks?
-		if (!user) {
-			// `user` is an empty string when lifting an autoblock
-			return null;
-		}
-		return this.getBlocksByUsername(user);
-	}
-
-	/**
-	 * @param {string} code
-	 * @param {BlockParams} params
-	 * @returns {boolean} Whether failed links should be restored after a delay,
-	 * allowing the user to retry the operation. `false` indicates a terminal failure.
-	 */
-	updateFromFailedBlock(code, params) {
-		if (!BlockLookup.retryableBlockErrors.has(code)) {
-			return false;
-		}
-
-		if (code === 'ipb_already_blocked') {
-			// This error happens when:
-			// 1. Someone else has blocked the user after the page was opened, or
-			// 2. The new block doesn't change any restrictions of the currently active blocks
-			//
-			// Since this script always performs an ID-based block when the target is already
-			// blocked, #1 is the case when `params.user` is set; otherwise #2 is the case
-
-			// true when #2 is the case: A retry can be performed after updating block settings
-			// on the dialog
-			// TODO: Request should be prevented when #2 is expected
-			return params.user === undefined;
-		}
-
-		return true;
-	}
-
-	/**
-	 * @param {string} code
-	 * @param {UnblockParams} params
-	 * @returns {boolean} Whether failed links should be restored after a delay,
-	 * allowing the user to retry the operation. `false` indicates a terminal failure.
-	 */
-	updateFromFailedUnblock(code, params) {
-		if (!BlockLookup.retryableUnblockErrors.has(code)) {
-			return false;
-		}
-
-		if (code === 'nosuchblockid') {
-			if (params.id === undefined) {
-				// For type safety; not expected to reach this code path
-				return false;
-			}
-			const index = this.idMap.get(params.id);
-			if (index !== undefined) {
-				this.data.splice(index, 1);
-				this.mapData();
-			}
-		} else if (code === 'ipb_cant_unblock') {
-			if (params.id !== undefined) {
-				const index = this.idMap.get(params.id);
-				if (index !== undefined) {
-					this.data.splice(index, 1);
-					this.mapData();
-				}
-			} else {
-				const indexes = this.usernameMap.get(params.user);
-				if (indexes !== undefined) {
-					const indexSet = new Set(indexes);
-					this.data = this.data.filter((_, i) => !indexSet.has(i));
-					this.mapData();
-				}
-			}
-		}
-
-		return true;
-	}
 
 	/**
 	 * @param {PermissionManager} permissionManager
@@ -1740,6 +1584,168 @@ class BlockLookup {
 			return null;
 		}
 		return this.data.filter((_, i) => indexes.includes(i));
+	}
+
+	/**
+	 * @param {ApiResponseBlock} res
+	 * @returns {?ApiResponseQueryListBlocks[]} Other active blocks, or null if none
+	 */
+	updateFromSuccessfulBlock(res) {
+		const datum = BlockLookup.convertBlockResponseToQueryBlocksResponse(res);
+
+		const index = this.idMap.get(res.id);
+		if (index === undefined) {
+			// New block
+			this.data.push(datum);
+			this.mapData();
+		} else {
+			// Reblock
+			this.data[index] = datum;
+		}
+
+		// Does the user have other active blocks?
+		const blocks = /** @type {ApiResponseQueryListBlocks[]} */ (this.getBlocksByUsername(res.user))
+			.filter(obj => obj !== datum);
+		return blocks.length ? blocks : null;
+	}
+
+	/**
+	 * @param {ApiResponseBlock} res
+	 * @returns {ApiResponseQueryListBlocks}
+	 * @private
+	 */
+	static convertBlockResponseToQueryBlocksResponse(res) {
+		/** @type {ApiResponseQueryListBlocks} */
+		const ret = {
+			id: res.id,
+			user: res.user,
+			by: wgUserName,
+			timestamp: res.timestamp, // TODO: The API module should itself return this
+			expiry: res.expiry,
+			// 'duration-l10n': string; // Cannot be fabricated from ApiResponseBlock
+			reason: res.reason,
+			automatic: false,
+			anononly: res.anononly,
+			nocreate: res.nocreate,
+			autoblock: res.autoblock,
+			noemail: res.noemail,
+			hidden: res.hidename,
+			allowusertalk: res.allowusertalk,
+			partial: res.partial,
+			restrictions: [],
+		};
+		if (res.pagerestrictions || res.namespacerestrictions || res.actionrestrictions) {
+			/** @type {ApiResponseQueryListBlocksRestrictions} */
+			const restr = Object.create(null);
+			if (res.pagerestrictions) {
+				restr.pages = res.pagerestrictions.map((page) => {
+					const title = new mw.Title(page);
+					return { ns: title.getNamespaceId(), title: title.getPrefixedText() };
+				});
+			}
+			if (res.namespacerestrictions) {
+				restr.namespaces = res.namespacerestrictions;
+			}
+			if (res.actionrestrictions) {
+				restr.actions = res.actionrestrictions;
+			}
+			ret.restrictions = restr;
+		}
+		return ret;
+	}
+
+	/**
+	 * @param {ApiResponseUnblock} res
+	 * @returns {?ApiResponseQueryListBlocks[]} Other active blocks, or null if none
+	 */
+	updateFromSuccessfulUnblock(res) {
+		const { id, user } = res;
+
+		const index = this.idMap.get(id);
+		if (index === undefined) {
+			console.warn(`Block with ID #${id} not found`);
+			return null;
+		}
+
+		// Remove the lifted block entry
+		this.data.splice(index, 1);
+		this.mapData();
+
+		// Does the user have other active blocks?
+		if (!user) {
+			// `user` is an empty string when lifting an autoblock
+			return null;
+		}
+		return this.getBlocksByUsername(user);
+	}
+
+	/**
+	 * @param {string} code
+	 * @param {BlockParams} params
+	 * @returns {boolean} Whether failed links should be restored after a delay,
+	 * allowing the user to retry the operation. `false` indicates a terminal failure.
+	 */
+	updateFromFailedBlock(code, params) {
+		if (!BlockLookup.retryableBlockErrors.has(code)) {
+			return false;
+		}
+
+		if (code === 'ipb_already_blocked') {
+			// This error happens when:
+			// 1. Someone else has blocked the user after the page was opened, or
+			// 2. The new block doesn't change any restrictions of the currently active blocks
+			//
+			// Since this script always performs an ID-based block when the target is already
+			// blocked, #1 is the case when `params.user` is set; otherwise #2 is the case
+
+			// true when #2 is the case: A retry can be performed after updating block settings
+			// on the dialog
+			// TODO: Request should be prevented when #2 is expected
+			return params.user === undefined;
+		}
+
+		return true;
+	}
+
+	/**
+	 * @param {string} code
+	 * @param {UnblockParams} params
+	 * @returns {boolean} Whether failed links should be restored after a delay,
+	 * allowing the user to retry the operation. `false` indicates a terminal failure.
+	 */
+	updateFromFailedUnblock(code, params) {
+		if (!BlockLookup.retryableUnblockErrors.has(code)) {
+			return false;
+		}
+
+		if (code === 'nosuchblockid') {
+			if (params.id === undefined) {
+				// For type safety; not expected to reach this code path
+				return false;
+			}
+			const index = this.idMap.get(params.id);
+			if (index !== undefined) {
+				this.data.splice(index, 1);
+				this.mapData();
+			}
+		} else if (code === 'ipb_cant_unblock') {
+			if (params.id !== undefined) {
+				const index = this.idMap.get(params.id);
+				if (index !== undefined) {
+					this.data.splice(index, 1);
+					this.mapData();
+				}
+			} else {
+				const indexes = this.usernameMap.get(params.user);
+				if (indexes !== undefined) {
+					const indexSet = new Set(indexes);
+					this.data = this.data.filter((_, i) => !indexSet.has(i));
+					this.mapData();
+				}
+			}
+		}
+
+		return true;
 	}
 
 	/**
@@ -2206,67 +2212,6 @@ class Messages {
 		}
 		return ret;
 	}
-
-	// /**
-	//  * *[This method is currently not used in any logic.]*
-	//  *
-	//  * Parses and caches MediaWiki interface messages using the parse API. Cached values are reused via `mw.storage`.
-	//  *
-	//  * @param {(keyof LoadedMessages)[]} keys List of message keys to parse.
-	//  * @returns {JQuery.Promise<void>} A promise that resolves when parsing and caching are complete.
-	//  */
-	// static parse(keys) {
-	// 	// FIXME: The storage key may need to be changed if we use this method again
-	// 	/**
-	// 	 * @type {Partial<LoadedMessages>}
-	// 	 */
-	// 	const cache = mw.storage.getObject(this.storageKey) || {};
-
-	// 	const $messages = $('<div>');
-	// 	let setCount = 0;
-
-	// 	// Retrieve all from the storage or re-parse all via the API
-	// 	// This non-partial approach makes it possible to manage the cache as one object
-	// 	for (const key of keys) {
-	// 		if (cache[key]) {
-	// 			mw.messages.set(key, cache[key]);
-	// 			setCount++;
-	// 		}
-	// 		$messages.append(
-	// 			$('<div>').prop('id', key).text(this.get(key))
-	// 		);
-	// 	}
-	// 	if (keys.length === setCount) {
-	// 		return $.Deferred().resolve().promise();
-	// 	}
-
-	// 	return api.post({
-	// 		action: 'parse',
-	// 		formatversion: '2',
-	// 		text: $messages.html(),
-	// 		prop: 'text',
-	// 		disablelimitreport: true,
-	// 		disableeditsection: true,
-	// 		disabletoc: true,
-	// 		contentmodel: 'wikitext'
-	// 	}, nonwritePost()).then((res) => {
-	// 		const $res = $(res.parse.text);
-	// 		const toCache = Object.create(null);
-
-	// 		for (const key of keys) {
-	// 			const $key = $res.find(`#${key}`);
-	// 			if ($key.length) {
-	// 				const parsed = $key.html();
-	// 				mw.messages.set(key, parsed);
-	// 				toCache[key] = parsed;
-	// 			}
-	// 		}
-
-	// 		if (!$.isEmptyObject(toCache)) {
-	// 			mw.storage.set(this.storageKey, JSON.stringify(toCache), daysInSeconds(3));
-	// 		}
-	// 	});
-	// }
 
 	/**
 	 * @param {string} message
