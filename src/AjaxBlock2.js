@@ -817,8 +817,18 @@ class AjaxBlock {
 			this.dialog.resetDialog();
 			this.processingOneClickEvent = false;
 
-			if (reason === 'invalidparams' || reason === 'unconfirmed-dialog') {
-				this.openDialogIfAllSettled(data);
+			/** @type {keyof LoadedMessages | false} */
+			let errorMsg = false;
+			switch (reason) {
+				case 'nooneclick':
+				case 'invalidparams':
+					errorMsg = 'ajaxblock-notify-error-cannotopendialog-oneclick';
+					break;
+				case 'unconfirmed-dialog':
+					errorMsg = 'ajaxblock-notify-error-cannotopendialog';
+			}
+			if (errorMsg !== false) {
+				this.openDialogIfAllSettled(data, errorMsg);
 			}
 		};
 
@@ -835,7 +845,6 @@ class AjaxBlock {
 			// When one-click execution is disallowed, the (un)block must be executed
 			// via the dialog
 			onAbort('nooneclick');
-			this.openDialogIfAllSettled(data, 'ajaxblock-notify-error-cannotopendialog-oneclick');
 			return;
 		}
 
