@@ -1175,7 +1175,7 @@ class AjaxBlock {
 		window.closed.then(/** @param {any} [data] */ (data) => {
 			/** @type {?boolean} */
 			let confirmed = !!(data && data.action === 'accept');
-			if (!confirmed && cbOpenDialog.isSelected()) {
+			if (!confirmed && cbOpenDialog.isVisible() && cbOpenDialog.isSelected()) {
 				confirmed = null;
 			}
 			windowManager.clearWindows();
