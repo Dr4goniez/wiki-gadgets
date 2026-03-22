@@ -473,6 +473,12 @@ class AjaxBlock {
 					params.set(key, clean(value));
 				}
 			}
+			const wpEditingRestriction = params.get('wpEditingRestriction');
+			if (wpEditingRestriction !== undefined) {
+				// Move wpEditingRestriction to last so that BlockUser.applyParams() prioritizes it
+				params.delete('wpEditingRestriction');
+				params.set('wpEditingRestriction', wpEditingRestriction);
+			}
 
 			// Register the valid link
 			links.push({
@@ -4067,7 +4073,6 @@ class BlockUser extends AjaxBlockDialogContent {
 	 * @param {BlockLink} data
 	 * @returns {void | JQuery.Promise<void>}
 	 * @override
-	 * @todo Verify whether this is compatible with the event listeners of form fields
 	 */
 	applyParams(data) {
 		const { params, target } = data;
