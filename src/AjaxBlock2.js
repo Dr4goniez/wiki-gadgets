@@ -829,6 +829,7 @@ class AjaxBlock {
 		 */
 		this.processingOneClickEvent = false;
 		/**
+		 * @type {Promise<void>}
 		 * @private
 		 */
 		this.lastExecution = Promise.resolve();
@@ -845,7 +846,7 @@ class AjaxBlock {
 
 		const AjaxBlockDialog = AjaxBlockDialogFactory();
 		/**
-		 * @type {InstanceType<ReturnType<AjaxBlockDialogFactory>>}
+		 * @type {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>}
 		 * @private
 		 * @readonly
 		 */
@@ -1661,6 +1662,7 @@ class PermissionManager {
 		}
 
 		/**
+		 * @type {Set<string>}
 		 * @readonly
 		 * @private
 		 */
@@ -1760,6 +1762,7 @@ class BlockLookup {
 	 */
 	constructor(data) {
 		/**
+		 * @type {ApiResponseQueryListBlocks[]}
 		 * @private
 		 */
 		this.data = data;
@@ -2089,10 +2092,12 @@ class BlockTarget {
 			throw new Error('id or username must be non-null');
 		}
 		/**
+		 * @type {?number}
 		 * @private
 		 */
 		this.id = id;
 		/**
+		 * @type {?string}
 		 * @private
 		 */
 		this.username = username;
@@ -2101,6 +2106,7 @@ class BlockTarget {
 		 * @private
 		 */
 		this.type = null;
+
 		this.setType();
 	}
 
@@ -2861,10 +2867,12 @@ function AjaxBlockDialogFactory() {
 			super(config);
 
 			/**
+			 * @type {AjaxBlock}
 			 * @readonly
 			 */
 			this.ajaxBlock = ajaxBlock;
 			/**
+			 * @type {readonly string[]}
 			 * @readonly
 			 */
 			this.actionRestrictions = actionRestrictions;
@@ -2877,16 +2885,19 @@ function AjaxBlockDialogFactory() {
 			 */
 			this.readyProcessBlockLog = null;
 			/**
+			 * @type {BlockUser}
 			 * @readonly
 			 * @private
 			 */
 			this.blockUser = new BlockUser(this);
 			/**
+			 * @type {UnblockUser}
 			 * @readonly
 			 * @private
 			 */
 			this.unblockUser = new UnblockUser(this);
 			/**
+			 * @type {AjaxBlockDialogBodyOverlay}
 			 * @readonly
 			 */
 			this.overlay = new AjaxBlockDialogBodyOverlay();
@@ -2896,15 +2907,21 @@ function AjaxBlockDialogFactory() {
 			 */
 			this.currentData = Object.create(null);
 			/**
+			 * @type {boolean}
 			 * @private
 			 */
 			this.locked = false;
-
+			/**
+			 * @type {OO.ui.PanelLayout}
+			 * @readonly
+			 * @private
+			 */
 			this.content = new OO.ui.PanelLayout({
 				$element: $('<div>').addClass('ajaxblock-dialog-overlay-container'),
 				padded: true,
 				expanded: false
 			});
+
 			this.content.$element.append(
 				this.overlay.$element,
 				this.blockUser.$element,
@@ -3278,6 +3295,7 @@ class AjaxBlockDialogBodyOverlay {
 		 */
 		this.$element = $('<div>').addClass('ajaxblock-dialog-overlay').hide();
 		/**
+		 * @type {boolean}
 		 * @private
 		 */
 		this.shown = false;
@@ -3305,13 +3323,25 @@ class AjaxBlockDialogBodyOverlay {
 class AjaxBlockDialogContent {
 
 	/**
-	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
 	 */
 	constructor(dialog) {
+		/**
+		 * @type {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>}
+		 * @readonly
+		 * @protected
+		 */
 		this.dialog = dialog;
-
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
 		this.$element = $('<div>').addClass('ajaxblock-dialog-content');
-
+		/**
+		 * @type {OO.ui.Element}
+		 * @readonly
+		 * @protected
+		 */
 		this.messageContainer = new OO.ui.Element({
 			$element: $('<div>')
 		});
@@ -3321,6 +3351,7 @@ class AjaxBlockDialogContent {
 		 */
 		this.currentTarget = [null, null];
 		/**
+		 * @type {boolean}
 		 * @protected
 		 */
 		this.oneClickAllowed = true;
@@ -3328,21 +3359,43 @@ class AjaxBlockDialogContent {
 		 * @type {?OO.ui.RadioSelectWidget}
 		 */
 		this.blockSelector = null;
-
-		const $targetContainer = $('<span>').addClass('ajaxblock-targetlabel');
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 * @protected
+		 */
 		this.$target = $('<b>');
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 * @protected
+		 */
 		this.$targetAux = $('<span>');
-		$targetContainer.append(
-			this.$target,
-			Messages.get('word-separator'),
-			this.$targetAux
-		);
+		/**
+		 * @type {OO.ui.LabelWidget}
+		 * @readonly
+		 * @private
+		 */
 		this.target = new OO.ui.LabelWidget({
-			label: $targetContainer
+			label: $('<span>')
+				.addClass('ajaxblock-targetlabel')
+				.append(
+					this.$target,
+					Messages.get('word-separator'),
+					this.$targetAux
+				)
 		});
-
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @protected
+		 */
 		this.watchUser = new OO.ui.CheckboxInputWidget();
-
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
+		 */
 		this.watchlistExpiry = new OO.ui.DropdownWidget({
 			menu: {
 				items: Messages.getBlockDurations().filter((option) => {
@@ -3352,6 +3405,7 @@ class AjaxBlockDialogContent {
 				})
 			}
 		});
+
 		DropdownUtil.selectInfinity(this.watchlistExpiry);
 	}
 
@@ -3428,7 +3482,7 @@ class AjaxBlockDialogContent {
 	}
 
 	/**
-	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
 	 * @returns {OO.ui.FieldLayout}
 	 * @protected For a subclass's constructor only
 	 */
@@ -3573,7 +3627,7 @@ class AjaxBlockDialogContent {
 class BlockUser extends AjaxBlockDialogContent {
 
 	/**
-	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
 	 */
 	constructor(dialog) {
 		super(dialog);
@@ -3584,6 +3638,11 @@ class BlockUser extends AjaxBlockDialogContent {
 			this.getTargetField(),
 		];
 
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
+		 */
 		this.expiry = new OO.ui.DropdownWidget({
 			menu: {
 				items: Messages.getBlockDurations()
@@ -3598,6 +3657,11 @@ class BlockUser extends AjaxBlockDialogContent {
 			})
 		);
 
+		/**
+		 * @type {OO.ui.TextInputWidget}
+		 * @readonly
+		 * @private
+		 */
 		this.expiryOther = new OO.ui.TextInputWidget({
 			placeholder: Messages.get('ipbother').replace(/[:：]$/, ''),
 		});
@@ -3609,6 +3673,11 @@ class BlockUser extends AjaxBlockDialogContent {
 			})
 		);
 
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
+		 */
 		this.reason1 = new OO.ui.DropdownWidget({
 			menu: {
 				items: Messages.parseBlockReasonDropdown()
@@ -3623,6 +3692,11 @@ class BlockUser extends AjaxBlockDialogContent {
 			})
 		);
 
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
+		 */
 		this.reason2 = new OO.ui.DropdownWidget({
 			menu: {
 				items: Messages.parseBlockReasonDropdown()
@@ -3637,6 +3711,11 @@ class BlockUser extends AjaxBlockDialogContent {
 			})
 		);
 
+		/**
+		 * @type {OO.ui.TextInputWidget}
+		 * @readonly
+		 * @private
+		 */
 		this.reasonOther = new OO.ui.TextInputWidget({
 			placeholder: Messages.get('block-reason-other'),
 		});
@@ -3648,6 +3727,10 @@ class BlockUser extends AjaxBlockDialogContent {
 			})
 		);
 
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 */
 		this.partialBlock = new OO.ui.CheckboxInputWidget();
 		items.push(
 			new OO.ui.FieldLayout(this.partialBlock, {
@@ -3663,6 +3746,10 @@ class BlockUser extends AjaxBlockDialogContent {
 		/** @type {OO.ui.Element[]} */
 		const partialBlockLayoutItems = [];
 
+		/**
+		 * @type {mw.widgets.TitlesMultiselectWidget}
+		 * @readonly
+		 */
 		this.partialBlockPages = new mw.widgets.TitlesMultiselectWidget({
 			api: AjaxBlock.api,
 			placeholder: Messages.get('block-pages-placeholder'),
@@ -3676,6 +3763,10 @@ class BlockUser extends AjaxBlockDialogContent {
 			})
 		);
 
+		/**
+		 * @type {mw.widgets.NamespacesMultiselectWidget}
+		 * @readonly
+		 */
 		this.partialBlockNamespaces = new mw.widgets.NamespacesMultiselectWidget({
 			placeholder: Messages.get('block-namespaces-placeholder'),
 		});
@@ -3686,6 +3777,10 @@ class BlockUser extends AjaxBlockDialogContent {
 			})
 		);
 
+		/**
+		 * @type {Record<string, OO.ui.CheckboxInputWidget>}
+		 * @readonly
+		 */
 		this.partialBlockActions = this.dialog.actionRestrictions.reduce((acc, action) => {
 			const checkbox = new OO.ui.CheckboxInputWidget({ data: action });
 			partialBlockLayoutItems.push(
@@ -3709,6 +3804,10 @@ class BlockUser extends AjaxBlockDialogContent {
 		this.$element.append(mainFieldset.$element);
 		items = [];
 
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 */
 		this.cbCreateAccount = new OO.ui.CheckboxInputWidget();
 		items.push(
 			new OO.ui.FieldLayout(this.cbCreateAccount, {
@@ -3716,7 +3815,10 @@ class BlockUser extends AjaxBlockDialogContent {
 				align: 'inline',
 			})
 		);
-
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 */
 		this.cbSendEmail = new OO.ui.CheckboxInputWidget();
 		items.push(
 			new OO.ui.FieldLayout(this.cbSendEmail, {
@@ -3724,7 +3826,10 @@ class BlockUser extends AjaxBlockDialogContent {
 				align: 'inline',
 			})
 		);
-
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 */
 		this.cbUserTalk = new OO.ui.CheckboxInputWidget();
 		items.push(
 			new OO.ui.FieldLayout(this.cbUserTalk, {
@@ -3740,21 +3845,48 @@ class BlockUser extends AjaxBlockDialogContent {
 		this.$element.append(detailsFieldset.$element);
 		items = [];
 
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 */
 		this.cbAutoblock = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
 		this.cbAutoblockContainer = new OO.ui.FieldLayout(this.cbAutoblock, {
 			label: Messages.get('ajaxblock-dialog-block-label-option-autoblock'),
 			align: 'inline',
 		});
 		items.push(this.cbAutoblockContainer);
 
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 */
 		this.cbHardblock = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
 		this.cbHardblockContainer = new OO.ui.FieldLayout(this.cbHardblock, {
 			label: Messages.get('ipb-hardblock'),
 			align: 'inline',
 		});
 		items.push(this.cbHardblockContainer);
 
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 */
 		this.cbHideName = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
 		this.cbHideNameContainer = new OO.ui.FieldLayout(this.cbHideName, {
 			label: $('<b>').text(Messages.get('ipbhidename')),
 			align: 'inline',
@@ -3766,6 +3898,10 @@ class BlockUser extends AjaxBlockDialogContent {
 			this.getWatchlistExpiryLayout(dialog)
 		);
 
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 */
 		this.cbAddBlock = new OO.ui.CheckboxInputWidget();
 		this.cbAddBlock.on('change', (selected) => {
 			if (selected && this.blockSelector) {
@@ -3773,6 +3909,11 @@ class BlockUser extends AjaxBlockDialogContent {
 				this.blockSelector.selectItem();
 			}
 		});
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
 		this.cbAddBlockContainer = new OO.ui.FieldLayout(this.cbAddBlock, {
 			label: $('<b>').text(Messages.get('block-create')),
 			align: 'inline',
@@ -4638,7 +4779,7 @@ BlockUser.validNamespaceRestrictionValues = new Set(
 class UnblockUser extends AjaxBlockDialogContent {
 
 	/**
-	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
 	 */
 	constructor(dialog) {
 		super(dialog);
@@ -4649,6 +4790,11 @@ class UnblockUser extends AjaxBlockDialogContent {
 			this.getTargetField()
 		];
 
+		/**
+		 * @type {OO.ui.TextInputWidget}
+		 * @readonly
+		 * @private
+		 */
 		this.reason = new OO.ui.TextInputWidget({
 			placeholder: Messages.get('block-removal-reason-placeholder')
 		});
@@ -5335,11 +5481,19 @@ function isObject(value) {
 class AjaxBlockLogo {
 
 	constructor() {
-		/** @private */
+		/**
+		 * @type {HTMLElement}
+		 * @readonly
+		 * @private
+		 */
 		this.logo = document.createElement('span');
 		this.logo.classList.add('ajaxblock-logo');
 		this.logo.innerHTML = AjaxBlockLogo.svg;
-		/** @private */
+
+		/**
+		 * @type {number}
+		 * @private
+		 */
 		this.inserted = 0;
 	}
 
