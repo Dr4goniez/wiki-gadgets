@@ -397,31 +397,36 @@ class AjaxBlock {
 
 		/** @type {NodeListOf<HTMLAnchorElement>} */
 		const anchors = content ? content.querySelectorAll('a') : document.querySelectorAll('#bodyContent a');
+		const currentHost = location.host;
+
 		for (const a of anchors) {
 			let href = a.href;
 			if (
 				!href ||
 				a.getAttribute('href') === '#' ||
 				a.role === 'button' ||
-				a.host !== location.host
+				a.host !== currentHost
 			) {
 				continue;
 			}
 
 			// Get prefixed title from the href
 			const mArticle = regex.article.exec(href);
-			let prefixedTitle = '';
+			let rawTitle = '';
+			let needsDecode = true;
 			if (mArticle) {
-				prefixedTitle = decodeURIComponent(mArticle[1]);
+				rawTitle = mArticle[1];
 			} else if (a.pathname === wgScript) {
-				prefixedTitle = mw.util.getParamValue('title', href) || '';
+				rawTitle = mw.util.getParamValue('title', href) || '';
+				needsDecode = false; // getParamValue() calls decodeURIComponent()
 			}
-			if (!prefixedTitle) {
+			if (!rawTitle || !rawTitle.includes(':')) {
+				// Optimization: Ensure the presence of a namespace-title separator
 				continue;
 			}
 
 			// Regular expressions for page aliases use underscores
-			prefixedTitle = prefixedTitle.replace(/ /g, '_');
+			const prefixedTitle = (needsDecode ? decodeURIComponent(rawTitle) : rawTitle).replace(/ /g, '_');
 
 			// Check whether this is a link to Special:Block or Special:Unblock
 			const mSpecial = regex.special.exec(prefixedTitle);
@@ -449,7 +454,7 @@ class AjaxBlock {
 			a.classList.add(clss);
 
 			// Extract target (subpage (i.e., username) is normalized in BlockTarget.validate())
-			const subpage = mSpecial[2] ? decodeURIComponent(mSpecial[2]) : null;
+			const subpage = mSpecial[2] || null;
 			const [id, username] = BlockTarget.validate(subpage, query);
 			if (!id && !username) {
 				this.markLinkAsUnprocessable(a);
