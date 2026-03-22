@@ -38,7 +38,6 @@ if (wgCanonicalSpecialPageName === 'Block' || wgCanonicalSpecialPageName === 'Un
 	return;
 }
 
-let /** @type {mw.Api} */ api;
 const wgUserLanguage = mw.config.get('wgUserLanguage');
 const wgUserName = /** @type {string} */ (mw.config.get('wgUserName'));
 const wgNamespaceIds = mw.config.get('wgNamespaceIds');
@@ -51,7 +50,7 @@ class AjaxBlock {
 		// Load modules needed for getInitializer()
 		await mw.loader.using(['mediawiki.api', 'mediawiki.storage', 'mediawiki.util']);
 
-		api = new mw.Api({
+		AjaxBlock.api = new mw.Api({
 			ajax: {
 				headers: {
 					'Api-User-Agent': 'AjaxBlock/2.0.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock.js)'
@@ -65,188 +64,38 @@ class AjaxBlock {
 		});
 
 		// Check user rights, special namespace aliases, and block/unblock special page aliases
-		let initPromises;
+		let /** @type {Initializer} */ initializer;
 		try {
-			initPromises = await Promise.all([this.getInitializer(api), $.when($.ready)]);
+			initializer = await this.getInitializer();
 		} catch (e) {
 			// Visualize initialization failure using the logo
 			await new AjaxBlockLogo().insert().setError().remove(800);
 			return;
 		}
-		const [initializer] = initPromises;
 		const permissionManager = new PermissionManager(initializer.userRights);
 		if (!permissionManager.isAllowed('block')) {
 			return;
 		}
 		wgEnableMultiBlocks = initializer.multiBlocksEnabled;
 
-		// Parse block/unblock links
-		const { links, users, ids } = this.collectBlockLinks(initializer);
-		if (!links.length) {
-			return;
+		// Run the script based on page types
+		const continuouslyUpdatedSpecialPages = new Set([
+			'Recentchanges',
+			'Recentchangeslinked',
+			'Watchlist',
+		]);
+		if (wgCanonicalSpecialPageName && continuouslyUpdatedSpecialPages.has(wgCanonicalSpecialPageName)) {
+			this.initContinuous(initializer, permissionManager);
+		} else {
+			this.initOnce(initializer, permissionManager);
 		}
-
-		// Show logo while loading
-		const logo = new AjaxBlockLogo().insert();
-
-		// Continue preparation:
-		// - Check if multiblocks is enabled on this site
-		// - Check the block statuses of the users/IDs extracted from block/unblock links
-		// - Load modules used by AjaxBlockDialog
-		// - Load missing interface messages
-		let dataPromises;
-		try {
-			dataPromises = await Promise.all([
-				BlockLookup.fetch(permissionManager, users, ids),
-				mw.loader.using([
-					'oojs-ui',
-					'mediawiki.widgets.TitlesMultiselectWidget',
-					'mediawiki.widgets.NamespacesMultiselectWidget',
-					// For safety: Already required by mediawiki.api
-					'mediawiki.Title',
-					'mediawiki.jqueryMsg',
-				]),
-				Messages.loadMessagesIfMissing(permissionManager, [
-					'colon-separator',
-					'parentheses-start',
-					'parentheses-end',
-
-					'block',
-					'block-target',
-					'block-expiry',
-					'infiniteblock',
-					'ipboptions',
-					'ipbother',
-					'ipbreason-dropdown',
-					'htmlform-selectorother-other',
-					'block-reason-other',
-
-					'ipb-pages-label',
-					'block-pages-placeholder',
-					'ipb-namespaces-label',
-					'block-namespaces-placeholder',
-
-					'block-details',
-					'ipbcreateaccount',
-					'ipbemailban',
-					'ipb-disableusertalk',
-
-					'block-options',
-					'ipb-hardblock',
-					'ipbhidename',
-					'ipbwatchuser',
-					'block-create',
-
-					'unblock',
-					'block-reason',
-					'block-removal-reason-placeholder',
-
-					// Used in setTarget()
-					'apierror-modify-autoblock',
-					'autoblockid',
-
-					'confirm',
-					'cancel',
-
-					// Copied from InvestigateHelper
-					'logentry-block-block',
-					'logentry-block-block-multi',
-					'logentry-block-reblock',
-					'logentry-partialblock-block',
-					'logentry-partialblock-block-multi',
-					'logentry-partialblock-reblock',
-					'logentry-non-editing-block-block',
-					'logentry-non-editing-block-block-multi',
-					'logentry-non-editing-block-reblock',
-					'block-log-flags-angry-autoblock',
-					'block-log-flags-anononly',
-					'block-log-flags-hiddenname',
-					'block-log-flags-noautoblock',
-					'block-log-flags-nocreate',
-					'block-log-flags-noemail',
-					'block-log-flags-nousertalk', // "{{int:Blocklist-nousertalk}}"
-					// 'blocklist-nousertalk', // Used by block-log-flags-nousertalk
-					'parentheses',
-					'comma-separator',
-					'and',
-					'word-separator',
-					'blanknamespace',
-					// 'ipb-action-create',
-					// 'ipb-action-move',
-					// 'ipb-action-thanks',
-					// 'ipb-action-upload',
-					'logentry-partialblock-block-page',
-					'logentry-partialblock-block-ns',
-					'logentry-partialblock-block-action',
-
-					'blocked-notice-logextract',
-					'blocked-notice-logextract-anon',
-
-					// @ts-expect-error
-					...initializer.actionRestrictions.map(r => `ipb-action-${r}`),
-				])
-			]);
-		} catch (e) {
-			console.error(e);
-			await logo.setError().remove(800);
-			return;
-		}
-		const [blockLookup] = dataPromises;
-
-		// Format the array of BlockLink objects to a Map
-		const /** @type {BlockLinkMap} */ linkMap = new Map();
-		for (const obj of links) {
-			const id = obj.target.getId();
-			const username = obj.target.getUsername();
-			let /** @type {string | number | null} */ key = null;
-
-			if (id && username) {
-				key = username;
-			} else if (id) {
-				// ID-based (un)block links must have associated active blocks
-				const block = blockLookup.getBlockById(id);
-				if (block) {
-					if (block.user) {
-						key = block.user;
-						obj.target.setUsername(key);
-					} else if (block.automatic && obj.type === 'unblock') {
-						key = id;
-					}
-				}
-			} else if (username) {
-				// We don't try to associate the username to block IDs here
-				// That should be handled in setTarget()
-				key = username;
-			} else {
-				// collectBlockLinks() should have already handled this path
-				throw new Error('Logic exception', { cause: obj });
-			}
-			if (key === null) {
-				this.markLinkAsUnprocessable(obj.anchor);
-				continue;
-			}
-
-			if (!linkMap.has(key)) {
-				linkMap.set(key, []);
-			}
-			/** @type {BlockLink[]} */ (linkMap.get(key)).push(obj);
-		}
-
-		// Create an AjaxBlock instance
-		// TODO: Use mw.hook
-		if (linkMap.size) {
-			this.addStyleTag();
-			new this(permissionManager, linkMap, blockLookup, initializer.actionRestrictions);
-		}
-		logo.remove(1200);
 	}
 
 	/**
-	 * @param {mw.Api} api
 	 * @returns {JQuery.Promise<Initializer>}
 	 * @private
 	 */
-	static getInitializer(api) {
+	static getInitializer() {
 		const /** @type {Partial<Initializer>} */ data = {
 			blockPageAliases: void 0,
 			specialNamespaceAliases: void 0,
@@ -289,7 +138,7 @@ class AjaxBlock {
 		// Cached multiblocks configuration
 		const cachedMbEnabled = mw.storage.get(this.storageKeys.enableMultiblocks);
 		if (typeof cachedMbEnabled === 'string') {
-			data.multiBlocksEnabled = Boolean(Number(cachedMbEnabled));
+			data.multiBlocksEnabled = cachedMbEnabled === '1';
 		}
 
 		/** @type {JQuery.Promise<void>[]} */
@@ -311,7 +160,7 @@ class AjaxBlock {
 			}
 
 			requests.push(
-				api.get(params).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+				this.api.get(params).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
 					if (!res || !res.query) {
 						return failAsEmptyResult(res, jqXHR);
 					}
@@ -354,7 +203,7 @@ class AjaxBlock {
 		// Fetch paraminfo if needed
 		if (!data.actionRestrictions || typeof data.multiBlocksEnabled !== 'boolean') {
 			requests.push(
-				api.get({
+				this.api.get({
 					action: 'paraminfo',
 					modules: 'block',
 				}).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
@@ -370,6 +219,9 @@ class AjaxBlock {
 						if (name === 'pagerestrictions' && typeof limit === 'number') {
 							// Hack: There's no other way to retrieve the value of wgEnableMultiBlocks (T404508),
 							// but the limit of page restrictions is 50 when multiblocks is enabled, otherwise 10
+							if (limit !== 10 && limit !== 50) {
+								console.warn('Unexpected pagerestrictions limit:', limit);
+							}
 							const multiBlocksEnabled = limit === 50;
 							mw.storage.set(
 								this.storageKeys.enableMultiblocks,
@@ -403,14 +255,115 @@ class AjaxBlock {
 	}
 
 	/**
+	 * @param {Initializer} initializer
+	 * @param {PermissionManager} permissionManager
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	static async initOnce(initializer, permissionManager) {
+		// Parse block/unblock links
+		await $.ready;
+		const { links, users, ids } = this.collectBlockLinks(initializer);
+		if (!links.length) {
+			return;
+		}
+
+		// Show logo while loading
+		const logo = new AjaxBlockLogo().insert();
+
+		// Continue preparation:
+		// - Check if multiblocks is enabled on this site
+		// - Check the block statuses of the users/IDs extracted from block/unblock links
+		// - Load modules used by AjaxBlockDialog
+		// - Load missing interface messages
+		let /** @type {BlockLookup} */ blockLookup;
+		const { actionRestrictions } = initializer;
+		try {
+			[blockLookup] = await Promise.all([
+				BlockLookup.fetch(permissionManager, users, ids),
+				this.loadDependencies(permissionManager, actionRestrictions),
+			]);
+		} catch (e) {
+			console.error(e);
+			await logo.setError().remove(800);
+			return;
+		}
+
+		const linkMap = this.injectBlockInfo(links, blockLookup);
+		if (linkMap.size) {
+			this.addStyleTag();
+
+			const ajaxBlock = new this(permissionManager, linkMap, blockLookup, actionRestrictions);
+			ajaxBlock.initialize();
+		}
+		logo.remove(1000);
+	}
+
+	/**
+	 * @param {Initializer} initializer
+	 * @param {PermissionManager} permissionManager
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	static async initContinuous(initializer, permissionManager) {
+		// Unlike initOnce, prepare all required things before parsing links
+		const { actionRestrictions } = initializer;
+		await Promise.all([
+			this.loadDependencies(permissionManager, actionRestrictions),
+			$.ready
+		]);
+		this.addStyleTag();
+
+		/** @type {?AjaxBlock} */
+		let ajaxBlock = null;
+
+		mw.hook('wikipage.content').add(async ($content) => {
+			const content = $content[0];
+			if (!content || !content.isConnected || !content.querySelector('a')) {
+				return;
+			}
+
+			// Parse block/unblock links
+			const { links, users, ids } = this.collectBlockLinks(initializer, content);
+			if (!links.length) {
+				return;
+			}
+
+			// Show logo while loading
+			const logo = new AjaxBlockLogo().insert();
+
+			let /** @type {BlockLookup} */ blockLookup;
+			try {
+				blockLookup = await BlockLookup.fetch(permissionManager, users, ids);
+			} catch (e) {
+				console.error(e);
+				await logo.setError().remove(800);
+				return;
+			}
+
+			const linkMap = this.injectBlockInfo(links, blockLookup);
+			if (linkMap.size) {
+				if (!ajaxBlock) {
+					ajaxBlock = new this(permissionManager, linkMap, blockLookup, actionRestrictions);
+					ajaxBlock.initialize();
+				} else {
+					ajaxBlock.initialize({ linkMap, blockLookup });
+				}
+			}
+			logo.remove(1000);
+		});
+	}
+
+	/**
 	 * @param {Initializer} init
+	 * @param {ParentNode} [content] Optional root node to limit scanning (used for dynamically injected content).
 	 * @return {{ links: BlockLink[]; users: Set<string>; ids: Set<number>; }}
 	 * @private
 	 */
-	static collectBlockLinks(init) {
+	static collectBlockLinks(init, content) {
 		const wgScript = mw.config.get('wgScript');
 		/**
-		 * @param {string[]} arr
+		 * @param {readonly string[]} arr
 		 * @returns {string}
 		 */
 		const toEscaped = (arr) => arr.map(mw.util.escapeRegExp).join('|');
@@ -442,10 +395,13 @@ class AjaxBlock {
 		const /** @type {Set<string>} */ users = new Set();
 		const /** @type {Set<number>} */ ids = new Set();
 
-		for (const a of /** @type {NodeListOf<HTMLAnchorElement>} */ (document.querySelectorAll('#bodyContent a'))) {
+		/** @type {NodeListOf<HTMLAnchorElement>} */
+		const anchors = content ? content.querySelectorAll('a') : document.querySelectorAll('#bodyContent a');
+		for (const a of anchors) {
 			let href = a.href;
 			if (
 				!href ||
+				a.getAttribute('href') === '#' ||
 				a.role === 'button' ||
 				a.host !== location.host
 			) {
@@ -549,11 +505,166 @@ class AjaxBlock {
 	}
 
 	/**
+	 * @param {PermissionManager} permissionManager
+	 * @param {Initializer['actionRestrictions']} actionRestrictions
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	static async loadDependencies(permissionManager, actionRestrictions) {
+		await Promise.all([
+			mw.loader.using([
+				'oojs-ui',
+				'mediawiki.widgets.TitlesMultiselectWidget',
+				'mediawiki.widgets.NamespacesMultiselectWidget',
+				// For safety: Already required by mediawiki.api
+				'mediawiki.Title',
+				'mediawiki.jqueryMsg',
+			]),
+			Messages.loadMessagesIfMissing(permissionManager, [
+				'colon-separator',
+				'parentheses-start',
+				'parentheses-end',
+
+				'block',
+				'block-target',
+				'block-expiry',
+				'infiniteblock',
+				'ipboptions',
+				'ipbother',
+				'ipbreason-dropdown',
+				'htmlform-selectorother-other',
+				'block-reason-other',
+
+				'ipb-pages-label',
+				'block-pages-placeholder',
+				'ipb-namespaces-label',
+				'block-namespaces-placeholder',
+
+				'block-details',
+				'ipbcreateaccount',
+				'ipbemailban',
+				'ipb-disableusertalk',
+
+				'block-options',
+				'ipb-hardblock',
+				'ipbhidename',
+				'ipbwatchuser',
+				'block-create',
+
+				'unblock',
+				'block-reason',
+				'block-removal-reason-placeholder',
+
+				// Used in setTarget()
+				'apierror-modify-autoblock',
+				'autoblockid',
+
+				'confirm',
+				'cancel',
+
+				// Copied from InvestigateHelper
+				'logentry-block-block',
+				'logentry-block-block-multi',
+				'logentry-block-reblock',
+				'logentry-partialblock-block',
+				'logentry-partialblock-block-multi',
+				'logentry-partialblock-reblock',
+				'logentry-non-editing-block-block',
+				'logentry-non-editing-block-block-multi',
+				'logentry-non-editing-block-reblock',
+				'block-log-flags-angry-autoblock',
+				'block-log-flags-anononly',
+				'block-log-flags-hiddenname',
+				'block-log-flags-noautoblock',
+				'block-log-flags-nocreate',
+				'block-log-flags-noemail',
+				'block-log-flags-nousertalk', // "{{int:Blocklist-nousertalk}}"
+				// 'blocklist-nousertalk', // Used by block-log-flags-nousertalk
+				'parentheses',
+				'comma-separator',
+				'and',
+				'word-separator',
+				'blanknamespace',
+				// 'ipb-action-create',
+				// 'ipb-action-move',
+				// 'ipb-action-thanks',
+				// 'ipb-action-upload',
+				'logentry-partialblock-block-page',
+				'logentry-partialblock-block-ns',
+				'logentry-partialblock-block-action',
+
+				'blocked-notice-logextract',
+				'blocked-notice-logextract-anon',
+
+				// @ts-expect-error
+				...actionRestrictions.map(r => `ipb-action-${r}`),
+			])
+		]);
+	}
+
+	/**
+	 * Injects block information to the given array of {@link BlockLink} objects returned by
+	 * {@link collectBlockLinks}, and returns a {@link BlockLinkMap} keyed by usernames (preferred),
+	 * or by block IDs when handling autoblock unblock links.
+	 *
+	 * @param {BlockLink[]} blockLinks
+	 * @param {BlockLookup} blockLookup
+	 * @returns {BlockLinkMap}
+	 * @private
+	 */
+	static injectBlockInfo(blockLinks, blockLookup) {
+		const /** @type {BlockLinkMap} */ linkMap = new Map();
+
+		for (const obj of blockLinks) {
+			const id = obj.target.getId();
+			const username = obj.target.getUsername();
+			let /** @type {string | number | null} */ key = null;
+
+			if (id && username) {
+				key = username;
+			} else if (id) {
+				// ID-based (un)block links must have associated active blocks
+				const block = blockLookup.getBlockById(id);
+				if (block) {
+					if (block.user) {
+						key = block.user;
+						obj.target.setUsername(key);
+					} else if (block.automatic && obj.type === 'unblock') {
+						key = id;
+					}
+				}
+			} else if (username) {
+				// We don't try to associate the username to block IDs here
+				// That should be handled in setTarget()
+				key = username;
+			} else {
+				// collectBlockLinks() should have already handled this path
+				throw new Error('Logic exception', { cause: obj });
+			}
+			if (key === null) {
+				this.markLinkAsUnprocessable(obj.anchor);
+				continue;
+			}
+
+			if (!linkMap.has(key)) {
+				linkMap.set(key, []);
+			}
+			/** @type {BlockLink[]} */ (linkMap.get(key)).push(obj);
+		}
+
+		return linkMap;
+	}
+
+	/**
 	 * @private
 	 */
 	static addStyleTag() {
+		const id = 'ajaxblock-styles';
+		if (document.getElementById(id)) {
+			return;
+		}
 		const style = document.createElement('style');
-		style.id = 'ajaxblock-styles';
+		style.id = id;
 		style.textContent = `
 			.ajaxblock-unprocessable {
 				text-decoration-line: underline;
@@ -683,32 +794,26 @@ class AjaxBlock {
 	 * @param {PermissionManager} permissionManager
 	 * @param {BlockLinkMap} linkMap
 	 * @param {BlockLookup} blockLookup
-	 * @param {string[]} actionRestrictions
+	 * @param {readonly string[]} actionRestrictions
 	 * @private
 	 */
 	constructor(permissionManager, linkMap, blockLookup, actionRestrictions) {
 		/**
+		 * @type {PermissionManager}
 		 * @readonly
 		 */
 		this.permissionManager = permissionManager;
 		/**
+		 * @type {BlockLinkMap}
 		 * @private
-		 * @readonly
 		 */
 		this.linkMap = linkMap;
 		/**
-		 * @readonly
+		 * @type {BlockLookup}
 		 */
 		this.blockLookup = blockLookup;
-
-		// Add a click event to each link
-		for (const [_key, links] of linkMap) {
-			for (const data of links) {
-				data.anchor.addEventListener('click', (e) => this.handleClick(e, data));
-			}
-		}
-
 		/**
+		 * @type {boolean}
 		 * @private
 		 */
 		this.processingOneClickEvent = false;
@@ -717,12 +822,19 @@ class AjaxBlock {
 		 */
 		this.lastExecution = Promise.resolve();
 		/**
+		 * @type {number}
 		 * @private
 		 */
 		this.pendingCount = 0;
+		/**
+		 * @type {number}
+		 * @private
+		 */
+		this.executionGeneration = 0;
 
 		const AjaxBlockDialog = AjaxBlockDialogFactory();
 		/**
+		 * @type {InstanceType<ReturnType<AjaxBlockDialogFactory>>}
 		 * @private
 		 * @readonly
 		 */
@@ -732,7 +844,36 @@ class AjaxBlock {
 			size: 'large',
 		});
 		AjaxBlockDialog.windowManager.addWindows([this.dialog]);
-		console.log('AjaxBlock has been loaded');
+	}
+
+	/**
+	 * Initializes block links by attaching AjaxBlock functionality to them.
+	 *
+	 * If `updater` is provided, re-initializes internal data before performing the attachment.
+	 *
+	 * @param {object} [updater]
+	 * @param {BlockLinkMap} updater.linkMap
+	 * @param {BlockLookup} updater.blockLookup
+	 * @returns {void}
+	 * @private
+	 */
+	initialize(updater) {
+		if (updater) {
+			this.executionGeneration++;
+			this.linkMap = updater.linkMap;
+			this.blockLookup = updater.blockLookup;
+		}
+
+		// Add a click event to each link
+		for (const [_key, links] of this.linkMap) {
+			for (const data of links) {
+				if (data.anchor.dataset.ajaxblockBound) {
+					continue;
+				}
+				data.anchor.addEventListener('click', (e) => this.handleClick(e, data));
+				data.anchor.dataset.ajaxblockBound = '1';
+			}
+		}
 	}
 
 	/**
@@ -961,11 +1102,19 @@ class AjaxBlock {
 		onBeforeExecute();
 
 		this.pendingCount++;
+		const generation = this.executionGeneration;
+
 		const current = this.lastExecution
 			// Note: lastExecution could become rejected; always chain from it using .catch()
 			// to avoid breaking the execution chain.
-			.catch(() => {})
-			.then(() => this.executeInternalDoRequest(data, params, key, processing));
+			.catch((e) => { console.warn('Previous execution failed', e); })
+			.then(() => {
+				if (generation !== this.executionGeneration) {
+					// This execution is stale; skip it
+					return;
+				}
+				return this.executeInternalDoRequest(data, params, key, processing, generation);
+			});
 		this.lastExecution = current;
 
 		const finalize = () => { this.pendingCount--; };
@@ -977,10 +1126,11 @@ class AjaxBlock {
 	 * @param {BlockParams | UnblockParams} params
 	 * @param {string | number} key
 	 * @param {ProcessingBlockLink[]} processing
+	 * @param {number} gen
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async executeInternalDoRequest(data, params, key, processing) {
+	async executeInternalDoRequest(data, params, key, processing, gen) {
 		// Perform the block/unblock
 		const request = DEBUG_MODE ? AjaxBlock.testExecute : AjaxBlock.execute;
 		let code = '';
@@ -989,8 +1139,13 @@ class AjaxBlock {
 		const result = await request(params, data).catch((c, err) => {
 			code = c;
 			console.error(err);
-			return api.getErrorMessage(err);
+			return AjaxBlock.api.getErrorMessage(err);
 		});
+		if (gen !== this.executionGeneration) {
+			// This instance has been re-initialized: skip post-processing since blockLookup
+			// is no longer up-to-date
+			return;
+		}
 
 		// Process the result
 		let /** @type {ProcessedBlockLink[]} */ processed;
@@ -1226,7 +1381,7 @@ class AjaxBlock {
 	 */
 	static execute(params, _data) {
 		// @ts-expect-error
-		return api.postWithEditToken(Object.assign(
+		return AjaxBlock.api.postWithEditToken(Object.assign(
 			{
 				errorformat: 'html',
 				errorlang: wgUserLanguage,
@@ -1330,6 +1485,10 @@ class AjaxBlock {
 	}
 
 }
+/**
+ * @type {mw.Api}
+ */
+AjaxBlock.api = Object.create(null);
 AjaxBlock.storageKeys = {
 	blockPageAliases: 'mw-AjaxBlock-blockPageAliases',
 	userRights: 'mw-AjaxBlock-userRights',
@@ -1534,7 +1693,7 @@ class BlockLookup {
 				return $.Deferred().resolve(ret).promise();
 			}
 
-			return api.post({
+			return AjaxBlock.api.post({
 				list: 'blocks',
 				[`bk${batchParam}`]: batch.slice(offset, offset + apilimit).join('|'),
 				bklimit: 'max',
@@ -1647,7 +1806,7 @@ class BlockLookup {
 		if (indexes === undefined) {
 			return null;
 		}
-		return this.data.filter((_, i) => indexes.includes(i));
+		return indexes.map(i => this.data[i]);
 	}
 
 	/**
@@ -1669,7 +1828,7 @@ class BlockLookup {
 
 		// Does the user have other active blocks?
 		const blocks = /** @type {ApiResponseQueryListBlocks[]} */ (this.getBlocksByUsername(res.user))
-			.filter(obj => obj !== datum);
+			.filter(obj => obj.id !== datum.id);
 		return blocks.length ? blocks : null;
 	}
 
@@ -2093,10 +2252,10 @@ class Messages {
 			const batch = keys.slice(index, index + apilimit);
 			let request, ajaxOptions;
 			if (batch.length <= 50) {
-				request = api.get.bind(api);
+				request = AjaxBlock.api.get.bind(AjaxBlock.api);
 				ajaxOptions = {};
 			} else {
-				request = api.post.bind(api);
+				request = AjaxBlock.api.post.bind(AjaxBlock.api);
 				ajaxOptions = nonwritePost();
 			}
 
@@ -3494,7 +3653,7 @@ class BlockUser extends AjaxBlockDialogContent {
 		const partialBlockLayoutItems = [];
 
 		this.partialBlockPages = new mw.widgets.TitlesMultiselectWidget({
-			api,
+			api: AjaxBlock.api,
 			placeholder: Messages.get('block-pages-placeholder'),
 			showMissing: false,
 			tagLimit: wgEnableMultiBlocks ? 50 : 10,
@@ -3995,7 +4154,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						 */
 						function request(batch, offset, ret = new Set()) {
 							const titles = batch.slice(offset, offset + apilimit);
-							return api.post({
+							return AjaxBlock.api.post({
 								titles,
 								errorformat: 'html',
 								errorlang: wgUserLanguage,
@@ -4118,7 +4277,7 @@ class BlockUser extends AjaxBlockDialogContent {
 			const val = getter(value, param);
 			if (isObject(val) && typeof val.then === 'function') {
 				// @ts-expect-error
-				const p = val.then(setter).catch((_code, _res, res) => api.getErrorMessage(res));
+				const p = val.then(setter).catch((_code, _res, res) => AjaxBlock.api.getErrorMessage(res));
 				promises.push(p);
 			} else {
 				// @ts-expect-error
@@ -4765,7 +4924,7 @@ class BlockLog {
 	 */
 	getEntries() {
 		const { ids, earliestTimestamp } = this.data;
-		return api.get({
+		return AjaxBlock.api.get({
 			action: 'query',
 			formatversion: '2',
 			list: 'logevents',

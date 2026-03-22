@@ -9,10 +9,10 @@ export type BlockPageNames = 'Block' | 'Unblock';
  * Note: Page name aliases use **underscores**, not spaces.
  */
 export interface Initializer {
-	blockPageAliases: Record<BlockPageNames, string[]>;
-	specialNamespaceAliases: string[];
+	blockPageAliases: Record<BlockPageNames, readonly string[]>;
+	specialNamespaceAliases: readonly string[];
 	userRights: Set<string>;
-	actionRestrictions: string[];
+	actionRestrictions: readonly string[];
 	multiBlocksEnabled: boolean;
 }
 
