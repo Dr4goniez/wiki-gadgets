@@ -280,7 +280,7 @@ class AjaxBlock {
 		const { actionRestrictions } = initializer;
 		try {
 			[blockLookup] = await Promise.all([
-				BlockLookup.fetch(permissionManager, users, ids),
+				BlockLookup.newFromTargets(permissionManager, users, ids),
 				this.loadDependencies(permissionManager, actionRestrictions),
 			]);
 		} catch (e) {
@@ -334,7 +334,7 @@ class AjaxBlock {
 
 			let /** @type {BlockLookup} */ blockLookup;
 			try {
-				blockLookup = await BlockLookup.fetch(permissionManager, users, ids);
+				blockLookup = await BlockLookup.newFromTargets(permissionManager, users, ids);
 			} catch (e) {
 				console.error(e);
 				await logo.setError().remove(800);
@@ -1689,7 +1689,8 @@ class BlockLookup {
 	 * @param {PermissionManager} permissionManager
 	 * @param {Set<string>} users
 	 * @param {Set<number>} ids
-	 * @returns {JQuery.Promise<BlockLookup>}
+	 * @returns {JQuery.Promise<ApiResponseQueryListBlocks[]>}
+	 * @private
 	 */
 	static fetch(permissionManager, users, ids) {
 		const apilimit = permissionManager.getApiLimit();
@@ -1753,14 +1754,34 @@ class BlockLookup {
 				}
 			}
 
-			return new this(data);
+			return data;
 		});
 	}
 
 	/**
-	 * @param {ApiResponseQueryListBlocks[]} data
+	 * @param {PermissionManager} permissionManager
+	 * @param {Set<string>} users
+	 * @param {Set<number>} ids
+	 * @returns {JQuery.Promise<BlockLookup>}
 	 */
-	constructor(data) {
+	static newFromTargets(permissionManager, users, ids) {
+		return this.fetch(permissionManager, users, ids).then((blocks) => {
+			return new this(permissionManager, blocks);
+		});
+	}
+
+	/**
+	 * @param {PermissionManager} permissionManager
+	 * @param {ApiResponseQueryListBlocks[]} data
+	 * @private
+	 */
+	constructor(permissionManager, data) {
+		/**
+		 * @type {PermissionManager}
+		 * @readonly
+		 * @private
+		 */
+		this.permissionManager = permissionManager;
 		/**
 		 * @type {ApiResponseQueryListBlocks[]}
 		 * @private
@@ -1965,6 +1986,27 @@ class BlockLookup {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Fetches the latest blocks for the given user and updates the internal data.
+	 *
+	 * @param {string} username
+	 * @returns {JQuery.Promise<ApiResponseQueryListBlocks[]>} An array of current blocks.
+	 */
+	refreshDataByUsername(username) {
+		return BlockLookup.fetch(this.permissionManager, new Set([username]), new Set()).then((blocks) => {
+			const currentIndexes = this.usernameMap.get(username);
+			if (currentIndexes !== undefined) {
+				const indexSet = new Set(currentIndexes);
+				this.data = this.data.filter((_, i) => !indexSet.has(i));
+			}
+
+			this.data.push(...blocks);
+			this.mapData();
+
+			return blocks;
+		});
 	}
 
 	/**
