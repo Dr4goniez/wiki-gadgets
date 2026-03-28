@@ -3041,28 +3041,19 @@ function AjaxBlockDialogFactory() {
 		 * @param {BlockLink} _data
 		 */
 		getReadyProcess(_data) {
-			// @ts-expect-error
-			return super.getReadyProcess(_data).next(async () => {
-				if (this.blockLogGenerator) {
-					const start = Date.now();
-					try {
-						await this.getReadyProcessInternal();
-					} catch (code) {
-						const err =
-							SCRIPT_NAME +
-							Messages.get('colon-separator') +
-							Messages.get('ajaxblock-notify-error-loadblocklogs', [/** @type {string} */ (code)]);
-						mw.notify(err, { type: 'error' });
-						return false;
-					}
+			const process = super.getReadyProcess(_data);
+			if (!this.blockLogGenerator) {
+				this.updateSize();
+				return process;
+			}
 
-					// Ensure the pending animation has been shown for a certain duration
-					await sleep(800 - (Date.now() - start));
-
-					this.content.toggle(true);
-					this.updateSize().popPending();
-					this.blockLogGenerator = null;
-				}
+			// @ts-expect-error Promise<void, any, any> -> Promise<void>
+			return process.next(() => {
+				return this.getReadyProcessInternal();
+			}).next(() => {
+				this.content.toggle(true);
+				this.updateSize().popPending();
+				this.blockLogGenerator = null;
 			});
 		}
 
@@ -3071,8 +3062,19 @@ function AjaxBlockDialogFactory() {
 		 * @private
 		 */
 		async getReadyProcessInternal() {
-			// @ts-expect-error
-			const options = await this.blockLogGenerator();
+			let options;
+			try {
+				// @ts-expect-error
+				options = await toNativePromise(this.blockLogGenerator());
+			} catch (err) {
+				const [code, info] = /** @type {[string, any]} */ (err);
+				const msg =
+					SCRIPT_NAME +
+					Messages.get('colon-separator') +
+					Messages.get('ajaxblock-notify-error-loadblocklogs', [code]);
+				mw.notify(msg, { type: 'error' });
+				throw info;
+			}
 			if (!options) {
 				return;
 			}
@@ -5471,6 +5473,17 @@ function failAsEmptyResult(res, jqXHR) {
 		res,
 		jqXHR
 	);
+}
+
+/**
+ * @template T
+ * @param {JQuery.Promise<T>} p
+ * @returns {Promise<T>}
+ */
+function toNativePromise(p) {
+	return new Promise((resolve, reject) => {
+		p.then(resolve, (...args) => reject(args));
+	});
 }
 
 /**
