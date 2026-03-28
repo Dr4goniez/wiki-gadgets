@@ -240,6 +240,7 @@ export interface AjaxBlockMessages {
 	'ajaxblock-dialog-message-existingblocks-dialogonly': string;
 	'ajaxblock-dialog-message-predefinedparams': string;
 	'ajaxblock-dialog-message-predefinedparams-apply': string;
+	'ajaxblock-dialog-message-blocklog-missing': string;
 	'ajaxblock-notify-error-loadblocklogs': string;
 	'ajaxblock-notify-error-idinactivenousername': string;
 	'ajaxblock-notify-error-cannotunblock': string;
@@ -421,3 +422,8 @@ type AbortReason =
 export type WarningContext =
 	| 'dialog'
 	| 'oneclick';
+
+export type TargetHandler =
+	| { message: () => string }
+	| { log: () => JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement> | null> }
+	| { none: true };

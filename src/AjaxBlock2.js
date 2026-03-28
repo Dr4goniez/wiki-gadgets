@@ -59,7 +59,10 @@ class AjaxBlock {
 			parameters: {
 				action: 'query',
 				format: 'json',
-				formatversion: '2'
+				formatversion: '2',
+				errorformat: 'html',
+				errorlang: wgUserLanguage,
+				errorsuselocal: true,
 			}
 		});
 
@@ -1392,14 +1395,8 @@ class AjaxBlock {
 	 * @private
 	 */
 	static execute(params, _data) {
-		// @ts-expect-error
 		return AjaxBlock.api.postWithEditToken(Object.assign(
-			{
-				errorformat: 'html',
-				errorlang: wgUserLanguage,
-				errorsuselocal: true,
-				curtimestamp: true,
-			},
+			{ curtimestamp: true },
 			params
 		)).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
 			if (res) {
@@ -1409,7 +1406,7 @@ class AjaxBlock {
 					return res.unblock;
 				}
 			}
-			failAsEmptyResult(res, jqXHR);
+			return failAsEmptyResult(res, jqXHR);
 		});
 	}
 
@@ -1992,7 +1989,7 @@ class BlockLookup {
 	 * Fetches the latest blocks for the given user and updates the internal data.
 	 *
 	 * @param {string} username
-	 * @returns {JQuery.Promise<ApiResponseQueryListBlocks[]>} An array of current blocks.
+	 * @returns {JQuery.Promise<?ApiResponseQueryListBlocks[]>} Currently active blocks, or null if none
 	 */
 	refreshDataByUsername(username) {
 		return BlockLookup.fetch(this.permissionManager, new Set([username]), new Set()).then((blocks) => {
@@ -2005,31 +2002,8 @@ class BlockLookup {
 			this.data.push(...blocks);
 			this.mapData();
 
-			return blocks;
+			return blocks.length ? blocks : null;
 		});
-	}
-
-	/**
-	 * @param {Required<ApiResponseQueryListBlocks>[]} blocks The `user` property must be defined
-	 * (i.e., no autoblock entries)
-	 * @returns {BlockIdMapValue}
-	 */
-	static toIdMap(blocks) {
-		/**
-		 * @type {BlockIdMapValue['ids']}
-		 */
-		const ids = new Map();
-		/**
-		 * @type {number[]}
-		 */
-		const unixTimes = [];
-
-		for (const obj of blocks) {
-			unixTimes.push(Date.parse(obj.timestamp) / 1000);
-			ids.set(obj.id, obj);
-		}
-
-		return { ids, earliestTimestamp: Math.min(...unixTimes) };
 	}
 
 }
@@ -2730,6 +2704,7 @@ Messages.i18n = {
 		'ajaxblock-dialog-message-existingblocks-dialogonly': '<b>This action must be performed via this dialog.</b> One-click execution is not supported.',
 		'ajaxblock-dialog-message-predefinedparams': 'This link contains predefined parameters for the form fields.',
 		'ajaxblock-dialog-message-predefinedparams-apply': 'apply',
+		'ajaxblock-dialog-message-blocklog-missing': 'Failed to load the log for the block with ID <b>#$1</b>',
 		'ajaxblock-notify-error-loadblocklogs': 'Failed to load block information ($1)',
 		'ajaxblock-notify-error-idinactivenousername': 'This link cannot be processed because the block with ID <b>#$1</b> is no longer active and no username is specified.',
 		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> does not have any active blocks and cannot be unblocked.',
@@ -2776,6 +2751,7 @@ Messages.i18n = {
 		'ajaxblock-dialog-message-existingblocks-dialogonly': '<b>この操作はダイアログから行う必要があります。</b>ワンクリック操作は実行できません。',
 		'ajaxblock-dialog-message-predefinedparams': 'このリンクにはフォームフィールドの事前定義パラメータが含まれています。',
 		'ajaxblock-dialog-message-predefinedparams-apply': '適用',
+		'ajaxblock-dialog-message-blocklog-missing': 'ID <b>#$1</b> に紐付けられたブロック記録を取得できませんでした',
 		'ajaxblock-notify-error-loadblocklogs': 'ブロック情報の取得に失敗しました ($1)',
 		'ajaxblock-notify-error-idinactivenousername': 'このリンクに紐付けられたID <b>#$1</b> のブロックは既に解除されており、利用者名も指定されていないため処理できません。',
 		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> は現在ブロックされていないため、ブロックを解除できません。',
@@ -2919,13 +2895,10 @@ function AjaxBlockDialogFactory() {
 			 */
 			this.actionRestrictions = actionRestrictions;
 			/**
-			 * Stores a {@link BlockLog} instance returned by {@link BlockUser.setTarget} or {@link UnblockUser.setTarget},
-			 * for use by {@link getSetupProcess} and {@link getReadyProcess}.
-			 *
-			 * @type {?BlockLog}
+			 * @type {?Extract<TargetHandler, { log: unknown }>['log']}
 			 * @private
 			 */
-			this.readyProcessBlockLog = null;
+			this.blockLogGenerator = null;
 			/**
 			 * @type {BlockUser}
 			 * @readonly
@@ -3001,7 +2974,7 @@ function AjaxBlockDialogFactory() {
 					return false;
 				}
 				this.getActiveField().addParamApplier(data);
-				if (this.readyProcessBlockLog) {
+				if (this.blockLogGenerator) {
 					this.pushPending();
 					this.content.toggle(false);
 				}
@@ -3019,23 +2992,22 @@ function AjaxBlockDialogFactory() {
 			this.getActions().setMode(data.type);
 			const field = this.setActiveField().getActiveField().clearMessages();
 			field.blockSelector = null;
-			this.readyProcessBlockLog = null;
+			this.blockLogGenerator = null;
 			this.popPending();
 			this.content.toggle(true);
 
 			// Set target and check if any additional processes should be handled to open the dialog
 			const targetHandler = field.setTarget(data.target);
-			if (Array.isArray(targetHandler)) {
+			if ('message' in targetHandler) {
 				// There's a blocker to open the dialog
-				const args = targetHandler;
 				mw.notify(
-					$('<span>').append(Messages.get(...args)),
+					$('<span>').append(targetHandler.message()),
 					{ type: 'error' }
 				);
 				return false;
-			} else if (targetHandler instanceof BlockLog) {
+			} else if ('log' in targetHandler) {
 				// Block log lines should be generated asynchronously
-				this.readyProcessBlockLog = targetHandler;
+				this.blockLogGenerator = targetHandler.log;
 			}
 			return true;
 		}
@@ -3071,10 +3043,10 @@ function AjaxBlockDialogFactory() {
 		getReadyProcess(_data) {
 			// @ts-expect-error
 			return super.getReadyProcess(_data).next(async () => {
-				if (this.readyProcessBlockLog) {
+				if (this.blockLogGenerator) {
 					const start = Date.now();
 					try {
-						await this.getReadyProcessInternal(this.readyProcessBlockLog);
+						await this.getReadyProcessInternal();
 					} catch (code) {
 						const err =
 							SCRIPT_NAME +
@@ -3089,19 +3061,23 @@ function AjaxBlockDialogFactory() {
 
 					this.content.toggle(true);
 					this.updateSize().popPending();
-					this.readyProcessBlockLog = null;
+					this.blockLogGenerator = null;
 				}
 			});
 		}
 
 		/**
-		 * @param {BlockLog} blockLog
 		 * @returns {Promise<void>}
 		 * @private
 		 */
-		async getReadyProcessInternal(blockLog) {
+		async getReadyProcessInternal() {
+			// @ts-expect-error
+			const options = await this.blockLogGenerator();
+			if (!options) {
+				return;
+			}
+
 			const data = this.getCurrentData();
-			const options = await blockLog.generate();
 			const field = this.getActiveField();
 
 			let /** @type {keyof LoadedMessages} */ msgKey;
@@ -3208,7 +3184,7 @@ function AjaxBlockDialogFactory() {
 			// - `locked` is explicitly set to true, or
 			// - the dialog is still getting ready, or
 			// - the overlay is shown
-			return this.locked || !!this.readyProcessBlockLog || this.overlay.isShown();
+			return this.locked || !!this.blockLogGenerator || this.overlay.isShown();
 		}
 
 		canClose() {
@@ -3272,7 +3248,7 @@ function AjaxBlockDialogFactory() {
 			this.currentData = Object.create(null);
 			this.getActiveField().clearMessages().resetCurrentTarget();
 			this.setLocked(false);
-			this.readyProcessBlockLog = null;
+			this.blockLogGenerator = null;
 			this.popPending();
 			this.content.toggle(true);
 		}
@@ -4073,10 +4049,11 @@ class BlockUser extends AjaxBlockDialogContent {
 
 		const id = target.getId();
 		const username = target.getUsername();
-		const blocks = username ? this.dialog.ajaxBlock.blockLookup.getBlocksByUsername(username) : null;
+		const blockLookup = this.dialog.ajaxBlock.blockLookup;
+		const blocks = username ? blockLookup.getBlocksByUsername(username) : null;
 
 		if (id !== null) {
-			const block = this.dialog.ajaxBlock.blockLookup.getBlockById(id);
+			const block = blockLookup.getBlockById(id);
 			if (block) {
 				// The block associated with this ID exists
 				if (username && blocks && blocks.length > 1) {
@@ -4088,11 +4065,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: false,
 						addBlock: true,
 					});
-					const idMap = BlockLookup.toIdMap(
-						// `user` is never missing for non-autoblocks
-						/** @type {Required<ApiResponseQueryListBlocks>[]} */ (blocks)
-					);
-					return new BlockLog(username, idMap, true);
+					return { log: () => BlockLog.generate(username, blockLookup, true) };
 				} else if (block.user) {
 					// Unambiguous block
 					this.setTargetInternal({
@@ -4106,9 +4079,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: true,
 						addBlock: true,
 					});
-					// @ts-expect-error
-					const idMap = BlockLookup.toIdMap([block]);
-					return new BlockLog(block.user, idMap, false);
+					return { log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, false) };
 				} else {
 					// Autoblock (cannot reblock)
 					this.setTargetInternal({
@@ -4118,7 +4089,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: false,
 						addBlock: false,
 					});
-					return ['apierror-modify-autoblock'];
+					return { message: () => Messages.get('apierror-modify-autoblock') };
 				}
 			} else {
 				// ID no longer active
@@ -4140,9 +4111,7 @@ class BlockUser extends AjaxBlockDialogContent {
 							oneClick: false,
 							addBlock: true,
 						});
-						// @ts-expect-error
-						const idMap = BlockLookup.toIdMap(blocks);
-						return new BlockLog(username, idMap, true);
+						return { log: () => BlockLog.generate(username, blockLookup, true) };
 					} else {
 						// No other active blocks: Allow a username-based block
 						this.setTargetInternal({
@@ -4162,10 +4131,10 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: false,
 						addBlock: false,
 					});
-					return ['ajaxblock-notify-error-idinactivenousername', [id]];
+					return { message: () => Messages.get('ajaxblock-notify-error-idinactivenousername', [id]) };
 				}
 			}
-			return null;
+			return { none: true };
 		}
 
 		if (username !== null) {
@@ -4179,9 +4148,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: false,
 						addBlock: true,
 					});
-					// @ts-expect-error
-					const idMap = BlockLookup.toIdMap(blocks);
-					return new BlockLog(username, idMap, true);
+					return { log: () => BlockLog.generate(username, blockLookup, true) };
 				} else {
 					// Single active block
 					this.setTargetInternal({
@@ -4195,9 +4162,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: true,
 						addBlock: true,
 					});
-					// @ts-expect-error
-					const idMap = BlockLookup.toIdMap(blocks);
-					return new BlockLog(username, idMap, false);
+					return { log: () => BlockLog.generate(username, blockLookup, false) };
 				}
 			} else {
 				// No active blocks
@@ -4209,7 +4174,7 @@ class BlockUser extends AjaxBlockDialogContent {
 					addBlock: false,
 				});
 			}
-			return null;
+			return { none: true };
 		}
 
 		this.setTargetInternal({
@@ -4470,7 +4435,7 @@ class BlockUser extends AjaxBlockDialogContent {
 			const val = getter(value, param);
 			if (isObject(val) && typeof val.then === 'function') {
 				// @ts-expect-error
-				const p = val.then(setter).catch((_code, _res, res) => AjaxBlock.api.getErrorMessage(res));
+				const p = val.then(setter).catch((_code, res) => AjaxBlock.api.getErrorMessage(res));
 				promises.push(p);
 			} else {
 				// @ts-expect-error
@@ -4876,10 +4841,11 @@ class UnblockUser extends AjaxBlockDialogContent {
 	setTarget(target) {
 		const id = target.getId();
 		const username = target.getUsername();
-		const blocks = username ? this.dialog.ajaxBlock.blockLookup.getBlocksByUsername(username) : null;
+		const blockLookup = this.dialog.ajaxBlock.blockLookup;
+		const blocks = username ? blockLookup.getBlocksByUsername(username) : null;
 
 		if (id !== null) {
-			const block = this.dialog.ajaxBlock.blockLookup.getBlockById(id);
+			const block = blockLookup.getBlockById(id);
 			if (block) {
 				// The block associated with this ID exists
 				if (username && blocks && blocks.length > 1) {
@@ -4890,9 +4856,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						currentTarget: [null, username],
 						oneClick: false,
 					});
-					// @ts-expect-error
-					const idMap = BlockLookup.toIdMap(blocks);
-					return new BlockLog(username, idMap, true);
+					return { log: () => BlockLog.generate(username, blockLookup, true) };
 				} else if (block.user) {
 					// Unambiguous block
 					this.setTargetInternal({
@@ -4905,9 +4869,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						currentTarget: [id, username],
 						oneClick: true,
 					});
-					// @ts-expect-error
-					const idMap = BlockLookup.toIdMap([block]);
-					return new BlockLog(block.user, idMap, false);
+					return { log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, false) };
 				} else {
 					// Autoblock
 					if (!block.automatic) {
@@ -4941,9 +4903,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 							currentTarget: [null, username],
 							oneClick: false,
 						});
-						// @ts-expect-error
-						const idMap = BlockLookup.toIdMap(blocks);
-						return new BlockLog(username, idMap, true);
+						return { log: () => BlockLog.generate(username, blockLookup, true) };
 					} else {
 						// No other active blocks (cannot be unblocked)
 						this.setTargetInternal({
@@ -4952,7 +4912,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 							currentTarget: [null, username],
 							oneClick: false,
 						});
-						return ['ajaxblock-notify-error-cannotunblock', [username]];
+						return { message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
 					}
 				} else {
 					// ID no longer active, no username: unprocessable
@@ -4962,10 +4922,10 @@ class UnblockUser extends AjaxBlockDialogContent {
 						currentTarget: [null, null],
 						oneClick: false,
 					});
-					return ['ajaxblock-notify-error-idinactivenousername', [id]];
+					return { message: () => Messages.get('ajaxblock-notify-error-idinactivenousername', [id]) };
 				}
 			}
-			return null;
+			return { none: true };
 		}
 
 		if (username !== null) {
@@ -4978,9 +4938,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						currentTarget: [null, username],
 						oneClick: false,
 					});
-					// @ts-expect-error
-					const idMap = BlockLookup.toIdMap(blocks);
-					return new BlockLog(username, idMap, true);
+					return { log: () => BlockLog.generate(username, blockLookup, true) };
 				} else {
 					// Single active block
 					this.setTargetInternal({
@@ -4993,9 +4951,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						currentTarget: [blocks[0].id, username],
 						oneClick: true,
 					});
-					// @ts-expect-error
-					const idMap = BlockLookup.toIdMap(blocks);
-					return new BlockLog(username, idMap, false);
+					return { log: () => BlockLog.generate(username, blockLookup, false) };
 				}
 			} else {
 				// No active blocks
@@ -5005,7 +4961,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 					currentTarget: [null, username],
 					oneClick: false,
 				});
-				return ['ajaxblock-notify-error-cannotunblock', [username]];
+				return { message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
 			}
 		}
 
@@ -5111,135 +5067,224 @@ UnblockUser.supportsParam = function(param) {
  */
 class BlockLog {
 
-	// ---- Adapted from InvestigateHelper ----
+	/**
+	 * @param {string} username
+	 * @param {BlockLookup} blockLookup
+	 * @param {boolean} useRadio Whether to use OO.ui.RadioSelectWidget in the logs:
+	 * - `true`: Returns `OO.ui.RadioOptionWidget[]` with no option selected so that
+	 *   the user can choose which block to update.
+	 * - `false`: Returns `JQuery<HTMLDivElement>` with a block log, **only if**
+	 *   there is only one active block.
+	 * @returns {JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement> | null>}
+	 * `null` if the user does not have any active blocks.
+	 */
+	static generate(username, blockLookup, useRadio) {
+		const currentBlocks = blockLookup.getBlocksByUsername(username);
+		let /** @type {number=} */ earliestTimestamp = undefined;
+		if (currentBlocks) {
+			for (const { timestamp } of currentBlocks) {
+				const unixTsInSeconds = Date.parse(timestamp) / 1000;
+				if (!earliestTimestamp || earliestTimestamp > unixTsInSeconds) {
+					earliestTimestamp = unixTsInSeconds;
+				}
+			}
+		}
+
+		return $.when(
+			blockLookup.refreshDataByUsername(username),
+			this.getEntries(username)
+		).then((blocks, logevents) => {
+			if (blocks === null) {
+				return null;
+			}
+			/** @type {Map<number, ApiResponseQueryListBlocks>} */
+			const blockIdMap = new Map();
+			for (const block of blocks) {
+				blockIdMap.set(block.id, block);
+			}
+
+			const logMap = this.getLogMap(username, blockIdMap, logevents);
+
+			// TODO: Log entries should be cached
+			if (useRadio || blockIdMap.size > 1) {
+				const options = /** @type {OO.ui.RadioOptionWidget[]} */ ([]);
+				for (const [id, _] of blockIdMap) {
+					options.push(
+						new OO.ui.RadioOptionWidget({
+							data: id,
+							label: new OO.ui.HtmlSnippet(this.getLogLine(logMap, id)),
+						})
+					);
+				}
+				return options;
+			} else {
+				const $wrapper = $('<div>');
+				for (const [id, _] of blockIdMap) {
+					$wrapper.append(
+						$(`<div data-blockid="${id}">`)
+							.addClass('ajaxblock-dialog-logline')
+							.append(this.getLogLine(logMap, id))
+					);
+				}
+				return $wrapper;
+			}
+		});
+	}
 
 	/**
-	 * Retrieves detailed log entries for the given user's active blocks.
-	 *
-	 * @returns {JQuery.Promise<BlockLogMap>} A Promise resolving to a Map of block IDs to block log details.
-	 * The Promise could reject in the same way as mw.Api.
+	 * @param {string} username
+	 * @param {number} [earliestTimestamp]
+	 * @returns {JQuery.Promise<ApiResponseQueryListLogevents[]>}
 	 * @private
 	 */
-	getEntries() {
-		const { ids, earliestTimestamp } = this.data;
+	static getEntries(username, earliestTimestamp) {
 		return AjaxBlock.api.get({
-			action: 'query',
-			formatversion: '2',
 			list: 'logevents',
 			leprop: 'user|type|timestamp|parsedcomment|details',
 			letype: 'block',
 			leend: earliestTimestamp,
-			letitle: `User:${this.username}`,
+			letitle: `User:${username}`,
 			lelimit: 'max',
 			uselang: wgUserLanguage
 		}).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
-			const logevents = res && res.query && res.query.logevents;
-			if (!logevents) {
-				return failAsEmptyResult(res, jqXHR);
+			if (res && res.query && res.query.logevents) {
+				return res.query.logevents;
 			}
-			/**
-			 * @type {BlockLogMap}
-			 */
-			const ret = new Map();
-			/**
-			 * Given a block log entry, attempts to find its corresponding active block
-			 * by matching the block timestamp.
-			 *
-			 * @param {ApiResponseQueryListLogevents} log A block log entry from the API.
-			 * @returns {number=} The matching block ID, or `undefined` if no match was found.
-			 */
-			const findId = (log) => {
-				for (const [id, block] of ids) {
-					if (block.timestamp === log.timestamp) {
-						return id;
-					}
-				}
-				return void 0;
-			};
-			const rIsoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
-
-			for (let i = 0; i < logevents.length; i++) {
-				let log = logevents[i];
-				let blockId = log.params.blockId;
-
-				// Log entries generated before the rollout of multiblocks lack a `blockId` property
-				// Plus, `list=blocks` returned information about the initial block even if it was
-				// later updated by a reblock (see also [[phab:T313661]])
-				if (typeof blockId !== 'number') {
-					// If the log entry has no `blockId`, try to infer it by matching against
-					// `list=blocks` data or traversing older logs depending on the action
-					switch (log.action) {
-						case 'block':
-							// For a block/block entry: check if it corresponds to an active block
-							// Note that `findId` is designed specifically for the bug mentioned above
-							blockId = findId(log);
-							break;
-						case 'reblock': {
-							// For a block/reblock entry: walk forward through older logs until the
-							// initial block is found. Because logs are anti-chronological, we must
-							// search toward larger indexes.
-							// - If we encounter another "reblock", skip it and keep searching.
-							// - If we encounter a "block", that’s the original → capture its ID.
-							// - If we encounter an "unblock" first, it may correspond to a different
-							//   earlier block, so the chain is ambiguous → stop searching.
-							let j = i + 1;
-							let done = false;
-							while (j < logevents.length && !done) {
-								const laterLog = logevents[j];
-								switch (laterLog.action) {
-									case 'block':
-										blockId = findId(laterLog);
-										done = true;
-										break;
-									case 'reblock':
-										break; // Ignore and keep searching
-									case 'unblock':
-										done = true; // Ambiguous case, stop here
-										break;
-								}
-								j++;
-							}
-							// Skip ahead so the outer loop doesn’t re-process logs we already examined
-							i = j;
-							break;
-						}
-						case 'unblock':
-							// For "unblock" entries: skip, since they cannot represent an active block
-							continue;
-					}
-				}
-				if (typeof blockId !== 'number' || !ids.has(blockId) || log.action === 'unblock') {
-					continue;
-				}
-				const { params, action, user, timestamp, parsedcomment } = log;
-				const { duration, flags, restrictions, finalTargetCount, sitewide, 'duration-l10n': duration_l10n } = params;
-				ret.set(blockId, {
-					subtype: action,
-					timestamp: timestamp.replace(/Z$/, ''),
-					sitewide,
-					count: finalTargetCount !== undefined ? finalTargetCount : 0,
-					performer: user,
-					target: this.username,
-					// `duration` being an ISO 8601 timestamp means either that an absolute time was specified
-					// for a new block, or that the expiry wasn't updated for a reblock. The latter case isn't
-					// 100% accurate though, as it's possible to specify an absolute time for a reblock. But
-					// this should be sufficient for the purpose here, because we would otherwise have to look
-					// for the initial block log overwritten by the reblock.
-					duration: rIsoTimestamp.test(duration)
-						? duration.replace(/Z$/, '') // Use the ISO 8601 timestamp as the block duration
-						: duration_l10n,
-					flags,
-					restrictions,
-					parsedcomment
-				});
-			}
-
-			if (!ret.size) {
-				return failAsEmptyResult(res, jqXHR);
-			}
-			return ret;
+			return failAsEmptyResult(res, jqXHR);
 		});
 	}
+
+	/**
+	 * @param {string} username
+	 * @param {Map<number, ApiResponseQueryListBlocks>} blockIdMap
+	 * @param {readonly ApiResponseQueryListLogevents[]} logevents
+	 * @returns {BlockLogMap}
+	 * @private
+	 */
+	static getLogMap(username, blockIdMap, logevents) {
+		/**
+		 * @type {BlockLogMap}
+		 */
+		const ret = new Map();
+		/**
+		 * Given a block log entry, attempts to find its corresponding active block
+		 * by matching the block timestamp.
+		 *
+		 * @param {ApiResponseQueryListLogevents} log A block log entry from the API.
+		 * @returns {number=} The matching block ID, or `undefined` if no match was found.
+		 */
+		const findId = (log) => {
+			for (const [id, { timestamp, by }] of blockIdMap) {
+				if (
+					// Exact match, or
+					timestamp === log.timestamp ||
+					// Allow a 1-second delay between the block and the log generation following it
+					// as long as the blocking sysop is identical
+					(Date.parse(timestamp) === (Date.parse(log.timestamp) - 1000) && by === log.user)
+				) {
+					return id;
+				}
+			}
+			return void 0;
+		};
+		const rIsoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+
+		for (let i = 0; i < logevents.length; i++) {
+			let log = logevents[i];
+			let blockId = log.params.blockId;
+
+			// Log entries generated before the rollout of multiblocks lack a `blockId` property
+			// Plus, `list=blocks` returned information about the initial block even if it was
+			// later updated by a reblock (see also [[phab:T313661]])
+			if (typeof blockId !== 'number') {
+				// If the log entry has no `blockId`, try to infer it by matching against
+				// `list=blocks` data or traversing older logs depending on the action
+				switch (log.action) {
+					case 'block':
+						// For a block/block entry: check if it corresponds to an active block
+						// Note that `findId` is designed specifically for the bug mentioned above
+						blockId = findId(log);
+						break;
+					case 'reblock': {
+						// For a block/reblock entry: walk forward through older logs until the
+						// initial block is found. Because logs are anti-chronological, we must
+						// search toward larger indexes.
+						// - If we encounter another "reblock", skip it and keep searching.
+						// - If we encounter a "block", that’s the original → capture its ID.
+						// - If we encounter an "unblock" first, it may correspond to a different
+						//   earlier block, so the chain is ambiguous → stop searching.
+						let j = i + 1;
+						let done = false;
+						while (j < logevents.length && !done) {
+							const laterLog = logevents[j];
+							switch (laterLog.action) {
+								case 'block':
+									blockId = findId(laterLog);
+									done = true;
+									break;
+								case 'reblock':
+									break; // Ignore and keep searching
+								case 'unblock':
+									done = true; // Ambiguous case, stop here
+									break;
+							}
+							j++;
+						}
+						// Skip ahead so the outer loop doesn’t re-process logs we already examined
+						i = j;
+						break;
+					}
+					case 'unblock':
+						// For "unblock" entries: skip, since they cannot represent an active block
+						continue;
+				}
+			}
+			if (typeof blockId !== 'number' || !blockIdMap.has(blockId) || log.action === 'unblock') {
+				continue;
+			}
+			const { params, action, user, timestamp, parsedcomment } = log;
+			const { duration, flags, restrictions, finalTargetCount, sitewide, 'duration-l10n': duration_l10n } = params;
+			ret.set(blockId, {
+				subtype: action,
+				timestamp: timestamp.replace(/Z$/, ''),
+				sitewide,
+				count: finalTargetCount !== undefined ? finalTargetCount : 0,
+				performer: user,
+				target: username,
+				// `duration` being an ISO 8601 timestamp means either that an absolute time was specified
+				// for a new block, or that the expiry wasn't updated for a reblock. The latter case isn't
+				// 100% accurate though, as it's possible to specify an absolute time for a reblock. But
+				// this should be sufficient for the purpose here, because we would otherwise have to look
+				// for the initial block log overwritten by the reblock.
+				duration: rIsoTimestamp.test(duration)
+					? duration.replace(/Z$/, '') // Use the ISO 8601 timestamp as the block duration
+					: duration_l10n,
+				flags,
+				restrictions,
+				parsedcomment
+			});
+		}
+
+		return ret;
+	}
+
+	/**
+	 * @param {BlockLogMap} logMap
+	 * @param {number} id
+	 * @returns {string}
+	 * @private
+	 */
+	static getLogLine(logMap, id) {
+		const logData = logMap.get(id);
+		if (logData !== undefined) {
+			return BlockLog.create(id, logData);
+		} else {
+			const line = Messages.get('ajaxblock-dialog-message-blocklog-missing', [BlockTarget.createBlockListLink(id).outerHTML]);
+			return `<span style="color: var(--color-icon-error, #f54739);">${line}</span>`;
+		}
+	}
+
+	// ---- Copied from InvestigateHelper ----
 
 	/**
 	 * Creates a block log line as raw HTML.
@@ -5381,68 +5426,7 @@ class BlockLog {
 		return $7;
 	}
 
-	// ---- Adaption end ----
-
-	/**
-	 * @param {string} username
-	 * @param {BlockIdMapValue} data
-	 * @param {boolean} useRadio Whether to use OO.ui.RadioSelectWidget in the logs:
-	 * - `true`: {@link generate} returns `OO.ui.RadioOptionWidget[]` with no option selected
-	 *   so that the user can choose which block to update.
-	 * - `false`: {@link generate} returns `JQuery<HTMLDivElement>` with a block log, **only if**
-	 *   there is only one active block.
-	 */
-	constructor(username, data, useRadio) {
-		/**
-		 * @readonly
-		 * @private
-		 */
-		this.username = username;
-		/**
-		 * @readonly
-		 * @private
-		 */
-		this.data = data;
-		/**
-		 * @readonly
-		 * @private
-		 */
-		this.useRadio = useRadio;
-	}
-
-	/**
-	 * @returns {JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement>>}
-	 */
-	generate() {
-		// TODO: Log entries should be cached
-		// TODO: Detect updates in blocks
-		return this.getEntries().then((blockLogMap) => {
-			if (this.useRadio || blockLogMap.size > 1) {
-				const options = /** @type {OO.ui.RadioOptionWidget[]} */ ([]);
-				for (const [id, logData] of blockLogMap) {
-					options.push(
-						new OO.ui.RadioOptionWidget({
-							data: id,
-							label: new OO.ui.HtmlSnippet(
-								BlockLog.create(id, logData)
-							),
-						})
-					);
-				}
-				return options;
-			} else {
-				const $wrapper = $('<div>');
-				for (const [id, logData] of blockLogMap) {
-					$wrapper.append(
-						$(`<div data-blockid="${id}">`)
-							.addClass('ajaxblock-dialog-logline')
-							.append(BlockLog.create(id, logData))
-					);
-				}
-				return $wrapper;
-			}
-		});
-	}
+	// ---- Copy end ----
 
 }
 
@@ -5483,7 +5467,7 @@ function nonwritePost() {
 function failAsEmptyResult(res, jqXHR) {
 	return $.Deferred().reject(
 		'ok-but-empty',
-		'OK response but empty result',
+		'OK response but empty result (check HTTP headers?)',
 		res,
 		jqXHR
 	);
@@ -5609,9 +5593,9 @@ AjaxBlockLogo.svg = `
  * @typedef {import('./window/AjaxBlock').UnblockParams} UnblockParams
  * @typedef {import('./window/AjaxBlock').AbortCallback} AbortCallback
  * @typedef {import('./window/AjaxBlock').WarningContext} WarningContext
+ * @typedef {import('./window/AjaxBlock').TargetHandler} TargetHandler
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogevents} ApiResponseQueryListLogevents
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
- * @typedef {import('./window/InvestigateHelper').BlockIdMapValue} BlockIdMapValue
  * @typedef {import('./window/InvestigateHelper').BlockLogMap} BlockLogMap
  * @typedef {import('./window/InvestigateHelper').BlockLogMapValue} BlockLogMapValue
  * @typedef {import('./window/InvestigateHelper').BlockFlags} BlockFlags
@@ -5629,13 +5613,6 @@ AjaxBlockLogo.svg = `
  * A number key always indicates it's mapped to autoblock-unblock links.
  *
  * @typedef {Map<string | number, BlockLink[]>} BlockLinkMap
- */
-/**
- * @typedef {BlockLog | Parameters<typeof Messages['get']> | null} TargetHandler
- * One of the following:
- * - `null`: No blocker to open the dialog.
- * - `BlockLog`: Block logs should be generated via {@link BlockLog.generate}.
- * - `array`: Arguments for {@link Messages.get} that explains why the block cannot be processed.
  */
 
 AjaxBlock.init();
