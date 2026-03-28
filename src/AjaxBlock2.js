@@ -5111,10 +5111,15 @@ class BlockLog {
 			if (useRadio || blockIdMap.size > 1) {
 				const options = /** @type {OO.ui.RadioOptionWidget[]} */ ([]);
 				for (const [id, _] of blockIdMap) {
+					const $label = $('<span>').append(this.getLogLine(logMap, id));
+					$label.find('a').each((_, a) => {
+						// Prevent radio option selection when clicking links inside labels
+						a.addEventListener('mousedown', (e) => e.stopImmediatePropagation());
+					});
 					options.push(
 						new OO.ui.RadioOptionWidget({
 							data: id,
-							label: new OO.ui.HtmlSnippet(this.getLogLine(logMap, id)),
+							label: $label,
 						})
 					);
 				}
