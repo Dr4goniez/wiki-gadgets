@@ -3,6 +3,8 @@ import { ApiResponseQueryListLogevents } from './InvestigateHelper';
 
 export type BlockPageNames = 'Block' | 'Unblock';
 
+export type BlockActions = 'block' | 'unblock';
+
 /**
  * Object that holds required data for script initialization.
  *
@@ -383,7 +385,7 @@ type UserParams = XOR<
 export type BaseParams =
 	UserParams &
 	WatchUserParams &
-	{ action: 'block' | 'unblock'; };
+	{ action: BlockActions; };
 
 export type BlockParams =
 	BaseParams &

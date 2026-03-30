@@ -468,25 +468,10 @@ class AjaxBlock {
 				ids.add(id);
 			}
 
-			// Create a map of supported parameters to their values
-			const params = /** @type {Map<string, string>} */ (new Map());
-			const SpecialPage = isUnblockLink ? UnblockUser : BlockUser;
-			for (const [key, value] of query.entries()) {
-				if (SpecialPage.supportsParam(key)) {
-					params.set(key, clean(value));
-				}
-			}
-			const wpEditingRestriction = params.get('wpEditingRestriction');
-			if (wpEditingRestriction !== undefined) {
-				// Move wpEditingRestriction to last so that BlockUser.applyParams() prioritizes it
-				params.delete('wpEditingRestriction');
-				params.set('wpEditingRestriction', wpEditingRestriction);
-			}
-
 			// Register the valid link
 			links.push({
 				anchor: a,
-				params,
+				params: ParamApplier.normalizeSearchParams(linkType, query),
 				target: new BlockTarget(id, username),
 				type: linkType,
 				locked: false,
@@ -2973,7 +2958,7 @@ function AjaxBlockDialogFactory() {
 				if (!proceed) {
 					return false;
 				}
-				this.getActiveField().addParamApplier(data);
+				ParamApplier.addSearchParamApplier(this, data);
 				if (this.blockLogGenerator) {
 					this.pushPending();
 					this.content.toggle(false);
@@ -3408,7 +3393,6 @@ class AjaxBlockDialogContent {
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
-		 * @protected
 		 */
 		this.watchUser = new OO.ui.CheckboxInputWidget();
 		/**
@@ -3526,57 +3510,6 @@ class AjaxBlockDialogContent {
 		params.watchuser = true;
 		params.watchlistexpiry = DropdownUtil.getSelectedOptionValue(this.watchlistExpiry);
 		return params;
-	}
-
-	/**
-	 * Appends a message box with an "apply parameters" button.
-	 *
-	 * @param {BlockLink} data
-	 * @returns {this}
-	 */
-	addParamApplier(data) {
-		if (!data.params.size) {
-			return this;
-		}
-
-		const applier = document.createElement('a');
-		applier.role = 'button';
-		applier.href = '#';
-		applier.textContent = Messages.get('ajaxblock-dialog-message-predefinedparams-apply');
-		applier.style.fontWeight = 'bold';
-		applier.addEventListener('click', (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			this.applyParams(data);
-		});
-
-		const mainMsg = Messages.get('ajaxblock-dialog-message-predefinedparams');
-		// eslint-disable-next-line no-control-regex
-		const isLastCharFullWidth = !!mainMsg && /[^\u0000-\u00ff]$/.test(mainMsg);
-		this.addMessage({
-			label: $('<span>').append(
-				mainMsg,
-				isLastCharFullWidth ? Messages.get('word-separator') : '',
-				Messages.get('parentheses-start'),
-				applier,
-				Messages.get('parentheses-end')
-			),
-			type: 'notice',
-		});
-
-		return this;
-	}
-
-	/**
-	 * Applies URL parameters to dialog fields.
-	 *
-	 * @param {BlockLink} data
-	 * @returns {void}
-	 * @abstract
-	 */
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	applyParams(data) {
-		// Noop
 	}
 
 	/**
@@ -4067,7 +4000,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: false,
 						addBlock: true,
 					});
-					return { log: () => BlockLog.generate(username, blockLookup, true) };
+					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, applier: true }) };
 				} else if (block.user) {
 					// Unambiguous block
 					this.setTargetInternal({
@@ -4081,7 +4014,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: true,
 						addBlock: true,
 					});
-					return { log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, false) };
+					return { log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, { applier: true }) };
 				} else {
 					// Autoblock (cannot reblock)
 					this.setTargetInternal({
@@ -4113,7 +4046,7 @@ class BlockUser extends AjaxBlockDialogContent {
 							oneClick: false,
 							addBlock: true,
 						});
-						return { log: () => BlockLog.generate(username, blockLookup, true) };
+						return { log: () => BlockLog.generate(username, blockLookup, { radio: true, applier: true }) };
 					} else {
 						// No other active blocks: Allow a username-based block
 						this.setTargetInternal({
@@ -4150,7 +4083,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: false,
 						addBlock: true,
 					});
-					return { log: () => BlockLog.generate(username, blockLookup, true) };
+					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, applier: true }) };
 				} else {
 					// Single active block
 					this.setTargetInternal({
@@ -4164,7 +4097,7 @@ class BlockUser extends AjaxBlockDialogContent {
 						oneClick: true,
 						addBlock: true,
 					});
-					return { log: () => BlockLog.generate(username, blockLookup, false) };
+					return { log: () => BlockLog.generate(username, blockLookup, { applier: true }) };
 				}
 			} else {
 				// No active blocks
@@ -4217,294 +4150,6 @@ class BlockUser extends AjaxBlockDialogContent {
 		this.cbAddBlock.setSelected(false);
 
 		return this;
-	}
-
-	/**
-	 * @param {BlockLink} data
-	 * @returns {void | JQuery.Promise<void>}
-	 * @override
-	 */
-	applyParams(data) {
-		const { params, target } = data;
-		const targetType = target.getType();
-
-		/**
-		 * @template T
-		 * @typedef {{
-		 *   getter: (value: string, key: string) => T | JQuery.Promise<T>;
-		 *   setter: (value: T) => any;
-		 *   default: T;
-		 * }} ParamHandler
-		 */
-		const paramMap = {
-			/** @type {ParamHandler<string>} */
-			wpExpiry: {
-				setter: this.setExpiry.bind(this),
-				getter: (v) => v,
-				default: '',
-			},
-			/** @type {ParamHandler<string>} */
-			wpReason: {
-				setter: this.setReason.bind(this),
-				getter: (v) => {
-					const ret = [];
-
-					const item = this.reason1.getMenu().findItemFromData(v);
-					if (item instanceof OO.ui.OptionWidget) {
-						ret.push(item.getData());
-					}
-
-					ret.push(params.get('wpReason-other'));
-
-					return ret.filter(Boolean).join(Messages.get('colon-separator'));
-				},
-				default: '',
-			},
-			/** @type {ParamHandler<boolean>} */
-			wpEditingRestriction: {
-				setter: this.partialBlock.setSelected.bind(this.partialBlock),
-				getter: (v) => v === 'partial',
-				default: false,
-			},
-			/** @type {ParamHandler<string[]>} */
-			wpPageRestrictions: {
-				setter: (values) => {
-					const menu = this.partialBlockPages.getMenu();
-					const items = [];
-					for (const title of values) {
-						if (!menu.findItemFromData(title)) {
-							items.push(
-								this.partialBlockPages.createMenuOptionWidget(title)
-							);
-						}
-					}
-					menu.addItems(items);
-					this.partialBlockPages.setValue(values);
-					menu.removeItems(items);
-				},
-				getter: (v, k) => {
-					const tempValues = /** @type {Set<string>} */ new Set();
-					const invalidValues = /** @type {Set<string>} */ new Set();
-
-					for (let t of v.split('\n')) {
-						t = t.trim();
-						const title = mw.Title.newFromText(t);
-						if (title && title.getNamespaceId() >= 0) {
-							tempValues.add(title.getPrefixedText());
-						} else {
-							invalidValues.add(t);
-						}
-					}
-
-					if (!tempValues.size) {
-						if (invalidValues.size) {
-							BlockUser.notifyInvalidValues(k, v, invalidValues);
-						}
-						return /** @type {string[]} */ ([]);
-					}
-
-					const apilimit = this.dialog.ajaxBlock.permissionManager.getApiLimit();
-					const ajaxOptions = nonwritePost();
-					return (
-						/**
-						 * @param {string[]} batch
-						 * @param {number} offset
-						 * @param {Set<string>} ret
-						 * @returns {JQuery.Promise<string[]>}
-						 */
-						function request(batch, offset, ret = new Set()) {
-							const titles = batch.slice(offset, offset + apilimit);
-							return AjaxBlock.api.post({
-								titles,
-								errorformat: 'html',
-								errorlang: wgUserLanguage,
-								errorsuselocal: true,
-							}, ajaxOptions).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
-								let pages = res && res.query && res.query.pages;
-								const interwiki = res && res.query && res.query.interwiki;
-								if (!Array.isArray(pages) && !Array.isArray(interwiki)) {
-									return failAsEmptyResult(res, jqXHR);
-								}
-								pages = pages || [];
-								if (Array.isArray(interwiki)) {
-									pages.push(...interwiki);
-								}
-								for (const page of pages) {
-									const { invalid, iw, missing, special, title } = page;
-									if (invalid || iw || missing || special) {
-										invalidValues.add(title);
-										continue;
-									}
-									ret.add(title);
-								}
-								offset += apilimit;
-								if (batch[offset]) {
-									return request(batch, offset, ret);
-								}
-								return [...ret];
-							});
-						}
-					)(Array.from(tempValues), 0).then((titles) => {
-						if (invalidValues.size) {
-							BlockUser.notifyInvalidValues(k, v, invalidValues);
-						}
-						return titles.slice(0, this.partialBlockPages.limit);
-					});
-				},
-				default: [],
-			},
-			/** @type {ParamHandler<string[]>} */
-			wpNamespaceRestrictions: {
-				setter: this.partialBlockNamespaces.setValue.bind(this.partialBlockNamespaces),
-				getter: /** @param {string} v @param {string} k */ (v, k) => {
-					// XXX: MwWidgetsNamespacesMenuOptionWidget.data is a string
-					const values = /** @type {Set<string>} */ new Set();
-					const invalidValues = /** @type {Set<string>} */ new Set();
-
-					for (let ns of v.split('\n')) {
-						ns = ns.trim();
-						if (/^\d+$/.test(ns) && BlockUser.isValidNamespaceRestrictionValue(+ns)) {
-							values.add(ns); // Namespace IDs are stored as strings
-						} else {
-							invalidValues.add(ns);
-						}
-					}
-
-					if (invalidValues.size) {
-						BlockUser.notifyInvalidValues(k, v, invalidValues);
-					}
-					return [...values];
-				},
-				default: [],
-			},
-			/** @type {ParamHandler<boolean>} */
-			wpCreateAccount: {
-				setter: this.cbCreateAccount.setSelected.bind(this.cbCreateAccount),
-				getter: /** @param {string} v */ (v) => toPHPBool(v),
-				default: true,
-			},
-			/** @type {ParamHandler<boolean>} */
-			wpDisableEmail: {
-				setter: this.cbSendEmail.setSelected.bind(this.cbSendEmail),
-				getter: /** @param {string} v */ (v) => toPHPBool(v),
-				default: false,
-			},
-			/** @type {ParamHandler<boolean>} */
-			wpDisableUTEdit: {
-				setter: this.cbUserTalk.setSelected.bind(this.cbUserTalk),
-				getter: /** @param {string} v */ (v) => toPHPBool(v),
-				default: false,
-			},
-			/** @type {ParamHandler<boolean>} */
-			wpAutoBlock: {
-				setter: this.cbAutoblock.setSelected.bind(this.cbAutoblock),
-				getter: /** @param {string} v */ (v) => targetType !== 'anon' && toPHPBool(v),
-				default: targetType !== 'anon',
-			},
-			/** @type {ParamHandler<boolean>} */
-			wpHideUser: {
-				setter: this.cbHideName.setSelected.bind(this.cbHideName),
-				getter: /** @param {string} v */ (v) => (
-					this.dialog.ajaxBlock.permissionManager.isAllowed('hideuser') && targetType !== 'anon' && toPHPBool(v)
-				),
-				default: false,
-			},
-			/** @type {ParamHandler<boolean>} */
-			wpHardBlock: {
-				setter: this.cbHardblock.setSelected.bind(this.cbHardblock),
-				getter: /** @param {string} v */ (v) => targetType === 'anon' && toPHPBool(v),
-				default: false,
-			},
-			/** @type {ParamHandler<boolean>} */
-			wpWatch: {
-				setter: this.watchUser.setSelected.bind(this.watchUser),
-				getter: /** @param {string} v */ (v) => toPHPBool(v),
-				default: false,
-			},
-		};
-
-		// Apply values from URL parameters
-		const applied = /** @type {Set<keyof typeof paramMap>} */ (new Set());
-		const promises = [];
-		for (const [key, value] of params) {
-			if (!Object.prototype.hasOwnProperty.call(paramMap, key)) {
-				console.warn('Unrecognized parameter: ' + key);
-				continue;
-			}
-			const param = /** @type {keyof typeof paramMap} */ (key);
-			applied.add(param);
-			const { getter, setter } = paramMap[param];
-			const val = getter(value, param);
-			if (isObject(val) && typeof val.then === 'function') {
-				// @ts-expect-error
-				const p = val.then(setter).catch((_code, res) => AjaxBlock.api.getErrorMessage(res));
-				promises.push(p);
-			} else {
-				// @ts-expect-error
-				setter(val);
-			}
-		}
-
-		// Apply defaults for parameters that were not provided
-		for (const key in paramMap) {
-			const param = /** @type {keyof typeof paramMap} */ (key);
-			if (!applied.has(param)) {
-				const { setter, default: def } = paramMap[param];
-				// @ts-expect-error
-				setter(def);
-			}
-		}
-
-		// Action restrictions cannot be preset via URL parameters, so reset them all
-		for (const checkbox of Object.values(this.partialBlockActions)) {
-			checkbox.setSelected(false);
-		}
-
-		// If any getter returned a Promise, show the pending animation and "lock"
-		// the dialog using the overlay. Unlock it again when all promises resolve.
-		if (promises.length) {
-			this.dialog.pushPending();
-			this.dialog.overlay.toggle(true);
-
-			return $.when(...promises).always((...args) => {
-				args.forEach(($err) => {
-					if ($err instanceof $) {
-						// @ts-expect-error
-						mw.notify($err, { type: 'error', autoHideSeconds: 'long' });
-					}
-				});
-				this.dialog.popPending();
-				this.dialog.overlay.toggle(false);
-			});
-		}
-	}
-
-	/**
-	 * @param {string} paramKey
-	 * @param {string} paramValue
-	 * @param {Set<string>} invalidValues
-	 * @private
-	 */
-	static notifyInvalidValues(paramKey, paramValue, invalidValues) {
-		const $msg = $('<div>');
-		const colon = Messages.get('colon-separator');
-
-		$msg.append(
-			$('<div>').append(
-				document.createTextNode(Messages.get('ajaxblock-notify-warning-invalidqueryparam-param')),
-				document.createTextNode(colon),
-				$('<code>').text(`${paramKey}=${paramValue.replace(/\n/g, '\\n')}`)
-			),
-			$('<div>').append(
-				document.createTextNode(Messages.get('ajaxblock-notify-warning-invalidqueryparam-values')),
-				document.createTextNode(colon),
-				Messages.listToText(
-					[...invalidValues].map(v => `<code>${v}</code>`)
-				)
-			).css({ 'margin-top': '0.5em' })
-		);
-
-		mw.notify($msg, { type: 'warn', autoHideSeconds: 'long' });
 	}
 
 	/**
@@ -4737,14 +4382,6 @@ class BlockUser extends AjaxBlockDialogContent {
 	}
 
 	/**
-	 * @param {string} param
-	 * @returns {boolean}
-	 */
-	static supportsParam(param) {
-		return this.supportedQueryParams.has(param);
-	}
-
-	/**
 	 * @param {number} namespace
 	 * @returns {boolean}
 	 */
@@ -4753,25 +4390,6 @@ class BlockUser extends AjaxBlockDialogContent {
 	}
 
 }
-/**
- * @type {Set<string>}
- */
-BlockUser.supportedQueryParams = new Set([
-	'wpExpiry',
-	'wpReason',
-	'wpReason-other',
-	// 'wpRemovalReason', // Handled in UnblockUser instead
-	'wpEditingRestriction',
-	'wpPageRestrictions',
-	'wpNamespaceRestrictions',
-	'wpCreateAccount', // Default: true
-	'wpDisableEmail',
-	'wpDisableUTEdit',
-	'wpAutoBlock',
-	'wpHideUser',
-	'wpHardBlock',
-	'wpWatch',
-]);
 /**
  * @type {Set<number>}
  */
@@ -4802,7 +4420,6 @@ class UnblockUser extends AjaxBlockDialogContent {
 		/**
 		 * @type {OO.ui.TextInputWidget}
 		 * @readonly
-		 * @private
 		 */
 		this.reason = new OO.ui.TextInputWidget({
 			placeholder: Messages.get('block-removal-reason-placeholder')
@@ -4858,7 +4475,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						currentTarget: [null, username],
 						oneClick: false,
 					});
-					return { log: () => BlockLog.generate(username, blockLookup, true) };
+					return { log: () => BlockLog.generate(username, blockLookup, { radio: true }) };
 				} else if (block.user) {
 					// Unambiguous block
 					this.setTargetInternal({
@@ -4871,7 +4488,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						currentTarget: [id, username],
 						oneClick: true,
 					});
-					return { log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, false) };
+					return { log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup) };
 				} else {
 					// Autoblock
 					if (!block.automatic) {
@@ -4905,7 +4522,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 							currentTarget: [null, username],
 							oneClick: false,
 						});
-						return { log: () => BlockLog.generate(username, blockLookup, true) };
+						return { log: () => BlockLog.generate(username, blockLookup, { radio: true }) };
 					} else {
 						// No other active blocks (cannot be unblocked)
 						this.setTargetInternal({
@@ -4940,7 +4557,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						currentTarget: [null, username],
 						oneClick: false,
 					});
-					return { log: () => BlockLog.generate(username, blockLookup, true) };
+					return { log: () => BlockLog.generate(username, blockLookup, { radio: true }) };
 				} else {
 					// Single active block
 					this.setTargetInternal({
@@ -4953,7 +4570,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 						currentTarget: [blocks[0].id, username],
 						oneClick: true,
 					});
-					return { log: () => BlockLog.generate(username, blockLookup, false) };
+					return { log: () => BlockLog.generate(username, blockLookup) };
 				}
 			} else {
 				// No active blocks
@@ -4997,21 +4614,6 @@ class UnblockUser extends AjaxBlockDialogContent {
 	}
 
 	/**
-	 * @param {BlockLink} data
-	 * @returns {void}
-	 * @override
-	 */
-	applyParams(data) {
-		const { params } = data;
-
-		const reason = params.get('wpRemovalReason') || params.get('wpReason') || '';
-		this.reason.setValue(reason);
-
-		const watch = toPHPBool(params.get('wpWatch'));
-		this.watchUser.setSelected(watch);
-	}
-
-	/**
 	 * Builds parameters to the unblock API.
 	 *
 	 * @param {BlockLink} data
@@ -5051,18 +4653,6 @@ class UnblockUser extends AjaxBlockDialogContent {
 	}
 
 }
-UnblockUser.supportedQueryParams = new Set([
-	'wpRemovalReason', // XXX: This is actually for Special:Block
-	'wpReason',
-	'wpWatch',
-]);
-/**
- * @param {string} param
- * @returns {boolean}
- */
-UnblockUser.supportsParam = function(param) {
-	return this.supportedQueryParams.has(param);
-};
 
 /**
  * Class that generates block loglines for a given blocked user.
@@ -5072,15 +4662,19 @@ class BlockLog {
 	/**
 	 * @param {string} username
 	 * @param {BlockLookup} blockLookup
-	 * @param {boolean} useRadio Whether to use OO.ui.RadioSelectWidget in the logs:
+	 * @param {object} [options]
+	 * @param {boolean} [options.radio] Whether to use OO.ui.RadioSelectWidget in the logs:
 	 * - `true`: Returns `OO.ui.RadioOptionWidget[]` with no option selected so that
 	 *   the user can choose which block to update.
 	 * - `false`: Returns `JQuery<HTMLDivElement>` with a block log, **only if**
 	 *   there is only one active block.
+	 * @param {boolean} [options.applier] Whether to generate a param applier.
 	 * @returns {JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement> | null>}
 	 * `null` if the user does not have any active blocks.
 	 */
-	static generate(username, blockLookup, useRadio) {
+	static generate(username, blockLookup, options = {}) {
+		const { radio = false, applier = false } = options;
+
 		const currentBlocks = blockLookup.getBlocksByUsername(username);
 		let /** @type {number=} */ earliestTimestamp = undefined;
 		if (currentBlocks) {
@@ -5108,14 +4702,17 @@ class BlockLog {
 			const logMap = this.getLogMap(username, blockIdMap, logevents);
 
 			// TODO: Log entries should be cached
-			if (useRadio || blockIdMap.size > 1) {
+			// TODO: Add a param applier
+			if (radio || blockIdMap.size > 1) {
 				const options = /** @type {OO.ui.RadioOptionWidget[]} */ ([]);
 				for (const [id, _] of blockIdMap) {
-					const $label = $('<span>').append(this.getLogLine(logMap, id));
+					const logData = logMap.get(id);
+					const $label = $('<span>').append(this.getLogLine(logData, id));
 					$label.find('a').each((_, a) => {
 						// Prevent radio option selection when clicking links inside labels
 						a.addEventListener('mousedown', (e) => e.stopImmediatePropagation());
 					});
+
 					options.push(
 						new OO.ui.RadioOptionWidget({
 							data: id,
@@ -5127,10 +4724,11 @@ class BlockLog {
 			} else {
 				const $wrapper = $('<div>');
 				for (const [id, _] of blockIdMap) {
+					const logData = logMap.get(id);
 					$wrapper.append(
 						$(`<div data-blockid="${id}">`)
 							.addClass('ajaxblock-dialog-logline')
-							.append(this.getLogLine(logMap, id))
+							.append(this.getLogLine(logData, id))
 					);
 				}
 				return $wrapper;
@@ -5276,13 +4874,12 @@ class BlockLog {
 	}
 
 	/**
-	 * @param {BlockLogMap} logMap
+	 * @param {BlockLogMapValue | undefined} logData
 	 * @param {number} id
 	 * @returns {string}
 	 * @private
 	 */
-	static getLogLine(logMap, id) {
-		const logData = logMap.get(id);
+	static getLogLine(logData, id) {
 		if (logData !== undefined) {
 			return BlockLog.create(id, logData);
 		} else {
@@ -5436,6 +5033,445 @@ class BlockLog {
 	// ---- Copy end ----
 
 }
+
+class ParamApplier {
+
+	/**
+	 * @param {BlockActions} type
+	 * @param {string} paramKey
+	 * @returns {boolean}
+	 */
+	static isSearchParamSupported(type, paramKey) {
+		return this.supportedSearchParams[type].has(paramKey);
+	}
+
+	/**
+	 * @param {BlockActions} type
+	 * @param {URLSearchParams} searchParams
+	 * @returns {BlockLink['params']}
+	 */
+	static normalizeSearchParams(type, searchParams) {
+		const map = /** @type {Map<string, string>} */ (new Map());
+
+		for (const [key, value] of searchParams.entries()) {
+			if (this.isSearchParamSupported(type, key)) {
+				map.set(key, clean(value));
+			}
+		}
+
+		// Reorder/cast some parameters
+		if (type === 'block') {
+			// Consistently use "wpReason-other": See BlockUser.setReason()
+			const reasons = [map.get('wpReason'), map.get('wpReason-other')].filter(v => v !== undefined && v.replace(/_/g, ' ').trim());
+			map.delete('wpReason');
+			if (reasons.length) {
+				map.set('wpReason-other', reasons.join(Messages.get('comma-separator')));
+			}
+
+			// Move wpEditingRestriction to last so that the applier prioritizes it
+			const wpEditingRestriction = map.get('wpEditingRestriction');
+			if (wpEditingRestriction !== undefined) {
+				map.delete('wpEditingRestriction');
+				map.set('wpEditingRestriction', wpEditingRestriction);
+			}
+		}
+
+		return map;
+	}
+
+	/**
+	 * @returns {{ wrapper: HTMLElement; applier: HTMLAnchorElement; }}
+	 */
+	static generateApplierLink() {
+		const applier = document.createElement('a');
+		applier.role = 'button';
+		applier.href = '#';
+		applier.textContent = Messages.get('ajaxblock-dialog-message-predefinedparams-apply');
+		applier.style.fontWeight = 'bold';
+
+		const wrapper = document.createElement('span');
+		wrapper.appendChild(document.createTextNode(Messages.get('parentheses-start')));
+		wrapper.appendChild(applier);
+		wrapper.appendChild(document.createTextNode(Messages.get('parentheses-end')));
+
+		return { wrapper, applier };
+	}
+
+	/**
+	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+	 * @param {BlockLink} data
+	 * @returns {void}
+	 */
+	static addSearchParamApplier(dialog, data) {
+		const { params, target } = data;
+		if (!params.size) {
+			return;
+		}
+
+		const targetType = target.getType();
+		const { wrapper, applier } = this.generateApplierLink();
+
+		applier.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			this.applySearchParams(dialog, params, targetType);
+		});
+
+		const mainMsg = Messages.get('ajaxblock-dialog-message-predefinedparams');
+		// eslint-disable-next-line no-control-regex
+		const isLastCharFullWidth = !!mainMsg && /[^\u0000-\u00ff]$/.test(mainMsg);
+		dialog.getActiveField().addMessage({
+			label: $('<span>').append(
+				mainMsg,
+				isLastCharFullWidth ? Messages.get('word-separator') : '',
+				wrapper
+			),
+			type: 'notice',
+		});
+	}
+
+	/**
+	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+	 * @param {BlockLink['params']} params
+	 * @param {BlockTargetType} targetType
+	 * @returns {void | JQuery.Promise<void>}
+	 */
+	static applySearchParams(dialog, params, targetType) {
+		if (dialog.getActiveField() instanceof BlockUser) {
+			return this.applyBlockSearchParams(dialog, params, targetType);
+		} else {
+			return this.applyUnblockSearchParams(dialog, params, targetType);
+		}
+	}
+
+	/**
+	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+	 * @param {BlockLink['params']} params
+	 * @param {BlockTargetType} targetType
+	 * @returns {void | JQuery.Promise<void>}
+	 * @private
+	 */
+	static applyBlockSearchParams(dialog, params, targetType) {
+		const blockUser = dialog.getActiveField();
+		if (!(blockUser instanceof BlockUser)) {
+			throw new Error('Expected the active field to be a BlockUser instance.');
+		}
+
+		/**
+		 * @template T
+		 * @typedef {{
+		 *   getter: (value: string, key: string) => T | JQuery.Promise<T>;
+		 *   setter: (value: T) => any;
+		 *   default: T;
+		 * }} ParamHandler
+		 */
+		const paramMap = {
+			/** @type {ParamHandler<string>} */
+			wpExpiry: {
+				setter: blockUser.setExpiry.bind(blockUser),
+				getter: (v) => v,
+				default: '',
+			},
+			/**
+			 * @type {ParamHandler<string>}
+			 * Note: `wpReason` is cast to `wpReason-other` in {@link normalizeSearchParams}
+			 */
+			'wpReason-other': {
+				setter: blockUser.setReason.bind(blockUser),
+				getter: (v) => v,
+				default: '',
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpEditingRestriction: {
+				setter: blockUser.partialBlock.setSelected.bind(blockUser.partialBlock),
+				getter: (v) => v === 'partial',
+				default: false,
+			},
+			/** @type {ParamHandler<string[]>} */
+			wpPageRestrictions: {
+				setter: (values) => {
+					const menu = blockUser.partialBlockPages.getMenu();
+					const items = [];
+					for (const title of values) {
+						if (!menu.findItemFromData(title)) {
+							items.push(
+								blockUser.partialBlockPages.createMenuOptionWidget(title)
+							);
+						}
+					}
+					menu.addItems(items);
+					blockUser.partialBlockPages.setValue(values);
+					menu.removeItems(items);
+				},
+				getter: (v, k) => {
+					const tempValues = /** @type {Set<string>} */ new Set();
+					const invalidValues = /** @type {Set<string>} */ new Set();
+
+					for (let t of v.split('\n')) {
+						t = t.trim();
+						const title = mw.Title.newFromText(t);
+						if (title && title.getNamespaceId() >= 0) {
+							tempValues.add(title.getPrefixedText());
+						} else {
+							invalidValues.add(t);
+						}
+					}
+
+					if (!tempValues.size) {
+						if (invalidValues.size) {
+							this.notifyInvalidValues(k, v, invalidValues);
+						}
+						return /** @type {string[]} */ ([]);
+					}
+
+					const apilimit = dialog.ajaxBlock.permissionManager.getApiLimit();
+					const ajaxOptions = nonwritePost();
+					return (
+						/**
+						 * @param {string[]} batch
+						 * @param {number} offset
+						 * @param {Set<string>} ret
+						 * @returns {JQuery.Promise<string[]>}
+						 */
+						function request(batch, offset, ret = new Set()) {
+							const titles = batch.slice(offset, offset + apilimit);
+							return AjaxBlock.api.post({
+								titles,
+							}, ajaxOptions).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+								let pages = res && res.query && res.query.pages;
+								const interwiki = res && res.query && res.query.interwiki;
+								if (!Array.isArray(pages) && !Array.isArray(interwiki)) {
+									return failAsEmptyResult(res, jqXHR);
+								}
+								pages = pages || [];
+								if (Array.isArray(interwiki)) {
+									pages.push(...interwiki);
+								}
+								for (const page of pages) {
+									const { invalid, iw, missing, special, title } = page;
+									if (invalid || iw || missing || special) {
+										invalidValues.add(title);
+										continue;
+									}
+									ret.add(title);
+								}
+								offset += apilimit;
+								if (batch[offset]) {
+									return request(batch, offset, ret);
+								}
+								return [...ret];
+							});
+						}
+					)(Array.from(tempValues), 0).then((titles) => {
+						if (invalidValues.size) {
+							this.notifyInvalidValues(k, v, invalidValues);
+						}
+						return titles.slice(0, blockUser.partialBlockPages.limit);
+					});
+				},
+				default: [],
+			},
+			/** @type {ParamHandler<string[]>} */
+			wpNamespaceRestrictions: {
+				setter: blockUser.partialBlockNamespaces.setValue.bind(blockUser.partialBlockNamespaces),
+				getter: /** @param {string} v @param {string} k */ (v, k) => {
+					// XXX: MwWidgetsNamespacesMenuOptionWidget.data is a string
+					const values = /** @type {Set<string>} */ new Set();
+					const invalidValues = /** @type {Set<string>} */ new Set();
+
+					for (let ns of v.split('\n')) {
+						ns = ns.trim();
+						if (/^\d+$/.test(ns) && BlockUser.isValidNamespaceRestrictionValue(+ns)) {
+							values.add(ns); // Namespace IDs are stored as strings
+						} else {
+							invalidValues.add(ns);
+						}
+					}
+
+					if (invalidValues.size) {
+						this.notifyInvalidValues(k, v, invalidValues);
+					}
+					return [...values];
+				},
+				default: [],
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpCreateAccount: {
+				setter: blockUser.cbCreateAccount.setSelected.bind(blockUser.cbCreateAccount),
+				getter: /** @param {string} v */ (v) => toPHPBool(v),
+				default: true,
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpDisableEmail: {
+				setter: blockUser.cbSendEmail.setSelected.bind(blockUser.cbSendEmail),
+				getter: /** @param {string} v */ (v) => toPHPBool(v),
+				default: false,
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpDisableUTEdit: {
+				setter: blockUser.cbUserTalk.setSelected.bind(blockUser.cbUserTalk),
+				getter: /** @param {string} v */ (v) => toPHPBool(v),
+				default: false,
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpAutoBlock: {
+				setter: blockUser.cbAutoblock.setSelected.bind(blockUser.cbAutoblock),
+				getter: /** @param {string} v */ (v) => targetType !== 'anon' && toPHPBool(v),
+				default: targetType !== 'anon',
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpHideUser: {
+				setter: blockUser.cbHideName.setSelected.bind(blockUser.cbHideName),
+				getter: /** @param {string} v */ (v) => (
+					dialog.ajaxBlock.permissionManager.isAllowed('hideuser') && targetType !== 'anon' && toPHPBool(v)
+				),
+				default: false,
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpHardBlock: {
+				setter: blockUser.cbHardblock.setSelected.bind(blockUser.cbHardblock),
+				getter: /** @param {string} v */ (v) => targetType === 'anon' && toPHPBool(v),
+				default: false,
+			},
+			/** @type {ParamHandler<boolean>} */
+			wpWatch: {
+				setter: blockUser.watchUser.setSelected.bind(blockUser.watchUser),
+				getter: /** @param {string} v */ (v) => toPHPBool(v),
+				default: false,
+			},
+		};
+
+		// Apply values from URL parameters
+		const applied = /** @type {Set<keyof typeof paramMap>} */ (new Set());
+		const promises = [];
+		for (const [key, value] of params) {
+			if (!Object.prototype.hasOwnProperty.call(paramMap, key)) {
+				if (!this.isSearchParamSupported('block', key)) {
+					// Warn only if the key isn't supported (paramMap lacks some elements in supportedSearchParams)
+					console.warn('Unrecognized parameter: ' + key);
+				}
+				continue;
+			}
+			const param = /** @type {keyof typeof paramMap} */ (key);
+			applied.add(param);
+			const { getter, setter } = paramMap[param];
+			const val = getter(value, param);
+			if (isObject(val) && typeof val.then === 'function') {
+				// @ts-expect-error
+				const p = val.then(setter).catch((_code, res) => AjaxBlock.api.getErrorMessage(res));
+				promises.push(p);
+			} else {
+				// @ts-expect-error
+				setter(val);
+			}
+		}
+
+		// Apply defaults for parameters that were not provided
+		for (const key in paramMap) {
+			const param = /** @type {keyof typeof paramMap} */ (key);
+			if (!applied.has(param)) {
+				const { setter, default: def } = paramMap[param];
+				// @ts-expect-error
+				setter(def);
+			}
+		}
+
+		// Action restrictions cannot be preset via URL parameters, so reset them all
+		for (const checkbox of Object.values(blockUser.partialBlockActions)) {
+			checkbox.setSelected(false);
+		}
+
+		// If any getter returned a Promise, show the pending animation and "lock"
+		// the dialog using the overlay. Unlock it again when all promises resolve.
+		if (promises.length) {
+			dialog.pushPending();
+			dialog.overlay.toggle(true);
+
+			return $.when(...promises).always((...args) => {
+				args.forEach(($err) => {
+					if ($err instanceof $) {
+						// @ts-expect-error
+						mw.notify($err, { type: 'error', autoHideSeconds: 'long' });
+					}
+				});
+				dialog.popPending();
+				dialog.overlay.toggle(false);
+			});
+		}
+	}
+
+	/**
+	 * @param {InstanceType<ReturnType<AjaxBlockDialogFactory>>} dialog
+	 * @param {BlockLink['params']} params
+	 * @param {BlockTargetType} _targetType
+	 * @returns {void}
+	 * @private
+	 */
+	static applyUnblockSearchParams(dialog, params, _targetType) {
+		const unblockUser = dialog.getActiveField();
+		if (!(unblockUser instanceof UnblockUser)) {
+			throw new Error('Expected the active field to be a UnblockUser instance.');
+		}
+
+		const reason = params.get('wpRemovalReason') || params.get('wpReason') || '';
+		unblockUser.reason.setValue(reason);
+
+		const watch = toPHPBool(params.get('wpWatch'));
+		unblockUser.watchUser.setSelected(watch);
+	}
+
+	/**
+	 * @param {string} paramKey
+	 * @param {string} paramValue
+	 * @param {Set<string>} invalidValues
+	 * @private
+	 */
+	static notifyInvalidValues(paramKey, paramValue, invalidValues) {
+		const $msg = $('<div>');
+		const colon = Messages.get('colon-separator');
+
+		$msg.append(
+			$('<div>').append(
+				document.createTextNode(Messages.get('ajaxblock-notify-warning-invalidqueryparam-param')),
+				document.createTextNode(colon),
+				$('<code>').text(`${paramKey}=${paramValue.replace(/\n/g, '\\n')}`)
+			),
+			$('<div>').append(
+				document.createTextNode(Messages.get('ajaxblock-notify-warning-invalidqueryparam-values')),
+				document.createTextNode(colon),
+				Messages.listToText(
+					[...invalidValues].map(v => `<code>${v}</code>`)
+				)
+			).css({ 'margin-top': '0.5em' })
+		);
+
+		mw.notify($msg, { type: 'warn', autoHideSeconds: 'long' });
+	}
+
+}
+ParamApplier.supportedSearchParams = {
+	block: new Set([
+		'wpExpiry',
+		'wpReason',
+		'wpReason-other',
+		// 'wpRemovalReason', // Handled in UnblockUser instead
+		'wpEditingRestriction',
+		'wpPageRestrictions',
+		'wpNamespaceRestrictions',
+		'wpCreateAccount', // Default: true
+		'wpDisableEmail',
+		'wpDisableUTEdit',
+		'wpAutoBlock',
+		'wpHideUser',
+		'wpHardBlock',
+		'wpWatch',
+	]),
+	unblock: new Set([
+		'wpRemovalReason', // XXX: This is actually for Special:Block
+		'wpReason',
+		'wpWatch',
+	]),
+};
 
 /**
  * Removes unicode bidirectional characters from the given string and trims it.
@@ -5593,6 +5629,7 @@ AjaxBlockLogo.svg = `
 
 /**
  * @typedef {import('./window/AjaxBlock').BlockPageNames} BlockPageNames
+ * @typedef {import('./window/AjaxBlock').BlockActions} BlockActions
  * @typedef {import('./window/AjaxBlock').Initializer} Initializer
  * @typedef {import('./window/AjaxBlock').ApiResponse} ApiResponse
  * @typedef {import('./window/AjaxBlock').ApiResponseBlock} ApiResponseBlock
@@ -5623,7 +5660,7 @@ AjaxBlockLogo.svg = `
  * @prop {HTMLAnchorElement} anchor
  * @prop {Map<string, string>} params
  * @prop {BlockTarget} target
- * @prop {'block' | 'unblock'} type
+ * @prop {BlockActions} type
  * @prop {boolean} locked Whether the link is permanently locked and excluded from future processing
  */
 /**
