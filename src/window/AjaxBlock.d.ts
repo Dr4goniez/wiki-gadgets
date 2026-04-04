@@ -240,8 +240,10 @@ export interface AjaxBlockMessages {
 	'ajaxblock-dialog-message-existingblocks-canadd': string;
 	'ajaxblock-dialog-message-existingblocks-unblock': string;
 	'ajaxblock-dialog-message-existingblocks-dialogonly': string;
-	'ajaxblock-dialog-message-predefinedparams': string;
-	'ajaxblock-dialog-message-predefinedparams-apply': string;
+	'ajaxblock-dialog-message-predefinedparams-block': string;
+	'ajaxblock-dialog-message-predefinedparams-unblock': string;
+	'ajaxblock-dialog-message-applyparams-short': string;
+	'ajaxblock-dialog-message-applyparams-long': string;
 	'ajaxblock-dialog-message-blocklog-missing': string;
 	'ajaxblock-notify-error-loadblocklogs': string;
 	'ajaxblock-notify-error-idinactivenousername': string;
@@ -254,8 +256,8 @@ export interface AjaxBlockMessages {
 	'ajaxblock-notify-error-noblocklinks': string;
 	'ajaxblock-notify-error-cannotopendialog': string;
 	'ajaxblock-notify-error-cannotopendialog-oneclick': string;
-	'ajaxblock-notify-warning-invalidqueryparam-param': string;
-	'ajaxblock-notify-warning-invalidqueryparam-values': string;
+	'ajaxblock-notify-warning-invalidparamvalue-pages': string;
+	'ajaxblock-notify-warning-invalidparamvalue-namespaces': string;
 	'ajaxblock-confirm-block-self': string;
 	'ajaxblock-confirm-block-noexpiry': string;
 	'ajaxblock-confirm-block-noreason': string;
@@ -341,16 +343,17 @@ export interface MediaWikiMessages {
 	'and': string;
 	'word-separator': string;
 	'blanknamespace': string;
-	// 'ipb-action-create': string;
-	// 'ipb-action-move': string;
-	// 'ipb-action-thanks': string;
-	// 'ipb-action-upload': string;
 	'logentry-partialblock-block-page': string;
 	'logentry-partialblock-block-ns': string;
 	'logentry-partialblock-block-action': string;
 
 	'blocked-notice-logextract': string;
 	'blocked-notice-logextract-anon': string;
+
+	// 'ipb-action-create': string;
+	// 'ipb-action-move': string;
+	// 'ipb-action-thanks': string;
+	// 'ipb-action-upload': string;
 }
 
 /**
@@ -429,3 +432,46 @@ export type TargetHandler =
 	| { message: () => string }
 	| { log: () => JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement> | null> }
 	| { none: true };
+
+export interface ParamApplierBlockParams {
+	expiry: string;
+	reason: string;
+	hardblock: boolean;
+	nocreate: boolean;
+	autoblock: boolean;
+	noemail: boolean;
+	hidden: boolean;
+	nousertalk: boolean;
+	partial: boolean;
+	pagerestrictions: string[];
+	namespacerestrictions: number[] | string[];
+	actionrestrictions: string[];
+	watch: boolean | null;
+}
+
+export interface ParamApplierUnblockParams {
+	reason: string;
+	watch: boolean;
+}
+
+interface ParamApplierHandler<SetterValue, GetterValue = SetterValue> {
+	getter?: (value: GetterValue) => SetterValue | JQuery.Promise<SetterValue>;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	setter: (value: SetterValue) => any;
+}
+
+export interface BlockParamApplierHandler {
+	expiry: ParamApplierHandler<string>;
+	reason: ParamApplierHandler<string>;
+	hardblock: ParamApplierHandler<boolean>;
+	nocreate: ParamApplierHandler<boolean>;
+	autoblock: ParamApplierHandler<boolean>;
+	noemail: ParamApplierHandler<boolean>;
+	hidden: ParamApplierHandler<boolean>;
+	nousertalk: ParamApplierHandler<boolean>;
+	partial: ParamApplierHandler<boolean>;
+	pagerestrictions: ParamApplierHandler<string[]>;
+	namespacerestrictions: ParamApplierHandler<string[], number[] | string[]>;
+	actionrestrictions: ParamApplierHandler<string[]>;
+	watch: ParamApplierHandler<boolean, boolean | null>;
+}
