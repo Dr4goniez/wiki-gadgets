@@ -2838,7 +2838,19 @@ function AjaxBlockDialogFactory() {
 			 * @readonly
 			 * @private
 			 */
-			this.blockUser = new BlockUser(this);
+			this.blockNamed = new BlockUser(this);
+			/**
+			 * @type {BlockUser}
+			 * @readonly
+			 * @private
+			 */
+			this.blockTemp = new BlockUser(this);
+			/**
+			 * @type {BlockUser}
+			 * @readonly
+			 * @private
+			 */
+			this.blockIp = new BlockUser(this);
 			/**
 			 * @type {UnblockUser}
 			 * @readonly
@@ -2873,7 +2885,9 @@ function AjaxBlockDialogFactory() {
 
 			this.content.$element.append(
 				this.overlay.$element,
-				this.blockUser.$element,
+				this.blockNamed.$element,
+				this.blockTemp.$element,
+				this.blockIp.$element,
 				this.unblockUser.$element
 			);
 		}
@@ -2964,8 +2978,14 @@ function AjaxBlockDialogFactory() {
 		 */
 		setActiveField() {
 			const data = this.getCurrentData();
-			this.blockUser.toggle(data.type === 'block');
-			this.unblockUser.toggle(data.type === 'unblock');
+			const targetType = data.target.getType();
+			const isBlock = data.type === 'block';
+
+			this.blockNamed.toggle(isBlock && targetType === 'named');
+			this.blockTemp.toggle(isBlock && targetType === 'temp');
+			this.blockIp.toggle(isBlock && targetType === 'anon');
+			this.unblockUser.toggle(!isBlock);
+
 			return this;
 		}
 
@@ -2974,7 +2994,16 @@ function AjaxBlockDialogFactory() {
 		 */
 		getActiveField() {
 			const data = this.getCurrentData();
-			return data.type === 'block' ? this.blockUser : this.unblockUser;
+			if (data.type === 'block') {
+				switch (data.target.getType()) {
+					case 'named': return this.blockNamed;
+					case 'temp': return this.blockTemp;
+					case 'anon': return this.blockIp;
+					default: throw new Error('Logic exception');
+				}
+			} else {
+				return this.unblockUser;
+			}
 		}
 
 		/**
