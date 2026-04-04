@@ -19,6 +19,13 @@ const VERSION = '2.0.0';
 const SCRIPT_NAME = 'AjaxBlock';
 const DEBUG_MODE = false;
 
+// Disallow duplicate runs
+if (window.ajaxBlockLoaded) {
+	console.error('AjaxBlock is loaded from multiple places.');
+	return;
+}
+window.ajaxBlockLoaded = true;
+
 // Ensure the user is registered
 if (!mw.config.get('wgUserId') || mw.config.get('wgUserIsTemp')) {
 	return;

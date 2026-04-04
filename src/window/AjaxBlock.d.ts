@@ -1,6 +1,12 @@
 import { XOR } from 'ts-essentials';
 import { ApiResponseQueryListLogevents } from './InvestigateHelper';
 
+declare global {
+	interface Window {
+		ajaxBlockLoaded?: true;
+	}
+}
+
 export type BlockPageNames = 'Block' | 'Unblock';
 
 export type BlockActions = 'block' | 'unblock';
