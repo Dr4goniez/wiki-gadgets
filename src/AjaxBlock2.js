@@ -3318,12 +3318,109 @@ class AjaxBlockDialogBodyOverlay {
 /**
  * @requires oojs-ui
  */
-class AjaxBlockDialogContent {
+class WatchUserField {
+
+	/**
+	 * @param {(checked: boolean) => any} [onWatchUserChange]
+	 * Callback invoked when the "watch user" checkbox state changes.
+	 *
+	 * Note that the expiry dropdown visibility is toggled before this callback
+	 * is invoked, so DOM state is already up to date when the handler runs.
+	 */
+	constructor(onWatchUserChange = () => {}) {
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.watchUser = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.watchUserLayout = new OO.ui.FieldLayout(this.watchUser, {
+			label: Messages.get('ipbwatchuser'),
+			align: 'inline',
+		});
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.watchlistExpiry = new OO.ui.DropdownWidget({
+			menu: {
+				items: Messages.getBlockDurations().filter((option) => {
+					// Filter out expiries that are too short or too long
+					const expiry = /** @type {string} */ (option.getData());
+					return /^(\d+\s*weeks?|\d+\s*months?|1\s*year|infinity)$/.test(expiry);
+				})
+			}
+		});
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.watchlistExpiryLayout = new OO.ui.FieldLayout(this.watchlistExpiry, {
+			$element: $('<div>').css({ 'margin-left': '1.8em', 'margin-top': '8px' }),
+		});
+
+		// Initialize fields
+		DropdownUtil.selectInfinity(this.watchlistExpiry); // Select infinity
+		this.watchlistExpiryLayout.toggle(false); // Hide the expiry field (since the checkbox isn't checked)
+
+		// When the "watch user" checkbox is checked/unchecked, show/hide the expiry field
+		this.watchUser.on('change', (selected) => {
+			const checked = !!selected;
+			this.watchlistExpiryLayout.toggle(checked);
+			onWatchUserChange(checked);
+		});
+	}
+
+	/**
+	 * @returns {OO.ui.FieldLayout[]}
+	 * @protected
+	 */
+	getWatchLayouts() {
+		return [this.watchUserLayout, this.watchlistExpiryLayout];
+	}
+
+	/**
+	 * @param {?boolean} watch If `null`, preserves the current checked state.
+	 * @returns {this}
+	 */
+	setWatchUser(watch) {
+		watch = watch === null ? this.watchUser.isSelected() : watch;
+		this.watchUser.setSelected(watch);
+		return this;
+	}
+
+	getWatchUserParams() {
+		/** @type {WatchUserParams} */
+		const params = Object.create(null);
+		if (!this.watchUser.isSelected()) {
+			return params;
+		}
+		params.watchuser = true;
+		params.watchlistexpiry = DropdownUtil.getSelectedOptionValue(this.watchlistExpiry);
+		return params;
+	}
+
+}
+
+/**
+ * @requires oojs-ui
+ */
+class AjaxBlockDialogContent extends WatchUserField {
 
 	/**
 	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
 	 */
 	constructor(dialog) {
+		const onWatchUserChange = () => dialog.updateSize();
+		super(onWatchUserChange);
+
 		/**
 		 * @type {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>}
 		 * @readonly
@@ -3383,28 +3480,6 @@ class AjaxBlockDialogContent {
 					this.$targetAux
 				)
 		});
-		/**
-		 * @type {OO.ui.CheckboxInputWidget}
-		 * @readonly
-		 * @private
-		 */
-		this.watchUser = new OO.ui.CheckboxInputWidget();
-		/**
-		 * @type {OO.ui.DropdownWidget}
-		 * @readonly
-		 * @private
-		 */
-		this.watchlistExpiry = new OO.ui.DropdownWidget({
-			menu: {
-				items: Messages.getBlockDurations().filter((option) => {
-					// Filter out expiries that are too short or too long
-					const expiry = /** @type {string} */ (option.getData());
-					return /^(\d+\s*weeks?|\d+\s*months?|1\s*year|infinity)$/.test(expiry);
-				})
-			}
-		});
-
-		DropdownUtil.selectInfinity(this.watchlistExpiry);
 	}
 
 	getParentDialog() {
@@ -3470,54 +3545,6 @@ class AjaxBlockDialogContent {
 	 */
 	isOneClickAllowed() {
 		return this.oneClickAllowed;
-	}
-
-	/**
-	 * @returns {OO.ui.FieldLayout}
-	 * @protected For a subclass's constructor only
-	 */
-	getWatchUserLayout() {
-		return new OO.ui.FieldLayout(this.watchUser, {
-			label: Messages.get('ipbwatchuser'),
-			align: 'inline',
-		});
-	}
-
-	/**
-	 * @param {?boolean} watch If `null`, preserves the current checked state.
-	 * @returns {this}
-	 */
-	setWatchUser(watch) {
-		watch = watch === null ? this.watchUser.isSelected() : watch;
-		this.watchUser.setSelected(watch);
-		return this;
-	}
-
-	/**
-	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
-	 * @returns {OO.ui.FieldLayout}
-	 * @protected For a subclass's constructor only
-	 */
-	getWatchlistExpiryLayout(dialog) {
-		const layout = new OO.ui.FieldLayout(this.watchlistExpiry);
-		layout.$element.css({ 'margin-left': '1.8em', 'margin-top': '8px' });
-		this.watchUser.on('change', (selected) => {
-			layout.toggle(!!selected);
-			dialog.updateSize();
-		});
-		layout.toggle(this.watchUser.isSelected());
-		return layout;
-	}
-
-	getWatchUserParams() {
-		/** @type {WatchUserParams} */
-		const params = Object.create(null);
-		if (!this.watchUser.isSelected()) {
-			return params;
-		}
-		params.watchuser = true;
-		params.watchlistexpiry = DropdownUtil.getSelectedOptionValue(this.watchlistExpiry);
-		return params;
 	}
 
 	/**
@@ -3860,8 +3887,7 @@ class BlockUser extends AjaxBlockDialogContent {
 		items.push(this.cbHideNameContainer);
 
 		items.push(
-			this.getWatchUserLayout(),
-			this.getWatchlistExpiryLayout(dialog)
+			...this.getWatchLayouts()
 		);
 
 		/**
@@ -4436,8 +4462,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 		items = [];
 
 		items.push(
-			this.getWatchUserLayout(),
-			this.getWatchlistExpiryLayout(dialog)
+			...this.getWatchLayouts()
 		);
 
 		const optionsFieldset = new OO.ui.FieldsetLayout({
