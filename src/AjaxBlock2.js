@@ -1975,7 +1975,7 @@ class BlockTarget {
 	 * @see SpecialBlock::getTargetInternal
 	 */
 	static validate(subpage, query) {
-		const id = this.validateBlockId(query.get('id'));
+		let id = this.validateBlockId(query.get('id'));
 
 		const possibleTargets = [
 			query.get('wpTarget'),
@@ -1986,6 +1986,12 @@ class BlockTarget {
 		/** @type {?string} */
 		let target = null;
 		for (const t of possibleTargets) {
+			if (t && /^#\d+$/.test(t)) {
+				if (!id) {
+					id = this.validateBlockId(t.slice(1));
+				}
+				continue;
+			}
 			const validated = this.validateUsername(t);
 			if (validated !== null) { // Note: this is never an empty string
 				target = validated;
@@ -2128,17 +2134,14 @@ class BlockTarget {
 	}
 
 	/**
-	 * @param {string | number} id `#ID` as a string or a block ID as a number.
+	 * @param {number} id
 	 * @returns {HTMLAnchorElement}
 	 */
 	static createBlockListLink(id) {
-		const wpTarget = typeof id === 'string'
-			? id
-			: '#' + id;
 		const anchor = document.createElement('a');
-		anchor.href = mw.util.getUrl('Special:BlockList', { wpTarget });
+		anchor.href = mw.util.getUrl('Special:BlockList', { wpTarget: '#' + id });
 		anchor.target = '_blank';
-		anchor.textContent = wpTarget;
+		anchor.textContent = String(id);
 		return anchor;
 	}
 
@@ -3398,6 +3401,9 @@ class WatchUserField {
 		return this;
 	}
 
+	/**
+	 * @todo This should always return an empty object when lifting an autoblock
+	 */
 	getWatchUserParams() {
 		/** @type {WatchUserParams} */
 		const params = Object.create(null);
@@ -3605,8 +3611,7 @@ class TargetField {
 					// Ignore ID and use username
 					this.addMessage({
 						label: new OO.ui.HtmlSnippet(
-							Messages.get('ajaxblock-dialog-message-nonactive-id', [id])
-								.replace(`#${id}`, BlockTarget.createBlockListLink(id).outerHTML)
+							Messages.get('ajaxblock-dialog-message-nonactive-id', [BlockTarget.createBlockListLink(id).outerHTML])
 						),
 						type: 'notice',
 					});
@@ -3677,6 +3682,7 @@ class TargetField {
 			this.$mainLabel.text(username);
 			this.$auxLabel.empty().append(
 				Messages.get('parentheses-start'),
+				'#',
 				BlockTarget.createBlockListLink(id),
 				Messages.get('parentheses-end')
 			);
