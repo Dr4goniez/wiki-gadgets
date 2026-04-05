@@ -3071,11 +3071,11 @@ function AjaxBlockDialogFactory() {
 					: 'ajaxblock-dialog-message-existingblocks'
 					);
 				msgType = 'warning';
-				field.targetField.blockSelector = new OO.ui.RadioSelectWidget({
+				const blockSelector = field.targetField.setBlockSelector({
 					classes: ['ajaxblock-dialog-blockselector'],
 					items: options,
 				});
-				$logLines = field.targetField.blockSelector.$element;
+				$logLines = blockSelector.$element;
 			} else {
 				msgKey = data.target.getType() === 'anon'
 					? 'blocked-notice-logextract-anon'
@@ -3093,7 +3093,7 @@ function AjaxBlockDialogFactory() {
 				document.createElement('br'),
 				$logLines
 			);
-			if (field.targetField.blockSelector) {
+			if (field.targetField.getBlockSelector()) {
 				field.targetField.addMessage({
 					label: new OO.ui.HtmlSnippet(Messages.get('ajaxblock-dialog-message-existingblocks-dialogonly')),
 					type: 'warning',
@@ -3315,19 +3315,21 @@ class AjaxBlockDialogBodyOverlay {
 
 }
 
+// Note: The following typedef shouldn't be moved to d.ts to keep it possible to
+// reference the doc comment from type signatures in this .js file
+/**
+ * @typedef {() => any} OnResize
+ * Callback invoked when the field container resizes.
+ */
 /**
  * @requires oojs-ui
  */
 class WatchUserField {
 
 	/**
-	 * @param {(checked: boolean) => any} [onWatchUserChange]
-	 * Callback invoked when the "watch user" checkbox state changes.
-	 *
-	 * Note that the expiry dropdown visibility is toggled before this callback
-	 * is invoked, so DOM state is already up to date when the handler runs.
+	 * @param {OnResize} onResize
 	 */
-	constructor(onWatchUserChange = () => {}) {
+	constructor(onResize) {
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
@@ -3374,7 +3376,7 @@ class WatchUserField {
 		this.watchUser.on('change', (selected) => {
 			const checked = !!selected;
 			this.watchlistExpiryLayout.toggle(checked);
-			onWatchUserChange(checked);
+			onResize();
 		});
 	}
 
@@ -3415,22 +3417,15 @@ class WatchUserField {
 class TargetField {
 
 	/**
-	 * @param {BlockLookup} blockLookup
-	 * @param {BlockUser} [blockUser]
+	 * @param {BlockUser | UnblockUser} parent
 	 */
-	constructor(blockLookup, blockUser) {
+	constructor(parent) {
 		/**
-		 * @type {BlockLookup}
+		 * @type {BlockUser | UnblockUser}
 		 * @readonly
 		 * @private
 		 */
-		this.blockLookup = blockLookup;
-		/**
-		 * @type {BlockUser=}
-		 * @readonly
-		 * @private
-		 */
-		this.blockUser = blockUser;
+		this.parent = parent;
 		/**
 		 * @type {OO.ui.Element}
 		 * @readonly
@@ -3489,6 +3484,7 @@ class TargetField {
 		this.addBlockAllowed = false;
 		/**
 		 * @type {?OO.ui.RadioSelectWidget}
+		 * @private
 		 */
 		this.blockSelector = null;
 	}
@@ -3505,14 +3501,6 @@ class TargetField {
 		}
 		const message = new OO.ui.MessageWidget(config);
 		this.messageContainer.$element.append(message.$element);
-		return this;
-	}
-
-	/**
-	 * @private
-	 */
-	clearMessages() {
-		this.messageContainer.$element.empty();
 		return this;
 	}
 
@@ -3547,7 +3535,7 @@ class TargetField {
 		this.current = [null, null];
 		this.oneClickAllowed = true;
 		this.addBlockAllowed = false;
-		this.clearMessages();
+		this.messageContainer.$element.empty();
 		this.blockSelector = null;
 		return this;
 	}
@@ -3563,30 +3551,44 @@ class TargetField {
 		return this.addBlockAllowed;
 	}
 
+	getBlockSelector() {
+		return this.blockSelector;
+	}
+
+	/**
+	 * @param {OO.ui.RadioSelectWidget.ConfigOptions} [config]
+	 * @returns {OO.ui.RadioSelectWidget}
+	 */
+	setBlockSelector(config) {
+		this.blockSelector = new OO.ui.RadioSelectWidget(config);
+		return this.blockSelector;
+	}
+
 	/**
 	 * Initializes the current target.
 	 *
 	 * @param {BlockTarget} target
+	 * @param {BlockLookup} blockLookup
 	 * @returns {TargetHandler}
 	 */
-	init(target) {
+	init(target, blockLookup) {
 		const id = target.getId();
 		const username = target.getUsername();
-		const blocks = username ? this.blockLookup.getBlocksByUsername(username) : null;
-		const blockUser = this.blockUser;
+		const blocks = username ? blockLookup.getBlocksByUsername(username) : null;
+		const blockUser = this.parent instanceof BlockUser ? this.parent : void 0;
 
 		if (id !== null) {
-			const block = this.blockLookup.getBlockById(id);
+			const block = blockLookup.getBlockById(id);
 			if (block) {
 				// The block associated with this ID exists
 				if (username && blocks && blocks.length > 1) {
 					// Other blocks also exist
 					this.initInternal(null, username, false, true);
-					return { log: () => BlockLog.generate(username, this.blockLookup, { radio: true, blockUser }) };
+					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
 				} else if (block.user) {
 					// Unambiguous block
 					this.initInternal(id, block.user, true, true);
-					return { log: () => BlockLog.generate(/** @type {string} */ (block.user), this.blockLookup, { blockUser }) };
+					return { log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, { blockUser }) };
 				} else {
 					// Autoblock
 					if (blockUser) {
@@ -3611,7 +3613,7 @@ class TargetField {
 					if (Array.isArray(blocks)) {
 						// If other active blocks exist, allow the user to choose which one to update
 						this.initInternal(null, username, false, true);
-						return { log: () => BlockLog.generate(username, this.blockLookup, { radio: true, blockUser }) };
+						return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
 					} else {
 						// No other active blocks
 						if (blockUser) {
@@ -3637,11 +3639,11 @@ class TargetField {
 				if (blocks.length > 1) {
 					// Multiple active blocks
 					this.initInternal(null, username, false, true);
-					return { log: () => BlockLog.generate(username, this.blockLookup, { radio: true, blockUser }) };
+					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
 				} else {
 					// Single active block
 					this.initInternal(blocks[0].id, username, true, true);
-					return { log: () => BlockLog.generate(username, this.blockLookup, { blockUser }) };
+					return { log: () => BlockLog.generate(username, blockLookup, { blockUser }) };
 				}
 			} else {
 				// No active blocks
@@ -3665,7 +3667,8 @@ class TargetField {
 	 * @param {boolean} oneClick Whether the target can be processed in the one-click mode.
 	 * @param {boolean} addBlock Whether to show the "Add block" checkbox.
 	 *
-	 * Note: This is set to true only if {@link blockUser} is defined and `wgEnableMultiBlocks` is true.
+	 * Note: This is coerced into false if {@link parent} isn't an instance of {@link BlockUser} or
+	 * `wgEnableMultiBlocks` is false, even if true is passed.
 	 * @returns {this}
 	 * @private
 	 */
@@ -3679,7 +3682,7 @@ class TargetField {
 			);
 		} else if (id) {
 			// Autoblock
-			if (this.blockUser) {
+			if (this.parent instanceof BlockUser) {
 				throw new Error('An autoblock can only be removed and cannot be updated');
 			}
 			this.$mainLabel.empty().append(
@@ -3696,7 +3699,7 @@ class TargetField {
 
 		this.current = [id, username];
 		this.oneClickAllowed = oneClick;
-		this.addBlockAllowed = addBlock && !!this.blockUser && wgEnableMultiBlocks;
+		this.addBlockAllowed = addBlock && this.parent instanceof BlockUser && wgEnableMultiBlocks;
 
 		return this;
 	}
@@ -3762,66 +3765,20 @@ class TargetField {
 
 /**
  * @requires oojs-ui
- */
-class AjaxBlockDialogContent extends WatchUserField {
-
-	/**
-	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
-	 */
-	constructor(dialog) {
-		const onWatchUserChange = () => dialog.updateSize();
-		super(onWatchUserChange);
-
-		/**
-		 * @type {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>}
-		 * @readonly
-		 * @private
-		 */
-		this.dialog = dialog;
-		/**
-		 * @type {JQuery<HTMLElement>}
-		 * @readonly
-		 */
-		this.$element = $('<div>').addClass('ajaxblock-dialog-content');
-		/**
-		 * @type {TargetField}
-		 * @readonly
-		 */
-		this.targetField = new TargetField(dialog.getBlockLookup()); // TODO: Pass BlockUser
-	}
-
-	getParentDialog() {
-		return this.dialog;
-	}
-
-	/**
-	 * @param {boolean} show
-	 * @return {this}
-	 */
-	toggle(show) {
-		this.$element.toggle(show);
-		return this;
-	}
-
-}
-
-/**
- * @requires oojs-ui
  * @requires mediawiki.widgets.TitlesMultiselectWidget
  * @requires mediawiki.widgets.NamespacesMultiselectWidget
  */
-class BlockUser extends AjaxBlockDialogContent {
+class BlockField extends WatchUserField {
 
 	/**
-	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
+	 * @param {readonly string[]} actionRestrictions
+	 * @param {OnResize} [onResize]
 	 */
-	constructor(dialog) {
-		super(dialog);
+	constructor(actionRestrictions, onResize = () => {}) {
+		super(onResize);
 
 		/** @type {OO.ui.Element[]} */
-		let items = [
-			...this.targetField.getLayouts(),
-		];
+		let items = [];
 
 		/**
 		 * @type {OO.ui.DropdownWidget}
@@ -3924,9 +3881,14 @@ class BlockUser extends AjaxBlockDialogContent {
 			})
 		);
 
-		const partialBlockLayout = new OO.ui.FieldsetLayout();
-		partialBlockLayout.$element.css({ 'margin-left': '1.8em' });
-		partialBlockLayout.toggle(this.partialBlock.isSelected());
+		/**
+		 * @type {OO.ui.FieldsetLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.partialBlockLayout = new OO.ui.FieldsetLayout();
+		this.partialBlockLayout.$element.css({ 'margin-left': '1.8em' });
+		this.partialBlockLayout.toggle(this.partialBlock.isSelected());
 
 		/** @type {OO.ui.Element[]} */
 		const partialBlockLayoutItems = [];
@@ -3966,7 +3928,7 @@ class BlockUser extends AjaxBlockDialogContent {
 		 * @type {Record<string, OO.ui.CheckboxInputWidget>}
 		 * @readonly
 		 */
-		this.partialBlockActions = this.getParentDialog().actionRestrictions.reduce((acc, action) => {
+		this.partialBlockActions = actionRestrictions.reduce((acc, action) => {
 			const checkbox = new OO.ui.CheckboxInputWidget({ data: action });
 			partialBlockLayoutItems.push(
 				new OO.ui.FieldLayout(checkbox, {
@@ -3984,14 +3946,23 @@ class BlockUser extends AjaxBlockDialogContent {
 			return acc;
 		}, /** @type {Record<string, OO.ui.CheckboxInputWidget>} */ (Object.create(null)));
 
-		partialBlockLayout.addItems(partialBlockLayoutItems);
-		items.push(partialBlockLayout);
+		this.partialBlockLayout.addItems(partialBlockLayoutItems);
+		items.push(this.partialBlockLayout);
 
-		const mainFieldset = new OO.ui.FieldsetLayout({
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = $('<div>').addClass('ajaxblock-dialog-content');
+		/**
+		 * @type {OO.ui.FieldsetLayout}
+		 * @protected
+		 */
+		this.mainFieldset = new OO.ui.FieldsetLayout({
 			label: Messages.get('block'),
 		});
-		mainFieldset.addItems(items);
-		this.$element.append(mainFieldset.$element);
+		this.mainFieldset.addItems(items);
+		this.$element.append(this.mainFieldset.$element);
 		items = [];
 
 		/**
@@ -4043,7 +4014,7 @@ class BlockUser extends AjaxBlockDialogContent {
 		/**
 		 * @type {OO.ui.FieldLayout}
 		 * @readonly
-		 * @private
+		 * @protected
 		 */
 		this.cbAutoblockContainer = new OO.ui.FieldLayout(this.cbAutoblock, {
 			label: Messages.get('ajaxblock-dialog-block-label-option-autoblock'),
@@ -4059,7 +4030,7 @@ class BlockUser extends AjaxBlockDialogContent {
 		/**
 		 * @type {OO.ui.FieldLayout}
 		 * @readonly
-		 * @private
+		 * @protected
 		 */
 		this.cbHardblockContainer = new OO.ui.FieldLayout(this.cbHardblock, {
 			label: Messages.get('ipb-hardblock'),
@@ -4075,7 +4046,7 @@ class BlockUser extends AjaxBlockDialogContent {
 		/**
 		 * @type {OO.ui.FieldLayout}
 		 * @readonly
-		 * @private
+		 * @protected
 		 */
 		this.cbHideNameContainer = new OO.ui.FieldLayout(this.cbHideName, {
 			label: $('<b>').text(Messages.get('ipbhidename')),
@@ -4088,31 +4059,27 @@ class BlockUser extends AjaxBlockDialogContent {
 		);
 
 		/**
-		 * @type {OO.ui.CheckboxInputWidget}
-		 * @readonly
+		 * @type {OO.ui.FieldsetLayout}
+		 * @protected
 		 */
-		this.cbAddBlock = new OO.ui.CheckboxInputWidget();
-		this.cbAddBlock.on('change', (selected) => {
-			if (selected && this.targetField.blockSelector) {
-				// `newblock` cannot be used together with `id`: Deselect radio options
-				this.targetField.blockSelector.selectItem();
-			}
+		this.optionsFieldset = new OO.ui.FieldsetLayout({
+			label: Messages.get('block-options'),
 		});
-		/**
-		 * @type {OO.ui.FieldLayout}
-		 * @readonly
-		 * @private
-		 */
-		this.cbAddBlockContainer = new OO.ui.FieldLayout(this.cbAddBlock, {
-			label: $('<b>').text(Messages.get('block-create')),
-			align: 'inline',
-		});
-		items.push(this.cbAddBlockContainer);
+		this.optionsFieldset.addItems(items);
+		this.$element.append(this.optionsFieldset.$element);
 
-		// --- Start: set up complex event listeners ---
+		this.setUpEventListeners(onResize);
+	}
+
+	/**
+	 * @param {OnResize} onResize
+	 * @returns {void}
+	 * @private
+	 */
+	setUpEventListeners(onResize) {
 		this.partialBlock.on('change', (selected) => {
-			partialBlockLayout.toggle(!!selected);
-			this.getParentDialog().updateSize();
+			this.partialBlockLayout.toggle(!!selected);
+			onResize();
 
 			// ipb-prevent-user-talk-edit:
 			// `!allowusertalk` can be applied only if sitewide, or partial affecting NS_USER_TALK
@@ -4182,13 +4149,199 @@ class BlockUser extends AjaxBlockDialogContent {
 				this.cbHideName.setDisabled(false);
 			}
 		});
-		// --- End: set up complex event listeners ---
+	}
 
-		const optionsFieldset = new OO.ui.FieldsetLayout({
-			label: Messages.get('block-options'),
+	getExpiry() {
+		const selected = DropdownUtil.getSelectedOptionValue(this.expiry);
+		if (selected) {
+			return selected;
+		} else {
+			return clean(this.expiryOther.getValue());
+		}
+	}
+
+	/**
+	 * @param {string} expiry
+	 * @return {this}
+	 */
+	setExpiry(expiry) {
+		expiry = clean(expiry);
+		if (mw.util.isInfinity(expiry)) {
+			expiry = EXPIRY_INFINITE;
+		}
+
+		const menu = this.expiry.getMenu();
+		let selected = false;
+		for (const item of /** @type {OO.ui.MenuOptionWidget[]} */ (menu.getItems())) {
+			if (item.getData() === expiry) {
+				menu.selectItem(item);
+				selected = true;
+				break;
+			}
+		}
+		if (selected) {
+			this.expiryOther.setValue('');
+		} else {
+			DropdownUtil.selectOther(this.expiry);
+			this.expiryOther.setValue(expiry);
+		}
+
+		return this;
+	}
+
+	getReason() {
+		const sep = Messages.get('colon-separator');
+		const main = [
+			DropdownUtil.getSelectedOptionValue(this.reason1),
+			DropdownUtil.getSelectedOptionValue(this.reason2),
+		].filter(Boolean).join(sep);
+		let other = clean(this.reasonOther.getValue());
+		const isOtherCommentOnly = other.startsWith('<!--') && other.endsWith('-->');
+		if (main && other && !isOtherCommentOnly) {
+			// Add the separator if the "other" reason is not a comment tag only
+			other = sep + other;
+		}
+		return main + other;
+	}
+
+	/**
+	 * @param {string} reason
+	 * @return {this}
+	 */
+	setReason(reason) {
+		const rSep = new RegExp('^' + mw.util.escapeRegExp(Messages.get('colon-separator')));
+		let item = DropdownUtil.findItemByCallback(this.reason1, (option) => {
+			const data = /** @type {string} */ (option.getData());
+			return data !== '' && reason.startsWith(data);
 		});
-		optionsFieldset.addItems(items);
-		this.$element.append(optionsFieldset.$element);
+		if (!item) {
+			[this.reason1, this.reason2].forEach((dropdown) => {
+				DropdownUtil.selectOther(dropdown);
+			});
+			this.reasonOther.setValue(reason);
+			return this;
+		} else {
+			this.reason1.getMenu().selectItem(item);
+			reason = reason
+				.replace(/** @type {string} */ (item.getData()), '')
+				.replace(rSep, '');
+		}
+
+		item = DropdownUtil.findItemByCallback(this.reason2, (option) => {
+			const data = /** @type {string} */ (option.getData());
+			return data !== '' && reason.startsWith(data);
+		});
+		if (!item) {
+			DropdownUtil.selectOther(this.reason2);
+		} else {
+			this.reason2.getMenu().selectItem(item);
+			reason = reason
+				.replace(/** @type {string} */ (item.getData()), '')
+				.replace(rSep, '');
+		}
+
+		this.reasonOther.setValue(reason);
+		return this;
+	}
+
+	getPartialBlockParams() {
+		if (!this.partialBlock.isSelected()) {
+			return { partial: false };
+		}
+
+		/** @type {PartialBlockParams} */
+		const options = Object.create(null);
+		options.partial = true;
+
+		const pages = this.partialBlockPages.getValue();
+		if (pages.length) {
+			options.pagerestrictions = pages.join('|');
+		}
+
+		const namespaces = this.partialBlockNamespaces.getValue();
+		if (namespaces.length) {
+			options.namespacerestrictions = namespaces.join('|');
+		}
+
+		const actions = /** @type {string[]} */ ([]);
+		for (const [action, checkbox] of Object.entries(this.partialBlockActions)) {
+			if (checkbox.isSelected()) {
+				actions.push(action);
+			}
+		}
+		if (actions.length) {
+			options.actionrestrictions = actions.join('|');
+		}
+
+		return options;
+	}
+
+}
+
+/**
+ * @requires oojs-ui
+ * @requires mediawiki.widgets.TitlesMultiselectWidget
+ * @requires mediawiki.widgets.NamespacesMultiselectWidget
+ */
+class BlockUser extends BlockField {
+
+	/**
+	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
+	 */
+	constructor(dialog) {
+		const onResize = () => dialog.updateSize();
+		super(dialog.actionRestrictions, onResize);
+
+		/**
+		 * @type {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>}
+		 * @readonly
+		 * @private
+		 */
+		this.dialog = dialog;
+		/**
+		 * @type {TargetField}
+		 * @readonly
+		 */
+		this.targetField = new TargetField(this);
+
+		this.mainFieldset.addItems(this.targetField.getLayouts(), 0);
+
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 */
+		this.cbAddBlock = new OO.ui.CheckboxInputWidget();
+		this.cbAddBlock.on('change', (selected) => {
+			const blockSelector = this.targetField.getBlockSelector();
+			if (selected && blockSelector) {
+				// `newblock` cannot be used together with `id`: Deselect radio options
+				blockSelector.selectItem();
+			}
+		});
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @protected
+		 */
+		this.cbAddBlockContainer = new OO.ui.FieldLayout(this.cbAddBlock, {
+			label: $('<b>').text(Messages.get('block-create')),
+			align: 'inline',
+		});
+
+		this.optionsFieldset.addItems([this.cbAddBlockContainer]);
+	}
+
+	getParentDialog() {
+		return this.dialog;
+	}
+
+	/**
+	 * @param {boolean} show
+	 * @return {this}
+	 */
+	toggle(show) {
+		this.$element.toggle(show);
+		return this;
 	}
 
 	/**
@@ -4196,7 +4349,7 @@ class BlockUser extends AjaxBlockDialogContent {
 	 * @returns {TargetHandler}
 	 */
 	initTarget(target) {
-		const handler = this.targetField.init(target);
+		const handler = this.targetField.init(target, this.getParentDialog().getBlockLookup());
 
 		// Adjust the visibility of field items
 		if (target.getType() === 'anon') {
@@ -4329,145 +4482,18 @@ class BlockUser extends AjaxBlockDialogContent {
 		return { params, warnings };
 	}
 
-	getExpiry() {
-		const selected = DropdownUtil.getSelectedOptionValue(this.expiry);
-		if (selected) {
-			return selected;
-		} else {
-			return clean(this.expiryOther.getValue());
-		}
-	}
-
-	/**
-	 * @param {string} expiry
-	 * @return {this}
-	 */
-	setExpiry(expiry) {
-		expiry = clean(expiry);
-		if (mw.util.isInfinity(expiry)) {
-			expiry = EXPIRY_INFINITE;
-		}
-
-		const menu = this.expiry.getMenu();
-		let selected = false;
-		for (const item of /** @type {OO.ui.MenuOptionWidget[]} */ (menu.getItems())) {
-			if (item.getData() === expiry) {
-				menu.selectItem(item);
-				selected = true;
-				break;
-			}
-		}
-		if (selected) {
-			this.expiryOther.setValue('');
-		} else {
-			DropdownUtil.selectOther(this.expiry);
-			this.expiryOther.setValue(expiry);
-		}
-
-		return this;
-	}
-
-	getReason() {
-		const sep = Messages.get('colon-separator');
-		const main = [
-			DropdownUtil.getSelectedOptionValue(this.reason1),
-			DropdownUtil.getSelectedOptionValue(this.reason2),
-		].filter(Boolean).join(sep);
-		let other = clean(this.reasonOther.getValue());
-		const isOtherCommentOnly = other.startsWith('<!--') && other.endsWith('-->');
-		if (main && other && !isOtherCommentOnly) {
-			// Add the separator if the "other" reason is not a comment tag only
-			other = sep + other;
-		}
-		return main + other;
-	}
-
-	/**
-	 * @param {string} reason
-	 * @return {this}
-	 */
-	setReason(reason) {
-		const rSep = new RegExp('^' + mw.util.escapeRegExp(Messages.get('colon-separator')));
-		let item = DropdownUtil.findItemByCallback(this.reason1, (option) => {
-			const data = /** @type {string} */ (option.getData());
-			return data !== '' && reason.startsWith(data);
-		});
-		if (!item) {
-			[this.reason1, this.reason2].forEach((dropdown) => {
-				DropdownUtil.selectOther(dropdown);
-			});
-			this.reasonOther.setValue(reason);
-			return this;
-		} else {
-			this.reason1.getMenu().selectItem(item);
-			reason = reason
-				.replace(/** @type {string} */ (item.getData()), '')
-				.replace(rSep, '');
-		}
-
-		item = DropdownUtil.findItemByCallback(this.reason2, (option) => {
-			const data = /** @type {string} */ (option.getData());
-			return data !== '' && reason.startsWith(data);
-		});
-		if (!item) {
-			DropdownUtil.selectOther(this.reason2);
-		} else {
-			this.reason2.getMenu().selectItem(item);
-			reason = reason
-				.replace(/** @type {string} */ (item.getData()), '')
-				.replace(rSep, '');
-		}
-
-		this.reasonOther.setValue(reason);
-		return this;
-	}
-
-	getPartialBlockParams() {
-		if (!this.partialBlock.isSelected()) {
-			return { partial: false };
-		}
-
-		/** @type {PartialBlockParams} */
-		const options = Object.create(null);
-		options.partial = true;
-
-		const pages = this.partialBlockPages.getValue();
-		if (pages.length) {
-			options.pagerestrictions = pages.join('|');
-		}
-
-		const namespaces = this.partialBlockNamespaces.getValue();
-		if (namespaces.length) {
-			options.namespacerestrictions = namespaces.join('|');
-		}
-
-		const actions = /** @type {string[]} */ ([]);
-		for (const [action, checkbox] of Object.entries(this.partialBlockActions)) {
-			if (checkbox.isSelected()) {
-				actions.push(action);
-			}
-		}
-		if (actions.length) {
-			options.actionrestrictions = actions.join('|');
-		}
-
-		return options;
-	}
-
 }
 
-class UnblockUser extends AjaxBlockDialogContent {
+class UnblockField extends WatchUserField {
 
 	/**
-	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
+	 * @param {OnResize} [onResize]
 	 */
-	constructor(dialog) {
-		super(dialog);
+	constructor(onResize = () => {}) {
+		super(onResize);
 
 		/** @type {OO.ui.Element[]} */
-		let items = [
-			...this.targetField.getLayouts(),
-		];
+		let items = [];
 
 		/**
 		 * @type {OO.ui.TextInputWidget}
@@ -4485,22 +4511,92 @@ class UnblockUser extends AjaxBlockDialogContent {
 			})
 		);
 
-		const mainFieldset = new OO.ui.FieldsetLayout({
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = $('<div>').addClass('ajaxblock-dialog-content');
+		/**
+		 * @type {OO.ui.FieldsetLayout}
+		 * @protected
+		 */
+		this.mainFieldset = new OO.ui.FieldsetLayout({
 			label: Messages.get('unblock'),
 		});
-		mainFieldset.addItems(items);
-		this.$element.append(mainFieldset.$element);
+		this.mainFieldset.addItems(items);
+		this.$element.append(this.mainFieldset.$element);
 		items = [];
 
 		items.push(
 			...this.getWatchLayouts()
 		);
 
-		const optionsFieldset = new OO.ui.FieldsetLayout({
+		/**
+		 * @type {OO.ui.FieldsetLayout}
+		 * @protected
+		 */
+		this.optionsFieldset = new OO.ui.FieldsetLayout({
 			label: Messages.get('block-options'),
 		});
-		optionsFieldset.addItems(items);
-		this.$element.append(optionsFieldset.$element);
+		this.optionsFieldset.addItems(items);
+		this.$element.append(this.optionsFieldset.$element);
+	}
+
+	getReason() {
+		return clean(this.reason.getValue());
+	}
+
+	/**
+	 * @param {string} reason
+	 * @returns {this}
+	 */
+	setReason(reason) {
+		this.reason.setValue(reason);
+		return this;
+	}
+
+}
+
+/**
+ * @requires oojs-ui
+ * @requires mediawiki.widgets.TitlesMultiselectWidget
+ * @requires mediawiki.widgets.NamespacesMultiselectWidget
+ */
+class UnblockUser extends UnblockField {
+
+	/**
+	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
+	 */
+	constructor(dialog) {
+		const onResize = () => dialog.updateSize();
+		super(onResize);
+
+		/**
+		 * @type {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>}
+		 * @readonly
+		 * @private
+		 */
+		this.dialog = dialog;
+		/**
+		 * @type {TargetField}
+		 * @readonly
+		 */
+		this.targetField = new TargetField(this);
+
+		this.mainFieldset.addItems(this.targetField.getLayouts(), 0);
+	}
+
+	getParentDialog() {
+		return this.dialog;
+	}
+
+	/**
+	 * @param {boolean} show
+	 * @return {this}
+	 */
+	toggle(show) {
+		this.$element.toggle(show);
+		return this;
 	}
 
 	/**
@@ -4508,7 +4604,7 @@ class UnblockUser extends AjaxBlockDialogContent {
 	 * @returns {TargetHandler}
 	 */
 	initTarget(target) {
-		return this.targetField.init(target);
+		return this.targetField.init(target, this.getParentDialog().getBlockLookup());
 	}
 
 	/**
@@ -4544,19 +4640,6 @@ class UnblockUser extends AjaxBlockDialogContent {
 		Object.assign(params, this.getWatchUserParams());
 
 		return { params, warnings };
-	}
-
-	getReason() {
-		return clean(this.reason.getValue());
-	}
-
-	/**
-	 * @param {string} reason
-	 * @returns {this}
-	 */
-	setReason(reason) {
-		this.reason.setValue(reason);
-		return this;
 	}
 
 }
