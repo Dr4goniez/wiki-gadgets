@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.2.2
+ * @version 1.2.3
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -887,7 +887,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.2.2 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.2.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -1129,7 +1129,7 @@ class Messages {
 			// Set `target="_blank"` on all anchors if `ret` contains any links
 			const $html = $('<div>').html(ret);
 			$html.find('a').each((_, a) => {
-				if (a.role !== 'button' && a.href && !a.href.startsWith('#')) {
+				if (a.role !== 'button' && a.href && !(a.getAttribute('href') || '').startsWith('#')) {
 					a.target = '_blank';
 				}
 			});
