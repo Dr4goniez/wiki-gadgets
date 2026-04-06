@@ -3401,9 +3401,6 @@ class WatchUserField {
 		return this;
 	}
 
-	/**
-	 * @todo This should always return an empty object when lifting an autoblock
-	 */
 	getWatchUserParams() {
 		/** @type {WatchUserParams} */
 		const params = Object.create(null);
@@ -3493,6 +3490,11 @@ class TargetField {
 		 * @private
 		 */
 		this.blockSelector = null;
+		/**
+		 * @type {boolean}
+		 * @private
+		 */
+		this.autoBlock = false;
 	}
 
 	/**
@@ -3543,6 +3545,7 @@ class TargetField {
 		this.addBlockAllowed = false;
 		this.messageContainer.$element.empty();
 		this.blockSelector = null;
+		this.autoBlock = false;
 		return this;
 	}
 
@@ -3568,6 +3571,10 @@ class TargetField {
 	setBlockSelector(config) {
 		this.blockSelector = new OO.ui.RadioSelectWidget(config);
 		return this.blockSelector;
+	}
+
+	isAutoBlock() {
+		return this.autoBlock;
 	}
 
 	/**
@@ -3691,6 +3698,7 @@ class TargetField {
 			if (this.parent instanceof BlockUser) {
 				throw new Error('An autoblock can only be removed and cannot be updated');
 			}
+			this.autoBlock = true;
 			this.$mainLabel.empty().append(
 				Messages.get('autoblockid', [BlockTarget.createBlockListLink(id).outerHTML])
 			);
@@ -4356,6 +4364,7 @@ class BlockUser extends BlockField {
 	 */
 	initTarget(target) {
 		const handler = this.targetField.init(target, this.getParentDialog().getBlockLookup());
+		this.optionsFieldset.toggle(!this.targetField.isAutoBlock());
 
 		// Adjust the visibility of field items
 		if (target.getType() === 'anon') {
@@ -4485,6 +4494,10 @@ class BlockUser extends BlockField {
 			}
 		}
 
+		if (!this.targetField.isAutoBlock()) {
+			Object.assign(params, this.getWatchUserParams());
+		}
+
 		return { params, warnings };
 	}
 
@@ -4610,7 +4623,9 @@ class UnblockUser extends UnblockField {
 	 * @returns {TargetHandler}
 	 */
 	initTarget(target) {
-		return this.targetField.init(target, this.getParentDialog().getBlockLookup());
+		const handler = this.targetField.init(target, this.getParentDialog().getBlockLookup());
+		this.optionsFieldset.toggle(!this.targetField.isAutoBlock());
+		return handler;
 	}
 
 	/**
@@ -4643,7 +4658,9 @@ class UnblockUser extends UnblockField {
 		params.reason = reason;
 
 		// TODO: Warn deviation from the predefined params
-		Object.assign(params, this.getWatchUserParams());
+		if (!this.targetField.isAutoBlock()) {
+			Object.assign(params, this.getWatchUserParams());
+		}
 
 		return { params, warnings };
 	}
