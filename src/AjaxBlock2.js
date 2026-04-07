@@ -3285,8 +3285,9 @@ function AjaxBlockDialogFactory() {
 		}
 
 		resetDialog() {
-			this.currentData = null;
+			// IMPORTANT: currentData must not be reset before calling getActiveField()
 			this.getActiveField().getTargetField().reset();
+			this.currentData = null;
 			this.setLocked(false);
 			this.blockLogGenerator = null;
 			this.popPending();
