@@ -456,10 +456,12 @@ export type WarningContext =
 	| 'dialog'
 	| 'oneclick';
 
+export type BlockLogGenerator = () => JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement> | null>;
+
 export type TargetHandler =
-	| { message: () => string }
-	| { log: () => JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement> | null> }
-	| { none: true };
+	| { type: 'message'; message: () => string; }
+	| { type: 'log'; log: BlockLogGenerator; }
+	| { type: 'none'; };
 
 export interface ParamApplierBlockParams {
 	expiry: string;

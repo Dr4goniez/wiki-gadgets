@@ -945,7 +945,7 @@ class AjaxBlock {
 		}
 
 		const field = this.dialog.getActiveField();
-		if (!field.targetField.isOneClickAllowed()) {
+		if (!field.getTargetField().isOneClickAllowed()) {
 			// When one-click execution is disallowed, the (un)block must be executed
 			// via the dialog
 			onAbort('nooneclick');
@@ -2768,7 +2768,7 @@ class DropdownUtil {
 	static assertOneOptionSelected(dropdown) {
 		const selected = dropdown.getMenu().findSelectedItems();
 		if (selected === null) {
-			throw new Error('All options are deselected');
+			throw new Error('No option is selected');
 		} else if (Array.isArray(selected)) {
 			throw new Error('Multiple options are selected');
 		}
@@ -2791,17 +2791,43 @@ class DropdownUtil {
 	}
 
 	/**
+	 * Gets the string data of the first selected item in the given dropdown.
+	 *
+	 * Notes:
+	 * - At least one option must be selected; otherwise, throws an Error.
+	 * - `getData()` must return a string; otherwise, throws a TypeError.
+	 * - If `getData()` returns an empty string (indicating that the "other"
+	 *   option is selected), returns null.
+	 *
 	 * @param {OO.ui.DropdownWidget} dropdown
-	 * @returns {string}
+	 * @returns {?string} `null` if the "other" option is selected
 	 */
 	static getSelectedOptionValue(dropdown) {
-		const selected = dropdown.getMenu().findFirstSelectedItem();
-		if (selected === null) {
+		const item = dropdown.getMenu().findFirstSelectedItem();
+		if (item === null) {
 			throw new Error('No option is selected');
 		}
-		const value = selected.getData();
+		const value = item.getData();
 		if (typeof value !== 'string') {
 			throw new TypeError('The selected dropdown option has data of type ' + typeof value);
+		}
+		return value === '' ? null : value;
+	}
+
+	/**
+	 * Gets the string data of the first selected item in the given dropdown.
+	 *
+	 * Same as {@link getSelectedOptionValue}, but throws an Error if the selected
+	 * option corresponds to the "other" value.
+	 *
+	 * @param {OO.ui.DropdownWidget} dropdown
+	 * @returns {string}
+	 * @throws {Error} If the "other" option is selected
+	 */
+	static getSelectedOptionValueThrow(dropdown) {
+		const value = this.getSelectedOptionValue(dropdown);
+		if (value === null) {
+			throw new Error('The "other" option cannot be selected');
 		}
 		return value;
 	}
@@ -2860,7 +2886,7 @@ function AjaxBlockDialogFactory() {
 			 */
 			this.actionRestrictions = actionRestrictions;
 			/**
-			 * @type {?Extract<TargetHandler, { log: unknown }>['log']}
+			 * @type {?BlockLogGenerator}
 			 * @private
 			 */
 			this.blockLogGenerator = null;
@@ -2894,10 +2920,10 @@ function AjaxBlockDialogFactory() {
 			 */
 			this.overlay = new AjaxBlockDialogBodyOverlay();
 			/**
-			 * @type {BlockLink}
+			 * @type {?BlockLink}
 			 * @private
 			 */
-			this.currentData = Object.create(null);
+			this.currentData = null;
 			/**
 			 * @type {boolean}
 			 * @private
@@ -2932,6 +2958,9 @@ function AjaxBlockDialogFactory() {
 		}
 
 		getCurrentData() {
+			if (this.currentData === null) {
+				throw new Error('Dialog data has not been initialized');
+			}
 			return this.currentData;
 		}
 
@@ -2978,21 +3007,21 @@ function AjaxBlockDialogFactory() {
 			this.currentData = data;
 			this.getActions().setMode(data.type);
 			const field = this.setActiveField().getActiveField();
-			field.targetField.reset();
+			field.getTargetField().reset();
 			this.blockLogGenerator = null;
 			this.popPending();
 			this.content.toggle(true);
 
 			// Set target and check if any additional processes should be handled to open the dialog
 			const targetHandler = field.initTarget(data.target);
-			if ('message' in targetHandler) {
+			if (targetHandler.type === 'message') {
 				// There's a blocker to open the dialog
 				mw.notify(
 					$('<span>').append(targetHandler.message()),
 					{ type: 'error' }
 				);
 				return false;
-			} else if ('log' in targetHandler) {
+			} else if (targetHandler.type === 'log') {
 				// Block log lines should be generated asynchronously
 				this.blockLogGenerator = targetHandler.log;
 			}
@@ -3002,7 +3031,7 @@ function AjaxBlockDialogFactory() {
 		/**
 		 * Sets the visibility of dialog fields based on the given data and flags a field as active.
 		 *
-		 * **This method is for use only by {@link AjaxBlockDialog.prepareDialog}**.
+		 * **This method is for use only by {@link prepareDialog}**.
 		 *
 		 * @returns {this}
 		 * @private
@@ -3044,43 +3073,42 @@ function AjaxBlockDialogFactory() {
 		 */
 		getReadyProcess(_data) {
 			const process = super.getReadyProcess(_data);
-			if (!this.blockLogGenerator) {
+			const generator = this.blockLogGenerator;
+			if (!generator) {
 				this.updateSize();
 				return process;
 			}
 
 			// @ts-expect-error Promise<void, any, any> -> Promise<void>
-			return process.next(() => {
-				return this.getReadyProcessInternal();
+			return process.next(async () => {
+				let options;
+				try {
+					options = await toNativePromise(generator());
+				} catch (err) {
+					const [code, info] = toErrorTuple(err);
+					mw.notify(Messages.get('ajaxblock-notify-error-loadblocklogs', [code]), { type: 'error' });
+					this.content.toggle(true);
+					this.popPending();
+					throw info;
+				} finally {
+					this.blockLogGenerator = null;
+				}
+				if (!options) {
+					return;
+				}
+				this.addBlockLogs(options);
 			}).next(() => {
 				this.content.toggle(true);
 				this.updateSize().popPending();
-				this.blockLogGenerator = null;
 			});
 		}
 
 		/**
-		 * @returns {Promise<void>}
+		 * @param {JQuery<HTMLElement> | OO.ui.RadioOptionWidget[]} options
+		 * @returns {void}
 		 * @private
 		 */
-		async getReadyProcessInternal() {
-			let options;
-			try {
-				// @ts-expect-error
-				options = await toNativePromise(this.blockLogGenerator());
-			} catch (err) {
-				const [code, info] = toErrorTuple(err);
-				const msg =
-					SCRIPT_NAME +
-					Messages.get('colon-separator') +
-					Messages.get('ajaxblock-notify-error-loadblocklogs', [code]);
-				mw.notify(msg, { type: 'error' });
-				throw info;
-			}
-			if (!options) {
-				return;
-			}
-
+		addBlockLogs(options) {
 			const data = this.getCurrentData();
 			const field = this.getActiveField();
 
@@ -3095,7 +3123,7 @@ function AjaxBlockDialogFactory() {
 					: 'ajaxblock-dialog-message-existingblocks'
 					);
 				msgType = 'warning';
-				const blockSelector = field.targetField.setBlockSelector({
+				const blockSelector = field.getTargetField().setBlockSelector({
 					classes: ['ajaxblock-dialog-blockselector'],
 					items: options,
 				});
@@ -3117,13 +3145,13 @@ function AjaxBlockDialogFactory() {
 				document.createElement('br'),
 				$logLines
 			);
-			if (field.targetField.getBlockSelector()) {
-				field.targetField.addMessage({
+			if (field.getTargetField().getBlockSelector()) {
+				field.getTargetField().addMessage({
 					label: new OO.ui.HtmlSnippet(Messages.get('ajaxblock-dialog-message-existingblocks-dialogonly')),
 					type: 'warning',
 				});
 			}
-			field.targetField.addMessage({
+			field.getTargetField().addMessage({
 				label: $label,
 				type: msgType,
 			});
@@ -3188,7 +3216,15 @@ function AjaxBlockDialogFactory() {
 			// - `locked` is explicitly set to true, or
 			// - the dialog is still getting ready, or
 			// - the overlay is shown
-			return this.locked || !!this.blockLogGenerator || this.overlay.isShown();
+			return this.locked || this.hasPendingBlockLog() || this.overlay.isShown();
+		}
+
+		/**
+		 * @returns {boolean}
+		 * @private
+		 */
+		hasPendingBlockLog() {
+			return !!this.blockLogGenerator;
 		}
 
 		canClose() {
@@ -3226,8 +3262,8 @@ function AjaxBlockDialogFactory() {
 
 				const field = this.getActiveField();
 				if (field instanceof BlockUser) {
-					// Clear the inputs for partial block restrictions, because there remaining a value
-					// indicates that it failed validation (getValue() doesn't pick up such values, though)
+					// Clear the inputs for partial block restrictions, because a remaining value
+					// indicates that validation failed (getValue() doesn't pick up such values, though)
 					field.partialBlockPages.clearFlags().clearInput();
 					field.partialBlockNamespaces.clearFlags().clearInput();
 				}
@@ -3249,8 +3285,8 @@ function AjaxBlockDialogFactory() {
 		}
 
 		resetDialog() {
-			this.currentData = Object.create(null);
-			this.getActiveField().targetField.reset();
+			this.currentData = null;
+			this.getActiveField().getTargetField().reset();
 			this.setLocked(false);
 			this.blockLogGenerator = null;
 			this.popPending();
@@ -3342,7 +3378,7 @@ class AjaxBlockDialogBodyOverlay {
 // Note: The following typedef shouldn't be moved to d.ts to keep it possible to
 // reference the doc comment from type signatures in this .js file
 /**
- * @typedef {() => any} OnResize
+ * @typedef {() => void} OnResize
  * Callback invoked when the field container resizes.
  */
 /**
@@ -3429,7 +3465,7 @@ class WatchUserField {
 			return params;
 		}
 		params.watchuser = true;
-		params.watchlistexpiry = DropdownUtil.getSelectedOptionValue(this.watchlistExpiry);
+		params.watchlistexpiry = DropdownUtil.getSelectedOptionValueThrow(this.watchlistExpiry);
 		return params;
 	}
 
@@ -3797,7 +3833,7 @@ class BlockField extends WatchUserField {
 
 		this.expiry.on('labelChange', () => {
 			const selected = DropdownUtil.getSelectedOptionValue(this.expiry);
-			if (selected !== '') {
+			if (selected) {
 				this.expiryOther.setValue('');
 			}
 
@@ -3825,7 +3861,7 @@ class BlockField extends WatchUserField {
 
 	getExpiry() {
 		const selected = DropdownUtil.getSelectedOptionValue(this.expiry);
-		if (selected !== '') {
+		if (selected) {
 			return selected;
 		} else {
 			let input = clean(this.expiryOther.getValue());
@@ -4065,6 +4101,7 @@ class BlockUser extends BlockField {
 		/**
 		 * @type {TargetField}
 		 * @readonly
+		 * @private
 		 */
 		this.targetField = new TargetField(this);
 
@@ -4097,6 +4134,10 @@ class BlockUser extends BlockField {
 
 	getParentDialog() {
 		return this.dialog;
+	}
+
+	getTargetField() {
+		return this.targetField;
 	}
 
 	/**
@@ -4277,6 +4318,7 @@ class UnblockUser extends UnblockField {
 		/**
 		 * @type {TargetField}
 		 * @readonly
+		 * @private
 		 */
 		this.targetField = new TargetField(this);
 
@@ -4285,6 +4327,10 @@ class UnblockUser extends UnblockField {
 
 	getParentDialog() {
 		return this.dialog;
+	}
+
+	getTargetField() {
+		return this.targetField;
 	}
 
 	/**
@@ -4538,17 +4584,17 @@ class TargetField {
 				if (username && blocks && blocks.length > 1) {
 					// Other blocks also exist
 					this.initInternal(null, username, false, true);
-					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
 				} else if (block.user) {
 					// Unambiguous block
 					this.initInternal(id, block.user, true, true);
-					return { log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, { blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, { blockUser }) };
 				} else {
 					// Autoblock
 					if (blockUser) {
 						// Cannot reblock
 						this.initInternal(null, null, false, false);
-						return { message: () => Messages.get('apierror-modify-autoblock') };
+						return { type: 'message', message: () => Messages.get('apierror-modify-autoblock') };
 					} else {
 						this.initInternal(id, null, true, false);
 					}
@@ -4564,7 +4610,7 @@ class TargetField {
 				if (Array.isArray(blocks)) {
 					// If other active blocks exist, allow the user to choose which one to update
 					this.initInternal(null, username, false, true);
-					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
 				} else {
 					// No other active blocks
 					if (blockUser) {
@@ -4573,15 +4619,15 @@ class TargetField {
 					} else {
 						// Cannot be unblocked
 						this.initInternal(null, username, false, false);
-						return { message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
+						return { type: 'message', message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
 					}
 				}
 			} else {
 				// ID no longer active, no username: unprocessable
 				this.initInternal(null, null, false, false);
-				return { message: () => Messages.get('ajaxblock-notify-error-idinactivenousername', [id]) };
+				return { type: 'message', message: () => Messages.get('ajaxblock-notify-error-idinactivenousername', [id]) };
 			}
-			return { none: true };
+			return { type: 'none' };
 		}
 
 		if (username !== null) {
@@ -4589,11 +4635,11 @@ class TargetField {
 				if (blocks.length > 1) {
 					// Multiple active blocks
 					this.initInternal(null, username, false, true);
-					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
 				} else {
 					// Single active block
 					this.initInternal(blocks[0].id, username, true, true);
-					return { log: () => BlockLog.generate(username, blockLookup, { blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { blockUser }) };
 				}
 			} else {
 				// No active blocks
@@ -4601,10 +4647,10 @@ class TargetField {
 					this.initInternal(null, username, true, false);
 				} else {
 					this.initInternal(null, username, false, false);
-					return { message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
+					return { type: 'message', message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
 				}
 			}
-			return { none: true };
+			return { type: 'none' };
 		}
 
 		this.initInternal(null, null, false, false);
@@ -5166,7 +5212,7 @@ class ParamApplier {
 		const mainMsg = Messages.get(`ajaxblock-dialog-message-predefinedparams-${type}`);
 		// eslint-disable-next-line no-control-regex
 		const isLastCharFullWidth = !!mainMsg && /[^\u0000-\u00ff]$/.test(mainMsg);
-		field.targetField.addMessage({
+		field.getTargetField().addMessage({
 			label: $('<span>').append(
 				mainMsg,
 				isLastCharFullWidth ? Messages.get('word-separator') : '',
@@ -5816,6 +5862,7 @@ AjaxBlockLogo.svg = `
  * @typedef {import('./window/AjaxBlock').UnblockParams} UnblockParams
  * @typedef {import('./window/AjaxBlock').AbortCallback} AbortCallback
  * @typedef {import('./window/AjaxBlock').WarningContext} WarningContext
+ * @typedef {import('./window/AjaxBlock').BlockLogGenerator} BlockLogGenerator
  * @typedef {import('./window/AjaxBlock').TargetHandler} TargetHandler
  * @typedef {import('./window/AjaxBlock').ParamApplierBlockParams} ParamApplierBlockParams
  * @typedef {import('./window/AjaxBlock').ParamApplierUnblockParams} ParamApplierUnblockParams
