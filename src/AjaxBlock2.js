@@ -174,11 +174,11 @@ class AjaxBlock {
 	 */
 	static getInitializer() {
 		const /** @type {Partial<Initializer>} */ data = {
-			blockPageAliases: void 0,
-			specialNamespaceAliases: void 0,
-			userRights: void 0,
-			actionRestrictions: void 0,
-			multiBlocksEnabled: void 0,
+			blockPageAliases: undefined,
+			specialNamespaceAliases: undefined,
+			userRights: undefined,
+			actionRestrictions: undefined,
+			multiBlocksEnabled: undefined,
 		};
 
 		// Special namespace aliases (always local)
@@ -3428,8 +3428,23 @@ class WatchUserField {
 		this.watchlistExpiryLayout = new OO.ui.FieldLayout(this.watchlistExpiry, {
 			$element: $('<div>').css({ 'margin-left': '1.8em', 'margin-top': '8px' }),
 		});
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = $('<div>').addClass('ajaxblock-dialog-content');
+		/**
+		 * @type {OO.ui.FieldsetLayout}
+		 * @readonly
+		 * @protected
+		 */
+		this.optionsFieldset = new OO.ui.FieldsetLayout({
+			label: Messages.get('block-options'),
+			items: [this.watchUserLayout, this.watchlistExpiryLayout],
+		});
 
 		// Initialize fields
+		this.$element.append(this.optionsFieldset.$element);
 		DropdownUtil.selectInfinity(this.watchlistExpiry); // Select infinity
 		this.watchlistExpiryLayout.toggle(false); // Hide the expiry field (since the checkbox isn't checked)
 
@@ -3442,11 +3457,12 @@ class WatchUserField {
 	}
 
 	/**
-	 * @returns {OO.ui.FieldLayout[]}
-	 * @protected
+	 * @param {boolean} show
+	 * @return {this}
 	 */
-	getWatchLayouts() {
-		return [this.watchUserLayout, this.watchlistExpiryLayout];
+	toggle(show) {
+		this.$element.toggle(show);
+		return this;
 	}
 
 	/**
@@ -3659,11 +3675,6 @@ class BlockField extends WatchUserField {
 		items.push(this.partialBlockLayout);
 
 		/**
-		 * @type {JQuery<HTMLElement>}
-		 * @readonly
-		 */
-		this.$element = $('<div>').addClass('ajaxblock-dialog-content');
-		/**
 		 * @type {OO.ui.FieldsetLayout}
 		 * @protected
 		 */
@@ -3671,9 +3682,8 @@ class BlockField extends WatchUserField {
 			label: Messages.get('block'),
 		});
 		this.mainFieldset.addItems(items);
-		this.$element.append(this.mainFieldset.$element);
-		items = [];
 
+		items = [];
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
@@ -3712,9 +3722,8 @@ class BlockField extends WatchUserField {
 			label: Messages.get('block-details'),
 		});
 		detailsFieldset.addItems(items);
-		this.$element.append(detailsFieldset.$element);
-		items = [];
 
+		items = [];
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
@@ -3763,19 +3772,11 @@ class BlockField extends WatchUserField {
 		});
 		items.push(this.cbHideNameContainer);
 
-		items.push(
-			...this.getWatchLayouts()
+		this.$element.prepend(
+			this.mainFieldset.$element,
+			detailsFieldset.$element
 		);
-
-		/**
-		 * @type {OO.ui.FieldsetLayout}
-		 * @protected
-		 */
-		this.optionsFieldset = new OO.ui.FieldsetLayout({
-			label: Messages.get('block-options'),
-		});
-		this.optionsFieldset.addItems(items);
-		this.$element.append(this.optionsFieldset.$element);
+		this.optionsFieldset.addItems(items, 0);
 
 		this.setUpEventListeners(onResize);
 	}
@@ -4014,7 +4015,7 @@ class UnblockField extends WatchUserField {
 		super(onResize);
 
 		/** @type {OO.ui.Element[]} */
-		let items = [];
+		const items = [];
 
 		/**
 		 * @type {OO.ui.TextInputWidget}
@@ -4033,11 +4034,6 @@ class UnblockField extends WatchUserField {
 		);
 
 		/**
-		 * @type {JQuery<HTMLElement>}
-		 * @readonly
-		 */
-		this.$element = $('<div>').addClass('ajaxblock-dialog-content');
-		/**
 		 * @type {OO.ui.FieldsetLayout}
 		 * @protected
 		 */
@@ -4045,22 +4041,10 @@ class UnblockField extends WatchUserField {
 			label: Messages.get('unblock'),
 		});
 		this.mainFieldset.addItems(items);
-		this.$element.append(this.mainFieldset.$element);
-		items = [];
 
-		items.push(
-			...this.getWatchLayouts()
+		this.$element.prepend(
+			this.mainFieldset.$element
 		);
-
-		/**
-		 * @type {OO.ui.FieldsetLayout}
-		 * @protected
-		 */
-		this.optionsFieldset = new OO.ui.FieldsetLayout({
-			label: Messages.get('block-options'),
-		});
-		this.optionsFieldset.addItems(items);
-		this.$element.append(this.optionsFieldset.$element);
 	}
 
 	getReason() {
@@ -4082,7 +4066,6 @@ class UnblockField extends WatchUserField {
  * @requires oojs-ui
  * @requires mediawiki.widgets.TitlesMultiselectWidget
  * @requires mediawiki.widgets.NamespacesMultiselectWidget
- * @todo Use a mixin?
  */
 class BlockUser extends BlockField {
 
@@ -4104,10 +4087,7 @@ class BlockUser extends BlockField {
 		 * @readonly
 		 * @private
 		 */
-		this.targetField = new TargetField(this);
-
-		this.mainFieldset.addItems(this.targetField.getLayouts(), 0);
-
+		this.targetField = new TargetField(this, this.mainFieldset);
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
@@ -4139,15 +4119,6 @@ class BlockUser extends BlockField {
 
 	getTargetField() {
 		return this.targetField;
-	}
-
-	/**
-	 * @param {boolean} show
-	 * @return {this}
-	 */
-	toggle(show) {
-		this.$element.toggle(show);
-		return this;
 	}
 
 	/**
@@ -4299,7 +4270,6 @@ class BlockUser extends BlockField {
  * @requires oojs-ui
  * @requires mediawiki.widgets.TitlesMultiselectWidget
  * @requires mediawiki.widgets.NamespacesMultiselectWidget
- * @todo Use a mixin?
  */
 class UnblockUser extends UnblockField {
 
@@ -4321,9 +4291,7 @@ class UnblockUser extends UnblockField {
 		 * @readonly
 		 * @private
 		 */
-		this.targetField = new TargetField(this);
-
-		this.mainFieldset.addItems(this.targetField.getLayouts(), 0);
+		this.targetField = new TargetField(this, this.mainFieldset);
 	}
 
 	getParentDialog() {
@@ -4332,15 +4300,6 @@ class UnblockUser extends UnblockField {
 
 	getTargetField() {
 		return this.targetField;
-	}
-
-	/**
-	 * @param {boolean} show
-	 * @return {this}
-	 */
-	toggle(show) {
-		this.$element.toggle(show);
-		return this;
 	}
 
 	/**
@@ -4399,8 +4358,9 @@ class TargetField {
 
 	/**
 	 * @param {BlockUser | UnblockUser} parent
+	 * @param {OO.ui.FieldsetLayout} prependTo
 	 */
-	constructor(parent) {
+	constructor(parent, prependTo) {
 		/**
 		 * @type {BlockUser | UnblockUser}
 		 * @readonly
@@ -4428,27 +4388,6 @@ class TargetField {
 		 */
 		this.$auxLabel = $('<span>');
 		/**
-		 * @type {OO.ui.FieldLayout}
-		 * @readonly
-		 * @private
-		 */
-		this.layout = new OO.ui.FieldLayout(
-			new OO.ui.LabelWidget({
-				label: $('<span>')
-					.addClass('ajaxblock-targetlabel')
-					.append(
-						this.$mainLabel,
-						Messages.get('word-separator'),
-						this.$auxLabel
-					)
-			}),
-			{
-				classes: ['ajaxblock-horizontalfield'],
-				label: Messages.get('block-target'),
-				align: 'left',
-			}
-		);
-		/**
 		 * @type {[?number, ?string]}
 		 * @private
 		 */
@@ -4473,6 +4412,24 @@ class TargetField {
 		 * @private
 		 */
 		this.autoBlock = false;
+
+		const layout = new OO.ui.FieldLayout(
+			new OO.ui.LabelWidget({
+				label: $('<span>')
+					.addClass('ajaxblock-targetlabel')
+					.append(
+						this.$mainLabel,
+						Messages.get('word-separator'),
+						this.$auxLabel
+					)
+			}),
+			{
+				classes: ['ajaxblock-horizontalfield'],
+				label: Messages.get('block-target'),
+				align: 'left',
+			}
+		);
+		prependTo.addItems([this.messageContainer, layout], 0);
 	}
 
 	/**
@@ -4495,13 +4452,6 @@ class TargetField {
 	clearMessages() {
 		this.messageContainer.$element.empty();
 		return this;
-	}
-
-	/**
-	 * @internal For use only by {@link BlockUser} and {@link UnblockUser} constructors
-	 */
-	getLayouts() {
-		return [this.messageContainer, this.layout];
 	}
 
 	/**
@@ -4576,7 +4526,7 @@ class TargetField {
 		const id = target.getId();
 		const username = target.getUsername();
 		const blocks = username ? blockLookup.getBlocksByUsername(username) : null;
-		const blockUser = this.parent instanceof BlockUser ? this.parent : void 0;
+		const blockUser = this.parent instanceof BlockUser ? this.parent : undefined;
 
 		if (id !== null) {
 			const block = blockLookup.getBlockById(id);
@@ -4912,7 +4862,7 @@ class BlockLog {
 					return id;
 				}
 			}
-			return void 0;
+			return undefined;
 		};
 		const rIsoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 
