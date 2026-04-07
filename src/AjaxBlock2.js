@@ -73,13 +73,13 @@ class AjaxBlock {
 			}
 		});
 
-		// Check user rights, special namespace aliases, and block/unblock special page aliases
+		// Fetch initialization data (user rights, aliases, configuration)
 		let /** @type {Initializer} */ initializer;
 		try {
 			initializer = await toNativePromise(this.getInitializer());
 		} catch (e) {
-			// Visualize initialization failure using the logo
-			console.error(/** @type {[string, any]} */ (e)[1]);
+			// Indicate initialization failure using the logo
+			console.error(toErrorTuple(e)[1]);
 			await new AjaxBlockLogo().insert().setError().remove(800);
 			return;
 		}
@@ -99,15 +99,46 @@ class AjaxBlock {
 
 		/** @type {?AjaxBlock} */
 		let ajaxBlock = null;
+		let isFirstRun = true;
 
 		mw.hook('wikipage.content').add(async ($content) => {
-			const content = $content[0];
-			if (!content || !content.isConnected || !content.querySelector('a')) {
-				return;
+			let content;
+			if (isFirstRun) {
+				// On first run, allow collectBlockLinks() to scan the full document (#bodyContent)
+				content = undefined;
+				isFirstRun = false;
+			} else {
+				content = $content[0];
+				if (!content || !content.isConnected || !content.querySelector('a')) {
+					return;
+				}
 			}
 
 			// Parse block/unblock links
 			const { links, users, ids } = this.collectBlockLinks(initializer, permissionManager, content);
+			if (ajaxBlock) {
+				// Reuse previously tracked links that are no longer present in the new scan
+				const anchorSet = new Set(links.map(obj => obj.anchor));
+				for (const prevLinks of ajaxBlock.linkMap.values()) {
+					for (const prev of prevLinks) {
+						if (!prev.anchor.isConnected || anchorSet.has(prev.anchor)) {
+							// Skip detached anchors and those already collected in this run
+							continue;
+						}
+						links.push(prev);
+
+						const username = prev.target.getUsername();
+						if (username) {
+							users.add(username);
+							continue;
+						}
+						const id = prev.target.getId();
+						if (id) {
+							ids.add(id);
+						}
+					}
+				}
+			}
 			if (!links.length) {
 				return;
 			}
@@ -119,7 +150,7 @@ class AjaxBlock {
 			try {
 				blockLookup = await toNativePromise(BlockLookup.newFromTargets(permissionManager, users, ids));
 			} catch (e) {
-				console.error(/** @type {[string, any]} */ (e)[1]);
+				console.error(toErrorTuple(e)[1]);
 				await logo.setError().remove(800);
 				return;
 			}
@@ -314,27 +345,12 @@ class AjaxBlock {
 		 * @returns {string}
 		 */
 		const toEscaped = (arr) => arr.map(mw.util.escapeRegExp).join('|');
-		const regex = {
-			/**
-			 * * `$0` - `/wiki/<title>`
-			 * * `$1` - `<title>`
-			 */
+		this.regex = this.regex || {
 			article: new RegExp(
 				mw.util.escapeRegExp(mw.config.get('wgArticlePath')).replace('\\$1', '([^#?]+)')
 			),
-			/**
-			 * * `$0` - `Special:<root>/<subpage>`
-			 * * `$1` - `<root>`
-			 * * `$2`? - `<subpage>`
-			 */
 			special: new RegExp('^(?:' + toEscaped(init.specialNamespaceAliases) + '):([^/]+)(?:/([^#]+))?', 'i'),
-			/**
-			 * * `$0` - `Block` (+aliases, case-insensitive)
-			 */
 			block: new RegExp('^(' + toEscaped(init.blockPageAliases.Block) + ')$', 'i'),
-			/**
-			 * * `$0` - `Unblock` (+aliases, case-insensitive)
-			 */
 			unblock: new RegExp('^(' + toEscaped(init.blockPageAliases.Unblock) + ')$', 'i'),
 		};
 
@@ -358,7 +374,7 @@ class AjaxBlock {
 			}
 
 			// Get prefixed title from the href
-			const mArticle = regex.article.exec(href);
+			const mArticle = this.regex.article.exec(href);
 			let rawTitle = '';
 			let needsDecode = true;
 			if (mArticle) {
@@ -376,15 +392,15 @@ class AjaxBlock {
 			const prefixedTitle = (needsDecode ? decodeURIComponent(rawTitle) : rawTitle).replace(/ /g, '_');
 
 			// Check whether this is a link to Special:Block or Special:Unblock
-			const mSpecial = regex.special.exec(prefixedTitle);
+			const mSpecial = this.regex.special.exec(prefixedTitle);
 			if (!mSpecial) {
 				continue;
 			}
 			const rootPageName = mSpecial[1];
 			let /** @type {BlockPageNames} */ specialPageName;
-			if (regex.block.test(rootPageName)) {
+			if (this.regex.block.test(rootPageName)) {
 				specialPageName = 'Block';
-			} else if (regex.unblock.test(rootPageName)) {
+			} else if (this.regex.unblock.test(rootPageName)) {
 				specialPageName = 'Unblock';
 			} else {
 				continue;
@@ -397,10 +413,9 @@ class AjaxBlock {
 			// Class attributes used here:
 			// - ajaxblock-blocklink
 			// - ajaxblock-unblocklink
-			const clss = `ajaxblock-${linkType}link`;
-			a.classList.add(clss);
+			a.classList.add(`ajaxblock-${linkType}link`);
 
-			// Extract target (subpage (i.e., username) is normalized in BlockTarget.validate())
+			// Extract target
 			const subpage = mSpecial[2] || null;
 			const [id, username] = BlockTarget.validate(subpage, query);
 			if (!id && !username) {
@@ -502,7 +517,7 @@ class AjaxBlock {
 				'block-reason',
 				'block-removal-reason-placeholder',
 
-				// Used in setTarget()
+				// Used in TargetField.init()
 				'apierror-modify-autoblock',
 				'autoblockid',
 
@@ -582,7 +597,7 @@ class AjaxBlock {
 				}
 			} else if (username) {
 				// We don't try to associate the username to block IDs here
-				// That should be handled in setTarget()
+				// That should be handled in TargetField.init()
 				key = username;
 			} else {
 				// collectBlockLinks() should have already handled this path
@@ -1169,7 +1184,7 @@ class AjaxBlock {
 				// The action matches, and
 				link.type === params.action && (
 					// The operation is username-based (a username-based operation indicates
-					// the target wasn't blocked, or adding a new block; see BlockUser.setTarget)
+					// the target wasn't blocked, or adding a new block; see TargetField.init)
 					params.user !== undefined ||
 					// --- The operation is ID-based ---
 					// The link doesn't target a block ID (i.e., targets the username)
@@ -1440,6 +1455,10 @@ AjaxBlock.storageKeys = {
 	enableMultiblocks: 'mw-AjaxBlock-enableMultiblocks',
 	actionRestrictions: 'mw-AjaxBlock-actionRestrictions',
 };
+/**
+ * @type {?import('./window/AjaxBlock').AjaxBlockRegex}
+ */
+AjaxBlock.regex = null;
 /**
  * @type {?string}
  */
@@ -2213,100 +2232,101 @@ class Messages {
 
 		const apilimit = permissionManager.getApiLimit();
 		return (
-		/**
-		 * Recursively loads missing messages in batches of up to 500.
-		 *
-		 * @param {string[]} keys List of message keys to load.
-		 * @param {number} index Starting index for the current batch.
-		 * @returns {JQuery.Promise<boolean>}
-		 */
-		function execute(keys, index) {
-			const batch = keys.slice(index, index + apilimit);
-			let request, ajaxOptions;
-			if (batch.length <= 50) {
-				request = AjaxBlock.api.get.bind(AjaxBlock.api);
-				ajaxOptions = {};
-			} else {
-				request = AjaxBlock.api.post.bind(AjaxBlock.api);
-				ajaxOptions = nonwritePost();
-			}
+			/**
+			 * Recursively loads missing messages in batches of up to 500.
+			 *
+			 * @param {string[]} keys List of message keys to load.
+			 * @param {number} index Starting index for the current batch.
+			 * @returns {JQuery.Promise<boolean>}
+			 */
+			function execute(keys, index) {
+				const batch = keys.slice(index, index + apilimit);
+				let request, ajaxOptions;
+				if (batch.length <= 50) {
+					request = AjaxBlock.api.get.bind(AjaxBlock.api);
+					ajaxOptions = {};
+				} else {
+					request = AjaxBlock.api.post.bind(AjaxBlock.api);
+					ajaxOptions = nonwritePost();
+				}
 
-			return request({
-				meta: 'allmessages',
-				ammessages: batch,
-				amlang: wgUserLanguage,
-			}, ajaxOptions).then(/** @param {ApiResponse} res */ (res) => {
-				const allmessages = res && res.query && res.query.allmessages || [];
-				let added = false;
-				/** @type {Set<string>} */
-				const containsIntAndMissing = new Set();
+				return request({
+					meta: 'allmessages',
+					ammessages: batch,
+					amlang: wgUserLanguage,
+				}, ajaxOptions).then(/** @param {ApiResponse} res */ (res) => {
+					const allmessages = res && res.query && res.query.allmessages || [];
+					let added = false;
+					/** @type {Set<string>} */
+					const containsIntAndMissing = new Set();
 
-				for (const { name, content, missing } of allmessages) {
-					if (!missing && content) {
-						// Add to mw.messages; track whether any new message was added
-						added = mw.messages.set(name, content) || added;
+					for (const { name, content, missing } of allmessages) {
+						if (!missing && content) {
+							// Add to mw.messages; track whether any new message was added
+							added = mw.messages.set(name, content) || added;
 
-						const unparsed = Messages.parseInt(content, name);
-						if (unparsed.size > 0) {
-							containsInt.add(name);
-							for (const dep of unparsed) {
-								if (!mw.messages.exists(dep)) {
-									containsIntAndMissing.add(dep);
+							const unparsed = Messages.parseInt(content, name);
+							if (unparsed.size > 0) {
+								containsInt.add(name);
+								for (const dep of unparsed) {
+									if (!mw.messages.exists(dep)) {
+										containsIntAndMissing.add(dep);
+									}
 								}
 							}
+						} else {
+							console.warn('Message not found: ' + name);
 						}
-					} else {
-						console.warn('Message not found: ' + name);
 					}
-				}
 
-				index += apilimit;
+					index += apilimit;
 
-				// Recursively process messages that contain {{int:...}}
-				if (containsIntAndMissing.size) {
-					if (keys[index] === undefined) {
-						let i = index;
-						for (const key of containsIntAndMissing) {
-							keys[i] = key;
-							i++;
+					// Recursively process messages that contain {{int:...}}
+					if (containsIntAndMissing.size) {
+						if (keys[index] === undefined) {
+							let i = index;
+							for (const key of containsIntAndMissing) {
+								keys[i] = key;
+								i++;
+							}
+						} else {
+							keys.push(...containsIntAndMissing);
 						}
-					} else {
-						keys.push(...containsIntAndMissing);
+						for (const el of containsIntAndMissing) {
+							missingMessages.add(el);
+						}
 					}
-					for (const el of containsIntAndMissing) {
-						missingMessages.add(el);
+
+					if (keys[index] !== undefined) {
+						// More messages to load
+						return execute(keys, index);
 					}
-				}
 
-				if (keys[index] !== undefined) {
-					// More messages to load
-					return execute(keys, index);
-				}
-
-				// Re-parse original messages that contained unresolved `{{int:...}}`
-				for (const key of containsInt) {
-					const msg = mw.messages.get(key);
-					if (msg !== null) {
-						Messages.parseInt(msg, key);
+					// Re-parse original messages that contained unresolved `{{int:...}}`
+					for (const key of containsInt) {
+						const msg = mw.messages.get(key);
+						if (msg !== null) {
+							Messages.parseInt(msg, key);
+						}
 					}
-				}
 
-				// Save cache
-				const newCache = Object.create(null);
-				for (const key of missingMessages) {
-					/** @type {?string} */
-					const value = mw.messages.get(key);
-					if (value !== null) {
-						newCache[key] = value;
+					// Save cache
+					const newCache = Object.create(null);
+					for (const key of missingMessages) {
+						/** @type {?string} */
+						const value = mw.messages.get(key);
+						if (value !== null) {
+							newCache[key] = value;
+						}
 					}
-				}
-				if (!$.isEmptyObject(newCache)) {
-					mw.storage.setObject(storageKey, newCache, daysInSeconds(1));
-				}
+					if (!$.isEmptyObject(newCache)) {
+						mw.storage.setObject(storageKey, newCache, daysInSeconds(1));
+					}
 
-				return added;
-			});
-		})(Array.from(missingMessages), 0);
+					return added;
+				});
+			}
+		)(Array.from(missingMessages), 0);
 	}
 
 	/**
@@ -2359,6 +2379,7 @@ class Messages {
 	 * @param {boolean} [options.restoreTags=false] For `method='parse'`, whether to restore angle brackets
 	 * to use the message as raw HTML. Defaults to `false`.
 	 * @returns {LoadedMessages[K]} The message as a string.
+	 * @todo Parsed messages should be cached
 	 */
 	static get(key, params = [], options = {}) {
 		const { method = 'text', restoreTags = false } = options;
@@ -2371,7 +2392,7 @@ class Messages {
 			// Set `target="_blank"` on all anchors if `ret` contains any links
 			const $html = $('<div>').html(ret);
 			$html.find('a').each((_, a) => {
-				if (a.role !== 'button' && a.href && !a.href.startsWith('#')) {
+				if (a.role !== 'button' && a.href && !(a.getAttribute('href') || '').startsWith('#')) {
 					a.target = '_blank';
 				}
 			});
@@ -2744,10 +2765,10 @@ class DropdownUtil {
 	 * @param {OO.ui.DropdownWidget} dropdown
 	 * @private
 	 */
-	static assertOneOptionIsSelected(dropdown) {
+	static assertOneOptionSelected(dropdown) {
 		const selected = dropdown.getMenu().findSelectedItems();
 		if (selected === null) {
-			throw new Error('All options were deselected');
+			throw new Error('All options are deselected');
 		} else if (Array.isArray(selected)) {
 			throw new Error('Multiple options are selected');
 		}
@@ -2758,7 +2779,7 @@ class DropdownUtil {
 	 */
 	static selectInfinity(dropdown) {
 		dropdown.getMenu().selectItemByData(EXPIRY_INFINITE);
-		this.assertOneOptionIsSelected(dropdown);
+		this.assertOneOptionSelected(dropdown);
 	}
 
 	/**
@@ -2766,7 +2787,7 @@ class DropdownUtil {
 	 */
 	static selectOther(dropdown) {
 		dropdown.getMenu().selectItemByData('');
-		this.assertOneOptionIsSelected(dropdown);
+		this.assertOneOptionSelected(dropdown);
 	}
 
 	/**
@@ -3048,7 +3069,7 @@ function AjaxBlockDialogFactory() {
 				// @ts-expect-error
 				options = await toNativePromise(this.blockLogGenerator());
 			} catch (err) {
-				const [code, info] = /** @type {[string, any]} */ (err);
+				const [code, info] = toErrorTuple(err);
 				const msg =
 					SCRIPT_NAME +
 					Messages.get('colon-separator') +
@@ -3502,16 +3523,26 @@ class TargetField {
 	 * @return {this}
 	 */
 	addMessage(config = {}) {
-		if (config.classes) {
-			config.classes.push('ajaxblock-dialog-message');
-		} else {
-			config = Object.assign({ classes: ['ajaxblock-dialog-message'] }, config);
-		}
+		// TODO: Should we shallow-copy the array before mutating it?
+		config.classes = config.classes || [];
+		config.classes.push('ajaxblock-dialog-message');
+
 		const message = new OO.ui.MessageWidget(config);
 		this.messageContainer.$element.append(message.$element);
 		return this;
 	}
 
+	/**
+	 * @private
+	 */
+	clearMessages() {
+		this.messageContainer.$element.empty();
+		return this;
+	}
+
+	/**
+	 * @internal For use only by {@link BlockUser} and {@link UnblockUser} constructors
+	 */
 	getLayouts() {
 		return [this.messageContainer, this.layout];
 	}
@@ -3543,7 +3574,7 @@ class TargetField {
 		this.current = [null, null];
 		this.oneClickAllowed = true;
 		this.addBlockAllowed = false;
-		this.messageContainer.$element.empty();
+		this.clearMessages();
 		this.blockSelector = null;
 		this.autoBlock = false;
 		return this;
@@ -3612,36 +3643,33 @@ class TargetField {
 						this.initInternal(id, null, true, false);
 					}
 				}
-			} else {
-				// ID no longer active
-				if (username !== null) {
-					// Ignore ID and use username
-					this.addMessage({
-						label: new OO.ui.HtmlSnippet(
-							Messages.get('ajaxblock-dialog-message-nonactive-id', [BlockTarget.createBlockListLink(id).outerHTML])
-						),
-						type: 'notice',
-					});
-					if (Array.isArray(blocks)) {
-						// If other active blocks exist, allow the user to choose which one to update
-						this.initInternal(null, username, false, true);
-						return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
-					} else {
-						// No other active blocks
-						if (blockUser) {
-							// Allow a username-based block
-							this.initInternal(null, username, true, false);
-						} else {
-							// Cannot be unblocked
-							this.initInternal(id, null, true, false);
-							return { message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
-						}
-					}
+			} else if (username !== null) {
+				// ID no longer active: Ignore ID and use username
+				this.addMessage({
+					label: new OO.ui.HtmlSnippet(
+						Messages.get('ajaxblock-dialog-message-nonactive-id', [BlockTarget.createBlockListLink(id).outerHTML])
+					),
+					type: 'notice',
+				});
+				if (Array.isArray(blocks)) {
+					// If other active blocks exist, allow the user to choose which one to update
+					this.initInternal(null, username, false, true);
+					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
 				} else {
-					// ID no longer active, no username: unprocessable
-					this.initInternal(null, null, false, false);
-					return { message: () => Messages.get('ajaxblock-notify-error-idinactivenousername', [id]) };
+					// No other active blocks
+					if (blockUser) {
+						// Allow a username-based block
+						this.initInternal(null, username, true, false);
+					} else {
+						// Cannot be unblocked
+						this.initInternal(null, username, false, false);
+						return { message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
+					}
 				}
+			} else {
+				// ID no longer active, no username: unprocessable
+				this.initInternal(null, null, false, false);
+				return { message: () => Messages.get('ajaxblock-notify-error-idinactivenousername', [id]) };
 			}
 			return { none: true };
 		}
@@ -3746,12 +3774,10 @@ class TargetField {
 		}
 
 		// Use the dialog's current target instead of data.target here to reflect
-		// what's been set by setTarget()
+		// what's been set by TargetField.init()
+		id = id || this.getCurrentId();
 		if (!id) {
-			id = this.getCurrentId();
-			if (!id) {
-				user = this.getCurrentUsername();
-			}
+			user = this.getCurrentUsername();
 		}
 
 		if (id) {
@@ -4167,10 +4193,14 @@ class BlockField extends WatchUserField {
 
 	getExpiry() {
 		const selected = DropdownUtil.getSelectedOptionValue(this.expiry);
-		if (selected) {
+		if (selected !== '') {
 			return selected;
 		} else {
-			return clean(this.expiryOther.getValue());
+			let input = clean(this.expiryOther.getValue());
+			if (mw.util.isInfinity(input)) {
+				input = EXPIRY_INFINITE;
+			}
+			return input;
 		}
 	}
 
@@ -4210,7 +4240,21 @@ class BlockField extends WatchUserField {
 			DropdownUtil.getSelectedOptionValue(this.reason2),
 		].filter(Boolean).join(sep);
 		let other = clean(this.reasonOther.getValue());
-		const isOtherCommentOnly = other.startsWith('<!--') && other.endsWith('-->');
+		/**
+		 * Good patterns:
+		 * - `<!---->`
+		 * - `<!--a-->`
+		 * - `<!--a--><!--a-->`
+		 * - `<!--a--> <!--a-->`
+		 *
+		 * Bad patterns:
+		 * - `<!-->`
+		 * - `<!--a-->aa`
+		 * - `aa<!--a-->`
+		 * - `<!--a-->aa<!--a-->`
+		 * - `<!--a-->aa-->`
+		 */
+		const isOtherCommentOnly = /^(?:<!--(?:(?!-->).)*-->\s*)+$/.test(other);
 		if (main && other && !isOtherCommentOnly) {
 			// Add the separator if the "other" reason is not a comment tag only
 			other = sep + other;
@@ -4296,6 +4340,7 @@ class BlockField extends WatchUserField {
  * @requires oojs-ui
  * @requires mediawiki.widgets.TitlesMultiselectWidget
  * @requires mediawiki.widgets.NamespacesMultiselectWidget
+ * @todo Use a mixin?
  */
 class BlockUser extends BlockField {
 
@@ -4456,13 +4501,13 @@ class BlockUser extends BlockField {
 				if (block) {
 					needsWarning = !block.hidden;
 				} else {
-					// Logic exception (setTarget should have already handled this)
+					// Logic exception (TargetField.init should have already handled this)
 					console.error('Block ID found, but block not found', data);
 				}
 			} else {
 				const blocks = blockLookup.getBlocksByUsername(params.user);
 				if (blocks) {
-					// Logic exception (setTarget should have already handled this)
+					// Logic exception (TargetField.init should have already handled this)
 					console.error('Ambiguous blocks found', data, blocks);
 				} else {
 					needsWarning = true; // Not blocked
@@ -4477,7 +4522,7 @@ class BlockUser extends BlockField {
 			delete params.id;
 			const username = this.targetField.getCurrentUsername();
 			if (!username) {
-				// There's a bug in setTarget()
+				// There's a bug in TargetField.init()
 				mw.notify(
 					Messages.get('internalerror_info', ['The "user" parameter must be non-null.']),
 					{ type: 'error' }
@@ -4580,6 +4625,7 @@ class UnblockField extends WatchUserField {
  * @requires oojs-ui
  * @requires mediawiki.widgets.TitlesMultiselectWidget
  * @requires mediawiki.widgets.NamespacesMultiselectWidget
+ * @todo Use a mixin?
  */
 class UnblockUser extends UnblockField {
 
@@ -5624,6 +5670,14 @@ function toNativePromise(p) {
 	return new Promise((resolve, reject) => {
 		p.then(resolve, (...args) => reject(args));
 	});
+}
+
+/**
+ * @param {unknown} e
+ * @returns {[string, any]}
+ */
+function toErrorTuple(e) {
+	return /** @type {[string, any]} */ (e);
 }
 
 /**

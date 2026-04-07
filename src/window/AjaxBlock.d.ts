@@ -374,6 +374,28 @@ export interface CachedMessage {
 
 export type BlockTargetType = 'anon' | 'temp' | 'named' | null;
 
+export interface AjaxBlockRegex {
+	/**
+	 * * `$0` - `/wiki/<title>`
+	 * * `$1` - `<title>`
+	 */
+	article: RegExp;
+	/**
+	 * * `$0` - `Special:<root>/<subpage>`
+	 * * `$1` - `<root>`
+	 * * `$2`? - `<subpage>`
+	 */
+	special: RegExp;
+	/**
+	 * * `$0` - `Block` (+aliases, case-insensitive)
+	 */
+	block: RegExp;
+	/**
+	 * * `$0` - `Unblock` (+aliases, case-insensitive)
+	 */
+	unblock: RegExp;
+}
+
 export interface PartialBlockParams {
 	partial: boolean;
 	pagerestrictions?: string;
