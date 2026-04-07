@@ -3437,374 +3437,6 @@ class WatchUserField {
 
 /**
  * @requires oojs-ui
- */
-class TargetField {
-
-	/**
-	 * @param {BlockUser | UnblockUser} parent
-	 */
-	constructor(parent) {
-		/**
-		 * @type {BlockUser | UnblockUser}
-		 * @readonly
-		 * @private
-		 */
-		this.parent = parent;
-		/**
-		 * @type {OO.ui.Element}
-		 * @readonly
-		 * @private
-		 */
-		this.messageContainer = new OO.ui.Element({
-			$element: $('<div>')
-		});
-		/**
-		 * @type {JQuery<HTMLElement>}
-		 * @readonly
-		 * @private
-		 */
-		this.$mainLabel = $('<b>');
-		/**
-		 * @type {JQuery<HTMLElement>}
-		 * @readonly
-		 * @private
-		 */
-		this.$auxLabel = $('<span>');
-		/**
-		 * @type {OO.ui.FieldLayout}
-		 * @readonly
-		 * @private
-		 */
-		this.layout = new OO.ui.FieldLayout(
-			new OO.ui.LabelWidget({
-				label: $('<span>')
-					.addClass('ajaxblock-targetlabel')
-					.append(
-						this.$mainLabel,
-						Messages.get('word-separator'),
-						this.$auxLabel
-					)
-			}),
-			{
-				classes: ['ajaxblock-horizontalfield'],
-				label: Messages.get('block-target'),
-				align: 'left',
-			}
-		);
-		/**
-		 * @type {[?number, ?string]}
-		 * @private
-		 */
-		this.current = [null, null];
-		/**
-		 * @type {boolean}
-		 * @private
-		 */
-		this.oneClickAllowed = true;
-		/**
-		 * @type {boolean}
-		 * @private
-		 */
-		this.addBlockAllowed = false;
-		/**
-		 * @type {?OO.ui.RadioSelectWidget}
-		 * @private
-		 */
-		this.blockSelector = null;
-		/**
-		 * @type {boolean}
-		 * @private
-		 */
-		this.autoBlock = false;
-	}
-
-	/**
-	 * @param {OO.ui.MessageWidget.ConfigOptions} [config]
-	 * @return {this}
-	 */
-	addMessage(config = {}) {
-		// TODO: Should we shallow-copy the array before mutating it?
-		config.classes = config.classes || [];
-		config.classes.push('ajaxblock-dialog-message');
-
-		const message = new OO.ui.MessageWidget(config);
-		this.messageContainer.$element.append(message.$element);
-		return this;
-	}
-
-	/**
-	 * @private
-	 */
-	clearMessages() {
-		this.messageContainer.$element.empty();
-		return this;
-	}
-
-	/**
-	 * @internal For use only by {@link BlockUser} and {@link UnblockUser} constructors
-	 */
-	getLayouts() {
-		return [this.messageContainer, this.layout];
-	}
-
-	/**
-	 * Gets the block ID of the current target.
-	 *
-	 * @returns {?number}
-	 */
-	getCurrentId() {
-		return this.current[0];
-	}
-
-	/**
-	 * Gets the username of the current target.
-	 *
-	 * @returns {?string}
-	 */
-	getCurrentUsername() {
-		return this.current[1];
-	}
-
-	/**
-	 * Resets the current target.
-	 *
-	 * @returns {this}
-	 */
-	reset() {
-		this.current = [null, null];
-		this.oneClickAllowed = true;
-		this.addBlockAllowed = false;
-		this.clearMessages();
-		this.blockSelector = null;
-		this.autoBlock = false;
-		return this;
-	}
-
-	/**
-	 * @returns {?boolean} `false` means unprocessable, `null` means the dialog should be opened.
-	 */
-	isOneClickAllowed() {
-		return this.oneClickAllowed;
-	}
-
-	canAddBlock() {
-		return this.addBlockAllowed;
-	}
-
-	getBlockSelector() {
-		return this.blockSelector;
-	}
-
-	/**
-	 * @param {OO.ui.RadioSelectWidget.ConfigOptions} [config]
-	 * @returns {OO.ui.RadioSelectWidget}
-	 */
-	setBlockSelector(config) {
-		this.blockSelector = new OO.ui.RadioSelectWidget(config);
-		return this.blockSelector;
-	}
-
-	isAutoBlock() {
-		return this.autoBlock;
-	}
-
-	/**
-	 * Initializes the current target.
-	 *
-	 * @param {BlockTarget} target
-	 * @param {BlockLookup} blockLookup
-	 * @returns {TargetHandler}
-	 */
-	init(target, blockLookup) {
-		const id = target.getId();
-		const username = target.getUsername();
-		const blocks = username ? blockLookup.getBlocksByUsername(username) : null;
-		const blockUser = this.parent instanceof BlockUser ? this.parent : void 0;
-
-		if (id !== null) {
-			const block = blockLookup.getBlockById(id);
-			if (block) {
-				// The block associated with this ID exists
-				if (username && blocks && blocks.length > 1) {
-					// Other blocks also exist
-					this.initInternal(null, username, false, true);
-					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
-				} else if (block.user) {
-					// Unambiguous block
-					this.initInternal(id, block.user, true, true);
-					return { log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, { blockUser }) };
-				} else {
-					// Autoblock
-					if (blockUser) {
-						// Cannot reblock
-						this.initInternal(null, null, false, false);
-						return { message: () => Messages.get('apierror-modify-autoblock') };
-					} else {
-						this.initInternal(id, null, true, false);
-					}
-				}
-			} else if (username !== null) {
-				// ID no longer active: Ignore ID and use username
-				this.addMessage({
-					label: new OO.ui.HtmlSnippet(
-						Messages.get('ajaxblock-dialog-message-nonactive-id', [BlockTarget.createBlockListLink(id).outerHTML])
-					),
-					type: 'notice',
-				});
-				if (Array.isArray(blocks)) {
-					// If other active blocks exist, allow the user to choose which one to update
-					this.initInternal(null, username, false, true);
-					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
-				} else {
-					// No other active blocks
-					if (blockUser) {
-						// Allow a username-based block
-						this.initInternal(null, username, true, false);
-					} else {
-						// Cannot be unblocked
-						this.initInternal(null, username, false, false);
-						return { message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
-					}
-				}
-			} else {
-				// ID no longer active, no username: unprocessable
-				this.initInternal(null, null, false, false);
-				return { message: () => Messages.get('ajaxblock-notify-error-idinactivenousername', [id]) };
-			}
-			return { none: true };
-		}
-
-		if (username !== null) {
-			if (Array.isArray(blocks)) {
-				if (blocks.length > 1) {
-					// Multiple active blocks
-					this.initInternal(null, username, false, true);
-					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
-				} else {
-					// Single active block
-					this.initInternal(blocks[0].id, username, true, true);
-					return { log: () => BlockLog.generate(username, blockLookup, { blockUser }) };
-				}
-			} else {
-				// No active blocks
-				if (blockUser) {
-					this.initInternal(null, username, true, false);
-				} else {
-					this.initInternal(null, username, false, false);
-					return { message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
-				}
-			}
-			return { none: true };
-		}
-
-		this.initInternal(null, null, false, false);
-		throw new Error('Either the ID or username must be non-null');
-	}
-
-	/**
-	 * @param {?number} id
-	 * @param {?string} username
-	 * @param {boolean} oneClick Whether the target can be processed in the one-click mode.
-	 * @param {boolean} addBlock Whether to show the "Add block" checkbox.
-	 *
-	 * Note: This is coerced into false if {@link parent} isn't an instance of {@link BlockUser} or
-	 * `wgEnableMultiBlocks` is false, even if true is passed.
-	 * @returns {this}
-	 * @private
-	 */
-	initInternal(id, username, oneClick, addBlock) {
-		if (id && username) {
-			this.$mainLabel.text(username);
-			this.$auxLabel.empty().append(
-				Messages.get('parentheses-start'),
-				'#',
-				BlockTarget.createBlockListLink(id),
-				Messages.get('parentheses-end')
-			);
-		} else if (id) {
-			// Autoblock
-			if (this.parent instanceof BlockUser) {
-				throw new Error('An autoblock can only be removed and cannot be updated');
-			}
-			this.autoBlock = true;
-			this.$mainLabel.empty().append(
-				Messages.get('autoblockid', [BlockTarget.createBlockListLink(id).outerHTML])
-			);
-			this.$auxLabel.empty();
-		} else if (username) {
-			this.$mainLabel.text(username);
-			this.$auxLabel.empty();
-		} else {
-			this.$mainLabel.text('');
-			this.$auxLabel.empty();
-		}
-
-		this.current = [id, username];
-		this.oneClickAllowed = oneClick;
-		this.addBlockAllowed = addBlock && this.parent instanceof BlockUser && wgEnableMultiBlocks;
-
-		return this;
-	}
-
-	/**
-	 * Builds base parameters to the API.
-	 *
-	 * @param {BlockLink} data
-	 * @returns {?{ params: BaseParams; warnings: (keyof LoadedMessages)[]; }}
-	 */
-	buildParams(data) {
-		let /** @type {?number} */ id = null;
-		let /** @type {?string} */ user = null;
-		const /** @type {BaseParams} */ params = Object.create(null);
-
-		params.action = data.type;
-		const isUnblock = data.type === 'unblock';
-
-		if (this.blockSelector) {
-			const item = this.blockSelector.findFirstSelectedItem();
-			if (!item) {
-				// When the block selector is present, the target of the (un)block must be selected
-				const msgKey = isUnblock || !wgEnableMultiBlocks
-					? 'ajaxblock-notify-error-ambiguousblock'
-					: 'ajaxblock-notify-error-ambiguousblock-canadd';
-				mw.notify(Messages.get(msgKey), { type: 'error' });
-				return null;
-			}
-			id = /** @type {number} */ (item.getData());
-		}
-
-		// Use the dialog's current target instead of data.target here to reflect
-		// what's been set by TargetField.init()
-		id = id || this.getCurrentId();
-		if (!id) {
-			user = this.getCurrentUsername();
-		}
-
-		if (id) {
-			params.id = id;
-		} else if (user) {
-			params.user = user;
-		} else {
-			// This code path should never be reached
-			mw.notify(
-				$('<span>').append(
-					mw.message(
-						'internalerror_info',
-						Messages.get('ajaxblock-notify-error-notarget')
-					).parseDom()
-				),
-				{ type: 'error' }
-			);
-			return null;
-		}
-
-		return { params, warnings: [] };
-	}
-
-}
-
-/**
- * @requires oojs-ui
  * @requires mediawiki.widgets.TitlesMultiselectWidget
  * @requires mediawiki.widgets.NamespacesMultiselectWidget
  */
@@ -4336,6 +3968,79 @@ class BlockField extends WatchUserField {
 
 }
 
+class UnblockField extends WatchUserField {
+
+	/**
+	 * @param {OnResize} [onResize]
+	 */
+	constructor(onResize = () => {}) {
+		super(onResize);
+
+		/** @type {OO.ui.Element[]} */
+		let items = [];
+
+		/**
+		 * @type {OO.ui.TextInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.reason = new OO.ui.TextInputWidget({
+			placeholder: Messages.get('block-removal-reason-placeholder')
+		});
+		items.push(
+			new OO.ui.FieldLayout(this.reason, {
+				classes: ['ajaxblock-horizontalfield'],
+				label: Messages.get('block-reason'),
+				align: 'left',
+			})
+		);
+
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = $('<div>').addClass('ajaxblock-dialog-content');
+		/**
+		 * @type {OO.ui.FieldsetLayout}
+		 * @protected
+		 */
+		this.mainFieldset = new OO.ui.FieldsetLayout({
+			label: Messages.get('unblock'),
+		});
+		this.mainFieldset.addItems(items);
+		this.$element.append(this.mainFieldset.$element);
+		items = [];
+
+		items.push(
+			...this.getWatchLayouts()
+		);
+
+		/**
+		 * @type {OO.ui.FieldsetLayout}
+		 * @protected
+		 */
+		this.optionsFieldset = new OO.ui.FieldsetLayout({
+			label: Messages.get('block-options'),
+		});
+		this.optionsFieldset.addItems(items);
+		this.$element.append(this.optionsFieldset.$element);
+	}
+
+	getReason() {
+		return clean(this.reason.getValue());
+	}
+
+	/**
+	 * @param {string} reason
+	 * @returns {this}
+	 */
+	setReason(reason) {
+		this.reason.setValue(reason);
+		return this;
+	}
+
+}
+
 /**
  * @requires oojs-ui
  * @requires mediawiki.widgets.TitlesMultiselectWidget
@@ -4548,79 +4253,6 @@ class BlockUser extends BlockField {
 
 }
 
-class UnblockField extends WatchUserField {
-
-	/**
-	 * @param {OnResize} [onResize]
-	 */
-	constructor(onResize = () => {}) {
-		super(onResize);
-
-		/** @type {OO.ui.Element[]} */
-		let items = [];
-
-		/**
-		 * @type {OO.ui.TextInputWidget}
-		 * @readonly
-		 * @private
-		 */
-		this.reason = new OO.ui.TextInputWidget({
-			placeholder: Messages.get('block-removal-reason-placeholder')
-		});
-		items.push(
-			new OO.ui.FieldLayout(this.reason, {
-				classes: ['ajaxblock-horizontalfield'],
-				label: Messages.get('block-reason'),
-				align: 'left',
-			})
-		);
-
-		/**
-		 * @type {JQuery<HTMLElement>}
-		 * @readonly
-		 */
-		this.$element = $('<div>').addClass('ajaxblock-dialog-content');
-		/**
-		 * @type {OO.ui.FieldsetLayout}
-		 * @protected
-		 */
-		this.mainFieldset = new OO.ui.FieldsetLayout({
-			label: Messages.get('unblock'),
-		});
-		this.mainFieldset.addItems(items);
-		this.$element.append(this.mainFieldset.$element);
-		items = [];
-
-		items.push(
-			...this.getWatchLayouts()
-		);
-
-		/**
-		 * @type {OO.ui.FieldsetLayout}
-		 * @protected
-		 */
-		this.optionsFieldset = new OO.ui.FieldsetLayout({
-			label: Messages.get('block-options'),
-		});
-		this.optionsFieldset.addItems(items);
-		this.$element.append(this.optionsFieldset.$element);
-	}
-
-	getReason() {
-		return clean(this.reason.getValue());
-	}
-
-	/**
-	 * @param {string} reason
-	 * @returns {this}
-	 */
-	setReason(reason) {
-		this.reason.setValue(reason);
-		return this;
-	}
-
-}
-
 /**
  * @requires oojs-ui
  * @requires mediawiki.widgets.TitlesMultiselectWidget
@@ -4709,6 +4341,374 @@ class UnblockUser extends UnblockField {
 		}
 
 		return { params, warnings };
+	}
+
+}
+
+/**
+ * @requires oojs-ui
+ */
+class TargetField {
+
+	/**
+	 * @param {BlockUser | UnblockUser} parent
+	 */
+	constructor(parent) {
+		/**
+		 * @type {BlockUser | UnblockUser}
+		 * @readonly
+		 * @private
+		 */
+		this.parent = parent;
+		/**
+		 * @type {OO.ui.Element}
+		 * @readonly
+		 * @private
+		 */
+		this.messageContainer = new OO.ui.Element({
+			$element: $('<div>')
+		});
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 * @private
+		 */
+		this.$mainLabel = $('<b>');
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 * @private
+		 */
+		this.$auxLabel = $('<span>');
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.layout = new OO.ui.FieldLayout(
+			new OO.ui.LabelWidget({
+				label: $('<span>')
+					.addClass('ajaxblock-targetlabel')
+					.append(
+						this.$mainLabel,
+						Messages.get('word-separator'),
+						this.$auxLabel
+					)
+			}),
+			{
+				classes: ['ajaxblock-horizontalfield'],
+				label: Messages.get('block-target'),
+				align: 'left',
+			}
+		);
+		/**
+		 * @type {[?number, ?string]}
+		 * @private
+		 */
+		this.current = [null, null];
+		/**
+		 * @type {boolean}
+		 * @private
+		 */
+		this.oneClickAllowed = true;
+		/**
+		 * @type {boolean}
+		 * @private
+		 */
+		this.addBlockAllowed = false;
+		/**
+		 * @type {?OO.ui.RadioSelectWidget}
+		 * @private
+		 */
+		this.blockSelector = null;
+		/**
+		 * @type {boolean}
+		 * @private
+		 */
+		this.autoBlock = false;
+	}
+
+	/**
+	 * @param {OO.ui.MessageWidget.ConfigOptions} [config]
+	 * @return {this}
+	 */
+	addMessage(config = {}) {
+		// TODO: Should we shallow-copy the array before mutating it?
+		config.classes = config.classes || [];
+		config.classes.push('ajaxblock-dialog-message');
+
+		const message = new OO.ui.MessageWidget(config);
+		this.messageContainer.$element.append(message.$element);
+		return this;
+	}
+
+	/**
+	 * @private
+	 */
+	clearMessages() {
+		this.messageContainer.$element.empty();
+		return this;
+	}
+
+	/**
+	 * @internal For use only by {@link BlockUser} and {@link UnblockUser} constructors
+	 */
+	getLayouts() {
+		return [this.messageContainer, this.layout];
+	}
+
+	/**
+	 * Gets the block ID of the current target.
+	 *
+	 * @returns {?number}
+	 */
+	getCurrentId() {
+		return this.current[0];
+	}
+
+	/**
+	 * Gets the username of the current target.
+	 *
+	 * @returns {?string}
+	 */
+	getCurrentUsername() {
+		return this.current[1];
+	}
+
+	/**
+	 * Resets the current target.
+	 *
+	 * @returns {this}
+	 */
+	reset() {
+		this.current = [null, null];
+		this.oneClickAllowed = true;
+		this.addBlockAllowed = false;
+		this.clearMessages();
+		this.blockSelector = null;
+		this.autoBlock = false;
+		return this;
+	}
+
+	/**
+	 * @returns {?boolean} `false` means unprocessable, `null` means the dialog should be opened.
+	 */
+	isOneClickAllowed() {
+		return this.oneClickAllowed;
+	}
+
+	canAddBlock() {
+		return this.addBlockAllowed;
+	}
+
+	getBlockSelector() {
+		return this.blockSelector;
+	}
+
+	/**
+	 * @param {OO.ui.RadioSelectWidget.ConfigOptions} [config]
+	 * @returns {OO.ui.RadioSelectWidget}
+	 */
+	setBlockSelector(config) {
+		this.blockSelector = new OO.ui.RadioSelectWidget(config);
+		return this.blockSelector;
+	}
+
+	isAutoBlock() {
+		return this.autoBlock;
+	}
+
+	/**
+	 * Initializes the current target.
+	 *
+	 * @param {BlockTarget} target
+	 * @param {BlockLookup} blockLookup
+	 * @returns {TargetHandler}
+	 */
+	init(target, blockLookup) {
+		const id = target.getId();
+		const username = target.getUsername();
+		const blocks = username ? blockLookup.getBlocksByUsername(username) : null;
+		const blockUser = this.parent instanceof BlockUser ? this.parent : void 0;
+
+		if (id !== null) {
+			const block = blockLookup.getBlockById(id);
+			if (block) {
+				// The block associated with this ID exists
+				if (username && blocks && blocks.length > 1) {
+					// Other blocks also exist
+					this.initInternal(null, username, false, true);
+					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
+				} else if (block.user) {
+					// Unambiguous block
+					this.initInternal(id, block.user, true, true);
+					return { log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, { blockUser }) };
+				} else {
+					// Autoblock
+					if (blockUser) {
+						// Cannot reblock
+						this.initInternal(null, null, false, false);
+						return { message: () => Messages.get('apierror-modify-autoblock') };
+					} else {
+						this.initInternal(id, null, true, false);
+					}
+				}
+			} else if (username !== null) {
+				// ID no longer active: Ignore ID and use username
+				this.addMessage({
+					label: new OO.ui.HtmlSnippet(
+						Messages.get('ajaxblock-dialog-message-nonactive-id', [BlockTarget.createBlockListLink(id).outerHTML])
+					),
+					type: 'notice',
+				});
+				if (Array.isArray(blocks)) {
+					// If other active blocks exist, allow the user to choose which one to update
+					this.initInternal(null, username, false, true);
+					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
+				} else {
+					// No other active blocks
+					if (blockUser) {
+						// Allow a username-based block
+						this.initInternal(null, username, true, false);
+					} else {
+						// Cannot be unblocked
+						this.initInternal(null, username, false, false);
+						return { message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
+					}
+				}
+			} else {
+				// ID no longer active, no username: unprocessable
+				this.initInternal(null, null, false, false);
+				return { message: () => Messages.get('ajaxblock-notify-error-idinactivenousername', [id]) };
+			}
+			return { none: true };
+		}
+
+		if (username !== null) {
+			if (Array.isArray(blocks)) {
+				if (blocks.length > 1) {
+					// Multiple active blocks
+					this.initInternal(null, username, false, true);
+					return { log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
+				} else {
+					// Single active block
+					this.initInternal(blocks[0].id, username, true, true);
+					return { log: () => BlockLog.generate(username, blockLookup, { blockUser }) };
+				}
+			} else {
+				// No active blocks
+				if (blockUser) {
+					this.initInternal(null, username, true, false);
+				} else {
+					this.initInternal(null, username, false, false);
+					return { message: () => Messages.get('ajaxblock-notify-error-cannotunblock', [username]) };
+				}
+			}
+			return { none: true };
+		}
+
+		this.initInternal(null, null, false, false);
+		throw new Error('Either the ID or username must be non-null');
+	}
+
+	/**
+	 * @param {?number} id
+	 * @param {?string} username
+	 * @param {boolean} oneClick Whether the target can be processed in the one-click mode.
+	 * @param {boolean} addBlock Whether to show the "Add block" checkbox.
+	 *
+	 * Note: This is coerced into false if {@link parent} isn't an instance of {@link BlockUser} or
+	 * `wgEnableMultiBlocks` is false, even if true is passed.
+	 * @returns {this}
+	 * @private
+	 */
+	initInternal(id, username, oneClick, addBlock) {
+		if (id && username) {
+			this.$mainLabel.text(username);
+			this.$auxLabel.empty().append(
+				Messages.get('parentheses-start'),
+				'#',
+				BlockTarget.createBlockListLink(id),
+				Messages.get('parentheses-end')
+			);
+		} else if (id) {
+			// Autoblock
+			if (this.parent instanceof BlockUser) {
+				throw new Error('An autoblock can only be removed and cannot be updated');
+			}
+			this.autoBlock = true;
+			this.$mainLabel.empty().append(
+				Messages.get('autoblockid', [BlockTarget.createBlockListLink(id).outerHTML])
+			);
+			this.$auxLabel.empty();
+		} else if (username) {
+			this.$mainLabel.text(username);
+			this.$auxLabel.empty();
+		} else {
+			this.$mainLabel.text('');
+			this.$auxLabel.empty();
+		}
+
+		this.current = [id, username];
+		this.oneClickAllowed = oneClick;
+		this.addBlockAllowed = addBlock && this.parent instanceof BlockUser && wgEnableMultiBlocks;
+
+		return this;
+	}
+
+	/**
+	 * Builds base parameters to the API.
+	 *
+	 * @param {BlockLink} data
+	 * @returns {?{ params: BaseParams; warnings: (keyof LoadedMessages)[]; }}
+	 */
+	buildParams(data) {
+		let /** @type {?number} */ id = null;
+		let /** @type {?string} */ user = null;
+		const /** @type {BaseParams} */ params = Object.create(null);
+
+		params.action = data.type;
+		const isUnblock = data.type === 'unblock';
+
+		if (this.blockSelector) {
+			const item = this.blockSelector.findFirstSelectedItem();
+			if (!item) {
+				// When the block selector is present, the target of the (un)block must be selected
+				const msgKey = isUnblock || !wgEnableMultiBlocks
+					? 'ajaxblock-notify-error-ambiguousblock'
+					: 'ajaxblock-notify-error-ambiguousblock-canadd';
+				mw.notify(Messages.get(msgKey), { type: 'error' });
+				return null;
+			}
+			id = /** @type {number} */ (item.getData());
+		}
+
+		// Use the dialog's current target instead of data.target here to reflect
+		// what's been set by TargetField.init()
+		id = id || this.getCurrentId();
+		if (!id) {
+			user = this.getCurrentUsername();
+		}
+
+		if (id) {
+			params.id = id;
+		} else if (user) {
+			params.user = user;
+		} else {
+			// This code path should never be reached
+			mw.notify(
+				$('<span>').append(
+					mw.message(
+						'internalerror_info',
+						Messages.get('ajaxblock-notify-error-notarget')
+					).parseDom()
+				),
+				{ type: 'error' }
+			);
+			return null;
+		}
+
+		return { params, warnings: [] };
 	}
 
 }
