@@ -103,7 +103,11 @@ class AjaxBlock {
 		// Build the config interface if the user is on the config page
 		if (cfgContentPromise) {
 			cfgContentPromise.then((content) => {
-				AjaxBlockConfig.init(content);
+				if (!content) {
+					// Failure is handled in AjaxBlockConfig.preparePage()
+					return;
+				}
+				AjaxBlockConfig.init(content, initializer);
 			});
 			return;
 		}
@@ -230,11 +234,18 @@ class AjaxBlock {
 			data.multiBlocksEnabled = cachedMbEnabled === '1';
 		}
 
+		// Cached language information
+		const cachedLangs = mw.storage.getObject(this.storageKeys.langs);
+		if ($.isPlainObject(cachedLangs) && AjaxBlockConfigLanguageOptions.supported.every(code => typeof cachedLangs[code] === 'string')) {
+			data.langs = cachedLangs;
+		}
+
 		/** @type {JQuery.Promise<void>[]} */
 		const requests = [];
 
 		// Query siteinfo/userinfo if needed
-		if (!data.blockPageAliases || !data.userRights) {
+		const needsLangInfo = AjaxBlockConfig.isConfigPage();
+		if (!data.blockPageAliases || !data.userRights || (!data.langs && needsLangInfo)) {
 			const params = Object.create(null);
 			params.meta = [];
 
@@ -248,12 +259,18 @@ class AjaxBlock {
 				params.uiprop = 'rights';
 			}
 
+			if (!data.langs && needsLangInfo) {
+				params.meta.push('languageinfo');
+				params.liprop = 'autonym';
+				params.licode = AjaxBlockConfigLanguageOptions.supported.join('|');
+			}
+
 			requests.push(
 				this.api.get(params).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
 					if (!res || !res.query) {
 						return failAsEmptyResult(res, jqXHR);
 					}
-					const { specialpagealiases, userinfo } = res.query;
+					const { specialpagealiases, userinfo, languageinfo } = res.query;
 
 					// Block aliases
 					if (Array.isArray(specialpagealiases)) {
@@ -282,7 +299,18 @@ class AjaxBlock {
 						data.userRights = new Set(rights);
 					}
 
-					if (!data.blockPageAliases || !data.userRights) {
+					if (languageinfo) {
+						const langMap = Object.create(null);
+						for (const [code, { autonym }] of Object.entries(languageinfo)) {
+							langMap[code] = autonym;
+						}
+						if (AjaxBlockConfigLanguageOptions.supported.every(code => typeof langMap[code] === 'string')) {
+							mw.storage.setObject(this.storageKeys.langs, langMap, daysInSeconds(14));
+							data.langs = langMap;
+						}
+					}
+
+					if (!data.blockPageAliases || !data.userRights || (!data.langs && needsLangInfo)) {
 						return failAsEmptyResult(res, jqXHR);
 					}
 				})
@@ -1485,6 +1513,7 @@ AjaxBlock.storageKeys = {
 	userRights: 'mw-AjaxBlock-userRights',
 	enableMultiblocks: 'mw-AjaxBlock-enableMultiblocks',
 	actionRestrictions: 'mw-AjaxBlock-actionRestrictions',
+	langs: 'mw-AjaxBlock-langs',
 };
 /**
  * @type {?import('./window/AjaxBlock').AjaxBlockRegex}
@@ -2683,7 +2712,7 @@ class Messages {
 }
 Messages.userLang = wgUserLanguage.replace(/-.*$/, '');
 /**
- * @type {Record<'en' | 'ja', AjaxBlockMessages>}
+ * @type {Record<AjaxBlockLanguages, AjaxBlockMessages>}
  */
 Messages.i18n = {
 	en: {
@@ -2736,6 +2765,10 @@ Messages.i18n = {
 		'ajaxblock-result-unblock-failure': 'unblock failed ($1)',
 		'ajaxblock-config-title': 'Configure AjaxBlock',
 		'ajaxblock-config-loading': 'Loading',
+		'ajaxblock-config-loading-failure': 'Failed to initialize the AjaxBlock config interface',
+		'ajaxblock-config-label-default': 'Default',
+		'ajaxblock-config-label-language-layout': 'Language options',
+		'ajaxblock-config-help-language-default': 'The user\'s interface language as set in preferences, or English if translations are unavailable',
 		'ajaxblock-config-label-warning-layout': 'Warning options',
 		'ajaxblock-config-label-warning-th-oneclick': 'One click',
 		'ajaxblock-config-label-warning-th-dialog': 'Dialog',
@@ -2802,6 +2835,10 @@ Messages.i18n = {
 		'ajaxblock-result-unblock-failure': 'ブロック解除失敗 ($1)',
 		'ajaxblock-config-title': 'AjaxBlockの設定',
 		'ajaxblock-config-loading': '読み込み中',
+		'ajaxblock-config-loading-failure': 'AjaxBlockの設定インターフェースの読み込みに失敗しました',
+		'ajaxblock-config-label-default': '規定値',
+		'ajaxblock-config-label-language-layout': '言語設定',
+		'ajaxblock-config-help-language-default': '個人設定で指定された言語、または翻訳が利用できない場合は英語',
 		'ajaxblock-config-label-warning-layout': '警告設定',
 		'ajaxblock-config-label-warning-th-oneclick': 'ワンクリック',
 		'ajaxblock-config-label-warning-th-dialog': 'ダイアログ',
@@ -5698,7 +5735,7 @@ class AjaxBlockConfig {
 			const heading = document.querySelector('.mw-first-heading');
 			const content = document.querySelector('.mw-body-content');
 			if (!heading || !content) {
-				console.error('Failed to initialize the AjaxBlock config interface.');
+				this.fail(content);
 				return null;
 			}
 			heading.textContent = title;
@@ -5717,13 +5754,35 @@ class AjaxBlockConfig {
 	/**
 	 * @param {?Element} content
 	 * @returns {void}
+	 * @private
 	 */
-	static init(content) {
-		if (!content) {
-			console.error('Failed to initialize the AjaxBlock config interface.');
+	static fail(content) {
+		const msg = Messages.get('ajaxblock-config-loading-failure', [], { method: 'plain' });
+		mw.notify(msg, { type: 'error' });
+		console.error(msg);
+
+		if (content) {
+			const span = document.createElement('span');
+			span.style.color = 'var(--color-icon-error, #f54739)';
+			span.textContent = msg;
+
+			content.replaceChildren(span);
+		}
+	}
+
+	/**
+	 * @param {Element} content
+	 * @param {Initializer} initializer
+	 * @returns {void}
+	 */
+	static init(content, initializer) {
+		const { langs } = initializer;
+		if (!langs) {
+			this.fail(content);
 			return;
 		}
-		new AjaxBlockConfig($(content));
+
+		new AjaxBlockConfig($(content), langs);
 
 		// const globalTabPanel = new OO.ui.TabPanelLayout('Global', {
 		// 	expanded: false,
@@ -5798,8 +5857,15 @@ class AjaxBlockConfig {
 
 	/**
 	 * @param {JQuery<Element>} $content
+	 * @param {NonNullable<Initializer['langs']>} langs
 	 */
-	constructor($content) {
+	constructor($content, langs) {
+		/**
+		 * @type {AjaxBlockConfigLanguageOptions}
+		 * @readonly
+		 * @private
+		 */
+		this.languageOptions = new AjaxBlockConfigLanguageOptions(langs);
 		/**
 		 * @type {AjaxBlockConfigWarningOptions}
 		 * @readonly
@@ -5808,11 +5874,84 @@ class AjaxBlockConfig {
 		this.warningOptions = new AjaxBlockConfigWarningOptions();
 
 		$content.empty().append(
+			this.languageOptions.layout.$element,
 			this.warningOptions.layout.$element
 		);
 	}
 
 }
+
+class AjaxBlockConfigLanguageOptions {
+
+	/**
+	 * @param {NonNullable<Initializer['langs']>} langs
+	 */
+	constructor(langs) {
+		const msgDefault = Messages.get('ajaxblock-config-label-default', [], { method: 'plain' });
+		const options = [
+			new OO.ui.MenuOptionWidget({
+				label: Messages.get('parentheses', [msgDefault], { method: 'plain' }),
+				data: '',
+			})
+		];
+		for (const [code, autonym] of typedEntries(langs)) {
+			options.push(
+				new OO.ui.MenuOptionWidget({
+					label: `${code} - ${autonym}`,
+					data: code,
+				})
+			);
+		}
+
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.dropdown = new OO.ui.DropdownWidget({
+			menu: {
+				items: options,
+			},
+		});
+		DropdownUtil.selectOther(this.dropdown);
+
+		/**
+		 * @type {OO.ui.FieldsetLayout}
+		 * @readonly
+		 */
+		this.layout = new OO.ui.FieldsetLayout({
+			label: Messages.get('ajaxblock-config-label-language-layout', [], { method: 'plain' }),
+			items: [
+				new OO.ui.FieldLayout(this.dropdown, {
+					align: 'top',
+					invisibleLabel: true,
+					help: msgDefault +
+						Messages.get('colon-separator', [], { method: 'plain' }) +
+						Messages.get('ajaxblock-config-help-language-default', [], { method: 'plain' }),
+					helpInline: true,
+				}),
+			]
+		});
+	}
+
+	/**
+	 * @returns {{ lang?: string; }}
+	 */
+	build() {
+		const code = DropdownUtil.getSelectedOptionValue(this.dropdown);
+		const cfg = Object.create(null);
+		if (!code) {
+			return cfg;
+		}
+		cfg.lang = code;
+		return cfg;
+	}
+
+}
+/**
+ * @type {AjaxBlockLanguages[]}
+ */
+AjaxBlockConfigLanguageOptions.supported = ['en', 'ja'];
 
 class AjaxBlockConfigWarningOptions {
 
@@ -6228,6 +6367,7 @@ AjaxBlockLogo.svg = `
  * @typedef {import('./window/AjaxBlock').ParamApplierBlockParams} ParamApplierBlockParams
  * @typedef {import('./window/AjaxBlock').ParamApplierUnblockParams} ParamApplierUnblockParams
  * @typedef {import('./window/AjaxBlock').BlockParamApplierHandler} BlockParamApplierHandler
+ * @typedef {import('./window/AjaxBlock').AjaxBlockLanguages} AjaxBlockLanguages
  * @typedef {import('./window/AjaxBlock').WarningKeys} WarningKeys
  * @typedef {import('./window/AjaxBlock').AjaxBlockWarningConfig} AjaxBlockWarningConfig
  * @typedef {import('./window/AjaxBlock').AjaxBlockWarningFlatConfig} AjaxBlockWarningFlatConfig

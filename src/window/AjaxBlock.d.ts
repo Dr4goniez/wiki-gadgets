@@ -22,6 +22,7 @@ export interface Initializer {
 	userRights: Set<string>;
 	actionRestrictions: readonly string[];
 	multiBlocksEnabled: boolean;
+	langs?: Record<AjaxBlockLanguages, string>;
 }
 
 export interface ApiResponse {
@@ -106,6 +107,9 @@ interface ApiResponseQuery {
 	allmessages?: ApiResponseQueryMetaAllmessages[];
 	blocks?: ApiResponseQueryListBlocks[];
 	interwiki?: ApiResponseQueryInterwikiTitles[];
+	languageinfo?: {
+		[code: string]: ApiResponseQueryMetaLanguageinfo;
+	};
 	logevents?: ApiResponseQueryListLogevents[];
 	specialpagealiases?: ApiResponseQueryMetaSiteinfoSpecialpagealiases[];
 	userinfo?: ApiResponseQueryMetaUserinfoRights;
@@ -152,6 +156,10 @@ interface ApiResponseQueryMetaAllmessages {
 	normalizedname: string;
 	missing?: true;
 	content?: string; // Missing if "missing" is true
+}
+
+interface ApiResponseQueryMetaLanguageinfo {
+	autonym: string;
 }
 
 interface ApiResponseQueryMetaSiteinfoSpecialpagealiases {
@@ -281,6 +289,10 @@ export interface AjaxBlockMessages {
 	'ajaxblock-result-unblock-failure': string;
 	'ajaxblock-config-title': string;
 	'ajaxblock-config-loading': string;
+	'ajaxblock-config-loading-failure': string;
+	'ajaxblock-config-label-default': string;
+	'ajaxblock-config-label-language-layout': string;
+	'ajaxblock-config-help-language-default': string;
 	'ajaxblock-config-label-warning-layout': string;
 	'ajaxblock-config-label-warning-th-oneclick': string;
 	'ajaxblock-config-label-warning-th-dialog': string;
@@ -522,6 +534,8 @@ export interface BlockParamApplierHandler {
 	actionrestrictions: ParamApplierHandler<string[]>;
 	watch: ParamApplierHandler<boolean, boolean | null>;
 }
+
+export type AjaxBlockLanguages = 'en' | 'ja';
 
 export type WarningKeys =
 	| 'block-noreason'
