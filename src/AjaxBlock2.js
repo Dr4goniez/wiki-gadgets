@@ -54,6 +54,9 @@ const EXPIRY_INFINITE = 'infinity';
 class AjaxBlock {
 
 	static async init() {
+		Messages.loadInternalMessages();
+		const cfgContentPromise = AjaxBlockConfig.isConfigPage() && AjaxBlockConfig.preparePage();
+
 		// Load modules needed for getInitializer()
 		await mw.loader.using(['mediawiki.api', 'mediawiki.storage', 'mediawiki.util']);
 
@@ -84,7 +87,7 @@ class AjaxBlock {
 			return;
 		}
 		const permissionManager = new PermissionManager(initializer.userRights);
-		if (!permissionManager.isAllowed('block')) {
+		if (!permissionManager.isAllowed('block') && !cfgContentPromise) {
 			return;
 		}
 		wgEnableMultiBlocks = initializer.multiBlocksEnabled;
@@ -96,6 +99,15 @@ class AjaxBlock {
 			$.ready
 		]);
 		this.addStyleTag();
+
+		// Build the config interface if the user is on the config page
+		if (cfgContentPromise) {
+			cfgContentPromise.then((content) => {
+				AjaxBlockConfig.init(content);
+			});
+			return;
+		}
+		BlockLinkUtil.getSpinner(); // Preload the image
 
 		/** @type {?AjaxBlock} */
 		let ajaxBlock = null;
@@ -158,7 +170,7 @@ class AjaxBlock {
 			const linkMap = this.injectBlockInfo(links, blockLookup);
 			if (linkMap.size) {
 				if (!ajaxBlock) {
-					ajaxBlock = new this(permissionManager, linkMap, blockLookup, actionRestrictions);
+					ajaxBlock = new AjaxBlock(permissionManager, linkMap, blockLookup, actionRestrictions);
 					ajaxBlock.initialize();
 				} else {
 					ajaxBlock.initialize({ linkMap, blockLookup });
@@ -747,6 +759,25 @@ class AjaxBlock {
 				font-weight: normal;
 				font-style: italic;
 				font-size: 1.1em;
+			}
+			${/* Special:AjaxBlockConfig */''}
+			${/* Warning options */''}
+			.ajaxblock-config-options-warnings > tbody > tr:nth-child(2n + 1) {
+				background-color: var(--background-color-neutral, #eaecf0);
+			}
+			.ajaxblock-config-options-warnings th,
+			.ajaxblock-config-options-warnings td {
+				padding-left: 0.5em;
+				padding-right: 0.5em;
+			}
+			.ajaxblock-config-options-warnings > thead > tr > th {
+				font-weight: normal;
+				font-style: italic;
+			}
+			.ajaxblock-config-options-warnings > tbody > tr > td:not(:first-child) {
+				text-align: center;
+				padding-top: 0.2em;
+				padding-bottom: 0.2em;
 			}
 		`.replace(/[\t\n\r]+/g, '');
 		document.head.appendChild(style);
@@ -1474,6 +1505,13 @@ AjaxBlock.linkRestorationTimeoutMap = new Map();
 
 class BlockLinkUtil {
 
+	static getSpinner() {
+		const spinner = new Image();
+		spinner.src = '//upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif';
+		spinner.classList.add('ajaxblock-loading');
+		return spinner;
+	}
+
 	/**
 	 * @typedef {object} ProcessingBlockLink
 	 * @prop {BlockLink} link
@@ -1503,9 +1541,7 @@ class BlockLinkUtil {
 
 		// Create a <span> element with a loading spinner
 		const wrapper = document.createElement('span');
-		const spinner = new Image();
-		spinner.src = '//upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif';
-		spinner.classList.add('ajaxblock-loading');
+		const spinner = this.getSpinner();
 		wrapper.appendChild(spinner);
 
 		// Insert the <span> immediately before the anchor and also move the anchor into the span
@@ -2172,6 +2208,12 @@ BlockTarget.regex = {
 
 class Messages {
 
+	static loadInternalMessages() {
+		const userLang = /** @type {keyof typeof Messages.i18n} */ (this.userLang);
+		const i18n = Messages.i18n[userLang] || Messages.i18n.en;
+		mw.messages.set(/** @type {any} */ (i18n));
+	}
+
 	/**
 	 * Loads a set of messages via the MediaWiki API and adds them to `mw.messages`,
 	 * but only if they are missing or depend on other missing `{{int:...}}` messages.
@@ -2184,10 +2226,6 @@ class Messages {
 	 * @returns {JQuery.Promise<boolean>} Resolves to `true` if any new messages were added; otherwise `false`.
 	 */
 	static loadMessagesIfMissing(permissionManager, messages) {
-		const userLang = /** @type {keyof typeof Messages.i18n} */ (wgUserLanguage.replace(/-.*$/, ''));
-		const i18n = Messages.i18n[userLang] || Messages.i18n.en;
-		mw.messages.set(/** @type {any} */ (i18n));
-
 		/**
 		 * Messages that are missing and need to be fetched
 		 * @type {Set<string>}
@@ -2200,7 +2238,7 @@ class Messages {
 		const containsInt = new Set();
 
 		// Retrieve cached messages if there's any
-		const storageKey = this.storageKey + '-' + userLang;
+		const storageKey = this.storageKey + '-' + this.userLang;
 		/** @type {Record<string, string> | false | null} */
 		const cached = mw.storage.getObject(storageKey);
 		if (cached && Object.values(cached).every(val => typeof val === 'string')) {
@@ -2643,6 +2681,7 @@ class Messages {
 	}
 
 }
+Messages.userLang = wgUserLanguage.replace(/-.*$/, '');
 /**
  * @type {Record<'en' | 'ja', AjaxBlockMessages>}
  */
@@ -2695,6 +2734,23 @@ Messages.i18n = {
 		'ajaxblock-result-block-failure': 'block failed ($1)',
 		'ajaxblock-result-unblock-success': 'unblocked',
 		'ajaxblock-result-unblock-failure': 'unblock failed ($1)',
+		'ajaxblock-config-title': 'Configure AjaxBlock',
+		'ajaxblock-config-loading': 'Loading',
+		'ajaxblock-config-label-warning-layout': 'Warning options',
+		'ajaxblock-config-label-warning-th-oneclick': 'One click',
+		'ajaxblock-config-label-warning-th-dialog': 'Dialog',
+		'ajaxblock-config-label-warning-block-noreason': 'When performing a block with no reason specified',
+		'ajaxblock-config-label-warning-block-noexpiry': 'When performing a block with no expiry specified',
+		'ajaxblock-config-label-warning-block-hardblock': 'When performing a hardblock',
+		'ajaxblock-config-label-warning-block-hideuser': 'When performing a hideuser block',
+		'ajaxblock-config-label-warning-block-reblock': 'When overwriting an existing block',
+		'ajaxblock-config-label-warning-block-addblock': 'When adding a new block',
+		'ajaxblock-config-label-warning-block-self': 'When performing a block on the performer themselves',
+		'ajaxblock-config-label-warning-block-ignorepredefined': 'When not using predefined block parameters',
+		'ajaxblock-config-label-warning-unblock': 'When performing an unblock',
+		'ajaxblock-config-label-warning-unblock-noreason': 'When performing an unblock with no reason specified',
+		'ajaxblock-config-label-warning-unblock-self': 'When performing an unblock on the performer themselves',
+		'ajaxblock-config-label-reset': 'Reset',
 	},
 	ja: {
 		'ajaxblock-link-title-unprocessable': '$1非対応のリンク',
@@ -2744,6 +2800,23 @@ Messages.i18n = {
 		'ajaxblock-result-block-failure': 'ブロック失敗 ($1)',
 		'ajaxblock-result-unblock-success': 'ブロック解除済み',
 		'ajaxblock-result-unblock-failure': 'ブロック解除失敗 ($1)',
+		'ajaxblock-config-title': 'AjaxBlockの設定',
+		'ajaxblock-config-loading': '読み込み中',
+		'ajaxblock-config-label-warning-layout': '警告設定',
+		'ajaxblock-config-label-warning-th-oneclick': 'ワンクリック',
+		'ajaxblock-config-label-warning-th-dialog': 'ダイアログ',
+		'ajaxblock-config-label-warning-block-noreason': '理由を指定せずにブロックを実行する場合',
+		'ajaxblock-config-label-warning-block-noexpiry': '有効期限を指定せずにブロックを実行する場合',
+		'ajaxblock-config-label-warning-block-hardblock': 'ハードブロックを実行する場合',
+		'ajaxblock-config-label-warning-block-hideuser': '利用者名を非表示にするブロックを実行する場合',
+		'ajaxblock-config-label-warning-block-reblock': '既存のブロックを上書きする場合',
+		'ajaxblock-config-label-warning-block-addblock': '新たにブロックを追加する場合',
+		'ajaxblock-config-label-warning-block-self': '実行者自身をブロックする場合',
+		'ajaxblock-config-label-warning-block-ignorepredefined': '事前定義されたブロック設定を無視する場合',
+		'ajaxblock-config-label-warning-unblock': 'ブロック解除を実行する場合',
+		'ajaxblock-config-label-warning-unblock-noreason': '理由を指定せずにブロック解除を実行する場合',
+		'ajaxblock-config-label-warning-unblock-self': '実行者自身のブロックを解除する場合',
+		'ajaxblock-config-label-reset': 'リセット',
 	},
 };
 /**
@@ -2754,10 +2827,6 @@ Messages.storageKey = 'mw-AjaxBlock-messages';
  * @type {CachedMessage}
  */
 Messages.cache = Object.create(null);
-
-// class AjaxBlockConfig {
-
-// }
 
 class DropdownUtil {
 
@@ -5615,6 +5684,347 @@ ParamApplier.validNamespaceRestrictionValues = new Set(
 	}, /** @type {number[]} */ ([]))
 );
 
+class AjaxBlockConfig {
+
+	static isConfigPage() {
+		return mw.config.get('wgNamespaceNumber') === -1 && /^(?:AjaxBlockConfig|ABC)$/i.test(mw.config.get('wgTitle'));
+	}
+
+	static preparePage() {
+		return $.ready.then(() => {
+			const title = Messages.get('ajaxblock-config-title', [], { method: 'plain' });
+			document.title = title + ' - ' + mw.config.get('wgSiteName');
+
+			const heading = document.querySelector('.mw-first-heading');
+			const content = document.querySelector('.mw-body-content');
+			if (!heading || !content) {
+				console.error('Failed to initialize the AjaxBlock config interface.');
+				return null;
+			}
+			heading.textContent = title;
+
+			const spinner = BlockLinkUtil.getSpinner();
+			spinner.style.marginLeft = '0.5em';
+			content.replaceChildren(
+				Messages.get('ajaxblock-config-loading', [], { method: 'plain' }),
+				spinner
+			);
+
+			return content;
+		});
+	}
+
+	/**
+	 * @param {?Element} content
+	 * @returns {void}
+	 */
+	static init(content) {
+		if (!content) {
+			console.error('Failed to initialize the AjaxBlock config interface.');
+			return;
+		}
+		new AjaxBlockConfig($(content));
+
+		// const globalTabPanel = new OO.ui.TabPanelLayout('Global', {
+		// 	expanded: false,
+		// 	label: msg['config-tab-global'],
+		// 	scrollable: false
+		// });
+		// const localTabPanel = new OO.ui.TabPanelLayout('Local', {
+		// 	expanded: false,
+		// 	label: msg['config-tab-local'],
+		// 	scrollable: false
+		// });
+		// const miscTabPanel = new OO.ui.TabPanelLayout('Misc', {
+		// 	expanded: false,
+		// 	label: msg['config-label-miscellaneous'],
+		// 	scrollable: false
+		// });
+		// const index = new OO.ui.IndexLayout({
+		// 	expanded: false,
+		// 	framed: false
+		// }).addTabPanels([globalTabPanel, localTabPanel, miscTabPanel], 0);
+
+		// const $overlay = $('<div>').addClass('sr-config-overlay').hide();
+		// $content
+		// 	.empty()
+		// 	.append($overlay, index.$element)
+		// 	.css({ position: 'relative' });
+
+		// const miscTab = new SelectiveRollbackConfigMisc($overlay);
+		// const globalTab = new this('global', $overlay, miscTab);
+		// const localTab = new this('local', $overlay, miscTab);
+
+		// globalTabPanel.$element.append(
+		// 	new OO.ui.MessageWidget({
+		// 		classes: ['sr-config-notice'],
+		// 		type: 'notice',
+		// 		label: msg['config-notice-global']
+		// 	}).$element,
+		// 	globalTab.$element
+		// );
+		// localTabPanel.$element.append(
+		// 	new OO.ui.MessageWidget({
+		// 		classes: ['sr-config-notice'],
+		// 		type: 'notice',
+		// 		label: msg['config-notice-local']
+		// 	}).$element,
+		// 	localTab.$element
+		// );
+		// miscTabPanel.$element.append(
+		// 	miscTab.$element
+		// );
+
+		// const dirMismatch = document.dir !== dir;
+		// if (dirMismatch) {
+		// 	this.handleDirMismatch();
+		// }
+
+		// const beforeunloadMap = {
+		// 	local: localTab,
+		// 	global: globalTab
+		// };
+		// window.onbeforeunload = (e) => {
+		// 	const unsaved = Object.entries(beforeunloadMap).some(([k, field]) => {
+		// 		const key = /** @type {'local' | 'global'} */ (k);
+		// 		return !objectsEqual(this.get(key), field.retrieve());
+		// 	});
+		// 	if (unsaved) {
+		// 		e.preventDefault();
+		// 		e.returnValue = 'You have unsaved changes. Do you want to leave the page?';
+		// 	}
+		// };
+	}
+
+	/**
+	 * @param {JQuery<Element>} $content
+	 */
+	constructor($content) {
+		/**
+		 * @type {AjaxBlockConfigWarningOptions}
+		 * @readonly
+		 * @private
+		 */
+		this.warningOptions = new AjaxBlockConfigWarningOptions();
+
+		$content.empty().append(
+			this.warningOptions.layout.$element
+		);
+	}
+
+}
+
+class AjaxBlockConfigWarningOptions {
+
+	constructor() {
+		/**
+		 * @type {Record<WarningKeys, Record<WarningContext, OO.ui.CheckboxInputWidget>>}
+		 * @readonly
+		 * @private
+		 */
+		this.map = Object.create(null);
+		/**
+		 * @type {boolean}
+		 * @private
+		 */
+		this.pauseEvents = false;
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.resetButton = new OO.ui.ButtonWidget({
+			label: Messages.get('ajaxblock-config-label-reset', [], { method: 'plain' }),
+			flags: ['destructive'],
+			disabled: true,
+		});
+
+		const $tbody = $('<tbody>');
+		for (const [key, { oneclick, dialog }] of typedEntries(AjaxBlockConfigWarningOptions.defaults)) {
+			const cbOneClick = new OO.ui.CheckboxInputWidget({
+				selected: oneclick.enabled,
+				disabled: oneclick.disabled,
+			});
+			const cbDialog = new OO.ui.CheckboxInputWidget({
+				selected: dialog.enabled,
+				disabled: dialog.disabled,
+			});
+
+			this.map[key] = {
+				oneclick: cbOneClick,
+				dialog: cbDialog,
+			};
+
+			$tbody.append(
+				$('<tr>').append(
+					// Messages used here:
+					// - ajaxblock-config-label-warning-block-noreason
+					// - ajaxblock-config-label-warning-block-noexpiry
+					// - ajaxblock-config-label-warning-block-hardblock
+					// - ajaxblock-config-label-warning-block-hideuser
+					// - ajaxblock-config-label-warning-block-reblock
+					// - ajaxblock-config-label-warning-block-addblock
+					// - ajaxblock-config-label-warning-block-self
+					// - ajaxblock-config-label-warning-block-ignorepredefined
+					// - ajaxblock-config-label-warning-unblock
+					// - ajaxblock-config-label-warning-unblock-noreason
+					// - ajaxblock-config-label-warning-unblock-self
+					$('<td>').text(Messages.get(`ajaxblock-config-label-warning-${key}`, [], { method: 'plain' })),
+					$('<td>').append(cbOneClick.$element),
+					$('<td>').append(cbDialog.$element)
+				)
+			);
+		}
+
+		const table = new OO.ui.Widget({
+			$element: $('<table>'),
+			classes: ['ajaxblock-config-options-warnings'],
+		});
+		table.$element.append(
+			$('<thead>').append(
+				$('<tr>').append(
+					$('<th>'),
+					$('<th>').text(Messages.get('ajaxblock-config-label-warning-th-oneclick', [], { method: 'plain' })),
+					$('<th>').text(Messages.get('ajaxblock-config-label-warning-th-dialog', [], { method: 'plain' }))
+				)
+			),
+			$tbody
+		);
+
+		/**
+		 * @type {OO.ui.FieldsetLayout}
+		 * @readonly
+		 */
+		this.layout = new OO.ui.FieldsetLayout({
+			label: Messages.get('ajaxblock-config-label-warning-layout', [], { method: 'plain' }),
+			items: [
+				new OO.ui.FieldLayout(table),
+				new OO.ui.FieldLayout(this.resetButton)
+			]
+		});
+
+		this.registerEvents();
+	}
+
+	/**
+	 * @private
+	 */
+	registerEvents() {
+		// Enable or disable the reset button when checkboxes change,
+		// depending on whether the current settings differ from the defaults
+		for (const { oneclick, dialog } of Object.values(this.map)) {
+			for (const cb of [oneclick, dialog]) {
+				cb.on('change', () => {
+					if (this.pauseEvents) {
+						return;
+					}
+					const differ = !$.isEmptyObject(this.build());
+					this.resetButton.setDisabled(!differ);
+				});
+			}
+		}
+
+		// Reset settings to their default values when the reset button is clicked
+		this.resetButton.on('click', () => {
+			this.pauseEvents = true;
+
+			const defaults = AjaxBlockConfigWarningOptions.flatDefaults;
+			for (const [key, { oneclick, dialog }] of typedEntries(this.map)) {
+				const def = defaults[key];
+				if (oneclick.isSelected() !== def.oneclick) {
+					oneclick.setSelected(def.oneclick);
+				}
+				if (dialog.isSelected() !== def.dialog) {
+					dialog.setSelected(def.dialog);
+				}
+			}
+
+			this.pauseEvents = false;
+			this.resetButton.setDisabled(true);
+		});
+	}
+
+	build() {
+		/** @type {import('ts-essentials').DeepPartial<AjaxBlockWarningFlatConfig>} */
+		const cfg = Object.create(null);
+		const defaults = AjaxBlockConfigWarningOptions.flatDefaults;
+
+		for (const [key, { oneclick, dialog }] of typedEntries(this.map)) {
+			let checked = oneclick.isSelected();
+			if (!oneclick.isDisabled() && checked !== defaults[key].oneclick) {
+				OO.setProp(cfg, key, 'oneclick', checked);
+			}
+
+			checked = dialog.isSelected();
+			if (!dialog.isDisabled() && checked !== defaults[key].dialog) {
+				OO.setProp(cfg, key, 'dialog', checked);
+			}
+		}
+
+		return cfg;
+	}
+
+}
+/**
+ * @type {AjaxBlockWarningConfig}
+ */
+AjaxBlockConfigWarningOptions.defaults = {
+	'block-noreason': {
+		oneclick: { enabled: true },
+		dialog: { enabled: true },
+	},
+	'block-noexpiry': {
+		oneclick: { enabled: true },
+		dialog: { enabled: true },
+	},
+	'block-hardblock': {
+		oneclick: { enabled: false },
+		dialog: { enabled: false },
+	},
+	'block-hideuser': {
+		oneclick: { enabled: true, disabled: true },
+		dialog: { enabled: true, disabled: true },
+	},
+	'block-reblock': {
+		oneclick: { enabled: true },
+		dialog: { enabled: false },
+	},
+	'block-addblock': {
+		oneclick: { enabled: false, disabled: true },
+		dialog: { enabled: true },
+	},
+	'block-self': {
+		oneclick: { enabled: true },
+		dialog: { enabled: true },
+	},
+	'block-ignorepredefined': {
+		oneclick: { enabled: true },
+		dialog: { enabled: false },
+	},
+	'unblock': {
+		oneclick: { enabled: true },
+		dialog: { enabled: false },
+	},
+	'unblock-noreason': {
+		oneclick: { enabled: true },
+		dialog: { enabled: true },
+	},
+	'unblock-self': {
+		oneclick: { enabled: true },
+		dialog: { enabled: true },
+	},
+};
+/**
+ * @type {AjaxBlockWarningFlatConfig}
+ */
+AjaxBlockConfigWarningOptions.flatDefaults = typedEntries(AjaxBlockConfigWarningOptions.defaults).reduce((acc, [key, { oneclick, dialog }]) => {
+	acc[key] = {
+		oneclick: oneclick.enabled,
+		dialog: dialog.enabled,
+	};
+	return acc;
+}, /** @type {AjaxBlockWarningFlatConfig} */ (Object.create(null)));
+
 /**
  * Removes unicode bidirectional characters from the given string and trims it.
  * @param {string} str
@@ -5818,6 +6228,9 @@ AjaxBlockLogo.svg = `
  * @typedef {import('./window/AjaxBlock').ParamApplierBlockParams} ParamApplierBlockParams
  * @typedef {import('./window/AjaxBlock').ParamApplierUnblockParams} ParamApplierUnblockParams
  * @typedef {import('./window/AjaxBlock').BlockParamApplierHandler} BlockParamApplierHandler
+ * @typedef {import('./window/AjaxBlock').WarningKeys} WarningKeys
+ * @typedef {import('./window/AjaxBlock').AjaxBlockWarningConfig} AjaxBlockWarningConfig
+ * @typedef {import('./window/AjaxBlock').AjaxBlockWarningFlatConfig} AjaxBlockWarningFlatConfig
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogevents} ApiResponseQueryListLogevents
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
  * @typedef {import('./window/InvestigateHelper').BlockLogMap} BlockLogMap

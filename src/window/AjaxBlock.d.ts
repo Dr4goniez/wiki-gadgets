@@ -279,6 +279,23 @@ export interface AjaxBlockMessages {
 	'ajaxblock-result-block-failure': string;
 	'ajaxblock-result-unblock-success': string;
 	'ajaxblock-result-unblock-failure': string;
+	'ajaxblock-config-title': string;
+	'ajaxblock-config-loading': string;
+	'ajaxblock-config-label-warning-layout': string;
+	'ajaxblock-config-label-warning-th-oneclick': string;
+	'ajaxblock-config-label-warning-th-dialog': string;
+	'ajaxblock-config-label-warning-block-noreason': string;
+	'ajaxblock-config-label-warning-block-noexpiry': string;
+	'ajaxblock-config-label-warning-block-hardblock': string;
+	'ajaxblock-config-label-warning-block-hideuser': string;
+	'ajaxblock-config-label-warning-block-reblock': string;
+	'ajaxblock-config-label-warning-block-addblock': string;
+	'ajaxblock-config-label-warning-block-self': string;
+	'ajaxblock-config-label-warning-block-ignorepredefined': string;
+	'ajaxblock-config-label-warning-unblock': string;
+	'ajaxblock-config-label-warning-unblock-noreason': string;
+	'ajaxblock-config-label-warning-unblock-self': string;
+	'ajaxblock-config-label-reset': string;
 }
 
 /**
@@ -505,3 +522,25 @@ export interface BlockParamApplierHandler {
 	actionrestrictions: ParamApplierHandler<string[]>;
 	watch: ParamApplierHandler<boolean, boolean | null>;
 }
+
+export type WarningKeys =
+	| 'block-noreason'
+	| 'block-noexpiry'
+	| 'block-hardblock'
+	| 'block-hideuser'
+	| 'block-reblock'
+	| 'block-addblock'
+	| 'block-self'
+	| 'block-ignorepredefined'
+	| 'unblock'
+	| 'unblock-noreason'
+	| 'unblock-self';
+
+interface WarningCheckboxConfig {
+	enabled: boolean;
+	disabled?: true;
+}
+
+export type AjaxBlockWarningConfig = Record<WarningKeys, Record<WarningContext, WarningCheckboxConfig>>;
+
+export type AjaxBlockWarningFlatConfig = Record<WarningKeys, Record<WarningContext, boolean>>;
