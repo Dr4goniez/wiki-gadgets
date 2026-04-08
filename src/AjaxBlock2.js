@@ -2766,6 +2766,10 @@ Messages.i18n = {
 		'ajaxblock-config-title': 'Configure AjaxBlock',
 		'ajaxblock-config-loading': 'Loading',
 		'ajaxblock-config-loading-failure': 'Failed to initialize the AjaxBlock config interface',
+		'ajaxblock-config-label-tab-common': 'Common',
+		'ajaxblock-config-label-tab-global': 'Global',
+		'ajaxblock-config-label-tab-local': 'Local',
+		'ajaxblock-config-label-tab-misc': 'Miscellaneous',
 		'ajaxblock-config-label-default': 'Default',
 		'ajaxblock-config-label-language-layout': 'Language options',
 		'ajaxblock-config-help-language-default': 'The user\'s interface language as set in preferences, or English if translations are unavailable',
@@ -2784,6 +2788,11 @@ Messages.i18n = {
 		'ajaxblock-config-label-warning-unblock-noreason': 'When performing an unblock with no reason specified',
 		'ajaxblock-config-label-warning-unblock-self': 'When performing an unblock on the performer themselves',
 		'ajaxblock-config-label-reset': 'Reset',
+		'ajaxblock-config-placeholder-customreasons': 'Enter reasons separated by line breaks',
+		'ajaxblock-config-label-customreasons-block-layout': 'Custom block reason options',
+		'ajaxblock-config-label-customreasons-unblock-layout': 'Custom unblock reason options',
+		'ajaxblock-config-help-customreasons-block': 'Reasons specified here will be added to the block reason dropdown',
+		'ajaxblock-config-help-customreasons-unblock': 'Reasons specified here will be shown as autocomplete suggestions in the unblock reason textbox',
 	},
 	ja: {
 		'ajaxblock-link-title-unprocessable': '$1非対応のリンク',
@@ -2836,6 +2845,10 @@ Messages.i18n = {
 		'ajaxblock-config-title': 'AjaxBlockの設定',
 		'ajaxblock-config-loading': '読み込み中',
 		'ajaxblock-config-loading-failure': 'AjaxBlockの設定インターフェースの読み込みに失敗しました',
+		'ajaxblock-config-label-tab-common': '共通',
+		'ajaxblock-config-label-tab-global': 'グローバル',
+		'ajaxblock-config-label-tab-local': 'ローカル',
+		'ajaxblock-config-label-tab-misc': 'その他',
 		'ajaxblock-config-label-default': '規定値',
 		'ajaxblock-config-label-language-layout': '言語設定',
 		'ajaxblock-config-help-language-default': '個人設定で指定された言語、または翻訳が利用できない場合は英語',
@@ -2854,6 +2867,11 @@ Messages.i18n = {
 		'ajaxblock-config-label-warning-unblock-noreason': '理由を指定せずにブロック解除を実行する場合',
 		'ajaxblock-config-label-warning-unblock-self': '実行者自身のブロックを解除する場合',
 		'ajaxblock-config-label-reset': 'リセット',
+		'ajaxblock-config-placeholder-customreasons': '理由を改行区切りで入力',
+		'ajaxblock-config-label-customreasons-block-layout': 'カスタムブロック理由設定',
+		'ajaxblock-config-label-customreasons-unblock-layout': 'カスタムブロック解除理由設定',
+		'ajaxblock-config-help-customreasons-block': 'ここで指定した理由はブロック理由ドロップダウンに追加されます',
+		'ajaxblock-config-help-customreasons-unblock': 'ここで指定した理由はブロック解除理由入力欄のオートコンプリート候補として表示されます',
 	},
 };
 /**
@@ -5776,38 +5794,83 @@ class AjaxBlockConfig {
 	 * @returns {void}
 	 */
 	static init(content, initializer) {
-		const { langs } = initializer;
-		if (!langs) {
+		if (!initializer.langs) {
 			this.fail(content);
 			return;
 		}
 
-		new AjaxBlockConfig($(content), langs);
+		const $content = $(content);
+		new AjaxBlockConfig($content, /** @type {Required<Initializer>} */ (initializer));
+	}
 
-		// const globalTabPanel = new OO.ui.TabPanelLayout('Global', {
-		// 	expanded: false,
-		// 	label: msg['config-tab-global'],
-		// 	scrollable: false
-		// });
-		// const localTabPanel = new OO.ui.TabPanelLayout('Local', {
-		// 	expanded: false,
-		// 	label: msg['config-tab-local'],
-		// 	scrollable: false
-		// });
-		// const miscTabPanel = new OO.ui.TabPanelLayout('Misc', {
-		// 	expanded: false,
-		// 	label: msg['config-label-miscellaneous'],
-		// 	scrollable: false
-		// });
-		// const index = new OO.ui.IndexLayout({
-		// 	expanded: false,
-		// 	framed: false
-		// }).addTabPanels([globalTabPanel, localTabPanel, miscTabPanel], 0);
+	/**
+	 * @param {JQuery<Element>} $content
+	 * @param {Required<Initializer>} initializer
+	 */
+	constructor($content, initializer) {
+		/**
+		 * @type {AjaxBlockConfigLanguageOptions}
+		 * @readonly
+		 * @private
+		 */
+		this.languageOptions = new AjaxBlockConfigLanguageOptions(initializer.langs);
+		/**
+		 * @type {AjaxBlockConfigWarningOptions}
+		 * @readonly
+		 * @private
+		 */
+		this.warningOptions = new AjaxBlockConfigWarningOptions();
+
+		const commonTabPanel = new OO.ui.TabPanelLayout('Common', {
+			expanded: false,
+			label: Messages.get('ajaxblock-config-label-tab-common', [], { method: 'plain' }),
+			scrollable: false
+		});
+		commonTabPanel.$element.append(
+			this.languageOptions.$element,
+			this.warningOptions.$element
+		);
+
+		const globalTabPanel = new OO.ui.TabPanelLayout('Global', {
+			expanded: false,
+			label: Messages.get('ajaxblock-config-label-tab-global', [], { method: 'plain' }),
+			scrollable: false
+		});
+		/**
+		 * @type {AjaxBlockConfigDialogOptions}
+		 * @readonly
+		 * @private
+		 */
+		this.globalDialogOptions = new AjaxBlockConfigDialogOptions(globalTabPanel, initializer.actionRestrictions);
+
+		const localTabPanel = new OO.ui.TabPanelLayout('Local', {
+			expanded: false,
+			label: Messages.get('ajaxblock-config-label-tab-local', [], { method: 'plain' }),
+			scrollable: false
+		});
+		/**
+		 * @type {AjaxBlockConfigDialogOptions}
+		 * @readonly
+		 * @private
+		 */
+		this.localDialogOptions = new AjaxBlockConfigDialogOptions(localTabPanel, initializer.actionRestrictions);
+
+		const miscTabPanel = new OO.ui.TabPanelLayout('Misc', {
+			expanded: false,
+			label: Messages.get('ajaxblock-config-label-tab-misc', [], { method: 'plain' }),
+			scrollable: false
+		});
+
+		const index = new OO.ui.IndexLayout({
+			expanded: false,
+			framed: false
+		}).addTabPanels([commonTabPanel, globalTabPanel, localTabPanel, miscTabPanel], 0);
 
 		// const $overlay = $('<div>').addClass('sr-config-overlay').hide();
-		// $content
-		// 	.empty()
-		// 	.append($overlay, index.$element)
+		$content.empty().append(
+			// $overlay,
+			index.$element
+		);
 		// 	.css({ position: 'relative' });
 
 		// const miscTab = new SelectiveRollbackConfigMisc($overlay);
@@ -5855,30 +5918,6 @@ class AjaxBlockConfig {
 		// };
 	}
 
-	/**
-	 * @param {JQuery<Element>} $content
-	 * @param {NonNullable<Initializer['langs']>} langs
-	 */
-	constructor($content, langs) {
-		/**
-		 * @type {AjaxBlockConfigLanguageOptions}
-		 * @readonly
-		 * @private
-		 */
-		this.languageOptions = new AjaxBlockConfigLanguageOptions(langs);
-		/**
-		 * @type {AjaxBlockConfigWarningOptions}
-		 * @readonly
-		 * @private
-		 */
-		this.warningOptions = new AjaxBlockConfigWarningOptions();
-
-		$content.empty().append(
-			this.languageOptions.layout.$element,
-			this.warningOptions.layout.$element
-		);
-	}
-
 }
 
 class AjaxBlockConfigLanguageOptions {
@@ -5915,11 +5954,7 @@ class AjaxBlockConfigLanguageOptions {
 		});
 		DropdownUtil.selectOther(this.dropdown);
 
-		/**
-		 * @type {OO.ui.FieldsetLayout}
-		 * @readonly
-		 */
-		this.layout = new OO.ui.FieldsetLayout({
+		const layout = new OO.ui.FieldsetLayout({
 			label: Messages.get('ajaxblock-config-label-language-layout', [], { method: 'plain' }),
 			items: [
 				new OO.ui.FieldLayout(this.dropdown, {
@@ -5932,6 +5967,11 @@ class AjaxBlockConfigLanguageOptions {
 				}),
 			]
 		});
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = layout.$element;
 	}
 
 	/**
@@ -6030,17 +6070,18 @@ class AjaxBlockConfigWarningOptions {
 			$tbody
 		);
 
-		/**
-		 * @type {OO.ui.FieldsetLayout}
-		 * @readonly
-		 */
-		this.layout = new OO.ui.FieldsetLayout({
+		const layout = new OO.ui.FieldsetLayout({
 			label: Messages.get('ajaxblock-config-label-warning-layout', [], { method: 'plain' }),
 			items: [
 				new OO.ui.FieldLayout(table),
 				new OO.ui.FieldLayout(this.resetButton)
 			]
 		});
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = layout.$element;
 
 		this.registerEvents();
 	}
@@ -6163,6 +6204,96 @@ AjaxBlockConfigWarningOptions.flatDefaults = typedEntries(AjaxBlockConfigWarning
 	};
 	return acc;
 }, /** @type {AjaxBlockWarningFlatConfig} */ (Object.create(null)));
+
+class AjaxBlockConfigDialogOptions {
+
+	/**
+	 * @param {OO.ui.TabPanelLayout} tabPanel
+	 * @param {Initializer['actionRestrictions']} actionRestrictions
+	 */
+	constructor(tabPanel, actionRestrictions) {
+		/**
+		 * @type {AjaxBlockConfigCustomReasonOptions}
+		 * @readonly
+		 */
+		this.blockReasonOptions = new AjaxBlockConfigCustomReasonOptions('block', tabPanel);
+		/**
+		 * @type {AjaxBlockConfigCustomReasonOptions}
+		 * @readonly
+		 */
+		this.unblockReasonOptions = new AjaxBlockConfigCustomReasonOptions('unblock', tabPanel);
+
+		tabPanel.$element.append(
+			this.blockReasonOptions.$element,
+			this.unblockReasonOptions.$element
+		);
+	}
+
+}
+
+class AjaxBlockConfigCustomReasonOptions {
+
+	/**
+	 * @param {BlockActions} action
+	 * @param {OO.ui.TabPanelLayout} tabPanel
+	 */
+	constructor(action, tabPanel) {
+		/**
+		 * @type {OO.ui.MultilineTextInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.input = new OO.ui.MultilineTextInputWidget({
+			autosize: true,
+			rows: 1,
+			maxRows: 10,
+			placeholder: Messages.get('ajaxblock-config-placeholder-customreasons', [], { method: 'plain' }),
+		});
+
+		const adjustSizeHack = () => {
+			// Work around OOUI autosize issue:
+			// adjustSize() relies on layout measurements (innerHeight, scrollHeight, etc.),
+			// which are incorrect while the widget is inside a hidden tab (`display: none`).
+			// Recalculate after the tab becomes visible.
+			requestAnimationFrame(() => this.input.adjustSize(true));
+			tabPanel.off('active', adjustSizeHack);
+		};
+		tabPanel.on('active', adjustSizeHack);
+
+		const layout = new OO.ui.FieldsetLayout({
+			// Messages used here:
+			// - ajaxblock-config-label-customreasons-block-layout
+			// - ajaxblock-config-label-customreasons-unblock-layout
+			label: Messages.get(`ajaxblock-config-label-customreasons-${action}-layout`, [], { method: 'plain' }),
+			items: [
+				new OO.ui.FieldLayout(this.input, {
+					align: 'top',
+					invisibleLabel: true,
+					// Messages used here:
+					// - ajaxblock-config-help-customreasons-block
+					// - ajaxblock-config-help-customreasons-unblock
+					help: Messages.get(`ajaxblock-config-help-customreasons-${action}`, [], { method: 'plain' }),
+					helpInline: true,
+				})
+			]
+		});
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = layout.$element;
+	}
+
+	build() {
+		const valueSet = new Set(
+			clean(this.input.getValue()).split('\n').map(v => v.trim()).filter(Boolean)
+		);
+		const value = [...valueSet].join('\n');
+		this.input.setValue(value);
+		return value;
+	}
+
+}
 
 /**
  * Removes unicode bidirectional characters from the given string and trims it.

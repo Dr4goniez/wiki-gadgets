@@ -290,6 +290,10 @@ export interface AjaxBlockMessages {
 	'ajaxblock-config-title': string;
 	'ajaxblock-config-loading': string;
 	'ajaxblock-config-loading-failure': string;
+	'ajaxblock-config-label-tab-common': string;
+	'ajaxblock-config-label-tab-global': string;
+	'ajaxblock-config-label-tab-local': string;
+	'ajaxblock-config-label-tab-misc': string;
 	'ajaxblock-config-label-default': string;
 	'ajaxblock-config-label-language-layout': string;
 	'ajaxblock-config-help-language-default': string;
@@ -308,6 +312,11 @@ export interface AjaxBlockMessages {
 	'ajaxblock-config-label-warning-unblock-noreason': string;
 	'ajaxblock-config-label-warning-unblock-self': string;
 	'ajaxblock-config-label-reset': string;
+	'ajaxblock-config-placeholder-customreasons': string;
+	'ajaxblock-config-label-customreasons-block-layout': string;
+	'ajaxblock-config-label-customreasons-unblock-layout': string;
+	'ajaxblock-config-help-customreasons-block': string;
+	'ajaxblock-config-help-customreasons-unblock': string;
 }
 
 /**
