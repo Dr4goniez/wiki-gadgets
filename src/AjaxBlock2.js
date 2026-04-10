@@ -504,10 +504,11 @@ class AjaxBlock {
 		anchor.classList.add(clss);
 
 		if (!this.unprocessableLinkTitleAttr) {
-			const sep = Messages.get('word-separator');
-			const parentheses = Messages.get('parentheses');
-			const title = Messages.get('ajaxblock-link-title-unprocessable', [SCRIPT_NAME]);
-			this.unprocessableLinkTitleAttr = sep + mw.format(parentheses, title);
+			this.unprocessableLinkTitleAttr =
+				Messages.plain('word-separator') +
+				Messages.plain('parentheses', [
+					Messages.get('ajaxblock-link-title-unprocessable', [SCRIPT_NAME])
+				]);
 		}
 
 		anchor.title += this.unprocessableLinkTitleAttr;
@@ -2502,6 +2503,16 @@ class Messages {
 	}
 
 	/**
+	 * @template {keyof LoadedMessages} K
+	 * @param {K} key Key of the message to retrieve.
+	 * @param {(string|number)[]} [params] Positional parameters for replacements.
+	 * @returns {LoadedMessages[K]} The message as a string.
+	 */
+	static plain(key, params) {
+		return this.get(key, params, { method: 'plain' });
+	}
+
+	/**
 	 * @param {string} message
 	 * @returns {string}
 	 */
@@ -2723,11 +2734,11 @@ class Messages {
 		}
 		let text = /** @type {string} */ (list.pop());
 		if (itemCount > 1) {
-			const and = Messages.get('and');
-			const space = Messages.get('word-separator');
+			const and = Messages.plain('and');
+			const space = Messages.plain('word-separator');
 			let comma = '';
 			if (itemCount > 2) {
-				comma = Messages.get('comma-separator');
+				comma = Messages.plain('comma-separator');
 			}
 			text = list.join(comma) + and + space + text;
 		}
@@ -4093,7 +4104,7 @@ class BlockField extends WatchUserField {
 	}
 
 	getReason() {
-		const sep = Messages.get('colon-separator');
+		const sep = Messages.plain('colon-separator');
 		const main = [
 			DropdownUtil.getSelectedOptionValue(this.reason1),
 			DropdownUtil.getSelectedOptionValue(this.reason2),
@@ -4126,7 +4137,7 @@ class BlockField extends WatchUserField {
 	 * @return {this}
 	 */
 	setReason(reason) {
-		const rSep = new RegExp('^' + mw.util.escapeRegExp(Messages.get('colon-separator')));
+		const rSep = new RegExp('^' + mw.util.escapeRegExp(Messages.plain('colon-separator')));
 		let item = DropdownUtil.findItemByCallback(this.reason1, (option) => {
 			const data = /** @type {string} */ (option.getData());
 			return data !== '' && reason.startsWith(data);
@@ -4625,7 +4636,7 @@ class TargetField {
 					.addClass('ajaxblock-targetlabel')
 					.append(
 						this.$mainLabel,
-						Messages.get('word-separator'),
+						Messages.plain('word-separator'),
 						this.$auxLabel
 					)
 			}),
@@ -4829,10 +4840,10 @@ class TargetField {
 		if (id && username) {
 			this.$mainLabel.text(username);
 			this.$auxLabel.empty().append(
-				Messages.get('parentheses-start'),
+				Messages.plain('parentheses-start'),
 				'#',
 				BlockTarget.createBlockListLink(id),
-				Messages.get('parentheses-end')
+				Messages.plain('parentheses-end')
 			);
 		} else if (id) {
 			// Autoblock
@@ -5251,8 +5262,8 @@ class BlockLog {
 
 		// @ts-expect-error
 		const logline = Messages.get(key, parameters);
-		const comment = parsedcomment && Messages.get('parentheses', [parsedcomment]);
-		const idLink = Messages.get('parentheses', [
+		const comment = parsedcomment && Messages.plain('parentheses', [parsedcomment]);
+		const idLink = Messages.plain('parentheses', [
 			`<b>${BlockTarget.createBlockListLink(blockId).outerHTML}</b>`
 		]);
 
@@ -5270,7 +5281,7 @@ class BlockLog {
 	static formatFlags(flags) {
 		const formatted = flags.map((f) => Messages.get(`block-log-flags-${f}`));
 		if (!formatted.length) return '';
-		return Messages.get('parentheses', [formatted.join(Messages.get('comma-separator'))]);
+		return Messages.plain('parentheses', [formatted.join(Messages.plain('comma-separator'))]);
 	}
 
 	/**
@@ -5372,7 +5383,7 @@ class ParamApplier {
 		field.getTargetField().addMessage({
 			label: $('<span>').append(
 				mainMsg,
-				isLastCharFullWidth ? Messages.get('word-separator') : '',
+				isLastCharFullWidth ? Messages.plain('word-separator') : '',
 				wrapper
 			),
 			type: 'notice',
@@ -5414,9 +5425,9 @@ class ParamApplier {
 		applier.style.fontWeight = 'bold';
 
 		const wrapper = document.createElement('span');
-		wrapper.appendChild(document.createTextNode(Messages.get('parentheses-start')));
+		wrapper.appendChild(document.createTextNode(Messages.plain('parentheses-start')));
 		wrapper.appendChild(applier);
-		wrapper.appendChild(document.createTextNode(Messages.get('parentheses-end')));
+		wrapper.appendChild(document.createTextNode(Messages.plain('parentheses-end')));
 
 		return { wrapper, applier };
 	}
@@ -5461,7 +5472,7 @@ class ParamApplier {
 			reason: [
 				(r = params.get('wpReason')) === 'other' ? '' : r,
 				params.get('wpReason-other')
-			].filter(Boolean).join(Messages.get('colon-separator')),
+			].filter(Boolean).join(Messages.plain('colon-separator')),
 			hardblock: targetType === 'ip' && toPHPBool(params.get('wpHardBlock')),
 			nocreate: toPHPBool(params.get('wpCreateAccount')),
 			autoblock: targetType !== 'ip' && toPHPBool(params.get('wpAutoBlock')),
@@ -5851,7 +5862,7 @@ class AjaxBlockConfig {
 
 	static preparePage() {
 		return $.ready.then(() => {
-			const title = Messages.get('ajaxblock-config-title', [], { method: 'plain' });
+			const title = Messages.get('ajaxblock-config-title');
 			document.title = title + ' - ' + mw.config.get('wgSiteName');
 
 			const heading = document.querySelector('.mw-first-heading');
@@ -5865,7 +5876,7 @@ class AjaxBlockConfig {
 			const spinner = BlockLinkUtil.getSpinner();
 			spinner.style.marginLeft = '0.5em';
 			content.replaceChildren(
-				Messages.get('ajaxblock-config-loading', [], { method: 'plain' }),
+				Messages.get('ajaxblock-config-loading'),
 				spinner
 			);
 
@@ -5879,7 +5890,7 @@ class AjaxBlockConfig {
 	 * @private
 	 */
 	static fail(content) {
-		const msg = Messages.get('ajaxblock-config-loading-failure', [], { method: 'plain' });
+		const msg = Messages.get('ajaxblock-config-loading-failure');
 		mw.notify(msg, { type: 'error' });
 		console.error(msg);
 
@@ -5931,7 +5942,7 @@ class AjaxBlockConfig {
 
 		const commonTabPanel = new OO.ui.TabPanelLayout('Common', {
 			expanded: false,
-			label: Messages.get('ajaxblock-config-label-tab-common', [], { method: 'plain' }),
+			label: Messages.get('ajaxblock-config-label-tab-common'),
 			scrollable: false
 		});
 		commonTabPanel.$element.append(
@@ -5941,7 +5952,7 @@ class AjaxBlockConfig {
 
 		const globalTabPanel = new OO.ui.TabPanelLayout('Global', {
 			expanded: false,
-			label: Messages.get('ajaxblock-config-label-tab-global', [], { method: 'plain' }),
+			label: Messages.get('ajaxblock-config-label-tab-global'),
 			scrollable: false
 		});
 		/**
@@ -5953,7 +5964,7 @@ class AjaxBlockConfig {
 
 		const localTabPanel = new OO.ui.TabPanelLayout('Local', {
 			expanded: false,
-			label: Messages.get('ajaxblock-config-label-tab-local', [], { method: 'plain' }),
+			label: Messages.get('ajaxblock-config-label-tab-local'),
 			scrollable: false
 		});
 		/**
@@ -5965,7 +5976,7 @@ class AjaxBlockConfig {
 
 		const miscTabPanel = new OO.ui.TabPanelLayout('Misc', {
 			expanded: false,
-			label: Messages.get('ajaxblock-config-label-tab-misc', [], { method: 'plain' }),
+			label: Messages.get('ajaxblock-config-label-tab-misc'),
 			scrollable: false
 		});
 
@@ -6034,10 +6045,10 @@ class AjaxBlockConfigLanguageOptions {
 	 * @param {FullInitializer} initializer
 	 */
 	constructor(initializer) {
-		const msgDefault = Messages.get('ajaxblock-config-label-default', [], { method: 'plain' });
+		const msgDefault = Messages.get('ajaxblock-config-label-default');
 		const options = [
 			new OO.ui.MenuOptionWidget({
-				label: Messages.get('parentheses', [msgDefault], { method: 'plain' }),
+				label: Messages.plain('parentheses', [msgDefault]),
 				data: '',
 			})
 		];
@@ -6063,14 +6074,14 @@ class AjaxBlockConfigLanguageOptions {
 		DropdownUtil.selectOther(this.dropdown);
 
 		const layout = new OO.ui.FieldsetLayout({
-			label: Messages.get('ajaxblock-config-label-language-layout', [], { method: 'plain' }),
+			label: Messages.get('ajaxblock-config-label-language-layout'),
 			items: [
 				new OO.ui.FieldLayout(this.dropdown, {
 					align: 'top',
 					invisibleLabel: true,
 					help: msgDefault +
-						Messages.get('colon-separator', [], { method: 'plain' }) +
-						Messages.get('ajaxblock-config-help-language-default', [], { method: 'plain' }),
+						Messages.plain('colon-separator') +
+						Messages.get('ajaxblock-config-help-language-default'),
 					helpInline: true,
 				}),
 			]
@@ -6121,7 +6132,7 @@ class AjaxBlockConfigWarningOptions {
 		 * @private
 		 */
 		this.resetButton = new OO.ui.ButtonWidget({
-			label: Messages.get('ajaxblock-config-label-reset', [], { method: 'plain' }),
+			label: Messages.get('ajaxblock-config-label-reset'),
 			flags: ['destructive'],
 			disabled: true,
 		});
@@ -6156,7 +6167,7 @@ class AjaxBlockConfigWarningOptions {
 					// - ajaxblock-config-label-warning-unblock
 					// - ajaxblock-config-label-warning-unblock-noreason
 					// - ajaxblock-config-label-warning-unblock-self
-					$('<td>').text(Messages.get(`ajaxblock-config-label-warning-${key}`, [], { method: 'plain' })),
+					$('<td>').text(Messages.get(`ajaxblock-config-label-warning-${key}`)),
 					$('<td>').append(cbOneClick.$element),
 					$('<td>').append(cbDialog.$element)
 				)
@@ -6171,15 +6182,15 @@ class AjaxBlockConfigWarningOptions {
 			$('<thead>').append(
 				$('<tr>').append(
 					$('<th>'),
-					$('<th>').text(Messages.get('ajaxblock-config-label-warning-th-oneclick', [], { method: 'plain' })),
-					$('<th>').text(Messages.get('ajaxblock-config-label-warning-th-dialog', [], { method: 'plain' }))
+					$('<th>').text(Messages.get('ajaxblock-config-label-warning-th-oneclick')),
+					$('<th>').text(Messages.get('ajaxblock-config-label-warning-th-dialog'))
 				)
 			),
 			$tbody
 		);
 
 		const layout = new OO.ui.FieldsetLayout({
-			label: Messages.get('ajaxblock-config-label-warning-layout', [], { method: 'plain' }),
+			label: Messages.get('ajaxblock-config-label-warning-layout'),
 			items: [
 				new OO.ui.FieldLayout(table),
 				new OO.ui.FieldLayout(this.resetButton)
@@ -6382,7 +6393,7 @@ class AjaxBlockConfigBlockPresetOptions {
 		}
 
 		const layout = new OO.ui.FieldsetLayout({
-			label: Messages.get('ajaxblock-config-label-presetreasons-layout', [], { method: 'plain' }),
+			label: Messages.get('ajaxblock-config-label-presetreasons-layout'),
 		});
 
 		/**
@@ -6396,7 +6407,7 @@ class AjaxBlockConfigBlockPresetOptions {
 		 * @private
 		 */
 		this.addButton = new OO.ui.ButtonWidget({
-			label: Messages.get('ajaxblock-config-label-presetreasons-add', [], { method: 'plain' }),
+			label: Messages.get('ajaxblock-config-label-presetreasons-add'),
 			flags: ['progressive'],
 		});
 
@@ -6517,7 +6528,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		 * @private
 		 */
 		this.presetNameInput = new OO.ui.TextInputWidget({
-			placeholder: Messages.get('ajaxblock-config-placeholder-presetreasons-name', [], { method: 'plain' }),
+			placeholder: Messages.get('ajaxblock-config-placeholder-presetreasons-name'),
 			value: presetName,
 			disabled: lockPreset,
 		});
@@ -6529,11 +6540,11 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		this.targetSelector = new OO.ui.MenuTagMultiselectWidget({
 			inputPosition: 'inline',
 			options: [
-				{ data: 'named', label: Messages.get('ajaxblock-config-label-presetreasons-target-named', [], { method: 'plain' }) },
-				{ data: 'temp', label: Messages.get('ajaxblock-config-label-presetreasons-target-temp', [], { method: 'plain' }) },
-				{ data: 'ip', label: Messages.get('ajaxblock-config-label-presetreasons-target-ip', [], { method: 'plain' }) },
+				{ data: 'named', label: Messages.get('ajaxblock-config-label-presetreasons-target-named') },
+				{ data: 'temp', label: Messages.get('ajaxblock-config-label-presetreasons-target-temp') },
+				{ data: 'ip', label: Messages.get('ajaxblock-config-label-presetreasons-target-ip') },
 			],
-			placeholder: Messages.get('ajaxblock-config-placeholder-presetreasons-target', [], { method: 'plain' }),
+			placeholder: Messages.get('ajaxblock-config-placeholder-presetreasons-target'),
 			selected: targets,
 			disabled: lockPreset,
 		});
@@ -6543,19 +6554,19 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			new OO.ui.FieldLayout(this.presetNameInput, {
 				classes: ['ajaxblock-horizontalfield'],
 				align: 'left',
-				label: $('<b>').text(Messages.get('ajaxblock-config-label-presetreasons-name', [], { method: 'plain' })).css(forcedBaseColor),
+				label: $('<b>').text(Messages.get('ajaxblock-config-label-presetreasons-name')).css(forcedBaseColor),
 			}),
 			new OO.ui.FieldLayout(this.targetSelector, {
 				classes: ['ajaxblock-horizontalfield'],
 				align: 'left',
-				label: $('<b>').text(Messages.get('block-target', [], { method: 'plain' })).css(forcedBaseColor),
+				label: $('<b>').text(Messages.get('block-target')).css(forcedBaseColor),
 			}),
 		], 0);
 
 		this.optionsFieldset.addItems([
 			new OO.ui.MessageWidget({
 				classes: ['ajaxblock-message-container'],
-				label: Messages.get('ajaxblock-config-notice-presetreasons-additionaloptions', [], { method: 'plain' }),
+				label: Messages.get('ajaxblock-config-notice-presetreasons-additionaloptions'),
 				type: 'notice',
 			})
 		], 0);
@@ -6566,7 +6577,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		 * @private
 		 */
 		this.deleteButton = new OO.ui.ButtonWidget({
-			label: Messages.get('ajaxblock-config-label-presetreasons-delete', [], { method: 'plain' }),
+			label: Messages.get('ajaxblock-config-label-presetreasons-delete'),
 			flags: ['destructive'],
 		});
 		/**
@@ -6689,7 +6700,7 @@ class CollapsibleFieldset {
 	constructor(collapsed = true, presetName = '') {
 		if (presetName in AjaxBlockConfigBlockPresetOptions.systemDefined) {
 			// @ts-expect-error
-			presetName = Messages.get(`ajaxblock-config-label-presetreasons-target-${presetName}`, [], { method: 'plain' });
+			presetName = Messages.get(`ajaxblock-config-label-presetreasons-target-${presetName}`);
 		}
 
 		/**
@@ -6717,11 +6728,11 @@ class CollapsibleFieldset {
 			$content: this.$content,
 			classes: ['mw-collapsibleFieldsetLayout', 'mw-collapsible'].concat(collapsed ? ['mw-collapsed'] : []),
 			label: $('<span>').append(
-				Messages.get('ajaxblock-config-label-presetreasons-name', [], { method: 'plain' }),
-				Messages.get('word-separator', [], { method: 'plain' }),
-				Messages.get('parentheses-start', [], { method: 'plain' }),
+				Messages.get('ajaxblock-config-label-presetreasons-name'),
+				Messages.plain('word-separator'),
+				Messages.plain('parentheses-start'),
 				this.$presetName.text(presetName),
-				Messages.get('parentheses-end', [], { method: 'plain' })
+				Messages.plain('parentheses-end')
 			),
 			icon: collapsed ? 'expand' : 'collapse',
 		});
@@ -6788,7 +6799,7 @@ class AjaxBlockConfigCustomReasonOptions {
 			autosize: true,
 			rows: 1,
 			maxRows: 10,
-			placeholder: Messages.get('ajaxblock-config-placeholder-customreasons', [], { method: 'plain' }),
+			placeholder: Messages.get('ajaxblock-config-placeholder-customreasons'),
 		});
 
 		tabPanel.once('active', () => {
@@ -6803,7 +6814,7 @@ class AjaxBlockConfigCustomReasonOptions {
 			// Messages used here:
 			// - ajaxblock-config-label-customreasons-block-layout
 			// - ajaxblock-config-label-customreasons-unblock-layout
-			label: Messages.get(`ajaxblock-config-label-customreasons-${action}-layout`, [], { method: 'plain' }),
+			label: Messages.get(`ajaxblock-config-label-customreasons-${action}-layout`),
 			items: [
 				new OO.ui.FieldLayout(this.input, {
 					align: 'top',
@@ -6811,7 +6822,7 @@ class AjaxBlockConfigCustomReasonOptions {
 					// Messages used here:
 					// - ajaxblock-config-help-customreasons-block
 					// - ajaxblock-config-help-customreasons-unblock
-					help: Messages.get(`ajaxblock-config-help-customreasons-${action}`, [], { method: 'plain' }),
+					help: Messages.get(`ajaxblock-config-help-customreasons-${action}`),
 					helpInline: true,
 				})
 			]
