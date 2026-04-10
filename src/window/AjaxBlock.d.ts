@@ -16,7 +16,7 @@ export type BlockActions = 'block' | 'unblock';
  *
  * Note: Page name aliases use **underscores**, not spaces.
  */
-export interface Initializer {
+export interface PrematureInitializer {
 	blockPageAliases: Record<BlockPageNames, readonly string[]>;
 	specialNamespaceAliases: readonly string[];
 	userRights: Set<string>;
@@ -174,17 +174,17 @@ interface ApiResponseQueryMetaUserinfoRights {
 }
 
 interface ApiResponseQueryPages {
-    invalid?: true;
-    invalidreason?: string;
-    iw?: string;
-    known?: true;
-    missing?: true;
-    ns?: number;
-    pageid?: number;
-    revid?: number;
-    special?: true;
-    title: string;
-    url?: string;
+	invalid?: true;
+	invalidreason?: string;
+	iw?: string;
+	known?: true;
+	missing?: true;
+	ns?: number;
+	pageid?: number;
+	revid?: number;
+	special?: true;
+	title: string;
+	url?: string;
 }
 
 interface ApiResponseQueryInterwikiTitles {
@@ -312,6 +312,16 @@ export interface AjaxBlockMessages {
 	'ajaxblock-config-label-warning-unblock-noreason': string;
 	'ajaxblock-config-label-warning-unblock-self': string;
 	'ajaxblock-config-label-reset': string;
+	'ajaxblock-config-label-presetreasons-layout': string;
+	'ajaxblock-config-label-presetreasons-name': string;
+	'ajaxblock-config-placeholder-presetreasons-name': string;
+	'ajaxblock-config-label-presetreasons-target-named': string;
+	'ajaxblock-config-label-presetreasons-target-temp': string;
+	'ajaxblock-config-label-presetreasons-target-ip': string;
+	'ajaxblock-config-placeholder-presetreasons-target': string;
+	'ajaxblock-config-notice-presetreasons-additionaloptions': string;
+	'ajaxblock-config-label-presetreasons-add': string;
+	'ajaxblock-config-label-presetreasons-delete': string;
 	'ajaxblock-config-placeholder-customreasons': string;
 	'ajaxblock-config-label-customreasons-block-layout': string;
 	'ajaxblock-config-label-customreasons-unblock-layout': string;
@@ -410,7 +420,7 @@ export interface CachedMessage {
 	'ipboptions': readonly Map<string, string>;
 }
 
-export type BlockTargetType = 'anon' | 'temp' | 'named' | null;
+export type BlockTargetType = 'ip' | 'temp' | 'named' | null;
 
 export interface AjaxBlockRegex {
 	/**
@@ -544,6 +554,41 @@ export interface BlockParamApplierHandler {
 	watch: ParamApplierHandler<boolean, boolean | null>;
 }
 
+/**
+ * Optional hooks for `ParamApplier.applyBlockParams`.
+ *
+ * These callbacks allow callers to integrate UI behavior (e.g. dialog state,
+ * overlays, or additional side effects) without coupling the applier to a
+ * specific implementation such as `BlockUser`.
+ */
+export interface BlockParamApplierOptions {
+	/**
+	 * Called after all synchronous parameter setters have been applied.
+	 *
+	 * This runs regardless of whether any asynchronous getters are present.
+	 * Useful for lightweight side effects that should always occur.
+	 */
+	onAfterApply?: () => void;
+	/**
+	 * Called immediately before handling asynchronous parameter resolution.
+	 *
+	 * Typically used to put the UI into a "pending" state (e.g. disabling inputs
+	 * or showing a loading overlay).
+	 *
+	 * Only invoked if at least one parameter getter returns a Promise.
+	 */
+	onBeforePromise?: () => void;
+	/**
+	 * Called after all asynchronous parameter setters have finished.
+	 *
+	 * @param errors An array of jQuery error elements returned from failed
+	 * Promise chains.
+	 *
+	 * Typically used to clear pending UI state and optionally surface errors.
+	 */
+	onAfterPromise?: (errors: JQuery<HTMLElement>[]) => void;
+}
+
 export type AjaxBlockLanguages = 'en' | 'ja';
 
 export type WarningKeys =
@@ -567,3 +612,10 @@ interface WarningCheckboxConfig {
 export type AjaxBlockWarningConfig = Record<WarningKeys, Record<WarningContext, WarningCheckboxConfig>>;
 
 export type AjaxBlockWarningFlatConfig = Record<WarningKeys, Record<WarningContext, boolean>>;
+
+export interface BlockPresetOptionsFieldOptions {
+	collapsed?: boolean;
+	presetName?: string;
+	targets?: NonNullable<BlockTargetType>[];
+	lockPreset?: boolean;
+}

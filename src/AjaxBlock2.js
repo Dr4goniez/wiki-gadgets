@@ -77,25 +77,30 @@ class AjaxBlock {
 		});
 
 		// Fetch initialization data (user rights, aliases, configuration)
-		let /** @type {Initializer} */ initializer;
+		let /** @type {PrematureInitializer} */ prematureInitializer;
 		try {
-			initializer = await toNativePromise(this.getInitializer());
+			prematureInitializer = await toNativePromise(this.getInitializer());
 		} catch (e) {
 			// Indicate initialization failure using the logo
 			console.error(toErrorTuple(e)[1]);
 			await new AjaxBlockLogo().insert().setError().remove(800);
 			return;
 		}
-		const permissionManager = new PermissionManager(initializer.userRights);
-		if (!permissionManager.isAllowed('block') && !cfgContentPromise) {
+		const permissionManager = new PermissionManager(prematureInitializer.userRights);
+		if (!permissionManager.canBlock() && !cfgContentPromise) {
 			return;
 		}
-		wgEnableMultiBlocks = initializer.multiBlocksEnabled;
+		wgEnableMultiBlocks = prematureInitializer.multiBlocksEnabled;
+
+		/** @type {Initializer} */
+		const initializer = Object.assign(
+			{ permissionManager },
+			prematureInitializer
+		);
 
 		// Run the script
-		const { actionRestrictions } = initializer;
 		await Promise.all([
-			this.loadDependencies(permissionManager, actionRestrictions),
+			this.loadDependencies(initializer),
 			$.ready
 		]);
 		this.addStyleTag();
@@ -107,7 +112,7 @@ class AjaxBlock {
 					// Failure is handled in AjaxBlockConfig.preparePage()
 					return;
 				}
-				AjaxBlockConfig.init(content, initializer);
+				AjaxBlockConfig.init(/** @type {FullInitializer} */ (initializer), content);
 			});
 			return;
 		}
@@ -131,7 +136,7 @@ class AjaxBlock {
 			}
 
 			// Parse block/unblock links
-			const { links, users, ids } = this.collectBlockLinks(initializer, permissionManager, content);
+			const { links, users, ids } = this.collectBlockLinks(initializer, content);
 			if (ajaxBlock) {
 				// Reuse previously tracked links that are no longer present in the new scan
 				const anchorSet = new Set(links.map(obj => obj.anchor));
@@ -174,7 +179,7 @@ class AjaxBlock {
 			const linkMap = this.injectBlockInfo(links, blockLookup);
 			if (linkMap.size) {
 				if (!ajaxBlock) {
-					ajaxBlock = new AjaxBlock(permissionManager, linkMap, blockLookup, actionRestrictions);
+					ajaxBlock = new AjaxBlock(initializer, linkMap, blockLookup);
 					ajaxBlock.initialize();
 				} else {
 					ajaxBlock.initialize({ linkMap, blockLookup });
@@ -185,11 +190,14 @@ class AjaxBlock {
 	}
 
 	/**
-	 * @returns {JQuery.Promise<Initializer>}
+	 * @typedef {PrematureInitializer & { permissionManager: PermissionManager }} Initializer
+	 */
+	/**
+	 * @returns {JQuery.Promise<PrematureInitializer>}
 	 * @private
 	 */
 	static getInitializer() {
-		const /** @type {Partial<Initializer>} */ data = {
+		const /** @type {Partial<PrematureInitializer>} */ data = {
 			blockPageAliases: undefined,
 			specialNamespaceAliases: undefined,
 			userRights: undefined,
@@ -274,7 +282,7 @@ class AjaxBlock {
 
 					// Block aliases
 					if (Array.isArray(specialpagealiases)) {
-						const map = /** @type {Initializer['blockPageAliases']} */ (Object.create(null));
+						const map = /** @type {PrematureInitializer['blockPageAliases']} */ (Object.create(null));
 
 						for (const { realname, aliases } of specialpagealiases) {
 							if (realname !== 'Block' && realname !== 'Unblock') {
@@ -365,20 +373,19 @@ class AjaxBlock {
 
 		// Everything cached
 		if (!requests.length) {
-			return $.Deferred().resolve(/** @type {Initializer} */ (data)).promise();
+			return $.Deferred().resolve(/** @type {PrematureInitializer} */ (data)).promise();
 		}
 
-		return $.when(...requests).then(() => /** @type {Initializer} */ (data));
+		return $.when(...requests).then(() => /** @type {PrematureInitializer} */ (data));
 	}
 
 	/**
 	 * @param {Initializer} init
-	 * @param {PermissionManager} permissionManager
 	 * @param {ParentNode} [content] Optional root node to limit scanning (used for dynamically injected content).
 	 * @return {{ links: BlockLink[]; users: Set<string>; ids: Set<number>; }}
 	 * @private
 	 */
-	static collectBlockLinks(init, permissionManager, content) {
+	static collectBlockLinks(init, content) {
 		const wgScript = mw.config.get('wgScript');
 		/**
 		 * @param {readonly string[]} arr
@@ -471,7 +478,7 @@ class AjaxBlock {
 			const target = new BlockTarget(id, username);
 			const params = isUnblockLink
 				? ParamApplier.createUnbBlockParamsFromSearchParams(query)
-				: ParamApplier.createBlockParamsFromSearchParams(query, target.getType(), permissionManager);
+				: ParamApplier.createBlockParamsFromSearchParams(query, target.getType(), init);
 			links.push({
 				anchor: a,
 				params,
@@ -507,12 +514,11 @@ class AjaxBlock {
 	}
 
 	/**
-	 * @param {PermissionManager} permissionManager
-	 * @param {Initializer['actionRestrictions']} actionRestrictions
+	 * @param {Initializer} initializer
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	static async loadDependencies(permissionManager, actionRestrictions) {
+	static async loadDependencies(initializer) {
 		await Promise.all([
 			mw.loader.using([
 				'oojs-ui',
@@ -521,8 +527,9 @@ class AjaxBlock {
 				// For safety: Already required by mediawiki.api
 				'mediawiki.Title',
 				'mediawiki.jqueryMsg',
+				...AjaxBlockConfig.getDependencies(),
 			]),
-			Messages.loadMessagesIfMissing(permissionManager, [
+			Messages.loadMessagesIfMissing(initializer, [
 				'colon-separator',
 				'parentheses-start',
 				'parentheses-end',
@@ -599,7 +606,7 @@ class AjaxBlock {
 				// - ipb-action-thanks
 				// - ipb-action-upload
 				// @ts-expect-error
-				...actionRestrictions.map(r => `ipb-action-${r}`),
+				...initializer.actionRestrictions.map(r => `ipb-action-${r}`),
 			])
 		]);
 	}
@@ -739,11 +746,13 @@ class AjaxBlock {
 				left: 0;
 				z-index: 1000;
 			}
-			${/* Reduce padding for MessageWidget in the dialog */''}
-			.ajaxblock-dialog .ajaxblock-dialog-message {
+			${/* Reduce padding for MessageWidget */''}
+			.ajaxblock-dialog .ajaxblock-message-container,
+			.ajaxblock-config-content .ajaxblock-message-container {
 				padding: 8px 12px;
 			}
-			.ajaxblock-dialog .oo-ui-messageWidget.oo-ui-messageWidget-block > .oo-ui-iconElement-icon {
+			.ajaxblock-dialog .ajaxblock-message-container.oo-ui-messageWidget.oo-ui-messageWidget-block > .oo-ui-iconElement-icon,
+			.ajaxblock-config-content .ajaxblock-message-container.oo-ui-messageWidget.oo-ui-messageWidget-block > .oo-ui-iconElement-icon {
 				background-position: 0 8px;
 			}
 			${/* Limit the height of the block selector box */''}
@@ -766,11 +775,13 @@ class AjaxBlock {
 				margin-bottom: 0.5em;
 			}
 			${/* Reduce vertical spacing between field items */''}
-			.ajaxblock-dialog .oo-ui-fieldLayout:not(:first-child) {
+			.ajaxblock-dialog .oo-ui-fieldLayout:not(:first-child),
+			.ajaxblock-config-content .oo-ui-fieldLayout:not(:first-child) {
 				margin-top: 6px;
 			}
 			${/* Increase the default width (60%) of fields with a horizontally aligned label */''}
-			.ajaxblock-dialog .ajaxblock-horizontalfield .oo-ui-fieldLayout-field {
+			.ajaxblock-dialog .ajaxblock-horizontalfield .oo-ui-fieldLayout-field,
+			.ajaxblock-config-content .ajaxblock-horizontalfield .oo-ui-fieldLayout-field {
 				width: 80% !important;
 			}
 			${/* Vertically align the FieldLayout text field with its label */''}
@@ -779,16 +790,23 @@ class AjaxBlock {
 				padding-top: 4px;
 			}
 			${/* Halve the default top margin for fieldset:not(:first-child) */''}
-			.ajaxblock-dialog .ajaxblock-dialog-content > fieldset:not(:first-child) {
+			.ajaxblock-dialog .ajaxblock-field-content > fieldset:not(:first-child),
+			.ajaxblock-config-content .ajaxblock-field-content > fieldset:not(:first-child) {
 				margin-top: 12px;
 			}
 			${/* Make non-primary legends less prominent */''}
-			.ajaxblock-dialog .ajaxblock-dialog-content > fieldset:not(:first-child) > legend > .oo-ui-labelElement-label {
+			.ajaxblock-dialog .ajaxblock-field-content > fieldset:not(:first-child) > legend > .oo-ui-labelElement-label,
+			.ajaxblock-config-content .ajaxblock-field-content > fieldset:not(:first-child) > legend > .oo-ui-labelElement-label {
 				font-weight: normal;
 				font-style: italic;
 				font-size: 1.1em;
 			}
 			${/* Special:AjaxBlockConfig */''}
+			${/* Preset block reason options */''}
+			.ajaxblock-config-content .ajaxblock-collapsiblefieldset-container {
+				padding: 8px 12px;
+				margin: 0 0 12px 0;
+			}
 			${/* Warning options */''}
 			.ajaxblock-config-options-warnings > tbody > tr:nth-child(2n + 1) {
 				background-color: var(--background-color-neutral, #eaecf0);
@@ -812,18 +830,17 @@ class AjaxBlock {
 	}
 
 	/**
-	 * @param {PermissionManager} permissionManager
+	 * @param {Initializer} initializer
 	 * @param {BlockLinkMap} linkMap
 	 * @param {BlockLookup} blockLookup
-	 * @param {readonly string[]} actionRestrictions
 	 * @private
 	 */
-	constructor(permissionManager, linkMap, blockLookup, actionRestrictions) {
+	constructor(initializer, linkMap, blockLookup) {
 		/**
-		 * @type {PermissionManager}
+		 * @type {Initializer}
 		 * @readonly
 		 */
-		this.permissionManager = permissionManager;
+		this.initializer = initializer;
 		/**
 		 * @type {BlockLinkMap}
 		 * @private
@@ -860,7 +877,7 @@ class AjaxBlock {
 		 * @private
 		 * @readonly
 		 */
-		this.dialog = new AjaxBlockDialog(this, actionRestrictions, {
+		this.dialog = new AjaxBlockDialog(this, {
 			$element: $('<div>').css({ 'font-size': '90%' }),
 			classes: ['ajaxblock-dialog'],
 			size: 'large',
@@ -1282,13 +1299,13 @@ class AjaxBlock {
 			$element: $('<div>').css({ 'font-size': '90%', 'z-index': 9999 }),
 			classes: ['ajaxblock-dialog'],
 		});
-		const $message = $('<div>').addClass('ajaxblock-dialog-content');
+		const $message = $('<div>').addClass('ajaxblock-field-content');
 
 		// Add an instruction message
 		const /** @type {OO.ui.FieldLayout[]} */ items = [
 			new OO.ui.FieldLayout(
 				new OO.ui.MessageWidget({
-					classes: ['ajaxblock-dialog-message'],
+					classes: ['ajaxblock-message-container'],
 					label: new OO.ui.HtmlSnippet(Messages.get('ajaxblock-confirm-dialog-label-instruction')),
 					type: 'warning',
 				}),
@@ -1692,6 +1709,14 @@ class PermissionManager {
 	 */
 	isAllowed(permission) {
 		return this.permissions.has(permission);
+	}
+
+	canBlock() {
+		return this.isAllowed('block');
+	}
+
+	canHideUser() {
+		return this.isAllowed('hideuser');
 	}
 
 	getApiLimit() {
@@ -2208,7 +2233,7 @@ class BlockTarget {
 		if (!this.username) {
 			t = null;
 		} else if (mw.util.isIPAddress(this.username, true)) {
-			t = 'anon';
+			t = 'ip';
 		} else if (mw.util.isTemporaryUser(this.username)) {
 			t = 'temp';
 		} else {
@@ -2250,11 +2275,11 @@ class Messages {
 	 * Unlike `mw.Api.loadMessagesIfMissing`, this version supports API continuation
 	 * using batches of 500 messages per request (instead of 50), improving performance.
 	 *
-	 * @param {PermissionManager} permissionManager
+	 * @param {Initializer} initializer
 	 * @param {(keyof MediaWikiMessages)[]} messages List of message keys to ensure they are available.
 	 * @returns {JQuery.Promise<boolean>} Resolves to `true` if any new messages were added; otherwise `false`.
 	 */
-	static loadMessagesIfMissing(permissionManager, messages) {
+	static loadMessagesIfMissing(initializer, messages) {
 		/**
 		 * Messages that are missing and need to be fetched
 		 * @type {Set<string>}
@@ -2297,7 +2322,7 @@ class Messages {
 			return $.Deferred().resolve(false).promise();
 		}
 
-		const apilimit = permissionManager.getApiLimit();
+		const apilimit = initializer.permissionManager.getApiLimit();
 		return (
 			/**
 			 * Recursively loads missing messages in batches of up to 500.
@@ -2788,6 +2813,16 @@ Messages.i18n = {
 		'ajaxblock-config-label-warning-unblock-noreason': 'When performing an unblock with no reason specified',
 		'ajaxblock-config-label-warning-unblock-self': 'When performing an unblock on the performer themselves',
 		'ajaxblock-config-label-reset': 'Reset',
+		'ajaxblock-config-label-presetreasons-layout': 'Preset block options',
+		'ajaxblock-config-label-presetreasons-name': 'Preset',
+		'ajaxblock-config-placeholder-presetreasons-name': 'Enter a preset name',
+		'ajaxblock-config-label-presetreasons-target-named': 'Registered users',
+		'ajaxblock-config-label-presetreasons-target-temp': 'Temporary users',
+		'ajaxblock-config-label-presetreasons-target-ip': 'IP users',
+		'ajaxblock-config-placeholder-presetreasons-target': 'Add user types',
+		'ajaxblock-config-notice-presetreasons-additionaloptions': 'In the dialog, some of the options below may be hidden depending on the target and user permissions.',
+		'ajaxblock-config-label-presetreasons-add': 'Add preset',
+		'ajaxblock-config-label-presetreasons-delete': 'Delete preset',
 		'ajaxblock-config-placeholder-customreasons': 'Enter reasons separated by line breaks',
 		'ajaxblock-config-label-customreasons-block-layout': 'Custom block reason options',
 		'ajaxblock-config-label-customreasons-unblock-layout': 'Custom unblock reason options',
@@ -2867,6 +2902,16 @@ Messages.i18n = {
 		'ajaxblock-config-label-warning-unblock-noreason': '理由を指定せずにブロック解除を実行する場合',
 		'ajaxblock-config-label-warning-unblock-self': '実行者自身のブロックを解除する場合',
 		'ajaxblock-config-label-reset': 'リセット',
+		'ajaxblock-config-label-presetreasons-layout': 'プリセットブロック設定',
+		'ajaxblock-config-label-presetreasons-name': 'プリセット',
+		'ajaxblock-config-placeholder-presetreasons-name': 'プリセット名を入力',
+		'ajaxblock-config-label-presetreasons-target-named': '登録利用者',
+		'ajaxblock-config-label-presetreasons-target-temp': '仮利用者',
+		'ajaxblock-config-label-presetreasons-target-ip': 'IP利用者',
+		'ajaxblock-config-placeholder-presetreasons-target': '利用者種別を追加',
+		'ajaxblock-config-notice-presetreasons-additionaloptions': 'ダイアログ上では、対象と利用者権限に応じて以下のオプションのいくつかは非表示になる場合があります。',
+		'ajaxblock-config-label-presetreasons-add': 'プリセットを追加',
+		'ajaxblock-config-label-presetreasons-delete': 'プリセットを削除',
 		'ajaxblock-config-placeholder-customreasons': '理由を改行区切りで入力',
 		'ajaxblock-config-label-customreasons-block-layout': 'カスタムブロック理由設定',
 		'ajaxblock-config-label-customreasons-unblock-layout': 'カスタムブロック解除理由設定',
@@ -2992,10 +3037,9 @@ function AjaxBlockDialogFactory() {
 
 		/**
 		 * @param {AjaxBlock} ajaxBlock
-		 * @param {readonly string[]} actionRestrictions
 		 * @param {OO.ui.ProcessDialog.ConfigOptions} [config]
 		 */
-		constructor(ajaxBlock, actionRestrictions, config) {
+		constructor(ajaxBlock, config) {
 			super(config);
 
 			/**
@@ -3004,11 +3048,6 @@ function AjaxBlockDialogFactory() {
 			 * @private
 			 */
 			this.ajaxBlock = ajaxBlock;
-			/**
-			 * @type {readonly string[]}
-			 * @readonly
-			 */
-			this.actionRestrictions = actionRestrictions;
 			/**
 			 * @type {?BlockLogGenerator}
 			 * @private
@@ -3073,12 +3112,12 @@ function AjaxBlockDialogFactory() {
 			);
 		}
 
-		getBlockLookup() {
-			return this.ajaxBlock.blockLookup;
+		getInitializer() {
+			return this.ajaxBlock.initializer;
 		}
 
-		getPermissionManager() {
-			return this.ajaxBlock.permissionManager;
+		getBlockLookup() {
+			return this.ajaxBlock.blockLookup;
 		}
 
 		getCurrentData() {
@@ -3167,7 +3206,7 @@ function AjaxBlockDialogFactory() {
 
 			this.blockNamed.toggle(isBlock && targetType === 'named');
 			this.blockTemp.toggle(isBlock && targetType === 'temp');
-			this.blockIp.toggle(isBlock && targetType === 'anon');
+			this.blockIp.toggle(isBlock && targetType === 'ip');
 			this.unblockUser.toggle(!isBlock);
 
 			return this;
@@ -3182,7 +3221,7 @@ function AjaxBlockDialogFactory() {
 				switch (data.target.getType()) {
 					case 'named': return this.blockNamed;
 					case 'temp': return this.blockTemp;
-					case 'anon': return this.blockIp;
+					case 'ip': return this.blockIp;
 					default: throw new Error('Logic exception');
 				}
 			} else {
@@ -3253,7 +3292,7 @@ function AjaxBlockDialogFactory() {
 				});
 				$logLines = blockSelector.$element;
 			} else {
-				msgKey = data.target.getType() === 'anon'
+				msgKey = data.target.getType() === 'ip'
 					? 'blocked-notice-logextract-anon'
 					: 'blocked-notice-logextract';
 				msgType = 'notice';
@@ -3556,7 +3595,7 @@ class WatchUserField {
 		 * @type {JQuery<HTMLElement>}
 		 * @readonly
 		 */
-		this.$element = $('<div>').addClass('ajaxblock-dialog-content');
+		this.$element = $('<div>').addClass('ajaxblock-field-content');
 		/**
 		 * @type {OO.ui.FieldsetLayout}
 		 * @readonly
@@ -3620,11 +3659,20 @@ class WatchUserField {
 class BlockField extends WatchUserField {
 
 	/**
-	 * @param {readonly string[]} actionRestrictions
-	 * @param {OnResize} [onResize]
+	 * @param {Initializer} initializer
+	 * @param {object} [options]
+	 * @param {OnResize} [options.onResize]
+	 * @param {boolean} [options.omitMainLabel]
 	 */
-	constructor(actionRestrictions, onResize = () => {}) {
+	constructor(initializer, options = {}) {
+		const { onResize = () => {}, omitMainLabel = false } = options;
 		super(onResize);
+
+		/**
+		 * @type {Initializer}
+		 * @readonly
+		 */
+		this.initializer = initializer;
 
 		/** @type {OO.ui.Element[]} */
 		let items = [];
@@ -3777,7 +3825,7 @@ class BlockField extends WatchUserField {
 		 * @type {Record<string, OO.ui.CheckboxInputWidget>}
 		 * @readonly
 		 */
-		this.partialBlockActions = actionRestrictions.reduce((acc, action) => {
+		this.partialBlockActions = this.initializer.actionRestrictions.reduce((acc, action) => {
 			const checkbox = new OO.ui.CheckboxInputWidget({ data: action });
 			partialBlockLayoutItems.push(
 				new OO.ui.FieldLayout(checkbox, {
@@ -3803,7 +3851,7 @@ class BlockField extends WatchUserField {
 		 * @protected
 		 */
 		this.mainFieldset = new OO.ui.FieldsetLayout({
-			label: Messages.get('block'),
+			label: omitMainLabel? undefined : Messages.get('block'),
 		});
 		this.mainFieldset.addItems(items);
 
@@ -3881,20 +3929,25 @@ class BlockField extends WatchUserField {
 		items.push(this.cbHardblockContainer);
 
 		/**
+		 * @type {boolean}
+		 * @private
+		 */
+		this.hideUserLocked = false;
+		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
 		 */
-		this.cbHideName = new OO.ui.CheckboxInputWidget();
+		this.cbHideUser = new OO.ui.CheckboxInputWidget();
 		/**
 		 * @type {OO.ui.FieldLayout}
 		 * @readonly
 		 * @protected
 		 */
-		this.cbHideNameContainer = new OO.ui.FieldLayout(this.cbHideName, {
+		this.cbHideUserContainer = new OO.ui.FieldLayout(this.cbHideUser, {
 			label: $('<b>').text(Messages.get('ipbhidename')),
 			align: 'inline',
 		});
-		items.push(this.cbHideNameContainer);
+		items.push(this.cbHideUserContainer);
 
 		this.$element.prepend(
 			this.mainFieldset.$element,
@@ -3924,11 +3977,7 @@ class BlockField extends WatchUserField {
 			}
 
 			// ipb_hide_partial: A "hide user" block must be sitewide
-			if (selected) {
-				this.cbHideName.setSelected(false).setDisabled(true);
-			} else {
-				this.cbHideName.setDisabled(false);
-			}
+			this.setHideUserAvailability(!selected);
 		});
 
 		this.partialBlockNamespaces.on('change', (items) => {
@@ -3940,7 +3989,7 @@ class BlockField extends WatchUserField {
 			}
 		});
 
-		this.cbHideName.on('change', (selected) => {
+		this.cbHideUser.on('change', (selected) => {
 			// ipb_hide_partial
 			// ipb_expiry_temp: A "hide user" block must have an indefinite expiry
 			if (selected) {
@@ -3964,11 +4013,7 @@ class BlockField extends WatchUserField {
 			}
 
 			// ipb_expiry_temp
-			if (this.getExpiry() !== EXPIRY_INFINITE) {
-				this.cbHideName.setSelected(false).setDisabled(true);
-			} else {
-				this.cbHideName.setDisabled(false);
-			}
+			this.setHideUserAvailability(this.getExpiry() === EXPIRY_INFINITE);
 		});
 
 		this.expiryOther.on('change', (value) => {
@@ -3977,12 +4022,32 @@ class BlockField extends WatchUserField {
 			}
 
 			// ipb_expiry_temp
-			if (this.getExpiry() !== EXPIRY_INFINITE) {
-				this.cbHideName.setSelected(false).setDisabled(true);
-			} else {
-				this.cbHideName.setDisabled(false);
-			}
+			this.setHideUserAvailability(this.getExpiry() === EXPIRY_INFINITE);
 		});
+	}
+
+	/**
+	 * @param {boolean} available
+	 * @returns {this}
+	 * @protected
+	 */
+	setHideUserAvailability(available) {
+		if (available && !this.hideUserLocked) {
+			this.cbHideUser.setDisabled(false);
+		} else {
+			this.cbHideUser.setSelected(false).setDisabled(true);
+		}
+		return this;
+	}
+
+	/**
+	 * @param {boolean} locked
+	 * @returns {this}
+	 * @protected
+	 */
+	setHideUserLocked(locked) {
+		this.hideUserLocked = locked;
+		return this;
 	}
 
 	getExpiry() {
@@ -4198,7 +4263,7 @@ class BlockUser extends BlockField {
 	 */
 	constructor(dialog) {
 		const onResize = () => dialog.updateSize();
-		super(dialog.actionRestrictions, onResize);
+		super(dialog.getInitializer(), { onResize });
 
 		/**
 		 * @type {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>}
@@ -4237,10 +4302,6 @@ class BlockUser extends BlockField {
 		this.optionsFieldset.addItems([this.cbAddBlockContainer]);
 	}
 
-	getParentDialog() {
-		return this.dialog;
-	}
-
 	getTargetField() {
 		return this.targetField;
 	}
@@ -4250,25 +4311,25 @@ class BlockUser extends BlockField {
 	 * @returns {TargetHandler}
 	 */
 	initTarget(target) {
-		const handler = this.targetField.init(target, this.getParentDialog().getBlockLookup());
+		const handler = this.targetField.init(target, this.dialog.getBlockLookup());
 		this.optionsFieldset.toggle(!this.targetField.isAutoBlock());
 
 		// Adjust the visibility of field items
-		if (target.getType() === 'anon') {
+		if (target.getType() === 'ip') {
 			this.cbAutoblockContainer.toggle(false);
 			this.cbAutoblock.setSelected(false);
 			this.cbHardblockContainer.toggle(true);
-			this.cbHideNameContainer.toggle(false);
-			this.cbHideName.setSelected(false);
+			this.cbHideUserContainer.toggle(false);
+			this.cbHideUser.setSelected(false);
 		} else {
 			this.cbAutoblockContainer.toggle(true);
 			this.cbHardblockContainer.toggle(false);
 			this.cbHardblock.setSelected(false);
-			if (this.getParentDialog().getPermissionManager().isAllowed('hideuser')) {
-				this.cbHideNameContainer.toggle(true);
+			if (this.initializer.permissionManager.canHideUser()) {
+				this.cbHideUserContainer.toggle(true);
 			} else {
-				this.cbHideNameContainer.toggle(false);
-				this.cbHideName.setSelected(false);
+				this.cbHideUserContainer.toggle(false);
+				this.cbHideUser.setSelected(false);
 			}
 		}
 		this.cbAddBlockContainer.toggle(this.targetField.canAddBlock());
@@ -4319,7 +4380,7 @@ class BlockUser extends BlockField {
 				nocreate: this.cbCreateAccount.isSelected(),
 				noemail: this.cbSendEmail.isSelected(),
 				allowusertalk: !this.cbUserTalk.isSelected(),
-				anononly: data.target.getType() === 'anon' && !this.cbHardblock.isSelected(),
+				anononly: data.target.getType() === 'ip' && !this.cbHardblock.isSelected(),
 				autoblock: this.cbAutoblock.isSelected(),
 				newblock: this.cbAddBlock.isSelected(),
 			},
@@ -4334,8 +4395,8 @@ class BlockUser extends BlockField {
 			return null;
 		}
 
-		const blockLookup = this.getParentDialog().getBlockLookup();
-		const hidename = this.cbHideName.isSelected();
+		const blockLookup = this.dialog.getBlockLookup();
+		const hidename = this.cbHideUser.isSelected();
 		if (hidename) {
 			let needsWarning = false;
 			if (params.id !== undefined) {
@@ -4388,6 +4449,31 @@ class BlockUser extends BlockField {
 		return { params, warnings };
 	}
 
+	/**
+	 * @returns {BlockParamApplierOptions}
+	 */
+	getParamApplierOptions() {
+		return {
+			onAfterApply: () => {
+				// Deselect "add block" since the existing settings will be reused
+				this.cbAddBlock.setSelected(false);
+			},
+			onBeforePromise: () => {
+				// Show the pending animation and "lock" the dialog using the overlay
+				this.dialog.pushPending();
+				this.dialog.overlay.toggle(true);
+			},
+			onAfterPromise: (errors) => {
+				// Unlock the pending again when all promises resolve
+				errors.forEach(($err) => {
+					mw.notify($err, { type: 'error', autoHideSeconds: 'long' });
+				});
+				this.dialog.popPending();
+				this.dialog.overlay.toggle(false);
+			},
+		};
+	}
+
 }
 
 /**
@@ -4418,10 +4504,6 @@ class UnblockUser extends UnblockField {
 		this.targetField = new TargetField(this, this.mainFieldset);
 	}
 
-	getParentDialog() {
-		return this.dialog;
-	}
-
 	getTargetField() {
 		return this.targetField;
 	}
@@ -4431,7 +4513,7 @@ class UnblockUser extends UnblockField {
 	 * @returns {TargetHandler}
 	 */
 	initTarget(target) {
-		const handler = this.targetField.init(target, this.getParentDialog().getBlockLookup());
+		const handler = this.targetField.init(target, this.dialog.getBlockLookup());
 		this.optionsFieldset.toggle(!this.targetField.isAutoBlock());
 		return handler;
 	}
@@ -4563,7 +4645,7 @@ class TargetField {
 	addMessage(config = {}) {
 		// TODO: Should we shallow-copy the array before mutating it?
 		config.classes = config.classes || [];
-		config.classes.push('ajaxblock-dialog-message');
+		config.classes.push('ajaxblock-message-container');
 
 		const message = new OO.ui.MessageWidget(config);
 		this.messageContainer.$element.append(message.$element);
@@ -5273,9 +5355,9 @@ class ParamApplier {
 			e.stopPropagation();
 			console.log(params);
 			if (field instanceof BlockUser && 'expiry' in params) {
-				this.applyBlockParams(field, params);
+				this.applyBlockParams(params, field, field.getParamApplierOptions());
 			} else if (field instanceof UnblockUser && !('expiry' in params)) {
-				this.applyUnblockParams(field, params);
+				this.applyUnblockParams(params, field);
 			} else {
 				throw new Error('Logic exception');
 			}
@@ -5309,7 +5391,7 @@ class ParamApplier {
 		link.applier.addEventListener('click', (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			this.applyBlockParams(blockUser, params);
+			this.applyBlockParams(params, blockUser, blockUser.getParamApplierOptions());
 		});
 
 		return link;
@@ -5342,10 +5424,10 @@ class ParamApplier {
 	/**
 	 * @param {URLSearchParams} params
 	 * @param {BlockTargetType} targetType
-	 * @param {PermissionManager} permissionManager
+	 * @param {Initializer} initializer
 	 * @returns {?ParamApplierBlockParams}
 	 */
-	static createBlockParamsFromSearchParams(params, targetType, permissionManager) {
+	static createBlockParamsFromSearchParams(params, targetType, initializer) {
 		const map = /** @type {Map<string, string>} */ (new Map());
 		for (const [key, value] of params.entries()) {
 			if (this.isBlockSearchParamSupported(key)) {
@@ -5380,11 +5462,11 @@ class ParamApplier {
 				(r = params.get('wpReason')) === 'other' ? '' : r,
 				params.get('wpReason-other')
 			].filter(Boolean).join(Messages.get('colon-separator')),
-			hardblock: targetType === 'anon' && toPHPBool(params.get('wpHardBlock')),
+			hardblock: targetType === 'ip' && toPHPBool(params.get('wpHardBlock')),
 			nocreate: toPHPBool(params.get('wpCreateAccount')),
-			autoblock: targetType !== 'anon' && toPHPBool(params.get('wpAutoBlock')),
+			autoblock: targetType !== 'ip' && toPHPBool(params.get('wpAutoBlock')),
 			noemail: toPHPBool(params.get('wpDisableEmail')),
-			hidden: permissionManager.isAllowed('hideuser') && toPHPBool(params.get('wpHideUser')),
+			hidden: initializer.permissionManager.canHideUser() && toPHPBool(params.get('wpHideUser')),
 			nousertalk: toPHPBool(params.get('wpDisableUTEdit')),
 			partial: isPartial,
 			pagerestrictions: getRetrictionArray('wpPageRestrictions'),
@@ -5440,42 +5522,43 @@ class ParamApplier {
 	}
 
 	/**
-	 * @param {BlockUser} blockUser
 	 * @param {ParamApplierBlockParams} params
-	 * @returns {void | JQuery.Promise<void>}
-	 * @private
+	 * @param {BlockField} blockField
+	 * @param {BlockParamApplierOptions} [options]
+	 * @returns {void}
+	 * @todo Add guard against incompatible values
 	 */
-	static applyBlockParams(blockUser, params) {
+	static applyBlockParams(params, blockField, options = {}) {
 		/**
 		 * @type {BlockParamApplierHandler}
 		 */
 		const paramMap = {
 			expiry: {
-				setter: blockUser.setExpiry.bind(blockUser),
+				setter: blockField.setExpiry.bind(blockField),
 			},
 			reason: {
-				setter: blockUser.setReason.bind(blockUser),
+				setter: blockField.setReason.bind(blockField),
 			},
 			hardblock: {
-				setter: blockUser.cbHardblock.setSelected.bind(blockUser.cbHardblock),
+				setter: blockField.cbHardblock.setSelected.bind(blockField.cbHardblock),
 			},
 			nocreate: {
-				setter: blockUser.cbCreateAccount.setSelected.bind(blockUser.cbCreateAccount),
+				setter: blockField.cbCreateAccount.setSelected.bind(blockField.cbCreateAccount),
 			},
 			autoblock: {
-				setter: blockUser.cbAutoblock.setSelected.bind(blockUser.cbAutoblock),
+				setter: blockField.cbAutoblock.setSelected.bind(blockField.cbAutoblock),
 			},
 			noemail: {
-				setter: blockUser.cbSendEmail.setSelected.bind(blockUser.cbSendEmail),
+				setter: blockField.cbSendEmail.setSelected.bind(blockField.cbSendEmail),
 			},
 			hidden: {
-				setter: blockUser.cbHideName.setSelected.bind(blockUser.cbHideName),
+				setter: blockField.cbHideUser.setSelected.bind(blockField.cbHideUser),
 			},
 			nousertalk: {
-				setter: blockUser.cbUserTalk.setSelected.bind(blockUser.cbUserTalk),
+				setter: blockField.cbUserTalk.setSelected.bind(blockField.cbUserTalk),
 			},
 			partial: {
-				setter: blockUser.partialBlock.setSelected.bind(blockUser.partialBlock),
+				setter: blockField.partialBlock.setSelected.bind(blockField.partialBlock),
 			},
 			pagerestrictions: {
 				getter: (values) => {
@@ -5498,7 +5581,7 @@ class ParamApplier {
 						return /** @type {string[]} */ ([]);
 					}
 
-					const apilimit = blockUser.getParentDialog().getPermissionManager().getApiLimit();
+					const apilimit = blockField.initializer.permissionManager.getApiLimit();
 					const ajaxOptions = nonwritePost();
 					return (
 						/**
@@ -5540,21 +5623,21 @@ class ParamApplier {
 						if (invalidValues.size) {
 							this.notifyInvalidRestrictions(invalidValues, 'pages');
 						}
-						return titles.slice(0, blockUser.partialBlockPages.limit);
+						return titles.slice(0, blockField.partialBlockPages.limit);
 					});
 				},
 				setter: (values) => {
-					const menu = blockUser.partialBlockPages.getMenu();
+					const menu = blockField.partialBlockPages.getMenu();
 					const items = [];
 					for (const title of values) {
 						if (!menu.findItemFromData(title)) {
 							items.push(
-								blockUser.partialBlockPages.createMenuOptionWidget(title)
+								blockField.partialBlockPages.createMenuOptionWidget(title)
 							);
 						}
 					}
 					menu.addItems(items);
-					blockUser.partialBlockPages.setValue(values);
+					blockField.partialBlockPages.setValue(values);
 					menu.removeItems(items);
 				},
 			},
@@ -5592,19 +5675,19 @@ class ParamApplier {
 
 					return [...values];
 				},
-				setter: blockUser.partialBlockNamespaces.setValue.bind(blockUser.partialBlockNamespaces),
+				setter: blockField.partialBlockNamespaces.setValue.bind(blockField.partialBlockNamespaces),
 			},
 			actionrestrictions: {
 				setter: (values) => {
 					const valueSet = new Set(values);
-					for (const [action, checkbox] of Object.entries(blockUser.partialBlockActions)) {
+					for (const [action, checkbox] of Object.entries(blockField.partialBlockActions)) {
 						const selected = valueSet.has(action);
 						checkbox.setSelected(selected);
 					}
 				}
 			},
 			watch: {
-				setter: blockUser.setWatchUser.bind(blockUser),
+				setter: blockField.setWatchUser.bind(blockField),
 			},
 		};
 
@@ -5616,7 +5699,14 @@ class ParamApplier {
 			entries.push(entries.splice(iPartial, 1)[0]);
 		}
 
-		const promises = [];
+		const promises = /** @type {Promise<?JQuery<HTMLElement>>[]} */ ([]);
+		/**
+		 * @param {string} _
+		 * @param {any} res
+		 * @returns {JQuery<HTMLElement>}
+		 */
+		const catchHandler = (_, res) => AjaxBlock.api.getErrorMessage(res);
+
 		for (const [key, value] of entries) {
 			const { getter, setter } = paramMap[key];
 			const val = typeof getter === 'function'
@@ -5624,47 +5714,53 @@ class ParamApplier {
 				? getter(value)
 				: value;
 			if (isObject(val) && typeof val.then === 'function') {
-				// @ts-expect-error
-				const p = val.then(setter).catch((_code, res) => AjaxBlock.api.getErrorMessage(res));
-				promises.push(p);
+				const p = val
+					.then(/** @param {any} v */ (v) => {
+						// @ts-expect-error
+						setter(v);
+						return null;
+					})
+					.catch(catchHandler);
+				promises.push(
+					// Don't use toNativePromise here: `p` never rejects (failures are normalized
+					// via `.catch()`), so wrapping jQuery's rejection semantics is unnecessary
+					// and would produce inconsistent error shapes.
+					new Promise(resolve => p.then(resolve))
+				);
 			} else {
 				// @ts-expect-error
 				setter(val);
 			}
 		}
 
-		// Deselect "add block" since the existing settings will be reused
-		blockUser.cbAddBlock.setSelected(false);
+		const noop = () => {};
+		const { onAfterApply = noop, onBeforePromise = noop, onAfterPromise = noop } = options;
+		onAfterApply();
 
-		// If any getter returned a Promise, show the pending animation and "lock"
-		// the dialog using the overlay. Unlock it again when all promises resolve.
 		if (promises.length) {
-			const dialog = blockUser.getParentDialog();
-			dialog.pushPending();
-			dialog.overlay.toggle(true);
+			onBeforePromise();
 
-			return $.when(...promises).always((...args) => {
-				args.forEach(($err) => {
-					if ($err instanceof $) {
-						// @ts-expect-error
-						mw.notify($err, { type: 'error', autoHideSeconds: 'long' });
-					}
-				});
-				dialog.popPending();
-				dialog.overlay.toggle(false);
+			// Note: Promise.all will never reject since all async failures are
+			// converted into resolved error elements
+			Promise.all(promises).then((results) => {
+				const errors = results.filter(el => el !== null);
+				onAfterPromise(errors);
+			}).catch(() => {
+				// This should never normally happen, but guarantees symmetry
+				onAfterPromise([]);
 			});
 		}
 	}
 
 	/**
-	 * @param {UnblockUser} unblockUser
 	 * @param {ParamApplierUnblockParams} params
+	 * @param {UnblockField} unblockField
 	 * @returns {void}
 	 * @private
 	 */
-	static applyUnblockParams(unblockUser, params) {
-		unblockUser.setReason(params.reason);
-		unblockUser.setWatchUser(params.watch);
+	static applyUnblockParams(params, unblockField) {
+		unblockField.setReason(params.reason);
+		unblockField.setWatchUser(params.watch);
 	}
 
 	/**
@@ -5672,6 +5768,7 @@ class ParamApplier {
 	 * @param {'pages' | 'namespaces'} restrictionType
 	 * @returns {void}
 	 * @private
+	 * @todo Consider whether this should be called on the config page
 	 */
 	static notifyInvalidRestrictions(invalidValues, restrictionType) {
 		const ul = document.createElement('ul');
@@ -5745,6 +5842,13 @@ class AjaxBlockConfig {
 		return mw.config.get('wgNamespaceNumber') === -1 && /^(?:AjaxBlockConfig|ABC)$/i.test(mw.config.get('wgTitle'));
 	}
 
+	static getDependencies() {
+		return !this.isConfigPage() ? [] : [
+			'jquery.makeCollapsible',
+			'oojs-ui.styles.icons-movement'
+		];
+	}
+
 	static preparePage() {
 		return $.ready.then(() => {
 			const title = Messages.get('ajaxblock-config-title', [], { method: 'plain' });
@@ -5789,31 +5893,35 @@ class AjaxBlockConfig {
 	}
 
 	/**
+	 * @typedef {Required<Initializer>} FullInitializer
+	 */
+	/**
+	 * @param {FullInitializer} initializer
 	 * @param {Element} content
-	 * @param {Initializer} initializer
 	 * @returns {void}
 	 */
-	static init(content, initializer) {
+	static init(initializer, content) {
 		if (!initializer.langs) {
 			this.fail(content);
 			return;
 		}
 
-		const $content = $(content);
-		new AjaxBlockConfig($content, /** @type {Required<Initializer>} */ (initializer));
+		const $content = $(content).addClass('ajaxblock-config-content');
+		new AjaxBlockConfig(initializer, $content);
 	}
 
 	/**
+	 * @param {FullInitializer} initializer
 	 * @param {JQuery<Element>} $content
-	 * @param {Required<Initializer>} initializer
+	 * @private
 	 */
-	constructor($content, initializer) {
+	constructor(initializer, $content) {
 		/**
 		 * @type {AjaxBlockConfigLanguageOptions}
 		 * @readonly
 		 * @private
 		 */
-		this.languageOptions = new AjaxBlockConfigLanguageOptions(initializer.langs);
+		this.languageOptions = new AjaxBlockConfigLanguageOptions(initializer);
 		/**
 		 * @type {AjaxBlockConfigWarningOptions}
 		 * @readonly
@@ -5841,7 +5949,7 @@ class AjaxBlockConfig {
 		 * @readonly
 		 * @private
 		 */
-		this.globalDialogOptions = new AjaxBlockConfigDialogOptions(globalTabPanel, initializer.actionRestrictions);
+		this.globalDialogOptions = new AjaxBlockConfigDialogOptions(initializer, globalTabPanel);
 
 		const localTabPanel = new OO.ui.TabPanelLayout('Local', {
 			expanded: false,
@@ -5853,7 +5961,7 @@ class AjaxBlockConfig {
 		 * @readonly
 		 * @private
 		 */
-		this.localDialogOptions = new AjaxBlockConfigDialogOptions(localTabPanel, initializer.actionRestrictions);
+		this.localDialogOptions = new AjaxBlockConfigDialogOptions(initializer, localTabPanel);
 
 		const miscTabPanel = new OO.ui.TabPanelLayout('Misc', {
 			expanded: false,
@@ -5923,9 +6031,9 @@ class AjaxBlockConfig {
 class AjaxBlockConfigLanguageOptions {
 
 	/**
-	 * @param {NonNullable<Initializer['langs']>} langs
+	 * @param {FullInitializer} initializer
 	 */
-	constructor(langs) {
+	constructor(initializer) {
 		const msgDefault = Messages.get('ajaxblock-config-label-default', [], { method: 'plain' });
 		const options = [
 			new OO.ui.MenuOptionWidget({
@@ -5933,7 +6041,7 @@ class AjaxBlockConfigLanguageOptions {
 				data: '',
 			})
 		];
-		for (const [code, autonym] of typedEntries(langs)) {
+		for (const [code, autonym] of typedEntries(initializer.langs)) {
 			options.push(
 				new OO.ui.MenuOptionWidget({
 					label: `${code} - ${autonym}`,
@@ -6208,10 +6316,15 @@ AjaxBlockConfigWarningOptions.flatDefaults = typedEntries(AjaxBlockConfigWarning
 class AjaxBlockConfigDialogOptions {
 
 	/**
+	 * @param {FullInitializer} initializer
 	 * @param {OO.ui.TabPanelLayout} tabPanel
-	 * @param {Initializer['actionRestrictions']} actionRestrictions
 	 */
-	constructor(tabPanel, actionRestrictions) {
+	constructor(initializer, tabPanel) {
+		/**
+		 * @type {AjaxBlockConfigBlockPresetOptions}
+		 * @readonly
+		 */
+		this.blockPresetOptions = new AjaxBlockConfigBlockPresetOptions(initializer);
 		/**
 		 * @type {AjaxBlockConfigCustomReasonOptions}
 		 * @readonly
@@ -6224,9 +6337,437 @@ class AjaxBlockConfigDialogOptions {
 		this.unblockReasonOptions = new AjaxBlockConfigCustomReasonOptions('unblock', tabPanel);
 
 		tabPanel.$element.append(
+			this.blockPresetOptions.$element,
 			this.blockReasonOptions.$element,
 			this.unblockReasonOptions.$element
 		);
+	}
+
+}
+
+class AjaxBlockConfigBlockPresetOptions {
+
+	/**
+	 * @param {FullInitializer} initializer
+	 */
+	constructor(initializer) {
+		/**
+		 * @type {FullInitializer}
+		 * @readonly
+		 * @private
+		 */
+		this.initializer = initializer;
+		/**
+		 * @type {AjaxBlockConfigBlockPresetOptionsField[]}
+		 * @private
+		 */
+		this.fields = [];
+		/**
+		 * @type {OO.ui.Widget}
+		 * @readonly
+		 * @private
+		 */
+		this.fieldContainer = new OO.ui.Widget({
+			$element: $('<div>').css({ maxWidth: '50em' }),
+		});
+
+		for (const [key, params] of typedEntries(AjaxBlockConfigBlockPresetOptions.systemDefined)) {
+			this.addField({
+				collapsed: true,
+				presetName: key,
+				targets: [key],
+				lockPreset: true,
+				params,
+			});
+		}
+
+		const layout = new OO.ui.FieldsetLayout({
+			label: Messages.get('ajaxblock-config-label-presetreasons-layout', [], { method: 'plain' }),
+		});
+
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = layout.$element;
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.addButton = new OO.ui.ButtonWidget({
+			label: Messages.get('ajaxblock-config-label-presetreasons-add', [], { method: 'plain' }),
+			flags: ['progressive'],
+		});
+
+		layout.addItems([
+			new OO.ui.FieldLayout(this.fieldContainer, {
+				align: 'top',
+				invisibleLabel: true,
+			}),
+			new OO.ui.FieldLayout(this.addButton, {
+				$element: $('<div>').css({ marginTop: 0 }),
+			}),
+		]);
+
+		this.registerEvents();
+	}
+
+	/**
+	 * @private
+	 */
+	registerEvents() {
+		this.fields.forEach((field) => {
+			field.onPresetDelete(() => {
+				const index = this.fields.indexOf(field);
+				if (index === -1) {
+					throw new Error('Field not found');
+				}
+				this.fields.splice(index, 1);
+			});
+		});
+
+		this.addButton.on('click', () => this.addField());
+	}
+
+	/**
+	 * @param {BlockPresetOptionsFieldOptions & { params?: ParamApplierBlockParams; }} [options]
+	 * @private
+	 */
+	addField(options = {}) {
+		const field = new AjaxBlockConfigBlockPresetOptionsField(this.initializer, options);
+		this.fields.push(field);
+		this.fieldContainer.$element.append(field.$container);
+		if (options.params) {
+			ParamApplier.applyBlockParams(options.params, field);
+		}
+	}
+
+}
+/**
+ * @type {Record<'named' | 'temp' | 'ip', ParamApplierBlockParams>}
+ */
+AjaxBlockConfigBlockPresetOptions.systemDefined = {
+	named: {
+		expiry: EXPIRY_INFINITE,
+		reason: '',
+		hardblock: false,
+		nocreate: true,
+		autoblock: true,
+		noemail: false,
+		hidden: false,
+		nousertalk: false,
+		partial: false,
+		pagerestrictions: [],
+		namespacerestrictions: [],
+		actionrestrictions: [],
+		watch: false,
+	},
+	temp: {
+		expiry: '3 months',
+		reason: '',
+		hardblock: false,
+		nocreate: true,
+		autoblock: true,
+		noemail: false,
+		hidden: false,
+		nousertalk: false,
+		partial: false,
+		pagerestrictions: [],
+		namespacerestrictions: [],
+		actionrestrictions: [],
+		watch: false,
+	},
+	ip: {
+		expiry: '1 week',
+		reason: '',
+		hardblock: false,
+		nocreate: true,
+		autoblock: false,
+		noemail: false,
+		hidden: false,
+		nousertalk: false,
+		partial: false,
+		pagerestrictions: [],
+		namespacerestrictions: [],
+		actionrestrictions: [],
+		watch: false,
+	},
+};
+
+class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
+
+	/**
+	 * @param {FullInitializer} initializer
+	 * @param {BlockPresetOptionsFieldOptions} [options]
+	 */
+	constructor(initializer, options = {}) {
+		super(initializer, { omitMainLabel: true });
+
+		const {
+			collapsed = false,
+			presetName = '',
+			targets = typedKeys(AjaxBlockConfigBlockPresetOptions.systemDefined),
+			lockPreset = false,
+		} = options;
+
+		/**
+		 * @type {OO.ui.TextInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.presetNameInput = new OO.ui.TextInputWidget({
+			placeholder: Messages.get('ajaxblock-config-placeholder-presetreasons-name', [], { method: 'plain' }),
+			value: presetName,
+			disabled: lockPreset,
+		});
+		/**
+		 * @type {OO.ui.MenuTagMultiselectWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.targetSelector = new OO.ui.MenuTagMultiselectWidget({
+			inputPosition: 'inline',
+			options: [
+				{ data: 'named', label: Messages.get('ajaxblock-config-label-presetreasons-target-named', [], { method: 'plain' }) },
+				{ data: 'temp', label: Messages.get('ajaxblock-config-label-presetreasons-target-temp', [], { method: 'plain' }) },
+				{ data: 'ip', label: Messages.get('ajaxblock-config-label-presetreasons-target-ip', [], { method: 'plain' }) },
+			],
+			placeholder: Messages.get('ajaxblock-config-placeholder-presetreasons-target', [], { method: 'plain' }),
+			selected: targets,
+			disabled: lockPreset,
+		});
+
+		const forcedBaseColor = { color: 'var(--color-base, #202122)' };
+		this.mainFieldset.addItems([
+			new OO.ui.FieldLayout(this.presetNameInput, {
+				classes: ['ajaxblock-horizontalfield'],
+				align: 'left',
+				label: $('<b>').text(Messages.get('ajaxblock-config-label-presetreasons-name', [], { method: 'plain' })).css(forcedBaseColor),
+			}),
+			new OO.ui.FieldLayout(this.targetSelector, {
+				classes: ['ajaxblock-horizontalfield'],
+				align: 'left',
+				label: $('<b>').text(Messages.get('block-target', [], { method: 'plain' })).css(forcedBaseColor),
+			}),
+		], 0);
+
+		this.optionsFieldset.addItems([
+			new OO.ui.MessageWidget({
+				classes: ['ajaxblock-message-container'],
+				label: Messages.get('ajaxblock-config-notice-presetreasons-additionaloptions', [], { method: 'plain' }),
+				type: 'notice',
+			})
+		], 0);
+
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.deleteButton = new OO.ui.ButtonWidget({
+			label: Messages.get('ajaxblock-config-label-presetreasons-delete', [], { method: 'plain' }),
+			flags: ['destructive'],
+		});
+		/**
+		 * @type {(() => void)[]}
+		 * @readonly
+		 * @private
+		 */
+		this.onPresetDeleteCallbacks = [];
+
+		this.optionsFieldset.addItems([
+			new OO.ui.FieldLayout(this.deleteButton, {
+				$element: $('<div>').css({ marginTop: '0.8em' }),
+			}),
+		]);
+
+		/**
+		 * @type {CollapsibleFieldset}
+		 * @readonly
+		 * @private
+		 */
+		this.collapsibleFieldset = new CollapsibleFieldset(collapsed, presetName);
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$container = this.collapsibleFieldset.$element;
+
+		this.collapsibleFieldset.$content.append(
+			this.$element
+		);
+
+		this.registerEvents();
+	}
+
+	/**
+	 * @private
+	 */
+	registerEvents() {
+		this.presetNameInput.on('change', (value) => {
+			this.collapsibleFieldset.setPresetName(value);
+		});
+
+		this.targetSelector.on('change', (items) => {
+			const targets = items.map(item => /** @type {NonNullable<BlockTargetType>} */ (item.getData()));
+			this.initFieldAccessibility(targets);
+		});
+		this.initFieldAccessibility(this.getTargets());
+
+		this.deleteButton.on('click', () => {
+			this.onPresetDeleteCallbacks.forEach(cb => cb());
+		});
+
+		if (this.isLocked()) {
+			this.deleteButton.toggle(false);
+		}
+
+		this.onPresetDelete(() => {
+			this.$container.remove();
+		});
+	}
+
+	/**
+	 * @param {NonNullable<BlockTargetType>[]} targets
+	 * @returns {this}
+	 */
+	initFieldAccessibility(targets) {
+		const targetSet = new Set(targets);
+
+		this.cbAutoblock.setDisabled(!(targetSet.has('named') || targetSet.has('temp')));
+		if (this.cbAutoblock.isDisabled()) {
+			this.cbAutoblock.setSelected(false);
+		}
+
+		this.cbHardblock.setDisabled(!targetSet.has('ip'));
+		if (this.cbHardblock.isDisabled()) {
+			this.cbHardblock.setSelected(false);
+		}
+
+		if (!targetSet.has('named')) {
+			this.setHideUserAvailability(false);
+			this.setHideUserLocked(true);
+		} else {
+			this.setHideUserLocked(false);
+			this.setHideUserAvailability(!this.partialBlock.isSelected() && this.getExpiry() === EXPIRY_INFINITE);
+		}
+
+		return this;
+	}
+
+	getFieldName() {
+		const value = clean(this.presetNameInput.getValue());
+		this.presetNameInput.setValue(value);
+		return value;
+	}
+
+	isLocked() {
+		return this.presetNameInput.isDisabled();
+	}
+
+	getTargets() {
+		return /** @type {NonNullable<BlockTargetType>[]} */ (this.targetSelector.getValue());
+	}
+
+	/**
+	 * @param {() => void} callback
+	 * @returns {this}
+	 */
+	onPresetDelete(callback) {
+		this.onPresetDeleteCallbacks.push(callback);
+		return this;
+	}
+
+}
+
+/**
+ * @see https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/core/+/refs/heads/master/includes/htmlform/CollapsibleFieldsetLayout.php
+ */
+class CollapsibleFieldset {
+
+	constructor(collapsed = true, presetName = '') {
+		if (presetName in AjaxBlockConfigBlockPresetOptions.systemDefined) {
+			// @ts-expect-error
+			presetName = Messages.get(`ajaxblock-config-label-presetreasons-target-${presetName}`, [], { method: 'plain' });
+		}
+
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = $('<div>').addClass('ajaxblock-collapsiblefieldset-container');
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$content = $('<div>').addClass('mw-collapsible-content').css({ marginTop: '0.5em' });
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 * @private
+		 */
+		this.$presetName = $('<span>');
+		/**
+		 * @type {OO.ui.FieldsetLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.fieldset = new OO.ui.FieldsetLayout({
+			$content: this.$content,
+			classes: ['mw-collapsibleFieldsetLayout', 'mw-collapsible'].concat(collapsed ? ['mw-collapsed'] : []),
+			label: $('<span>').append(
+				Messages.get('ajaxblock-config-label-presetreasons-name', [], { method: 'plain' }),
+				Messages.get('word-separator', [], { method: 'plain' }),
+				Messages.get('parentheses-start', [], { method: 'plain' }),
+				this.$presetName.text(presetName),
+				Messages.get('parentheses-end', [], { method: 'plain' })
+			),
+			icon: collapsed ? 'expand' : 'collapse',
+		});
+
+		const wrapper = new OO.ui.PanelLayout({
+			$element: this.$element,
+			expanded: false,
+			framed: true,
+			padded: true,
+		});
+		wrapper.$element.append(this.fieldset.$element);
+
+		const $legend = this.fieldset.$element.children('legend'); // header
+		$legend
+			.attr({ role: 'button' })
+			.addClass('mw-collapsible-toggle')
+			// Change the icon when the fieldset is expanded/collapsed
+			.off('click')
+			.on('click', () => {
+				this.fieldset.setIcon(this.fieldset.$element.hasClass('mw-collapsed') ? 'collapse' : 'expand');
+			});
+		$legend.children('.oo-ui-labelElement-label')
+			.css({ marginBottom: 0 });
+
+		this.fieldset.$element.makeCollapsible();
+	}
+
+	/**
+	 * @param {string} name
+	 * @returns {this}
+	 */
+	setPresetName(name) {
+		this.$presetName.text(name);
+		return this;
+	}
+
+	/**
+	 * @param {boolean} collapse
+	 * @returns {this}
+	 */
+	setCollapsed(collapse) {
+		const isCollapsed = this.fieldset.$element.hasClass('mw-collapsed');
+		if (isCollapsed !== collapse) {
+			this.fieldset.$element.trigger('click');
+		}
+		return this;
 	}
 
 }
@@ -6250,15 +6791,13 @@ class AjaxBlockConfigCustomReasonOptions {
 			placeholder: Messages.get('ajaxblock-config-placeholder-customreasons', [], { method: 'plain' }),
 		});
 
-		const adjustSizeHack = () => {
+		tabPanel.once('active', () => {
 			// Work around OOUI autosize issue:
 			// adjustSize() relies on layout measurements (innerHeight, scrollHeight, etc.),
 			// which are incorrect while the widget is inside a hidden tab (`display: none`).
 			// Recalculate after the tab becomes visible.
 			requestAnimationFrame(() => this.input.adjustSize(true));
-			tabPanel.off('active', adjustSizeHack);
-		};
-		tabPanel.on('active', adjustSizeHack);
+		});
 
 		const layout = new OO.ui.FieldsetLayout({
 			// Messages used here:
@@ -6403,6 +6942,15 @@ function typedEntries(obj) {
 	return /** @type {any} */ (Object.entries(obj));
 }
 
+/**
+ * @template {object} T
+ * @param {T} obj
+ * @returns {Array<Extract<keyof T, string>>}
+ */
+function typedKeys(obj) {
+	return /** @type {Array<Extract<keyof T, string>>} */ (Object.keys(obj));
+}
+
 class AjaxBlockLogo {
 
 	constructor() {
@@ -6475,7 +7023,7 @@ AjaxBlockLogo.svg = `
 /**
  * @typedef {import('./window/AjaxBlock').BlockPageNames} BlockPageNames
  * @typedef {import('./window/AjaxBlock').BlockActions} BlockActions
- * @typedef {import('./window/AjaxBlock').Initializer} Initializer
+ * @typedef {import('./window/AjaxBlock').PrematureInitializer} PrematureInitializer
  * @typedef {import('./window/AjaxBlock').ApiResponse} ApiResponse
  * @typedef {import('./window/AjaxBlock').ApiResponseBlock} ApiResponseBlock
  * @typedef {import('./window/AjaxBlock').ApiResponseUnblock} ApiResponseUnblock
@@ -6498,10 +7046,12 @@ AjaxBlockLogo.svg = `
  * @typedef {import('./window/AjaxBlock').ParamApplierBlockParams} ParamApplierBlockParams
  * @typedef {import('./window/AjaxBlock').ParamApplierUnblockParams} ParamApplierUnblockParams
  * @typedef {import('./window/AjaxBlock').BlockParamApplierHandler} BlockParamApplierHandler
+ * @typedef {import('./window/AjaxBlock').BlockParamApplierOptions} BlockParamApplierOptions
  * @typedef {import('./window/AjaxBlock').AjaxBlockLanguages} AjaxBlockLanguages
  * @typedef {import('./window/AjaxBlock').WarningKeys} WarningKeys
  * @typedef {import('./window/AjaxBlock').AjaxBlockWarningConfig} AjaxBlockWarningConfig
  * @typedef {import('./window/AjaxBlock').AjaxBlockWarningFlatConfig} AjaxBlockWarningFlatConfig
+ * @typedef {import('./window/AjaxBlock').BlockPresetOptionsFieldOptions} BlockPresetOptionsFieldOptions
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogevents} ApiResponseQueryListLogevents
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
  * @typedef {import('./window/InvestigateHelper').BlockLogMap} BlockLogMap
