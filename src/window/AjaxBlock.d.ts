@@ -277,7 +277,7 @@ export interface AjaxBlockMessages {
 	'ajaxblock-confirm-block-hardblock': string;
 	'ajaxblock-confirm-block-hideuser': string;
 	'ajaxblock-confirm-block-reblock': string;
-	'ajaxblock-confirm-block-addblock': string;
+	'ajaxblock-confirm-block-newblock': string;
 	'ajaxblock-confirm-block-self': string;
 	'ajaxblock-confirm-block-ignorepredefined': string;
 	'ajaxblock-confirm-unblock': string;
@@ -310,7 +310,7 @@ export interface AjaxBlockMessages {
 	'ajaxblock-config-label-warning-block-hardblock': string;
 	'ajaxblock-config-label-warning-block-hideuser': string;
 	'ajaxblock-config-label-warning-block-reblock': string;
-	'ajaxblock-config-label-warning-block-addblock': string;
+	'ajaxblock-config-label-warning-block-newblock': string;
 	'ajaxblock-config-label-warning-block-self': string;
 	'ajaxblock-config-label-warning-block-ignorepredefined': string;
 	'ajaxblock-config-label-warning-unblock': string;
@@ -452,9 +452,9 @@ export interface AjaxBlockRegex {
 
 export interface PartialBlockParams {
 	partial: boolean;
-	pagerestrictions?: string;
-	namespacerestrictions?: string;
-	actionrestrictions?: string;
+	pagerestrictions?: string[];
+	namespacerestrictions?: string[];
+	actionrestrictions?: string[];
 }
 
 export interface WatchUserParams {
@@ -486,7 +486,7 @@ export type BlockParams =
 		autoblock?: boolean;
 		hidename?: boolean;
 		reblock?: true;
-		newblock: boolean;
+		newblock?: boolean;
 	};
 
 export type UnblockParams =
@@ -507,8 +507,8 @@ type AbortReason =
 	| 'noblocklinks'; // Internal error
 
 export type WarningContext =
-	| 'dialog'
-	| 'oneclick';
+	| 'oneclick'
+	| 'dialog';
 
 export type BlockLogGenerator = () => JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement> | null>;
 
@@ -597,13 +597,71 @@ export interface BlockParamApplierOptions {
 
 export type AjaxBlockLanguages = 'en' | 'ja';
 
+export type AjaxBlockConfigVersions = 'current' | 'legacy';
+
+export type AjaxBlockConfigDomains = 'local' | 'global';
+
+export interface AjaxBlockLegacyConfigGlobal {
+	lang: string;
+	dropdown: string[];
+}
+
+export interface AjaxBlockLegacyConfigLocal {
+	lang: string;
+	dropdown: {
+		local: string[];
+		global: [];
+	};
+	preset: {
+		block: Record<'user' | 'ip', AjaxBlockLegacyConfigBlockPresetOptions>;
+		unblock: AjaxBlockLegacyConfigUnblockPresetOptions;
+	};
+	warning: Record<WarningContext, AjaxBlockLegacyConfigWarning>;
+}
+
+interface AjaxBlockLegacyConfigWatchOptions {
+	watchlist: boolean;
+	watchlistexpiry: string;
+}
+
+interface AjaxBlockLegacyConfigBlockPresetOptions extends AjaxBlockLegacyConfigWatchOptions {
+	user: string;
+	reason: string;
+	expiry: string;
+	automatic: boolean;
+	nocreate: boolean;
+	noemail: boolean;
+	allowusertalk: boolean;
+	anononly: boolean;
+	autoblock: boolean;
+	hidden?: boolean;
+	partial: boolean;
+	restrictions: Omit<ApiResponseQueryListBlocksRestrictions, 'actions'>;
+}
+
+interface AjaxBlockLegacyConfigUnblockPresetOptions extends AjaxBlockLegacyConfigWatchOptions {
+	reason: string;
+}
+
+export interface AjaxBlockLegacyConfigWarning {
+	noReason: boolean;
+	noExpiry: boolean;
+	noPartialSpecs: boolean;
+	willHardblock: boolean;
+	willHideUser: boolean;
+	willOverwrite: boolean;
+	willIgnorePredefined: boolean;
+	willBlockSelf: boolean;
+	willUnblock: boolean;
+}
+
 export type WarningKeys =
 	| 'block-noreason'
 	| 'block-noexpiry'
 	| 'block-hardblock'
 	| 'block-hideuser'
 	| 'block-reblock'
-	| 'block-addblock'
+	| 'block-newblock'
 	| 'block-self'
 	| 'block-ignorepredefined'
 	| 'unblock'
@@ -611,14 +669,7 @@ export type WarningKeys =
 	| 'unblock-self'
 	| 'unblock-ignorepredefined';
 
-interface WarningCheckboxConfig {
-	enabled: boolean;
-	disabled?: true;
-}
-
-export type AjaxBlockWarningConfig = Record<WarningKeys, Record<WarningContext, WarningCheckboxConfig>>;
-
-export type AjaxBlockWarningFlatConfig = Record<WarningKeys, Record<WarningContext, boolean>>;
+export type AjaxBlockWarningConfig = Record<WarningKeys, Record<WarningContext, boolean>>;
 
 export interface BlockPresetOptionsFieldOptions {
 	collapsed?: boolean;

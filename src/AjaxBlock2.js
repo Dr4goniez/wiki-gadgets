@@ -58,7 +58,7 @@ class AjaxBlock {
 		const cfgContentPromise = AjaxBlockConfig.isConfigPage() && AjaxBlockConfig.preparePage();
 
 		// Load modules needed for getInitializer()
-		await mw.loader.using(['mediawiki.api', 'mediawiki.storage', 'mediawiki.util']);
+		await mw.loader.using(['mediawiki.api', 'mediawiki.storage', 'mediawiki.util', 'mediawiki.user']);
 
 		AjaxBlock.api = new mw.Api({
 			ajax: {
@@ -94,7 +94,7 @@ class AjaxBlock {
 
 		/** @type {Initializer} */
 		const initializer = Object.assign(
-			{ permissionManager },
+			{ permissionManager, configStore: new AjaxBlockConfigStore() },
 			prematureInitializer
 		);
 
@@ -190,7 +190,10 @@ class AjaxBlock {
 	}
 
 	/**
-	 * @typedef {PrematureInitializer & { permissionManager: PermissionManager }} Initializer
+	 * @typedef {PrematureInitializer & {
+	 *   permissionManager: PermissionManager;
+	 *   configStore: AjaxBlockConfigStore;
+	 * }} Initializer
 	 */
 	/**
 	 * @returns {JQuery.Promise<PrematureInitializer>}
@@ -1047,7 +1050,7 @@ class AjaxBlock {
 	 * @returns {Promise<void>}
 	 */
 	async runExecution(data, field, { suppressWarnings, warningContext, onAbort, onBeforeExecute }) {
-		const paramObj = field.buildParams(data);
+		const paramObj = field.buildParams(data, warningContext);
 		if (!paramObj) {
 			// When buildParams() returns null, it issues mw.notify messages to indicate
 			// that something needs to be modified on the dialog
@@ -1473,9 +1476,9 @@ class AjaxBlock {
 					allowusertalk: !!params.allowusertalk,
 					watchuser: !!params.watchuser,
 					partial: !!params.partial,
-					pagerestrictions: params.pagerestrictions ? params.pagerestrictions.split('|') : [],
-					namespacerestrictions: params.namespacerestrictions ? params.namespacerestrictions.split('|').map(n => +n) : [],
-					actionrestrictions: params.actionrestrictions ? params.actionrestrictions.split('|') : [],
+					pagerestrictions: params.pagerestrictions ? params.pagerestrictions : [],
+					namespacerestrictions: params.namespacerestrictions ? params.namespacerestrictions.map(n => +n) : [],
+					actionrestrictions: params.actionrestrictions ? params.actionrestrictions : [],
 				};
 				if (params.watchlistexpiry) {
 					resBlock.watchlistexpiry = params.watchlistexpiry;
@@ -2776,7 +2779,7 @@ Messages.i18n = {
 		'ajaxblock-confirm-block-hardblock': 'Apply a <b>hardblock</b>',
 		'ajaxblock-confirm-block-hideuser': 'Block with <b>"Hide user" enabled</b>',
 		'ajaxblock-confirm-block-reblock': '<b>Overwrite</b> the existing block',
-		'ajaxblock-confirm-block-addblock': '<b>Add</b> a new block',
+		'ajaxblock-confirm-block-newblock': '<b>Add</b> a new block',
 		'ajaxblock-confirm-block-self': 'Block <b>yourself</b>',
 		'ajaxblock-confirm-block-ignorepredefined': 'Block while <b>ignoring predefined parameters</b>',
 		'ajaxblock-confirm-unblock': '<b>Unblock</b> the user',
@@ -2809,7 +2812,7 @@ Messages.i18n = {
 		'ajaxblock-config-label-warning-block-hardblock': 'When performing a hardblock',
 		'ajaxblock-config-label-warning-block-hideuser': 'When performing a hideuser block',
 		'ajaxblock-config-label-warning-block-reblock': 'When overwriting an existing block',
-		'ajaxblock-config-label-warning-block-addblock': 'When adding a new block',
+		'ajaxblock-config-label-warning-block-newblock': 'When adding a new block',
 		'ajaxblock-config-label-warning-block-self': 'When performing a block on the performer themselves',
 		'ajaxblock-config-label-warning-block-ignorepredefined': 'When not using predefined block parameters',
 		'ajaxblock-config-label-warning-unblock': 'When performing an unblock',
@@ -2871,7 +2874,7 @@ Messages.i18n = {
 		'ajaxblock-confirm-block-hardblock': '<b>ハードブロック</b>を適用',
 		'ajaxblock-confirm-block-hideuser': '<b>「利用者名を隠す」</b>を有効にしてブロック',
 		'ajaxblock-confirm-block-reblock': '既存のブロックを<b>上書き</b>',
-		'ajaxblock-confirm-block-addblock': '新しいブロックを<b>追加</b>',
+		'ajaxblock-confirm-block-newblock': '新しいブロックを<b>追加</b>',
 		'ajaxblock-confirm-block-self': '<b>自分自身</b>をブロック',
 		'ajaxblock-confirm-block-ignorepredefined': '<b>事前定義された設定を無視</b>してブロック',
 		'ajaxblock-confirm-unblock': '利用者の<b>ブロックを解除</b>',
@@ -2904,7 +2907,7 @@ Messages.i18n = {
 		'ajaxblock-config-label-warning-block-hardblock': 'ハードブロックを実行する場合',
 		'ajaxblock-config-label-warning-block-hideuser': '利用者名を非表示にするブロックを実行する場合',
 		'ajaxblock-config-label-warning-block-reblock': '既存のブロックを上書きする場合',
-		'ajaxblock-config-label-warning-block-addblock': '新たにブロックを追加する場合',
+		'ajaxblock-config-label-warning-block-newblock': '新たにブロックを追加する場合',
 		'ajaxblock-config-label-warning-block-self': '実行者自身をブロックする場合',
 		'ajaxblock-config-label-warning-block-ignorepredefined': '事前定義されたブロック設定を無視する場合',
 		'ajaxblock-config-label-warning-unblock': 'ブロック解除を実行する場合',
@@ -3561,9 +3564,15 @@ class AjaxBlockDialogBodyOverlay {
 class WatchUserField {
 
 	/**
+	 * @param {Initializer} initializer
 	 * @param {OnResize} onResize
 	 */
-	constructor(onResize) {
+	constructor(initializer, onResize) {
+		/**
+		 * @type {Initializer}
+		 * @readonly
+		 */
+		this.initializer = initializer;
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
@@ -3676,13 +3685,7 @@ class BlockField extends WatchUserField {
 	 */
 	constructor(initializer, options = {}) {
 		const { onResize = () => {}, omitMainLabel = false } = options;
-		super(onResize);
-
-		/**
-		 * @type {Initializer}
-		 * @readonly
-		 */
-		this.initializer = initializer;
+		super(initializer, onResize);
 
 		/** @type {OO.ui.Element[]} */
 		let items = [];
@@ -4182,12 +4185,12 @@ class BlockField extends WatchUserField {
 
 		const pages = this.partialBlockPages.getValue();
 		if (pages.length) {
-			options.pagerestrictions = pages.join('|');
+			options.pagerestrictions = /** @type {string[]} */ (pages);
 		}
 
 		const namespaces = this.partialBlockNamespaces.getValue();
 		if (namespaces.length) {
-			options.namespacerestrictions = namespaces.join('|');
+			options.namespacerestrictions = /** @type {string[]} */ (namespaces);
 		}
 
 		const actions = /** @type {string[]} */ ([]);
@@ -4197,7 +4200,7 @@ class BlockField extends WatchUserField {
 			}
 		}
 		if (actions.length) {
-			options.actionrestrictions = actions.join('|');
+			options.actionrestrictions = actions;
 		}
 
 		return options;
@@ -4208,10 +4211,11 @@ class BlockField extends WatchUserField {
 class UnblockField extends WatchUserField {
 
 	/**
+	 * @param {Initializer} initializer
 	 * @param {OnResize} [onResize]
 	 */
-	constructor(onResize = () => {}) {
-		super(onResize);
+	constructor(initializer, onResize = () => {}) {
+		super(initializer, onResize);
 
 		/** @type {OO.ui.Element[]} */
 		const items = [];
@@ -4352,32 +4356,17 @@ class BlockUser extends BlockField {
 	 * Builds parameters to the unblock API.
 	 *
 	 * @param {BlockLink} data
+	 * @param {WarningContext} context
 	 * @returns {?{ params: BlockParams; warnings: (keyof LoadedMessages)[]; }}
 	 */
-	buildParams(data) {
+	buildParams(data, context) {
 		const base = this.targetField.buildParams(data);
 		if (!base) {
 			return null;
 		}
+		const configStore = this.initializer.configStore;
 		const params = /** @type {BlockParams} */ (base.params);
 		const warnings = base.warnings;
-
-		if (data.target.getUsername() === wgUserName) {
-			warnings.push('ajaxblock-confirm-block-self');
-		}
-
-		let expiry = this.getExpiry();
-		if (!expiry) {
-			warnings.push('ajaxblock-confirm-block-noexpiry');
-			expiry = EXPIRY_INFINITE;
-		}
-		params.expiry = expiry;
-
-		const reason = this.getReason();
-		if (!reason) {
-			warnings.push('ajaxblock-confirm-block-noreason');
-		}
-		params.reason = reason;
 
 		// Note:
 		// - Incompatible fields are hidden and deselected by AjaxBlockDialog.setActiveField()
@@ -4390,11 +4379,10 @@ class BlockUser extends BlockField {
 				nocreate: this.cbCreateAccount.isSelected(),
 				noemail: this.cbSendEmail.isSelected(),
 				allowusertalk: !this.cbUserTalk.isSelected(),
-				anononly: data.target.getType() === 'ip' && !this.cbHardblock.isSelected(),
-				autoblock: this.cbAutoblock.isSelected(),
 				newblock: this.cbAddBlock.isSelected(),
 			},
 			this.getPartialBlockParams(),
+			this.getWatchUserParams(),
 		);
 
 		if (
@@ -4405,9 +4393,63 @@ class BlockUser extends BlockField {
 			return null;
 		}
 
+		const userType = data.target.getType();
+		if (userType === null) {
+			throw new Error('BlockTarget.getType() expectedly returned null');
+		}
+		if (userType === 'ip') {
+			params.anononly = !this.cbHardblock.isSelected();
+		}
+		if (userType !== 'ip') {
+			params.autoblock = this.cbAutoblock.isSelected();
+		}
+
+		if (params.newblock && !params.user) {
+			delete params.id;
+			const username = this.targetField.getCurrentUsername();
+			if (!username) {
+				// There's a bug in TargetField.init()
+				mw.notify(
+					Messages.get('internalerror_info', ['The "user" parameter must be non-null.']),
+					{ type: 'error' }
+				);
+				return null;
+			}
+			params.user = username;
+		}
+
 		const blockLookup = this.dialog.getBlockLookup();
-		const hidename = this.cbHideUser.isSelected();
-		if (hidename) {
+		if (params.user && !params.newblock) {
+			const blocks = blockLookup.getBlocksByUsername(params.user);
+			if (blocks && blocks.length === 1) {
+				params.reblock = true;
+			}
+		}
+
+		const reason = this.getReason();
+		if (!reason && configStore.isWarningEnabled('block-noreason', context)) {
+			warnings.push('ajaxblock-confirm-block-noreason');
+		}
+		params.reason = reason;
+
+		let expiry = this.getExpiry();
+		if (!expiry && configStore.isWarningEnabled('block-noexpiry', context)) {
+			warnings.push('ajaxblock-confirm-block-noexpiry');
+			expiry = EXPIRY_INFINITE;
+		}
+		params.expiry = expiry;
+
+		if (!params.anononly && configStore.isWarningEnabled('block-hardblock', context)) {
+			warnings.push('ajaxblock-confirm-block-hardblock');
+		}
+
+		while (this.initializer.permissionManager.canHideUser() && userType === 'named') {
+			params.hidename = this.cbHideUser.isSelected();
+			if (!params.hidename) {
+				break;
+			}
+
+			// Will this block newly hide the user?
 			let needsWarning = false;
 			if (params.id !== undefined) {
 				const block = blockLookup.getBlockById(params.id);
@@ -4426,34 +4468,26 @@ class BlockUser extends BlockField {
 					needsWarning = true; // Not blocked
 				}
 			}
-			if (needsWarning) {
+
+			if (needsWarning && configStore.isWarningEnabled('block-hideuser', context)) {
 				warnings.push('ajaxblock-confirm-block-hideuser');
 			}
 		}
 
-		if (params.newblock && !params.user) {
-			delete params.id;
-			const username = this.targetField.getCurrentUsername();
-			if (!username) {
-				// There's a bug in TargetField.init()
-				mw.notify(
-					Messages.get('internalerror_info', ['The "user" parameter must be non-null.']),
-					{ type: 'error' }
-				);
-				return null;
-			}
-			params.user = username;
+		if (params.reblock && configStore.isWarningEnabled('block-reblock', context)) {
+			warnings.push('ajaxblock-confirm-block-reblock');
 		}
 
-		if (params.user && !params.newblock) {
-			const blocks = blockLookup.getBlocksByUsername(params.user);
-			if (blocks && blocks.length === 1) {
-				params.reblock = true;
-			}
+		if (params.newblock && configStore.isWarningEnabled('block-newblock', context)) {
+			warnings.push('ajaxblock-confirm-block-newblock');
 		}
 
-		if (!this.targetField.isAutoBlock()) {
-			Object.assign(params, this.getWatchUserParams());
+		if (data.target.getUsername() === wgUserName && configStore.isWarningEnabled('block-self', context)) {
+			warnings.push('ajaxblock-confirm-block-self');
+		}
+
+		if (ParamApplier.blockParamsDiffer(params, data.params) && configStore.isWarningEnabled('block-ignorepredefined', context)) {
+			warnings.push('ajaxblock-confirm-block-ignorepredefined');
 		}
 
 		return { params, warnings };
@@ -4498,7 +4532,7 @@ class UnblockUser extends UnblockField {
 	 */
 	constructor(dialog) {
 		const onResize = () => dialog.updateSize();
-		super(onResize);
+		super(dialog.getInitializer(), onResize);
 
 		/**
 		 * @type {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>}
@@ -4532,34 +4566,38 @@ class UnblockUser extends UnblockField {
 	 * Builds parameters to the unblock API.
 	 *
 	 * @param {BlockLink} data
+	 * @param {WarningContext} context
 	 * @returns {?{ params: UnblockParams; warnings: (keyof LoadedMessages)[]; }}
 	 */
-	buildParams(data) {
+	buildParams(data, context) {
 		const base = this.targetField.buildParams(data);
 		if (!base) {
 			return null;
 		}
+		const configStore = this.initializer.configStore;
 		const params = /** @type {UnblockParams} */ (base.params);
 		const warnings = base.warnings;
 
-		// TODO: Update this condition after implementing AjaxBlockConfig
-		// eslint-disable-next-line no-constant-condition
-		if (false) {
+		if (configStore.isWarningEnabled('unblock', context)) {
 			warnings.push('ajaxblock-confirm-unblock');
-		}
-		if (data.target.getUsername() === wgUserName) {
-			warnings.push('ajaxblock-confirm-unblock-self');
 		}
 
 		const reason = this.getReason();
-		if (!reason) {
+		if (!reason && configStore.isWarningEnabled('unblock-noreason', context)) {
 			warnings.push('ajaxblock-confirm-unblock-noreason');
 		}
 		params.reason = reason;
 
-		// TODO: Warn deviation from the predefined params
+		if (data.target.getUsername() === wgUserName && configStore.isWarningEnabled('unblock-self', context)) {
+			warnings.push('ajaxblock-confirm-unblock-self');
+		}
+
 		if (!this.targetField.isAutoBlock()) {
 			Object.assign(params, this.getWatchUserParams());
+		}
+
+		if (ParamApplier.unblockParamsDiffer(params, data.params) && configStore.isWarningEnabled('unblock-ignorepredefined', context)) {
+			warnings.push('ajaxblock-confirm-unblock-ignorepredefined');
 		}
 
 		return { params, warnings };
@@ -5654,11 +5692,6 @@ class ParamApplier {
 			namespacerestrictions: {
 				getter: (namespaces) => {
 					/**
-					 * @param {unknown[]} arr
-					 * @returns {arr is number[]}
-					 */
-					const isNumberArray = (arr) => typeof arr[0] === 'number';
-					/**
 					 * @type {Set<string>}
 					 * XXX: MwWidgetsNamespacesMenuOptionWidget.data is a string
 					 */
@@ -5812,6 +5845,67 @@ class ParamApplier {
 		return this.validNamespaceRestrictionValues.has(namespace);
 	}
 
+	/**
+	 * @param {BlockParams} params
+	 * @param {BlockLink['params']} predefinedParams
+	 * @returns {boolean}
+	 */
+	static blockParamsDiffer(params, predefinedParams) {
+		if (!predefinedParams) {
+			return false;
+		} else if (!('expiry' in predefinedParams)) {
+			console.error('Encountered unblock parameters for action="block"', predefinedParams);
+			return false;
+		}
+		return params.expiry !== predefinedParams.expiry ||
+			params.reason !== predefinedParams.reason ||
+			params.nocreate !== predefinedParams.nocreate ||
+			params.noemail !== predefinedParams.noemail ||
+			params.allowusertalk !== !predefinedParams.nousertalk ||
+			(params.anononly !== undefined && params.anononly !== !predefinedParams.hardblock) ||
+			(params.autoblock !== undefined && params.autoblock !== predefinedParams.autoblock) ||
+			(params.hidename !== undefined && params.hidename !== predefinedParams.hidden) ||
+			(predefinedParams.watch !== null && !!params.watchuser !== predefinedParams.watch) ||
+			params.partial !== predefinedParams.partial ||
+			this.restrictionsDiffer(params.pagerestrictions, predefinedParams.pagerestrictions) ||
+			this.restrictionsDiffer(params.namespacerestrictions, predefinedParams.namespacerestrictions);
+			// this.restrictionsDiffer(params.actionrestrictions, predefinedParams.actionrestrictions);
+	}
+
+	/**
+	 * @param {UnblockParams} params
+	 * @param {BlockLink['params']} predefinedParams
+	 * @returns {boolean}
+	 */
+	static unblockParamsDiffer(params, predefinedParams) {
+		if (!predefinedParams) {
+			return false;
+		} else if ('expiry' in predefinedParams) {
+			console.error('Encountered block parameters for action="unblock"', predefinedParams);
+			return false;
+		}
+		return params.reason !== predefinedParams.reason ||
+			(predefinedParams.watch !== null && !!params.watchuser !== predefinedParams.watch);
+	}
+
+	/**
+	 * @param {string[] | undefined} paramValues
+	 * @param {string[] | number[]} predefined
+	 * @returns {boolean}
+	 * @private
+	 */
+	static restrictionsDiffer(paramValues, predefined) {
+		paramValues = paramValues || [];
+		if (isNumberArray(predefined)) {
+			predefined = predefined.map(String);
+		}
+		if (paramValues.length !== predefined.length) {
+			return true;
+		}
+		const paramValueSet = new Set(paramValues);
+		return predefined.every(v => paramValueSet.has(v));
+	}
+
 }
 ParamApplier.supportedSearchParams = {
 	block: new Set([
@@ -5845,6 +5939,84 @@ ParamApplier.validNamespaceRestrictionValues = new Set(
 		return acc;
 	}, /** @type {number[]} */ ([]))
 );
+
+/**
+ * @requires mediawiki.user This class must not depend on any other modules
+ */
+class AjaxBlockConfigStore {
+
+	/**
+	 * @private
+	 */
+	static getLegacy() {
+		return {
+			local: /** @type {?AjaxBlockLegacyConfigLocal} */ (this.getParsed('legacy', 'local')) || undefined,
+			global: /** @type {?AjaxBlockLegacyConfigGlobal} */ (this.getParsed('legacy', 'global')) || undefined,
+		};
+	}
+
+	/**
+	 * @template T
+	 * @param {AjaxBlockConfigVersions} version
+	 * @param {AjaxBlockConfigDomains} domain
+	 * @returns {?T}
+	 * @private
+	 */
+	static getParsed(version, domain) {
+		const cfgStr = mw.user.options.get(this.optionKeys[version][domain], null);
+		if (!cfgStr) {
+			return null;
+		}
+		try {
+			const parsed = JSON.parse(cfgStr);
+			if (!$.isPlainObject(parsed)) {
+				throw new Error(`Encountered a non-plain object as the ${domain} ${version} config`);
+			}
+			return parsed;
+		} catch (e) {
+			console.error(e, cfgStr);
+			return null;
+		}
+	}
+
+	constructor() {
+		const legacy = AjaxBlockConfigStore.getLegacy();
+
+		/**
+		 * @type {AjaxBlockWarningConfig}
+		 * @readonly
+		 * @private
+		 */
+		this.warnings = AjaxBlockConfigWarningOptions.getMerged(legacy.local);
+	}
+
+	getWarningOptions() {
+		return this.warnings;
+	}
+
+	/**
+	 * @param {WarningKeys} key
+	 * @param {WarningContext} context
+	 * @returns {boolean}
+	 */
+	isWarningEnabled(key, context) {
+		return this.warnings[key][context];
+	}
+
+}
+/**
+ * @type {Record<AjaxBlockConfigVersions, Record<AjaxBlockConfigDomains, string>>}
+ */
+AjaxBlockConfigStore.optionKeys = {
+	current: {
+		local: 'userjs-ajaxblock2',
+		global: 'userjs-ajaxblock2-global',
+	},
+	legacy: {
+		local: 'userjs-ajaxblock',
+		global: 'userjs-ajaxblock-global',
+	},
+};
 
 class AjaxBlockConfig {
 
@@ -5937,7 +6109,7 @@ class AjaxBlockConfig {
 		 * @readonly
 		 * @private
 		 */
-		this.warningOptions = new AjaxBlockConfigWarningOptions();
+		this.warningOptions = new AjaxBlockConfigWarningOptions(initializer);
 
 		const commonTabPanel = new OO.ui.TabPanelLayout('Common', {
 			expanded: false,
@@ -6113,9 +6285,13 @@ AjaxBlockConfigLanguageOptions.supported = ['en', 'ja'];
 
 class AjaxBlockConfigWarningOptions {
 
-	constructor() {
+	/**
+	 * @param {FullInitializer} initializer
+	 */
+	constructor(initializer) {
+		const { configStore } = initializer;
 		/**
-		 * @type {Record<WarningKeys, Record<WarningContext, OO.ui.CheckboxInputWidget>>}
+		 * @type {Record<WarningKeys, Record<'cbOneClick' | 'cbDialog', OO.ui.CheckboxInputWidget>>}
 		 * @readonly
 		 * @private
 		 */
@@ -6133,24 +6309,26 @@ class AjaxBlockConfigWarningOptions {
 		this.resetButton = new OO.ui.ButtonWidget({
 			label: Messages.get('ajaxblock-config-label-reset'),
 			flags: ['destructive'],
-			disabled: true,
+			disabled: OO.compare(
+				AjaxBlockConfigWarningOptions.defaults.enabled,
+				configStore.getWarningOptions()
+			),
 		});
 
 		const $tbody = $('<tbody>');
-		for (const [key, { oneclick, dialog }] of typedEntries(AjaxBlockConfigWarningOptions.defaults)) {
+		for (const [key, enabled] of typedEntries(configStore.getWarningOptions())) {
+			const disabled = AjaxBlockConfigWarningOptions.defaults.disabled[key];
+
 			const cbOneClick = new OO.ui.CheckboxInputWidget({
-				selected: oneclick.enabled,
-				disabled: oneclick.disabled,
+				selected: AjaxBlockConfigWarningOptions.verifyEnabled(key, 'oneclick', enabled.oneclick),
+				disabled: disabled.oneclick,
 			});
 			const cbDialog = new OO.ui.CheckboxInputWidget({
-				selected: dialog.enabled,
-				disabled: dialog.disabled,
+				selected: AjaxBlockConfigWarningOptions.verifyEnabled(key, 'dialog', enabled.dialog),
+				disabled: disabled.dialog,
 			});
 
-			this.map[key] = {
-				oneclick: cbOneClick,
-				dialog: cbDialog,
-			};
+			this.map[key] = { cbOneClick, cbDialog };
 
 			$tbody.append(
 				$('<tr>').append(
@@ -6160,7 +6338,7 @@ class AjaxBlockConfigWarningOptions {
 					// - ajaxblock-config-label-warning-block-hardblock
 					// - ajaxblock-config-label-warning-block-hideuser
 					// - ajaxblock-config-label-warning-block-reblock
-					// - ajaxblock-config-label-warning-block-addblock
+					// - ajaxblock-config-label-warning-block-newblock
 					// - ajaxblock-config-label-warning-block-self
 					// - ajaxblock-config-label-warning-block-ignorepredefined
 					// - ajaxblock-config-label-warning-unblock
@@ -6211,8 +6389,8 @@ class AjaxBlockConfigWarningOptions {
 	registerEvents() {
 		// Enable or disable the reset button when checkboxes change,
 		// depending on whether the current settings differ from the defaults
-		for (const { oneclick, dialog } of Object.values(this.map)) {
-			for (const cb of [oneclick, dialog]) {
+		for (const { cbOneClick, cbDialog } of Object.values(this.map)) {
+			for (const cb of [cbOneClick, cbDialog]) {
 				cb.on('change', () => {
 					if (this.pauseEvents) {
 						return;
@@ -6227,14 +6405,14 @@ class AjaxBlockConfigWarningOptions {
 		this.resetButton.on('click', () => {
 			this.pauseEvents = true;
 
-			const defaults = AjaxBlockConfigWarningOptions.flatDefaults;
-			for (const [key, { oneclick, dialog }] of typedEntries(this.map)) {
+			const defaults = AjaxBlockConfigWarningOptions.defaults.enabled;
+			for (const [key, { cbOneClick, cbDialog }] of typedEntries(this.map)) {
 				const def = defaults[key];
-				if (oneclick.isSelected() !== def.oneclick) {
-					oneclick.setSelected(def.oneclick);
+				if (cbOneClick.isSelected() !== def.oneclick) {
+					cbOneClick.setSelected(def.oneclick);
 				}
-				if (dialog.isSelected() !== def.dialog) {
-					dialog.setSelected(def.dialog);
+				if (cbDialog.isSelected() !== def.dialog) {
+					cbDialog.setSelected(def.dialog);
 				}
 			}
 
@@ -6244,89 +6422,196 @@ class AjaxBlockConfigWarningOptions {
 	}
 
 	build() {
-		/** @type {import('ts-essentials').DeepPartial<AjaxBlockWarningFlatConfig>} */
+		/** @type {import('ts-essentials').DeepPartial<AjaxBlockWarningConfig>} */
 		const cfg = Object.create(null);
-		const defaults = AjaxBlockConfigWarningOptions.flatDefaults;
+		const defaults = AjaxBlockConfigWarningOptions.defaults.enabled;
 
-		for (const [key, { oneclick, dialog }] of typedEntries(this.map)) {
-			let checked = oneclick.isSelected();
-			if (!oneclick.isDisabled() && checked !== defaults[key].oneclick) {
-				OO.setProp(cfg, key, 'oneclick', checked);
-			}
-
-			checked = dialog.isSelected();
-			if (!dialog.isDisabled() && checked !== defaults[key].dialog) {
-				OO.setProp(cfg, key, 'dialog', checked);
+		for (const [key, { cbOneClick, cbDialog }] of typedEntries(this.map)) {
+			for (const context of AjaxBlockConfigWarningOptions.contexts) {
+				const cb = context === 'oneclick' ? cbOneClick : cbDialog;
+				const checked = AjaxBlockConfigWarningOptions.verifyEnabled(key, context, cb.isSelected());
+				if (checked !== defaults[key][context]) {
+					OO.setProp(cfg, key, context, checked);
+				}
 			}
 		}
 
 		return cfg;
 	}
 
+	/**
+	 * @param {WarningKeys} key
+	 * @param {WarningContext} context
+	 * @param {boolean} enabled
+	 * @returns {boolean}
+	 * @private
+	 */
+	static verifyEnabled(key, context, enabled) {
+		const isCheckboxDisabled = this.defaults.disabled[key][context];
+		return isCheckboxDisabled ? this.defaults.enabled[key][context] : enabled;
+	}
+
+	/**
+	 * @param {AjaxBlockLegacyConfigLocal} [legacyCfg]
+	 * @returns {AjaxBlockWarningConfig}
+	 * Note: This method must not depend on any modules.
+	 */
+	static getMerged(legacyCfg) {
+		return $.extend(
+			true,
+			{},
+			AjaxBlockConfigWarningOptions.defaults.enabled,
+			AjaxBlockConfigWarningOptions.mapLegacyConfig(legacyCfg && legacyCfg.warning)
+		);
+	}
+
+	/**
+	 * @param {AjaxBlockLegacyConfigLocal['warning']} [cfg]
+	 * @returns {Partial<AjaxBlockWarningConfig> | undefined}
+	 * @private
+	 * Note: This method must not depend on any modules.
+	 */
+	static mapLegacyConfig(cfg) {
+		if (!cfg) {
+			return;
+		}
+
+		/** @type {Record<keyof AjaxBlockLegacyConfigWarning, WarningKeys[]>} */
+		const map = {
+			noReason: ['block-noreason', 'unblock-noreason'],
+			noExpiry: ['block-noexpiry'],
+			noPartialSpecs: [],
+			willHardblock: ['block-hardblock'],
+			willHideUser: ['block-hideuser'],
+			willOverwrite: ['block-reblock'],
+			willIgnorePredefined: ['block-ignorepredefined', 'unblock-ignorepredefined'],
+			willBlockSelf: ['block-self', 'unblock-self'],
+			willUnblock: ['unblock'],
+		};
+
+		const /** @type {Partial<AjaxBlockWarningConfig>} */ ret = Object.create(null);
+		for (const [context, config] of typedEntries(cfg)) {
+			for (const [legacyKey, enabled] of typedEntries(config)) {
+				const keys = map[legacyKey];
+				for (const key of keys) {
+					setProp(ret, key, context, this.verifyEnabled(key, context, enabled));
+				}
+			}
+		}
+		console.log(ret);
+		return ret;
+	}
+
 }
 /**
- * @type {AjaxBlockWarningConfig}
+ * @type {WarningContext[]}
+ */
+AjaxBlockConfigWarningOptions.contexts = ['oneclick', 'dialog'];
+/**
+ * @type {Record<'enabled' | 'disabled', AjaxBlockWarningConfig>}
  */
 AjaxBlockConfigWarningOptions.defaults = {
-	'block-noreason': {
-		oneclick: { enabled: true },
-		dialog: { enabled: true },
+	enabled: {
+		'block-noreason': {
+			oneclick: true,
+			dialog: true,
+		},
+		'block-noexpiry': {
+			oneclick: true,
+			dialog: true,
+		},
+		'block-hardblock': {
+			oneclick: false,
+			dialog: false,
+		},
+		'block-hideuser': {
+			oneclick: true,
+			dialog: true,
+		},
+		'block-reblock': {
+			oneclick: true,
+			dialog: false,
+		},
+		'block-newblock': {
+			oneclick: false,
+			dialog: true,
+		},
+		'block-self': {
+			oneclick: true,
+			dialog: true,
+		},
+		'block-ignorepredefined': {
+			oneclick: true,
+			dialog: false,
+		},
+		'unblock': {
+			oneclick: true,
+			dialog: false,
+		},
+		'unblock-noreason': {
+			oneclick: true,
+			dialog: true,
+		},
+		'unblock-self': {
+			oneclick: true,
+			dialog: true,
+		},
+		'unblock-ignorepredefined': {
+			oneclick: true,
+			dialog: false,
+		},
 	},
-	'block-noexpiry': {
-		oneclick: { enabled: true },
-		dialog: { enabled: true },
-	},
-	'block-hardblock': {
-		oneclick: { enabled: false },
-		dialog: { enabled: false },
-	},
-	'block-hideuser': {
-		oneclick: { enabled: true, disabled: true },
-		dialog: { enabled: true, disabled: true },
-	},
-	'block-reblock': {
-		oneclick: { enabled: true },
-		dialog: { enabled: false },
-	},
-	'block-addblock': {
-		oneclick: { enabled: false, disabled: true },
-		dialog: { enabled: true },
-	},
-	'block-self': {
-		oneclick: { enabled: true },
-		dialog: { enabled: true },
-	},
-	'block-ignorepredefined': {
-		oneclick: { enabled: true },
-		dialog: { enabled: false },
-	},
-	'unblock': {
-		oneclick: { enabled: true },
-		dialog: { enabled: false },
-	},
-	'unblock-noreason': {
-		oneclick: { enabled: true },
-		dialog: { enabled: true },
-	},
-	'unblock-self': {
-		oneclick: { enabled: true },
-		dialog: { enabled: true },
-	},
-	'unblock-ignorepredefined': {
-		oneclick: { enabled: true },
-		dialog: { enabled: false },
+	disabled: {
+		'block-noreason': {
+			oneclick: false,
+			dialog: false,
+		},
+		'block-noexpiry': {
+			oneclick: false,
+			dialog: false,
+		},
+		'block-hardblock': {
+			oneclick: false,
+			dialog: false,
+		},
+		'block-hideuser': {
+			oneclick: true,
+			dialog: true,
+		},
+		'block-reblock': {
+			oneclick: false,
+			dialog: false,
+		},
+		'block-newblock': {
+			oneclick: true,
+			dialog: false,
+		},
+		'block-self': {
+			oneclick: false,
+			dialog: false,
+		},
+		'block-ignorepredefined': {
+			oneclick: false,
+			dialog: false,
+		},
+		'unblock': {
+			oneclick: false,
+			dialog: false,
+		},
+		'unblock-noreason': {
+			oneclick: false,
+			dialog: false,
+		},
+		'unblock-self': {
+			oneclick: false,
+			dialog: false,
+		},
+		'unblock-ignorepredefined': {
+			oneclick: false,
+			dialog: false,
+		},
 	},
 };
-/**
- * @type {AjaxBlockWarningFlatConfig}
- */
-AjaxBlockConfigWarningOptions.flatDefaults = typedEntries(AjaxBlockConfigWarningOptions.defaults).reduce((acc, [key, { oneclick, dialog }]) => {
-	acc[key] = {
-		oneclick: oneclick.enabled,
-		dialog: dialog.enabled,
-	};
-	return acc;
-}, /** @type {AjaxBlockWarningFlatConfig} */ (Object.create(null)));
 
 class AjaxBlockConfigDialogOptions {
 
@@ -6943,6 +7228,15 @@ function isObject(value) {
 }
 
 /**
+ * @param {unknown[]} arr
+ * @returns {arr is number[]}
+ * @todo Should this check all elements?
+ */
+function isNumberArray(arr) {
+	return typeof arr[0] === 'number';
+}
+
+/**
  * @template T
  * @typedef {Array<
  *   Exclude<{ [K in keyof T]: [K, T[K]] }[keyof T], undefined>
@@ -6964,6 +7258,32 @@ function typedEntries(obj) {
  */
 function typedKeys(obj) {
 	return /** @type {Array<Extract<keyof T, string>>} */ (Object.keys(obj));
+}
+
+/**
+ * Copy of `OO.setProp`.
+ *
+ * @link https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/core/+/34875dec1fdedbcf52e2d1a026c2f5562de2c4e4/resources/lib/oojs/oojs.js#215
+ * @param {Record<string, any>} obj
+ * @param {...any} keys The last element is used as the value.
+ * @returns {void}
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function setProp(obj, ...keys) {
+	if ( Object( obj ) !== obj || arguments.length < 2 ) {
+		return;
+	}
+	var prop = obj;
+	for ( var i = 1; i < arguments.length - 2; i++ ) {
+		if ( prop[ arguments[ i ] ] === undefined ) {
+			prop[ arguments[ i ] ] = {};
+		}
+		if ( Object( prop[ arguments[ i ] ] ) !== prop[ arguments[ i ] ] ) {
+			return;
+		}
+		prop = prop[ arguments[ i ] ];
+	}
+	prop[ arguments[ arguments.length - 2 ] ] = arguments[ arguments.length - 1 ];
 }
 
 class AjaxBlockLogo {
@@ -7070,9 +7390,13 @@ AjaxBlockLogo.svg =
  * @typedef {import('./window/AjaxBlock').BlockParamApplierHandler} BlockParamApplierHandler
  * @typedef {import('./window/AjaxBlock').BlockParamApplierOptions} BlockParamApplierOptions
  * @typedef {import('./window/AjaxBlock').AjaxBlockLanguages} AjaxBlockLanguages
+ * @typedef {import('./window/AjaxBlock').AjaxBlockConfigVersions} AjaxBlockConfigVersions
+ * @typedef {import('./window/AjaxBlock').AjaxBlockConfigDomains} AjaxBlockConfigDomains
+ * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigLocal} AjaxBlockLegacyConfigLocal
+ * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigGlobal} AjaxBlockLegacyConfigGlobal
+ * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigWarning} AjaxBlockLegacyConfigWarning
  * @typedef {import('./window/AjaxBlock').WarningKeys} WarningKeys
  * @typedef {import('./window/AjaxBlock').AjaxBlockWarningConfig} AjaxBlockWarningConfig
- * @typedef {import('./window/AjaxBlock').AjaxBlockWarningFlatConfig} AjaxBlockWarningFlatConfig
  * @typedef {import('./window/AjaxBlock').BlockPresetOptionsFieldOptions} BlockPresetOptionsFieldOptions
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogevents} ApiResponseQueryListLogevents
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
