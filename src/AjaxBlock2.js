@@ -54,11 +54,12 @@ const EXPIRY_INFINITE = 'infinity';
 class AjaxBlock {
 
 	static async init() {
-		Messages.loadInternalMessages();
-		const cfgContentPromise = AjaxBlockConfig.isConfigPage() && AjaxBlockConfig.preparePage();
-
 		// Load modules needed for getInitializer()
 		await mw.loader.using(['mediawiki.api', 'mediawiki.storage', 'mediawiki.util', 'mediawiki.user']);
+
+		const configStore = new AjaxBlockConfigStore();
+		Messages.loadInternalMessages(configStore);
+		const cfgContentPromise = AjaxBlockConfig.isConfigPage() && AjaxBlockConfig.preparePage();
 
 		AjaxBlock.api = new mw.Api({
 			ajax: {
@@ -94,7 +95,7 @@ class AjaxBlock {
 
 		/** @type {Initializer} */
 		const initializer = Object.assign(
-			{ permissionManager, configStore: new AjaxBlockConfigStore() },
+			{ permissionManager, configStore },
 			prematureInitializer
 		);
 
@@ -2253,9 +2254,12 @@ BlockTarget.regex = {
 
 class Messages {
 
-	static loadInternalMessages() {
-		const userLang = /** @type {keyof typeof Messages.i18n} */ (this.userLang);
-		const i18n = Messages.i18n[userLang] || Messages.i18n.en;
+	/**
+	 * @param {AjaxBlockConfigStore} configStore
+	 */
+	static loadInternalMessages(configStore) {
+		const lang = configStore.getLanguage();
+		const i18n = Messages.i18n[lang];
 		mw.messages.set(/** @type {any} */ (i18n));
 	}
 
@@ -2283,7 +2287,7 @@ class Messages {
 		const containsInt = new Set();
 
 		// Retrieve cached messages if there's any
-		const storageKey = this.storageKey + '-' + this.userLang;
+		const storageKey = this.storageKey + '-' + initializer.configStore.getLanguage();
 		/** @type {Record<string, string> | false | null} */
 		const cached = mw.storage.getObject(storageKey);
 		if (cached && Object.values(cached).every(val => typeof val === 'string')) {
@@ -2736,7 +2740,6 @@ class Messages {
 	}
 
 }
-Messages.userLang = wgUserLanguage.replace(/-.*$/, '');
 /**
  * @type {Record<AjaxBlockLanguages, AjaxBlockMessages>}
  */
@@ -5982,12 +5985,39 @@ class AjaxBlockConfigStore {
 	constructor() {
 		const legacy = AjaxBlockConfigStore.getLegacy();
 
+		const userLang = wgUserLanguage.replace(/-.*$/, '');
+		/**
+		 * @type {?AjaxBlockLanguages}
+		 * @readonly
+		 * @private
+		 */
+		this.configuredLanguage = AjaxBlockConfigLanguageOptions.getMerged(legacy.local, legacy.global);
+		/**
+		 * @type {AjaxBlockLanguages}
+		 * @readonly
+		 * @private
+		 */
+		this.language = this.configuredLanguage !== null
+			? this.configuredLanguage
+			: (
+				userLang in Messages.i18n
+				? /** @type {AjaxBlockLanguages} */ (userLang)
+				: 'en'
+			);
 		/**
 		 * @type {AjaxBlockWarningConfig}
 		 * @readonly
 		 * @private
 		 */
 		this.warnings = AjaxBlockConfigWarningOptions.getMerged(legacy.local);
+	}
+
+	getConfiguredLanguage() {
+		return this.configuredLanguage;
+	}
+
+	getLanguage() {
+		return this.language;
 	}
 
 	getWarningOptions() {
@@ -6216,6 +6246,8 @@ class AjaxBlockConfigLanguageOptions {
 	 * @param {FullInitializer} initializer
 	 */
 	constructor(initializer) {
+		const { configStore } = initializer;
+
 		const msgDefault = Messages.get('ajaxblock-config-label-default');
 		const options = [
 			new OO.ui.MenuOptionWidget({
@@ -6242,7 +6274,7 @@ class AjaxBlockConfigLanguageOptions {
 				items: options,
 			},
 		});
-		DropdownUtil.selectOther(this.dropdown);
+		this.dropdown.getMenu().selectItemByData(configStore.getConfiguredLanguage() || '');
 
 		const layout = new OO.ui.FieldsetLayout({
 			label: Messages.get('ajaxblock-config-label-language-layout'),
@@ -6275,6 +6307,26 @@ class AjaxBlockConfigLanguageOptions {
 		}
 		cfg.lang = code;
 		return cfg;
+	}
+
+	/**
+	 * @param {AjaxBlockLegacyConfigLocal} [legacyLocalCfg]
+	 * @param {AjaxBlockLegacyConfigGlobal} [legacyGlobalCfg]
+	 * @returns {?AjaxBlockLanguages}
+	 * Note: This method must not depend on any modules.
+	 */
+	static getMerged(legacyLocalCfg, legacyGlobalCfg) {
+		const localLang = legacyLocalCfg && legacyLocalCfg.lang;
+		if (localLang && localLang in Messages.i18n) {
+			return /** @type {AjaxBlockLanguages} */ (localLang);
+		}
+
+		const globalLang = legacyGlobalCfg && legacyGlobalCfg.lang;
+		if (globalLang && globalLang in Messages.i18n) {
+			return /** @type {AjaxBlockLanguages} */ (globalLang);
+		}
+
+		return null;
 	}
 
 }
