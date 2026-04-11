@@ -272,13 +272,18 @@ export interface AjaxBlockMessages {
 	'ajaxblock-notify-error-cannotopendialog-oneclick': string;
 	'ajaxblock-notify-warning-invalidparamvalue-pages': string;
 	'ajaxblock-notify-warning-invalidparamvalue-namespaces': string;
-	'ajaxblock-confirm-block-self': string;
-	'ajaxblock-confirm-block-noexpiry': string;
 	'ajaxblock-confirm-block-noreason': string;
+	'ajaxblock-confirm-block-noexpiry': string;
+	'ajaxblock-confirm-block-hardblock': string;
 	'ajaxblock-confirm-block-hideuser': string;
+	'ajaxblock-confirm-block-reblock': string;
+	'ajaxblock-confirm-block-addblock': string;
+	'ajaxblock-confirm-block-self': string;
+	'ajaxblock-confirm-block-ignorepredefined': string;
 	'ajaxblock-confirm-unblock': string;
-	'ajaxblock-confirm-unblock-self': string;
 	'ajaxblock-confirm-unblock-noreason': string;
+	'ajaxblock-confirm-unblock-self': string;
+	'ajaxblock-confirm-unblock-ignorepredefined': string;
 	'ajaxblock-confirm-dialog-title-block': string;
 	'ajaxblock-confirm-dialog-title-unblock': string;
 	'ajaxblock-confirm-dialog-label-instruction': string;
@@ -311,6 +316,7 @@ export interface AjaxBlockMessages {
 	'ajaxblock-config-label-warning-unblock': string;
 	'ajaxblock-config-label-warning-unblock-noreason': string;
 	'ajaxblock-config-label-warning-unblock-self': string;
+	'ajaxblock-config-label-warning-unblock-ignorepredefined': string;
 	'ajaxblock-config-label-reset': string;
 	'ajaxblock-config-label-presetreasons-layout': string;
 	'ajaxblock-config-label-presetreasons-name': string;
@@ -602,7 +608,8 @@ export type WarningKeys =
 	| 'block-ignorepredefined'
 	| 'unblock'
 	| 'unblock-noreason'
-	| 'unblock-self';
+	| 'unblock-self'
+	| 'unblock-ignorepredefined';
 
 interface WarningCheckboxConfig {
 	enabled: boolean;
