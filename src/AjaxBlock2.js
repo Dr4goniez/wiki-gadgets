@@ -6181,10 +6181,11 @@ class AjaxBlockConfig {
 			scrollable: false
 		});
 
+		const panels = [commonTabPanel, globalTabPanel, localTabPanel, miscTabPanel];
 		const index = new OO.ui.IndexLayout({
 			expanded: false,
 			framed: false
-		}).addTabPanels([commonTabPanel, globalTabPanel, localTabPanel, miscTabPanel], 0);
+		}).addTabPanels(panels, 0);
 
 		// const $overlay = $('<div>').addClass('sr-config-overlay').hide();
 		$content.empty().append(
@@ -6236,6 +6237,28 @@ class AjaxBlockConfig {
 		// 		e.returnValue = 'You have unsaved changes. Do you want to leave the page?';
 		// 	}
 		// };
+
+		this.registerEvents(panels);
+	}
+
+	/**
+	 * @param {OO.ui.TabPanelLayout[]} panels
+	 * @private
+	 */
+	registerEvents(panels) {
+		// On panel activation, clear any automatically assigned focus within the panel
+		panels.forEach((panel) => {
+			panel.on('active', (activated) => {
+				if (activated) {
+					requestAnimationFrame(() => {
+						const activeEl = document.activeElement;
+						if (activeEl instanceof HTMLElement && panel.$element.has(activeEl).length) {
+							activeEl.blur();
+						}
+					});
+				}
+			});
+		});
 	}
 
 }
