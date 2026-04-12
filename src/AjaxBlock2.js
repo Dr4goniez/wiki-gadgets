@@ -2752,6 +2752,7 @@ Messages.i18n = {
 		'ajaxblock-dialog-button-label-config': 'Config',
 		'ajaxblock-dialog-block-label-reason1': 'Reason 1',
 		'ajaxblock-dialog-block-label-reason2': 'Reason 2',
+		'ajaxblock-dialog-block-label-customreasons': 'Custom block reasons',
 		'ajaxblock-dialog-block-label-partial': 'Partial block',
 		'ajaxblock-dialog-block-label-option-autoblock': 'Apply autoblock',
 		'ajaxblock-dialog-message-nonactive-id': 'The block with ID <b>#$1</b> specified by this link is no longer active and has been ignored.',
@@ -2847,6 +2848,7 @@ Messages.i18n = {
 		'ajaxblock-dialog-button-label-config': '設定',
 		'ajaxblock-dialog-block-label-reason1': '理由1',
 		'ajaxblock-dialog-block-label-reason2': '理由2',
+		'ajaxblock-dialog-block-label-customreasons': 'カスタムブロック理由',
 		'ajaxblock-dialog-block-label-partial': '部分ブロック',
 		'ajaxblock-dialog-block-label-option-autoblock': '自動ブロックを適用',
 		'ajaxblock-dialog-message-nonactive-id': 'このリンクで指定されたID <b>#$1</b> のブロックは既に解除されているため、無視されました。',
@@ -3031,6 +3033,31 @@ class DropdownUtil {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * @param {OO.ui.MenuSelectWidget} menu
+	 * @param {string} groupLabel
+	 * @returns {?OO.ui.OptionWidget[]}
+	 */
+	static findGroupedOptions(menu, groupLabel) {
+		let /** @type {?number} */ start = null;
+		let /** @type {?number} */ end = null;
+		const options = /** @type {OO.ui.OptionWidget[]} */ (menu.getItems());
+
+		for (let i = 0; i < options.length; i++) {
+			const option = options[i];
+			if (option instanceof OO.ui.MenuSectionOptionWidget) {
+				if (start === null && option.getLabel() === groupLabel) {
+					start = i;
+				} else if (start !== null) {
+					end = i;
+					break;
+				}
+			}
+		}
+
+		return (start !== null && end !== null) ? options.slice(start, end) : null;
 	}
 
 }
@@ -3972,6 +3999,37 @@ class BlockField extends WatchUserField {
 		this.optionsFieldset.addItems(items, 0);
 
 		this.setUpEventListeners(onResize);
+		this.insertCustomReasons();
+	}
+
+	/**
+	 * @param {string[]} [customReasons]
+	 * @returns {this}
+	 */
+	insertCustomReasons(customReasons) {
+		customReasons = customReasons || this.initializer.configStore.getCustomReasons('block');
+		const groupLabel = Messages.plain('ajaxblock-dialog-block-label-customreasons');
+		const currentReason = this.getReason();
+
+		for (const dropdown of [this.reason1, this.reason2]) {
+			const menu = dropdown.getMenu();
+			const grouped = DropdownUtil.findGroupedOptions(menu, groupLabel);
+
+			// Always remove existing group if present
+			if (grouped) {
+				menu.removeItems(grouped);
+			}
+
+			// Only re-add if we actually have reasons
+			if (customReasons.length) {
+				menu.addItems([
+					new OO.ui.MenuSectionOptionWidget({ label: groupLabel }),
+					...customReasons.map(r => new OO.ui.MenuOptionWidget({ label: r })),
+				], 1);
+			}
+		}
+
+		return this.setReason(currentReason);
 	}
 
 	/**
@@ -4224,12 +4282,13 @@ class UnblockField extends WatchUserField {
 		const items = [];
 
 		/**
-		 * @type {OO.ui.TextInputWidget}
+		 * @type {OO.ui.ComboBoxInputWidget}
 		 * @readonly
 		 * @private
 		 */
-		this.reason = new OO.ui.TextInputWidget({
-			placeholder: Messages.get('block-removal-reason-placeholder')
+		this.reason = new OO.ui.ComboBoxInputWidget({
+			placeholder: Messages.get('block-removal-reason-placeholder'),
+			options: this.initializer.configStore.getCustomReasons('unblock').map(r => ({ data: r })),
 		});
 		items.push(
 			new OO.ui.FieldLayout(this.reason, {
@@ -6010,6 +6069,12 @@ class AjaxBlockConfigStore {
 		 * @private
 		 */
 		this.warnings = AjaxBlockConfigWarningOptions.getMerged(legacy.local);
+		/**
+		 * @type {ReturnType<typeof AjaxBlockConfigCustomReasonOptions.getMerged>}
+		 * @readonly
+		 * @private
+		 */
+		this.customReasons = AjaxBlockConfigCustomReasonOptions.getMerged(legacy.local, legacy.global);
 	}
 
 	getConfiguredLanguage() {
@@ -6031,6 +6096,27 @@ class AjaxBlockConfigStore {
 	 */
 	isWarningEnabled(key, context) {
 		return this.warnings[key][context];
+	}
+
+	/**
+	 * @param {BlockActions} action
+	 * @param {AjaxBlockConfigDomains} [domain]
+	 * @returns {string[]}
+	 */
+	getCustomReasons(action, domain) {
+		/** @type {string[]} */
+		const reasons = [];
+
+		if (domain) {
+			reasons.push(...this.customReasons[domain][action]);
+		} else {
+			reasons.push(
+				...this.customReasons.local[action],
+				...this.customReasons.global[action]
+			);
+		}
+
+		return Array.from(new Set(reasons));
 	}
 
 }
@@ -6161,7 +6247,7 @@ class AjaxBlockConfig {
 		 * @readonly
 		 * @private
 		 */
-		this.globalDialogOptions = new AjaxBlockConfigDialogOptions(initializer, globalTabPanel);
+		this.globalDialogOptions = new AjaxBlockConfigDialogOptions(initializer, 'global', globalTabPanel);
 
 		const localTabPanel = new OO.ui.TabPanelLayout('Local', {
 			expanded: false,
@@ -6173,7 +6259,7 @@ class AjaxBlockConfig {
 		 * @readonly
 		 * @private
 		 */
-		this.localDialogOptions = new AjaxBlockConfigDialogOptions(initializer, localTabPanel);
+		this.localDialogOptions = new AjaxBlockConfigDialogOptions(initializer, 'local', localTabPanel);
 
 		const miscTabPanel = new OO.ui.TabPanelLayout('Misc', {
 			expanded: false,
@@ -6259,6 +6345,29 @@ class AjaxBlockConfig {
 				}
 			});
 		});
+
+		// Debounced update of block reason dropdown options when custom reasons change
+		const updateReasons = () => {
+			const globalCustomReasons = this.globalDialogOptions.blockReasonOptions.build(false);
+			const localCustomReasons = this.localDialogOptions.blockReasonOptions.build(false);
+			const combinedCustomReasons = Array.from(
+				new Set([...localCustomReasons, ...globalCustomReasons])
+			);
+
+			// Apply global-only
+			this.globalDialogOptions.blockPresetOptions.getFields().forEach((field) => {
+				field.insertCustomReasons(globalCustomReasons);
+			});
+
+			// Apply combined to local
+			this.localDialogOptions.blockPresetOptions.getFields().forEach((field) => {
+				field.insertCustomReasons(combinedCustomReasons);
+			});
+		};
+		const onChange = OO.ui.debounce(updateReasons, 1000);
+		this.globalDialogOptions.blockReasonOptions.getTextInput().on('change', onChange);
+		this.localDialogOptions.blockReasonOptions.getTextInput().on('change', onChange);
+
 	}
 
 }
@@ -6692,9 +6801,10 @@ class AjaxBlockConfigDialogOptions {
 
 	/**
 	 * @param {FullInitializer} initializer
+	 * @param {AjaxBlockConfigDomains} domain
 	 * @param {OO.ui.TabPanelLayout} tabPanel
 	 */
-	constructor(initializer, tabPanel) {
+	constructor(initializer, domain, tabPanel) {
 		/**
 		 * @type {AjaxBlockConfigBlockPresetOptions}
 		 * @readonly
@@ -6704,12 +6814,12 @@ class AjaxBlockConfigDialogOptions {
 		 * @type {AjaxBlockConfigCustomReasonOptions}
 		 * @readonly
 		 */
-		this.blockReasonOptions = new AjaxBlockConfigCustomReasonOptions('block', tabPanel);
+		this.blockReasonOptions = new AjaxBlockConfigCustomReasonOptions(initializer, 'block', domain, tabPanel);
 		/**
 		 * @type {AjaxBlockConfigCustomReasonOptions}
 		 * @readonly
 		 */
-		this.unblockReasonOptions = new AjaxBlockConfigCustomReasonOptions('unblock', tabPanel);
+		this.unblockReasonOptions = new AjaxBlockConfigCustomReasonOptions(initializer, 'unblock', domain, tabPanel);
 
 		tabPanel.$element.append(
 			this.blockPresetOptions.$element,
@@ -6816,6 +6926,10 @@ class AjaxBlockConfigBlockPresetOptions {
 		if (options.params) {
 			ParamApplier.applyBlockParams(options.params, field);
 		}
+	}
+
+	getFields() {
+		return /** @type {readonly AjaxBlockConfigBlockPresetOptionsField[]} */ (this.fields);
 	}
 
 }
@@ -7150,10 +7264,14 @@ class CollapsibleFieldset {
 class AjaxBlockConfigCustomReasonOptions {
 
 	/**
+	 * @param {Initializer} initializer
 	 * @param {BlockActions} action
+	 * @param {AjaxBlockConfigDomains} domain
 	 * @param {OO.ui.TabPanelLayout} tabPanel
 	 */
-	constructor(action, tabPanel) {
+	constructor(initializer, action, domain, tabPanel) {
+		const { configStore } = initializer;
+
 		/**
 		 * @type {OO.ui.MultilineTextInputWidget}
 		 * @readonly
@@ -7164,14 +7282,7 @@ class AjaxBlockConfigCustomReasonOptions {
 			rows: 1,
 			maxRows: 10,
 			placeholder: Messages.get('ajaxblock-config-placeholder-customreasons'),
-		});
-
-		tabPanel.once('active', () => {
-			// Work around OOUI autosize issue:
-			// adjustSize() relies on layout measurements (innerHeight, scrollHeight, etc.),
-			// which are incorrect while the widget is inside a hidden tab (`display: none`).
-			// Recalculate after the tab becomes visible.
-			requestAnimationFrame(() => this.input.adjustSize(true));
+			value: configStore.getCustomReasons(action, domain).join('\n'),
 		});
 
 		const layout = new OO.ui.FieldsetLayout({
@@ -7196,15 +7307,70 @@ class AjaxBlockConfigCustomReasonOptions {
 		 * @readonly
 		 */
 		this.$element = layout.$element;
+
+		this.registerEvents(tabPanel);
 	}
 
-	build() {
+	/**
+	 * @param {OO.ui.TabPanelLayout} tabPanel
+	 * @private
+	 */
+	registerEvents(tabPanel) {
+		// Work around OOUI autosize issue:
+		// adjustSize() relies on layout measurements (innerHeight, scrollHeight, etc.),
+		// which are incorrect while the widget is inside a hidden tab (`display: none`).
+		// Recalculate after the tab becomes visible.
+		tabPanel.once('active', () => {
+			requestAnimationFrame(() => this.input.adjustSize(true));
+		});
+	}
+
+	/**
+	 * @param {boolean} [setValue] Whether to set the return value to the input (default: `true`)
+	 * @returns
+	 */
+	build(setValue = true) {
 		const valueSet = new Set(
 			clean(this.input.getValue()).split('\n').map(v => v.trim()).filter(Boolean)
 		);
-		const value = [...valueSet].join('\n');
-		this.input.setValue(value);
-		return value;
+		const values = [...valueSet];
+		if (setValue) {
+			this.input.setValue(values.join('\n'));
+		}
+		return values;
+	}
+
+	getTextInput() {
+		return this.input;
+	}
+
+	/**
+	 * @param {AjaxBlockLegacyConfigLocal} [legacyLocalCfg]
+	 * @param {AjaxBlockLegacyConfigGlobal} [legacyGlobalCfg]
+	 * @returns {Record<AjaxBlockConfigDomains, Record<BlockActions, string[]>>}
+	 * Note: This method must not depend on any modules.
+	 */
+	static getMerged(legacyLocalCfg, legacyGlobalCfg) {
+		/** @type {ReturnType<typeof AjaxBlockConfigCustomReasonOptions.getMerged>} */
+		const ret = {
+			local: {
+				block: [],
+				unblock: [],
+			},
+			global: {
+				block: [],
+				unblock: [],
+			},
+		};
+
+		if (legacyLocalCfg && legacyLocalCfg.dropdown.local.length) {
+			ret.local.block.push(...legacyLocalCfg.dropdown.local.filter(Boolean));
+		}
+		if (legacyGlobalCfg && legacyGlobalCfg.dropdown.length) {
+			ret.global.block.push(...legacyGlobalCfg.dropdown.filter(Boolean));
+		}
+
+		return ret;
 	}
 
 }
