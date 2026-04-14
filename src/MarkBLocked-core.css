@@ -51,7 +51,7 @@ body a.mbl-userlink {
  */
 body a.mbl-blocked-indef {
 	opacity: 0.6;
-	text-decoration: line-through;
+	text-decoration-line: line-through;
 	/**
 	 * Below might not be supported by the user's browser, hence defined separately.
 	 * This ensures that the user link is at least struck through.
@@ -59,10 +59,10 @@ body a.mbl-blocked-indef {
 	text-decoration-style: double;
 }
 body a.mbl-blocked-temp {
-	text-decoration: line-through;
+	text-decoration-line: line-through;
 }
 body a.mbl-blocked-partial {
-	text-decoration: underline;
+	text-decoration-line: underline;
 	text-decoration-style: dotted;
 }
 
@@ -72,14 +72,19 @@ body a.mbl-blocked-partial {
  */
 body a.mbl-globally-locked {
 	opacity: 0.6;
-	border-bottom: red double;
+	border-bottom-color: red;
+	border-bottom-style: double;
 }
 body a.mbl-globally-blocked-indef:not(.mbl-globally-locked) {
 	opacity: 0.6;
-	border-bottom: 2px red dashed;
+	border-bottom-width: 2px;
+	border-bottom-color: red;
+	border-bottom-style: dashed;
 }
 body a.mbl-globally-blocked-temp:not(.mbl-globally-locked) {
-	border-bottom: 2px red dashed;
+	border-bottom-width: 2px;
+	border-bottom-color: red;
+	border-bottom-style: dashed;
 }
 
 /* Increase opacity on dark mode for better readability */
