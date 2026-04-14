@@ -6249,18 +6249,6 @@ class AjaxBlockConfig {
 			this.warningOptions.$element
 		);
 
-		const globalTabPanel = new OO.ui.TabPanelLayout('Global', {
-			expanded: false,
-			label: Messages.get('ajaxblock-config-label-tab-global'),
-			scrollable: false
-		});
-		/**
-		 * @type {AjaxBlockConfigDialogOptions}
-		 * @readonly
-		 * @private
-		 */
-		this.globalDialogOptions = new AjaxBlockConfigDialogOptions(initializer, 'global', globalTabPanel);
-
 		const localTabPanel = new OO.ui.TabPanelLayout('Local', {
 			expanded: false,
 			label: Messages.get('ajaxblock-config-label-tab-local'),
@@ -6273,13 +6261,25 @@ class AjaxBlockConfig {
 		 */
 		this.localDialogOptions = new AjaxBlockConfigDialogOptions(initializer, 'local', localTabPanel);
 
+		const globalTabPanel = new OO.ui.TabPanelLayout('Global', {
+			expanded: false,
+			label: Messages.get('ajaxblock-config-label-tab-global'),
+			scrollable: false
+		});
+		/**
+		 * @type {AjaxBlockConfigDialogOptions}
+		 * @readonly
+		 * @private
+		 */
+		this.globalDialogOptions = new AjaxBlockConfigDialogOptions(initializer, 'global', globalTabPanel);
+
 		const miscTabPanel = new OO.ui.TabPanelLayout('Misc', {
 			expanded: false,
 			label: Messages.get('ajaxblock-config-label-tab-misc'),
 			scrollable: false
 		});
 
-		const panels = [commonTabPanel, globalTabPanel, localTabPanel, miscTabPanel];
+		const panels = [commonTabPanel, localTabPanel, globalTabPanel, miscTabPanel];
 		const index = new OO.ui.IndexLayout({
 			expanded: false,
 			framed: false
