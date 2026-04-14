@@ -563,6 +563,7 @@ class AjaxBlock {
 				'ipb-hardblock',
 				'ipbhidename',
 				'ipbwatchuser',
+				'watchlist-expiry-options',
 				'block-create',
 
 				'unblock',
@@ -2613,7 +2614,7 @@ class Messages {
 	 * used for expiry and duration lists.
 	 *
 	 * This method is adapted from `XmlSelect::parseOptionsMessage`.
-	 * @param {'ipboptions'} msgKey The key of the message to parse as a list.
+	 * @param {'ipboptions' | 'watchlist-expiry-options'} msgKey The key of the message to parse as a list.
 	 * @returns {Map<string, string>}
 	 */
 	static parseOptionsMessage(msgKey) {
@@ -2645,36 +2646,6 @@ class Messages {
 
 		this.cache[msgKey] = ret;
 		return ret;
-	}
-
-	/**
-	 * Parses the `ipboptions` message to an array of `OO.ui.MenuOptionWidget` instances.
-	 *
-	 * @returns {OO.ui.MenuOptionWidget[]}
-	 */
-	static getBlockDurations() {
-		const map = this.parseOptionsMessage('ipboptions');
-		/** @type {OO.ui.MenuOptionWidget[]} */
-		const options = [
-			new OO.ui.MenuOptionWidget({
-				label: this.get('ipbother').replace(/[:：]$/, ''),
-				data: ''
-			})
-		];
-		let indefFound = false;
-		for (const [label, value] of map) {
-			indefFound = indefFound || value === EXPIRY_INFINITE;
-			options.push(
-				new OO.ui.MenuOptionWidget({ label, data: value })
-			);
-		}
-		if (!indefFound) {
-			// Ensure the presence of an "indefinite" option
-			options.push(
-				new OO.ui.MenuOptionWidget({ label: Messages.get('infiniteblock'), data: EXPIRY_INFINITE })
-			);
-		}
-		return options;
 	}
 
 	// /**
@@ -2990,6 +2961,42 @@ class DropdownUtil {
 	}
 
 	/**
+	 * Parses the `ipboptions` message to an array of `OO.ui.MenuOptionWidget` instances.
+	 *
+	 * @param {'ipboptions' | 'watchlist-expiry-options'} key
+	 * @returns {OO.ui.MenuOptionWidget[]}
+	 */
+	static getDurationMenuOptions(key) {
+		/** @type {OO.ui.MenuOptionWidget[]} */
+		const options = [];
+		if (key === 'ipboptions') {
+			options.push(
+				new OO.ui.MenuOptionWidget({
+					label: Messages.get('ipbother').replace(/[:：]$/, ''),
+					data: ''
+				})
+			);
+		}
+
+		const map = Messages.parseOptionsMessage(key);
+		let indefFound = false;
+		for (const [label, value] of map) {
+			indefFound = indefFound || value === EXPIRY_INFINITE;
+			options.push(
+				new OO.ui.MenuOptionWidget({ label, data: value })
+			);
+		}
+		if (!indefFound) {
+			// Ensure the presence of an "indefinite" option
+			options.push(
+				new OO.ui.MenuOptionWidget({ label: Messages.get('infiniteblock'), data: EXPIRY_INFINITE })
+			);
+		}
+
+		return options;
+	}
+
+	/**
 	 * Gets the string data of the first selected item in the given dropdown.
 	 *
 	 * Notes:
@@ -3113,19 +3120,19 @@ function AjaxBlockDialogFactory() {
 			 * @readonly
 			 * @private
 			 */
-			this.blockNamed = new BlockUser(this);
+			this.blockNamed = new BlockUser(this, 'named');
 			/**
 			 * @type {BlockUser}
 			 * @readonly
 			 * @private
 			 */
-			this.blockTemp = new BlockUser(this);
+			this.blockTemp = new BlockUser(this, 'temp');
 			/**
 			 * @type {BlockUser}
 			 * @readonly
 			 * @private
 			 */
-			this.blockIp = new BlockUser(this);
+			this.blockIp = new BlockUser(this, 'ip');
 			/**
 			 * @type {UnblockUser}
 			 * @readonly
@@ -3637,11 +3644,7 @@ class WatchUserField {
 		 */
 		this.watchlistExpiry = new OO.ui.DropdownWidget({
 			menu: {
-				items: Messages.getBlockDurations().filter((option) => {
-					// Filter out expiries that are too short or too long
-					const expiry = /** @type {string} */ (option.getData());
-					return /^(\d+\s*weeks?|\d+\s*months?|1\s*year|infinity)$/.test(expiry);
-				})
+				items: DropdownUtil.getDurationMenuOptions('watchlist-expiry-options'),
 			}
 		});
 		/**
@@ -3699,6 +3702,24 @@ class WatchUserField {
 		return this;
 	}
 
+	/**
+	 * @param {?string} expiry If `null`, preserves the current value.
+	 * @returns {this}
+	 */
+	setWatchlistExpiry(expiry) {
+		if (expiry === null) {
+			return this;
+		}
+		const menu = this.watchlistExpiry.getMenu();
+		const item = /** @type {?OO.ui.MenuOptionWidget} */ (menu.findItemFromData(expiry));
+		if (item) {
+			menu.selectItem(item);
+		} else {
+			DropdownUtil.selectInfinity(this.watchlistExpiry);
+		}
+		return this;
+	}
+
 	getWatchUserParams() {
 		/** @type {WatchUserParams} */
 		const params = Object.create(null);
@@ -3739,7 +3760,7 @@ class BlockField extends WatchUserField {
 		 */
 		this.expiry = new OO.ui.DropdownWidget({
 			menu: {
-				items: Messages.getBlockDurations()
+				items: DropdownUtil.getDurationMenuOptions('ipboptions'),
 			}
 		});
 		DropdownUtil.selectInfinity(this.expiry);
@@ -4348,8 +4369,9 @@ class BlockUser extends BlockField {
 
 	/**
 	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
+	 * @param {'named' | 'temp' | 'ip'} preset
 	 */
-	constructor(dialog) {
+	constructor(dialog, preset) {
 		const onResize = () => dialog.updateSize();
 		super(dialog.getInitializer(), { onResize });
 
@@ -4370,13 +4392,6 @@ class BlockUser extends BlockField {
 		 * @readonly
 		 */
 		this.cbAddBlock = new OO.ui.CheckboxInputWidget();
-		this.cbAddBlock.on('change', (selected) => {
-			const blockSelector = this.targetField.getBlockSelector();
-			if (selected && blockSelector) {
-				// `newblock` cannot be used together with `id`: Deselect radio options
-				blockSelector.selectItem();
-			}
-		});
 		/**
 		 * @type {OO.ui.FieldLayout}
 		 * @readonly
@@ -4387,7 +4402,32 @@ class BlockUser extends BlockField {
 			align: 'inline',
 		});
 
+		this.initialize(preset);
+	}
+
+	/**
+	 * @param {'named' | 'temp' | 'ip'} preset
+	 * @private
+	 */
+	initialize(preset) {
 		this.optionsFieldset.addItems([this.cbAddBlockContainer]);
+
+		// When "add block" is checked and a block selector exists, deselect radio options
+		// in it since `newblock` cannot be used together with `id` (= data of the options)
+		this.cbAddBlock.on('change', (selected) => {
+			const blockSelector = this.targetField.getBlockSelector();
+			if (selected && blockSelector) {
+				blockSelector.selectItem();
+			}
+		});
+
+		// Apply preset block options
+		const presets = this.initializer.configStore.getPresets('merged');
+		const params = presets[preset] || AjaxBlockConfigBlockPresetOptions.systemDefined[preset];
+		ParamApplier.applyBlockParams(params, this, this.getParamApplierOptions());
+		// TODO: Handle target types when applying the params
+		// TODO: Handle cases where applyBlockParams() is an asynchronous process
+		// TODO: Perhaps add an additional safety layer to buildParams()?
 	}
 
 	getTargetField() {
@@ -5594,7 +5634,8 @@ class ParamApplier {
 			pagerestrictions: getRetrictionArray('wpPageRestrictions'),
 			namespacerestrictions: getRetrictionArray('wpNamespaceRestrictions'),
 			actionrestrictions: [],
-			watch: toPHPBool(params.get('wpWatch')),
+			watchuser: toPHPBool(params.get('wpWatch')),
+			watchlistexpiry: null,
 		};
 	}
 
@@ -5615,14 +5656,14 @@ class ParamApplier {
 
 		return {
 			reason: params.get('wpRemovalReason') || params.get('wpReason') || '',
-			watch: toPHPBool(params.get('wpWatch')),
+			watchuser: toPHPBool(params.get('wpWatch')),
+			watchlistexpiry: null,
 		};
 	}
 
 	/**
-	 * @param {ApiResponseQueryListBlocks} block
+	 * @param {Omit<ApiResponseQueryListBlocks, 'id' | 'by' | 'timestamp'> & Partial<AjaxBlockLegacyConfigWatchOptions>} block
 	 * @returns {ParamApplierBlockParams}
-	 * @private
 	 */
 	static createBlockParamsFromApiResponse(block) {
 		const restr = Array.isArray(block.restrictions) ? {} : block.restrictions;
@@ -5639,7 +5680,8 @@ class ParamApplier {
 			pagerestrictions: restr.pages ? restr.pages.map(obj => obj.title) : [],
 			namespacerestrictions: restr.namespaces || [],
 			actionrestrictions: restr.actions || [],
-			watch: null,
+			watchuser: block.watchlist !== undefined ? block.watchlist : null,
+			watchlistexpiry: block.watchlistexpiry !== undefined ? block.watchlistexpiry : null,
 		};
 	}
 
@@ -5803,8 +5845,11 @@ class ParamApplier {
 					}
 				}
 			},
-			watch: {
+			watchuser: {
 				setter: blockField.setWatchUser.bind(blockField),
+			},
+			watchlistexpiry: {
+				setter: blockField.setWatchlistExpiry.bind(blockField),
 			},
 		};
 
@@ -5876,8 +5921,10 @@ class ParamApplier {
 	 * @private
 	 */
 	static applyUnblockParams(params, unblockField) {
-		unblockField.setReason(params.reason);
-		unblockField.setWatchUser(params.watch);
+		unblockField
+			.setReason(params.reason)
+			.setWatchUser(params.watchuser)
+			.setWatchlistExpiry(params.watchlistexpiry);
 	}
 
 	/**
@@ -5939,7 +5986,7 @@ class ParamApplier {
 			(params.anononly !== undefined && params.anononly !== !predefinedParams.hardblock) ||
 			(params.autoblock !== undefined && params.autoblock !== predefinedParams.autoblock) ||
 			(params.hidename !== undefined && params.hidename !== predefinedParams.hidden) ||
-			(predefinedParams.watch !== null && !!params.watchuser !== predefinedParams.watch) ||
+			(predefinedParams.watchuser !== null && !!params.watchuser !== predefinedParams.watchuser) ||
 			params.partial !== predefinedParams.partial ||
 			this.restrictionsDiffer(params.pagerestrictions, predefinedParams.pagerestrictions) ||
 			this.restrictionsDiffer(params.namespacerestrictions, predefinedParams.namespacerestrictions);
@@ -5959,7 +6006,7 @@ class ParamApplier {
 			return false;
 		}
 		return params.reason !== predefinedParams.reason ||
-			(predefinedParams.watch !== null && !!params.watchuser !== predefinedParams.watch);
+			(predefinedParams.watchuser !== null && !!params.watchuser !== predefinedParams.watchuser);
 	}
 
 	/**
@@ -6078,6 +6125,12 @@ class AjaxBlockConfigStore {
 		 */
 		this.warnings = AjaxBlockConfigWarningOptions.getMerged(legacy.local);
 		/**
+		 * @type {ReturnType<typeof AjaxBlockConfigBlockPresetOptions.getMerged>}
+		 * @readonly
+		 * @private
+		 */
+		this.presets = AjaxBlockConfigBlockPresetOptions.getMerged(undefined, undefined, legacy.local);
+		/**
 		 * @type {ReturnType<typeof AjaxBlockConfigCustomReasonOptions.getMerged>}
 		 * @readonly
 		 * @private
@@ -6108,6 +6161,29 @@ class AjaxBlockConfigStore {
 	 */
 	isWarningEnabled(key, context) {
 		return this.warnings[key][context];
+	}
+
+	/**
+	 * @param {AjaxBlockConfigDomains | 'merged'} format
+	 */
+	getPresets(format) {
+		if (format === 'merged') {
+			const ret = /** @type {Record<string, ParamApplierBlockParams>} */ (Object.create(null));
+
+			// Merge local and global presets by overriding the latter
+			// TODO: This should be moved to the constructor
+			for (const cfg of [this.presets.global, this.presets.local]) {
+				for (const [preset, params] of Object.entries(cfg)) {
+					ret[preset] = params;
+				}
+			}
+
+			return ret;
+		}
+		if (format in this.presets) {
+			return this.presets[format];
+		}
+		throw new Error('Invalid format: ' + format);
 	}
 
 	/**
@@ -6708,7 +6784,6 @@ class AjaxBlockConfigWarningOptions {
 				}
 			}
 		}
-		console.log(ret);
 		return ret;
 	}
 
@@ -6958,6 +7033,39 @@ class AjaxBlockConfigBlockPresetOptions {
 		return /** @type {readonly AjaxBlockConfigBlockPresetOptionsField[]} */ (this.fields);
 	}
 
+	/**
+	 * @param {Record<string, ParamApplierBlockParams>} [localCfg]
+	 * @param {Record<string, ParamApplierBlockParams>} [globalCfg]
+	 * @param {AjaxBlockLegacyConfigLocal} [legacyCfg]
+	 * @returns {Record<AjaxBlockConfigDomains, Record<string, ParamApplierBlockParams>>}
+	 */
+	static getMerged(localCfg, globalCfg, legacyCfg) {
+		/** @type {ReturnType<typeof AjaxBlockConfigBlockPresetOptions.getMerged>} */
+		const ret = {
+			local: Object.create(null),
+			global: Object.create(null),
+		};
+
+		if (legacyCfg) {
+			for (const [key, obj] of typedEntries(legacyCfg.preset.block)) {
+				const block = Object.assign({}, obj, { hidden: !!obj.hidden });
+				const params = ParamApplier.createBlockParamsFromApiResponse(block);
+				const preset = key === 'user' ? 'named' : key;
+				ret.local[preset] = params;
+			}
+		}
+
+		for (const [domain, cfg] of typedEntries({ local: localCfg, global: globalCfg })) {
+			if (!cfg) {
+				continue;
+			}
+			ret[domain] = cfg;
+		}
+
+		return ret;
+	}
+
+
 }
 /**
  * @type {Record<'named' | 'temp' | 'ip', ParamApplierBlockParams>}
@@ -6976,7 +7084,8 @@ AjaxBlockConfigBlockPresetOptions.systemDefined = {
 		pagerestrictions: [],
 		namespacerestrictions: [],
 		actionrestrictions: [],
-		watch: false,
+		watchuser: false,
+		watchlistexpiry: EXPIRY_INFINITE,
 	},
 	temp: {
 		expiry: '3 months',
@@ -6991,7 +7100,8 @@ AjaxBlockConfigBlockPresetOptions.systemDefined = {
 		pagerestrictions: [],
 		namespacerestrictions: [],
 		actionrestrictions: [],
-		watch: false,
+		watchuser: false,
+		watchlistexpiry: EXPIRY_INFINITE,
 	},
 	ip: {
 		expiry: '1 week',
@@ -7006,7 +7116,8 @@ AjaxBlockConfigBlockPresetOptions.systemDefined = {
 		pagerestrictions: [],
 		namespacerestrictions: [],
 		actionrestrictions: [],
-		watch: false,
+		watchuser: false,
+		watchlistexpiry: EXPIRY_INFINITE,
 	},
 };
 
@@ -7396,6 +7507,10 @@ class AjaxBlockConfigCustomReasonOptions {
 			ret.global.block.push(...legacyGlobalCfg.dropdown.filter(Boolean));
 		}
 
+		if (legacyLocalCfg && legacyLocalCfg.preset.unblock.reason) {
+			ret.local.unblock.push(legacyLocalCfg.preset.unblock.reason);
+		}
+
 		return ret;
 	}
 
@@ -7660,6 +7775,7 @@ AjaxBlockLogo.svg =
  * @typedef {import('./window/AjaxBlock').AjaxBlockConfigVersions} AjaxBlockConfigVersions
  * @typedef {import('./window/AjaxBlock').AjaxBlockConfigDomains} AjaxBlockConfigDomains
  * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigLocal} AjaxBlockLegacyConfigLocal
+ * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigWatchOptions} AjaxBlockLegacyConfigWatchOptions
  * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigGlobal} AjaxBlockLegacyConfigGlobal
  * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigWarning} AjaxBlockLegacyConfigWarning
  * @typedef {import('./window/AjaxBlock').AjaxBlockLanguageConfig} AjaxBlockLanguageConfig

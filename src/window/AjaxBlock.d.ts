@@ -373,6 +373,7 @@ export interface MediaWikiMessages {
 	'ipb-hardblock': string;
 	'ipbhidename': string;
 	'ipbwatchuser': string;
+	'watchlist-expiry-options': string;
 	'block-create': string;
 
 	'unblock': string;
@@ -429,6 +430,7 @@ export interface LoadedMessages extends AjaxBlockMessages, MediaWikiMessages {}
 export interface CachedMessage {
 	'ipbreason-dropdown': readonly Record<string, string | Record<string, string>>;
 	'ipboptions': readonly Map<string, string>;
+	'watchlist-expiry-options': readonly Map<string, string>;
 }
 
 export type BlockTargetType = 'ip' | 'temp' | 'named' | null;
@@ -522,7 +524,12 @@ export type TargetHandler =
 	| { type: 'log'; log: BlockLogGenerator; }
 	| { type: 'none'; };
 
-export interface ParamApplierBlockParams {
+interface ParamApplierWatchParams {
+	watchuser: boolean | null;
+	watchlistexpiry: string | null;
+}
+
+export interface ParamApplierBlockParams extends ParamApplierWatchParams {
 	expiry: string;
 	reason: string;
 	hardblock: boolean;
@@ -535,12 +542,10 @@ export interface ParamApplierBlockParams {
 	pagerestrictions: string[];
 	namespacerestrictions: number[] | string[];
 	actionrestrictions: string[];
-	watch: boolean | null;
 }
 
-export interface ParamApplierUnblockParams {
+export interface ParamApplierUnblockParams extends ParamApplierWatchParams {
 	reason: string;
-	watch: boolean;
 }
 
 interface ParamApplierHandler<SetterValue, GetterValue = SetterValue> {
@@ -562,7 +567,8 @@ export interface BlockParamApplierHandler {
 	pagerestrictions: ParamApplierHandler<string[]>;
 	namespacerestrictions: ParamApplierHandler<string[], number[] | string[]>;
 	actionrestrictions: ParamApplierHandler<string[]>;
-	watch: ParamApplierHandler<boolean, boolean | null>;
+	watchuser: ParamApplierHandler<boolean | null>;
+	watchlistexpiry: ParamApplierHandler<string | null>;
 }
 
 /**
@@ -624,7 +630,7 @@ export interface AjaxBlockLegacyConfigLocal {
 	warning: Record<WarningContext, AjaxBlockLegacyConfigWarning>;
 }
 
-interface AjaxBlockLegacyConfigWatchOptions {
+export interface AjaxBlockLegacyConfigWatchOptions {
 	watchlist: boolean;
 	watchlistexpiry: string;
 }
