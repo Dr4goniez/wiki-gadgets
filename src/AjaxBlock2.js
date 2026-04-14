@@ -817,6 +817,10 @@ class AjaxBlock {
 				padding-top: 0.2em;
 				padding-bottom: 0.2em;
 			}
+			${/* Limit width to match OO.ui.FieldLayout */''}
+			.ajaxblock-config-fields--constrained {
+				max-width: 50em;
+			}
 		`.replace(/[\t\n\r]+/g, '');
 		document.head.appendChild(style);
 	}
@@ -2806,8 +2810,12 @@ Messages.i18n = {
 		'ajaxblock-config-label-tab-local': 'Local',
 		'ajaxblock-config-label-tab-misc': 'Miscellaneous',
 		'ajaxblock-config-label-default': 'Default',
-		'ajaxblock-config-label-language-layout': 'Language options',
-		'ajaxblock-config-help-language-default': 'The user\'s interface language as set in preferences, or English if translations are unavailable',
+		'ajaxblock-config-label-languages-layout': 'Language options',
+		'ajaxblock-config-label-languages-used': 'Used languages',
+		'ajaxblock-config-placeholder-languages-used': 'Add languages',
+		'ajaxblock-config-help-languages-used': 'Used when the interface language in use matches one of the selected languages.',
+		'ajaxblock-config-label-languages-default': 'Default language',
+		'ajaxblock-config-help-languages-default': 'Used when the interface language in use does not match any language selected in "{{int:ajaxblock-config-label-languages-used}}".',
 		'ajaxblock-config-label-warning-layout': 'Warning options',
 		'ajaxblock-config-label-warning-th-oneclick': 'One click',
 		'ajaxblock-config-label-warning-th-dialog': 'Dialog',
@@ -2902,8 +2910,12 @@ Messages.i18n = {
 		'ajaxblock-config-label-tab-local': 'ローカル',
 		'ajaxblock-config-label-tab-misc': 'その他',
 		'ajaxblock-config-label-default': '規定値',
-		'ajaxblock-config-label-language-layout': '言語設定',
-		'ajaxblock-config-help-language-default': '個人設定で指定された言語、または翻訳が利用できない場合は英語',
+		'ajaxblock-config-label-languages-layout': '言語設定',
+		'ajaxblock-config-label-languages-used': '使用言語',
+		'ajaxblock-config-placeholder-languages-used': '言語を追加',
+		'ajaxblock-config-help-languages-used': '使用中のインターフェース言語が選択されたいずれかの言語と一致する場合に使用されます。',
+		'ajaxblock-config-label-languages-default': '既定言語',
+		'ajaxblock-config-help-languages-default': '使用中のインターフェース言語が「{{int:ajaxblock-config-label-languages-used}}」のいずれとも一致しない場合に使用されます。',
 		'ajaxblock-config-label-warning-layout': '警告設定',
 		'ajaxblock-config-label-warning-th-oneclick': 'ワンクリック',
 		'ajaxblock-config-label-warning-th-dialog': 'ダイアログ',
@@ -6044,25 +6056,21 @@ class AjaxBlockConfigStore {
 	constructor() {
 		const legacy = AjaxBlockConfigStore.getLegacy();
 
-		const userLang = wgUserLanguage.replace(/-.*$/, '');
+		const userLang = /** @type {AjaxBlockLanguages} */ (wgUserLanguage.replace(/-.*$/, ''));
 		/**
-		 * @type {?AjaxBlockLanguages}
+		 * @type {AjaxBlockLanguageConfig}
 		 * @readonly
 		 * @private
 		 */
-		this.configuredLanguage = AjaxBlockConfigLanguageOptions.getMerged(legacy.local, legacy.global);
+		this.configuredLanguages = AjaxBlockConfigLanguageOptions.getMerged(legacy.local, legacy.global);
 		/**
 		 * @type {AjaxBlockLanguages}
 		 * @readonly
 		 * @private
 		 */
-		this.language = this.configuredLanguage !== null
-			? this.configuredLanguage
-			: (
-				userLang in Messages.i18n
-				? /** @type {AjaxBlockLanguages} */ (userLang)
-				: 'en'
-			);
+		this.language = this.configuredLanguages.used.includes(userLang)
+			? userLang
+			: this.configuredLanguages.default || 'en';
 		/**
 		 * @type {AjaxBlockWarningConfig}
 		 * @readonly
@@ -6077,8 +6085,12 @@ class AjaxBlockConfigStore {
 		this.customReasons = AjaxBlockConfigCustomReasonOptions.getMerged(legacy.local, legacy.global);
 	}
 
-	getConfiguredLanguage() {
-		return this.configuredLanguage;
+	getUsedLanguages() {
+		return this.configuredLanguages.used;
+	}
+
+	getDefaultLanguage() {
+		return this.configuredLanguages.default;
 	}
 
 	getLanguage() {
@@ -6380,43 +6392,54 @@ class AjaxBlockConfigLanguageOptions {
 	constructor(initializer) {
 		const { configStore } = initializer;
 
-		const msgDefault = Messages.get('ajaxblock-config-label-default');
-		const options = [
-			new OO.ui.MenuOptionWidget({
-				label: Messages.plain('parentheses', [msgDefault]),
-				data: '',
-			})
-		];
-		for (const [code, autonym] of typedEntries(initializer.langs)) {
-			options.push(
-				new OO.ui.MenuOptionWidget({
+		const getLanguageOptions = () => {
+			return typedEntries(initializer.langs).map(([code, autonym]) => {
+				return {
 					label: `${code} - ${autonym}`,
 					data: code,
-				})
-			);
-		}
+				};
+			});
+		};
+
+		/**
+		 * @type {OO.ui.MenuTagMultiselectWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.ddUsedLanguages = new OO.ui.MenuTagMultiselectWidget({
+			inputPosition: 'inline',
+			options: getLanguageOptions(),
+			placeholder: Messages.get('ajaxblock-config-placeholder-languages-used'),
+		});
+		this.ddUsedLanguages.setValue(configStore.getUsedLanguages());
 
 		/**
 		 * @type {OO.ui.DropdownWidget}
 		 * @readonly
 		 * @private
 		 */
-		this.dropdown = new OO.ui.DropdownWidget({
+		this.ddDefaultLanguage = new OO.ui.DropdownWidget({
 			menu: {
-				items: options,
+				items: getLanguageOptions().map(cfg => new OO.ui.MenuOptionWidget(cfg)),
 			},
 		});
-		this.dropdown.getMenu().selectItemByData(configStore.getConfiguredLanguage() || '');
+		this.ddDefaultLanguage.getMenu().selectItemByData(configStore.getDefaultLanguage() || 'en');
 
 		const layout = new OO.ui.FieldsetLayout({
-			label: Messages.get('ajaxblock-config-label-language-layout'),
+			label: Messages.get('ajaxblock-config-label-languages-layout'),
 			items: [
-				new OO.ui.FieldLayout(this.dropdown, {
+				new OO.ui.FieldLayout(this.ddUsedLanguages, {
+					$element: $('<div>').addClass('ajaxblock-config-fields--constrained'),
 					align: 'top',
-					invisibleLabel: true,
-					help: msgDefault +
-						Messages.plain('colon-separator') +
-						Messages.get('ajaxblock-config-help-language-default'),
+					label: Messages.plain('ajaxblock-config-label-languages-used'),
+					help: Messages.get('ajaxblock-config-help-languages-used'),
+					helpInline: true,
+				}),
+				new OO.ui.FieldLayout(this.ddDefaultLanguage, {
+					$element: $('<div>').addClass('ajaxblock-config-fields--constrained'),
+					align: 'top',
+					label: Messages.plain('ajaxblock-config-label-languages-default'),
+					help: Messages.get('ajaxblock-config-help-languages-default'),
 					helpInline: true,
 				}),
 			]
@@ -6429,36 +6452,39 @@ class AjaxBlockConfigLanguageOptions {
 	}
 
 	/**
-	 * @returns {{ lang?: string; }}
+	 * @returns {AjaxBlockLanguageConfig}
 	 */
 	build() {
-		const code = DropdownUtil.getSelectedOptionValue(this.dropdown);
-		const cfg = Object.create(null);
-		if (!code) {
-			return cfg;
-		}
-		cfg.lang = code;
-		return cfg;
+		return {
+			used: /** @type {AjaxBlockLanguages[]} */ (this.ddUsedLanguages.getValue()),
+			default: /** @type {AjaxBlockLanguages} */ (DropdownUtil.getSelectedOptionValueThrow(this.ddDefaultLanguage)),
+		};
 	}
 
 	/**
 	 * @param {AjaxBlockLegacyConfigLocal} [legacyLocalCfg]
 	 * @param {AjaxBlockLegacyConfigGlobal} [legacyGlobalCfg]
-	 * @returns {?AjaxBlockLanguages}
+	 * @returns {AjaxBlockLanguageConfig}
 	 * Note: This method must not depend on any modules.
 	 */
 	static getMerged(legacyLocalCfg, legacyGlobalCfg) {
-		const localLang = legacyLocalCfg && legacyLocalCfg.lang;
-		if (localLang && localLang in Messages.i18n) {
-			return /** @type {AjaxBlockLanguages} */ (localLang);
+		/**
+		 * @param {string} lang
+		 * @returns {AjaxBlockLanguages}
+		 */
+		const typeGuard = (lang) => /** @type {AjaxBlockLanguages} */ (lang);
+
+		for (const legacyCfg of [legacyLocalCfg, legacyGlobalCfg]) {
+			if (!legacyCfg) {
+				continue;
+			}
+			const lang = legacyCfg.lang || 'en';
+			if (lang in Messages.i18n) {
+				return { used: [typeGuard(lang)], default: typeGuard(lang) };
+			}
 		}
 
-		const globalLang = legacyGlobalCfg && legacyGlobalCfg.lang;
-		if (globalLang && globalLang in Messages.i18n) {
-			return /** @type {AjaxBlockLanguages} */ (globalLang);
-		}
-
-		return null;
+		return { used: [], default: null };
 	}
 
 }
@@ -6853,7 +6879,7 @@ class AjaxBlockConfigBlockPresetOptions {
 		 * @private
 		 */
 		this.fieldContainer = new OO.ui.Widget({
-			$element: $('<div>').css({ maxWidth: '50em' }),
+			$element: $('<div>').addClass('ajaxblock-config-fields--constrained'),
 		});
 
 		for (const [key, params] of typedEntries(AjaxBlockConfigBlockPresetOptions.systemDefined)) {
@@ -7636,6 +7662,7 @@ AjaxBlockLogo.svg =
  * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigLocal} AjaxBlockLegacyConfigLocal
  * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigGlobal} AjaxBlockLegacyConfigGlobal
  * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigWarning} AjaxBlockLegacyConfigWarning
+ * @typedef {import('./window/AjaxBlock').AjaxBlockLanguageConfig} AjaxBlockLanguageConfig
  * @typedef {import('./window/AjaxBlock').WarningKeys} WarningKeys
  * @typedef {import('./window/AjaxBlock').AjaxBlockWarningConfig} AjaxBlockWarningConfig
  * @typedef {import('./window/AjaxBlock').BlockPresetOptionsFieldOptions} BlockPresetOptionsFieldOptions

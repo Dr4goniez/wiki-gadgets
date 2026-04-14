@@ -301,8 +301,12 @@ export interface AjaxBlockMessages {
 	'ajaxblock-config-label-tab-local': string;
 	'ajaxblock-config-label-tab-misc': string;
 	'ajaxblock-config-label-default': string;
-	'ajaxblock-config-label-language-layout': string;
-	'ajaxblock-config-help-language-default': string;
+	'ajaxblock-config-label-languages-layout': string;
+	'ajaxblock-config-label-languages-used': string;
+	'ajaxblock-config-placeholder-languages-used': string;
+	'ajaxblock-config-help-languages-used': string;
+	'ajaxblock-config-label-languages-default': string;
+	'ajaxblock-config-help-languages-default': string;
 	'ajaxblock-config-label-warning-layout': string;
 	'ajaxblock-config-label-warning-th-oneclick': string;
 	'ajaxblock-config-label-warning-th-dialog': string;
@@ -654,6 +658,11 @@ export interface AjaxBlockLegacyConfigWarning {
 	willIgnorePredefined: boolean;
 	willBlockSelf: boolean;
 	willUnblock: boolean;
+}
+
+export interface AjaxBlockLanguageConfig {
+	used: AjaxBlockLanguages[];
+	default: AjaxBlockLanguages | null;
 }
 
 export type WarningKeys =
