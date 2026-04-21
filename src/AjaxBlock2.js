@@ -920,6 +920,8 @@ class AjaxBlock {
 	handleClick(e, data) {
 		if (data.anchor.classList.contains('ajaxblock-hiddenlink')) {
 			// Unexpected click on the hidden anchor
+			e.preventDefault();
+			e.stopPropagation();
 			mw.notify(Messages.get('ajaxblock-notify-error-processing'), { type: 'error' });
 			return;
 		}
@@ -941,6 +943,10 @@ class AjaxBlock {
 
 		e.preventDefault();
 		e.stopPropagation();
+		if (!this.dialog.presetsReady()) {
+			mw.notify(Messages.get('ajaxblock-notify-error-paramapplier-presetsnotready'), { type: 'error' });
+			return;
+		}
 		callback();
 	}
 
@@ -2725,6 +2731,8 @@ Messages.i18n = {
 		'ajaxblock-dialog-button-label-unblock': 'Unblock',
 		'ajaxblock-dialog-button-label-docs': 'Docs',
 		'ajaxblock-dialog-button-label-config': 'Config',
+		'ajaxblock-dialog-block-placeholder-preset': 'Select a preset to load',
+		'ajaxblock-notify-block-placeholder-preset': 'Loaded preset "$1"',
 		'ajaxblock-dialog-block-label-reason1': 'Reason 1',
 		'ajaxblock-dialog-block-label-reason2': 'Reason 2',
 		'ajaxblock-dialog-block-label-customreasons': 'Custom block reasons',
@@ -2751,8 +2759,10 @@ Messages.i18n = {
 		'ajaxblock-notify-error-noblocklinks': 'No associated block links found.',
 		'ajaxblock-notify-error-cannotopendialog': 'Unable to open the $1 dialog because there are pending operations currently being processed. Please wait for them to finish and try again.',
 		'ajaxblock-notify-error-cannotopendialog-oneclick': 'This link must be executed via the dialog, but could not open it because there are pending operations currently being processed. Please wait for them to finish and try again.',
-		'ajaxblock-notify-warning-invalidparamvalue-pages': 'Filtered invalid values for page restrictions:',
-		'ajaxblock-notify-warning-invalidparamvalue-namespaces': 'Filtered invalid values for namespace restrictions:',
+		'ajaxblock-notify-error-paramapplier-presetsnotready': 'AjaxBlock is still loading block presets. Please try again in a few seconds. If this error occurs frequently, consider removing page restrictions from your presets.',
+		'ajaxblock-notify-warning-paramapplier-filtered-top': 'Filtered invalid block parameter values:',
+		'ajaxblock-notify-warning-paramapplier-filtered-pages': 'Page restrictions',
+		'ajaxblock-notify-warning-paramapplier-filtered-namespaces': 'Namespace restrictions',
 		'ajaxblock-confirm-block-noreason': 'Block with <b>no reason</b> specified',
 		'ajaxblock-confirm-block-noexpiry': 'Block with <b>no expiry</b> specified (defaults to "{{int:infiniteblock}}")',
 		'ajaxblock-confirm-block-hardblock': 'Apply a <b>hardblock</b>',
@@ -2825,6 +2835,8 @@ Messages.i18n = {
 		'ajaxblock-dialog-button-label-unblock': 'ブロック解除',
 		'ajaxblock-dialog-button-label-docs': '解説',
 		'ajaxblock-dialog-button-label-config': '設定',
+		'ajaxblock-dialog-block-placeholder-preset': '読み込むプリセットを選択',
+		'ajaxblock-notify-block-placeholder-preset': 'プリセット「$1」を読み込みました',
 		'ajaxblock-dialog-block-label-reason1': '理由1',
 		'ajaxblock-dialog-block-label-reason2': '理由2',
 		'ajaxblock-dialog-block-label-customreasons': 'カスタムブロック理由',
@@ -2851,8 +2863,10 @@ Messages.i18n = {
 		'ajaxblock-notify-error-noblocklinks': '関連するブロックリンクが存在しません。',
 		'ajaxblock-notify-error-cannotopendialog': '実行中の処理が存在するため、$1ダイアログを開けません。処理の完了後に再度お試しください。',
 		'ajaxblock-notify-error-cannotopendialog-oneclick': 'このリンクはダイアログからの実行が必要ですが、実行中の処理が存在するためダイアログを開けませんでした。処理の完了後に再度お試しください。',
-		'ajaxblock-notify-warning-invalidparamvalue-pages': 'ページの制限として無効な値を除外しました:',
-		'ajaxblock-notify-warning-invalidparamvalue-namespaces': '名前空間の制限として無効な値を除外しました:',
+		'ajaxblock-notify-error-paramapplier-presetsnotready': 'AjaxBlockはブロックプリセットを読み込み中です。数秒おいてからもう一度お試しください。このエラーが頻繁に発生する場合、プリセットからページ制限を除去することを検討してください。',
+		'ajaxblock-notify-warning-paramapplier-filtered-top': '無効なブロック設定の値を除外しました:',
+		'ajaxblock-notify-warning-paramapplier-filtered-pages': 'ページ制限',
+		'ajaxblock-notify-warning-paramapplier-filtered-namespaces': '名前空間制限',
 		'ajaxblock-confirm-block-noreason': '<b>理由未指定</b>でブロック',
 		'ajaxblock-confirm-block-noexpiry': '<b>有効期限未指定</b>でブロック（既定値「{{int:infiniteblock}}」）',
 		'ajaxblock-confirm-block-hardblock': '<b>ハードブロック</b>を適用',
@@ -3155,6 +3169,16 @@ function AjaxBlockDialogFactory() {
 			 */
 			this.locked = false;
 			/**
+			 * Map of block target types to promises that resolve when preset parameters
+			 * have been fully applied to the corresponding BlockUser instance.
+			 *
+			 * Populated during {@link initialize}. Promises never reject.
+			 *
+			 * @type {Partial<Record<NonNullable<BlockTargetType>, JQuery.Promise<void>>>}
+			 * @private
+			 */
+			this.paramApplierPromiseMap = Object.create(null);
+			/**
 			 * @type {OO.ui.PanelLayout}
 			 * @readonly
 			 * @private
@@ -3189,6 +3213,13 @@ function AjaxBlockDialogFactory() {
 			return this.currentData;
 		}
 
+		presetsReady() {
+			if (!this.isInitialized()) {
+				return false;
+			}
+			return Object.values(this.paramApplierPromiseMap).every(promise => promise.state() === 'resolved');
+		}
+
 		/**
 		 * @inheritdoc
 		 * @override
@@ -3199,6 +3230,23 @@ function AjaxBlockDialogFactory() {
 
 			// @ts-expect-error
 			this.$body.append(this.content.$element);
+
+			// Apply preset block options
+			const presets = this.getInitializer().configStore.getPresets('merged');
+			this.paramApplierPromiseMap = [this.blockNamed, this.blockTemp, this.blockIp].reduce((acc, blockUser) => {
+				const targetType = blockUser.getPresetType();
+				const preset = presets.get(targetType);
+				if (!preset) {
+					console.error(`Preset "${targetType}" is not found`);
+					return acc;
+				}
+				acc[targetType] = ParamApplier.applyBlockParams(preset.getParams(), blockUser, {
+					hooks: { targetType },
+					context: { preset: targetType, scriptName: true },
+					notification: { autoHideSeconds: undefined, autoHide: false },
+				});
+				return acc;
+			}, /** @type {Record<NonNullable<BlockTargetType>, JQuery.Promise<void>>} */ (Object.create(null)));
 
 			return this;
 		}
@@ -3458,10 +3506,10 @@ function AjaxBlockDialogFactory() {
 			if (field instanceof BlockUser) {
 				// Disallow settings that would result in an ipb-empty-block error
 				if (
-					field.partialBlock.isSelected() &&
-					field.partialBlockPages.getValue().length === 0 &&
-					field.partialBlockNamespaces.getValue().length === 0 &&
-					!Object.values(field.partialBlockActions).some(cb => cb.isSelected()) &&
+					field.cbPartialBlock.isSelected() &&
+					field.getPageRestrictions().length === 0 &&
+					field.getNamespaceRestrictions().length === 0 &&
+					field.getActionRestrictions().length === 0 &&
 					!field.cbCreateAccount.isSelected() &&
 					!field.cbSendEmail.isSelected() &&
 					!field.cbUserTalk.isSelected()
@@ -3627,13 +3675,13 @@ class WatchUserField {
 		 * @readonly
 		 * @private
 		 */
-		this.watchUser = new OO.ui.CheckboxInputWidget();
+		this.cbWatchUser = new OO.ui.CheckboxInputWidget();
 		/**
 		 * @type {OO.ui.FieldLayout}
 		 * @readonly
 		 * @private
 		 */
-		this.watchUserLayout = new OO.ui.FieldLayout(this.watchUser, {
+		this.watchUserLayout = new OO.ui.FieldLayout(this.cbWatchUser, {
 			label: Messages.get('ipbwatchuser'),
 			align: 'inline',
 		});
@@ -3672,11 +3720,11 @@ class WatchUserField {
 
 		// Initialize fields
 		this.$element.append(this.optionsFieldset.$element);
-		DropdownUtil.selectInfinity(this.watchlistExpiry); // Select infinity
+		DropdownUtil.selectInfinity(this.watchlistExpiry);
 		this.watchlistExpiryLayout.toggle(false); // Hide the expiry field (since the checkbox isn't checked)
 
 		// When the "watch user" checkbox is checked/unchecked, show/hide the expiry field
-		this.watchUser.on('change', (selected) => {
+		this.cbWatchUser.on('change', (selected) => {
 			const checked = !!selected;
 			this.watchlistExpiryLayout.toggle(checked);
 			onResize();
@@ -3692,14 +3740,22 @@ class WatchUserField {
 		return this;
 	}
 
+	getWatchUser() {
+		return this.cbWatchUser.isSelected();
+	}
+
 	/**
 	 * @param {?boolean} watch If `null`, preserves the current checked state.
 	 * @returns {this}
 	 */
 	setWatchUser(watch) {
-		watch = watch === null ? this.watchUser.isSelected() : watch;
-		this.watchUser.setSelected(watch);
+		watch = watch === null ? this.getWatchUser() : watch;
+		this.cbWatchUser.setSelected(watch);
 		return this;
+	}
+
+	getWatchlistExpiry() {
+		return DropdownUtil.getSelectedOptionValueThrow(this.watchlistExpiry);
 	}
 
 	/**
@@ -3723,11 +3779,11 @@ class WatchUserField {
 	getWatchUserParams() {
 		/** @type {WatchUserParams} */
 		const params = Object.create(null);
-		if (!this.watchUser.isSelected()) {
+		if (!this.getWatchUser()) {
 			return params;
 		}
 		params.watchuser = true;
-		params.watchlistexpiry = DropdownUtil.getSelectedOptionValueThrow(this.watchlistExpiry);
+		params.watchlistexpiry = this.getWatchlistExpiry();
 		return params;
 	}
 
@@ -3846,9 +3902,9 @@ class BlockField extends WatchUserField {
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
 		 */
-		this.partialBlock = new OO.ui.CheckboxInputWidget();
+		this.cbPartialBlock = new OO.ui.CheckboxInputWidget();
 		items.push(
-			new OO.ui.FieldLayout(this.partialBlock, {
+			new OO.ui.FieldLayout(this.cbPartialBlock, {
 				label: Messages.get('ajaxblock-dialog-block-label-partial'),
 				align: 'inline',
 			})
@@ -3861,7 +3917,7 @@ class BlockField extends WatchUserField {
 		 */
 		this.partialBlockLayout = new OO.ui.FieldsetLayout();
 		this.partialBlockLayout.$element.css({ 'margin-left': '1.8em' });
-		this.partialBlockLayout.toggle(this.partialBlock.isSelected());
+		this.partialBlockLayout.toggle(this.cbPartialBlock.isSelected());
 
 		/** @type {OO.ui.Element[]} */
 		const partialBlockLayoutItems = [];
@@ -4071,13 +4127,13 @@ class BlockField extends WatchUserField {
 	 * @private
 	 */
 	setUpEventListeners(onResize) {
-		this.partialBlock.on('change', (selected) => {
+		this.cbPartialBlock.on('change', (selected) => {
 			this.partialBlockLayout.toggle(!!selected);
 			onResize();
 
 			// ipb-prevent-user-talk-edit:
 			// `!allowusertalk` can be applied only if sitewide, or partial affecting NS_USER_TALK
-			if (selected && !this.partialBlockNamespaces.getValue().includes(wgNamespaceIds.user_talk.toString())) {
+			if (selected && !this.getNamespaceRestrictions().includes(wgNamespaceIds.user_talk.toString())) {
 				this.cbUserTalk.setSelected(false).setDisabled(true);
 			} else {
 				this.cbUserTalk.setDisabled(false);
@@ -4089,7 +4145,7 @@ class BlockField extends WatchUserField {
 
 		this.partialBlockNamespaces.on('change', (items) => {
 			// ipb-prevent-user-talk-edit
-			if (this.partialBlock.isSelected() && !items.map(item => item.getData()).includes(wgNamespaceIds.user_talk.toString())) {
+			if (this.cbPartialBlock.isSelected() && !items.map(item => item.getData()).includes(wgNamespaceIds.user_talk.toString())) {
 				this.cbUserTalk.setSelected(false).setDisabled(true);
 			} else {
 				this.cbUserTalk.setDisabled(false);
@@ -4100,13 +4156,13 @@ class BlockField extends WatchUserField {
 			// ipb_hide_partial
 			// ipb_expiry_temp: A "hide user" block must have an indefinite expiry
 			if (selected) {
-				this.partialBlock.setSelected(false).setDisabled(true);
+				this.cbPartialBlock.setSelected(false).setDisabled(true);
 
 				this.setExpiry(EXPIRY_INFINITE);
 				this.expiry.setDisabled(true);
 				this.expiryOther.setDisabled(true);
 			} else {
-				this.partialBlock.setDisabled(false);
+				this.cbPartialBlock.setDisabled(false);
 
 				this.expiry.setDisabled(false);
 				this.expiryOther.setDisabled(false);
@@ -4269,7 +4325,7 @@ class BlockField extends WatchUserField {
 	}
 
 	getPartialBlockParams() {
-		if (!this.partialBlock.isSelected()) {
+		if (!this.cbPartialBlock.isSelected()) {
 			return { partial: false };
 		}
 
@@ -4277,27 +4333,39 @@ class BlockField extends WatchUserField {
 		const options = Object.create(null);
 		options.partial = true;
 
-		const pages = this.partialBlockPages.getValue();
+		const pages = this.getPageRestrictions();
 		if (pages.length) {
 			options.pagerestrictions = /** @type {string[]} */ (pages);
 		}
 
-		const namespaces = this.partialBlockNamespaces.getValue();
+		const namespaces = this.getNamespaceRestrictions();
 		if (namespaces.length) {
 			options.namespacerestrictions = /** @type {string[]} */ (namespaces);
 		}
 
-		const actions = /** @type {string[]} */ ([]);
-		for (const [action, checkbox] of Object.entries(this.partialBlockActions)) {
-			if (checkbox.isSelected()) {
-				actions.push(action);
-			}
-		}
+		const actions = this.getActionRestrictions();
 		if (actions.length) {
 			options.actionrestrictions = actions;
 		}
 
 		return options;
+	}
+
+	getPageRestrictions() {
+		return /** @type {string[]} */ (this.partialBlockPages.getValue());
+	}
+
+	getNamespaceRestrictions() {
+		return /** @type {string[]} */ (this.partialBlockNamespaces.getValue());
+	}
+
+	getActionRestrictions() {
+		return Object.entries(this.partialBlockActions).reduce((acc, [action, checkbox]) => {
+			if (checkbox.isSelected()) {
+				acc.push(action);
+			}
+			return acc;
+		}, /** @type {string[]} */ ([]));
 	}
 
 }
@@ -4369,9 +4437,9 @@ class BlockUser extends BlockField {
 
 	/**
 	 * @param {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>} dialog
-	 * @param {'named' | 'temp' | 'ip'} preset
+	 * @param {NonNullable<BlockTargetType>} presetType
 	 */
-	constructor(dialog, preset) {
+	constructor(dialog, presetType) {
 		const onResize = () => dialog.updateSize();
 		super(dialog.getInitializer(), { onResize });
 
@@ -4382,11 +4450,38 @@ class BlockUser extends BlockField {
 		 */
 		this.dialog = dialog;
 		/**
+		 * @type {NonNullable<BlockTargetType>}
+		 * @readonly
+		 * @private
+		 */
+		this.presetType = presetType;
+		/**
 		 * @type {TargetField}
 		 * @readonly
 		 * @private
 		 */
 		this.targetField = new TargetField(this, this.mainFieldset);
+		/**
+		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.presetSelector = new OO.ui.DropdownWidget({
+			label: Messages.get('ajaxblock-dialog-block-placeholder-preset'),
+			menu: {
+				items: BlockPreset.createMenuOptions(this.initializer.configStore),
+			},
+		});
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.presetSelectorContainer = new OO.ui.FieldLayout(this.presetSelector, {
+			classes: ['ajaxblock-horizontalfield'],
+			label: Messages.get('ajaxblock-config-label-presetreasons-name'),
+			align: 'left',
+		});
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
@@ -4402,14 +4497,13 @@ class BlockUser extends BlockField {
 			align: 'inline',
 		});
 
-		this.initialize(preset);
+		this.initialize();
 	}
 
 	/**
-	 * @param {'named' | 'temp' | 'ip'} preset
 	 * @private
 	 */
-	initialize(preset) {
+	initialize() {
 		this.optionsFieldset.addItems([this.cbAddBlockContainer]);
 
 		// When "add block" is checked and a block selector exists, deselect radio options
@@ -4421,13 +4515,33 @@ class BlockUser extends BlockField {
 			}
 		});
 
-		// Apply preset block options
-		const presets = this.initializer.configStore.getPresets('merged');
-		const params = presets[preset] || AjaxBlockConfigBlockPresetOptions.systemDefined[preset];
-		ParamApplier.applyBlockParams(params, this, this.getParamApplierOptions());
-		// TODO: Handle target types when applying the params
-		// TODO: Handle cases where applyBlockParams() is an asynchronous process
-		// TODO: Perhaps add an additional safety layer to buildParams()?
+		// Insert the preset selector field
+		const targetFieldIndex = this.mainFieldset.getItemIndex(this.targetField.container);
+		if (targetFieldIndex === -1) {
+			throw new Error('Target field not found');
+		}
+		this.mainFieldset.addItems([this.presetSelectorContainer], targetFieldIndex + 1);
+
+		// Call ParamApplier when a preset is selected
+		this.presetSelector.on('labelChange', () => {
+			const menu = this.presetSelector.getMenu();
+			const option = menu.findFirstSelectedItem();
+			if (!option) {
+				return;
+			}
+			menu.selectItem(); // Deselect
+			this.presetSelector.setLabel(Messages.get('ajaxblock-dialog-block-placeholder-preset'));
+			const preset = /** @type {BlockPreset} */ (option.getData());
+			ParamApplier.applyBlockParams(preset.getParams(), this, {
+				hooks: this.getParamApplierOptions(this.presetType),
+			}).then(() => {
+				mw.notify(Messages.get('ajaxblock-notify-block-placeholder-preset', [preset.getName()]));
+			});
+		});
+	}
+
+	getPresetType() {
+		return this.presetType;
 	}
 
 	getTargetField() {
@@ -4443,7 +4557,8 @@ class BlockUser extends BlockField {
 		this.optionsFieldset.toggle(!this.targetField.isAutoBlock());
 
 		// Adjust the visibility of field items
-		if (target.getType() === 'ip') {
+		const targetType = target.getType();
+		if (targetType === 'ip') {
 			this.cbAutoblockContainer.toggle(false);
 			this.cbAutoblock.setSelected(false);
 			this.cbHardblockContainer.toggle(true);
@@ -4462,6 +4577,19 @@ class BlockUser extends BlockField {
 		}
 		this.cbAddBlockContainer.toggle(this.targetField.canAddBlock());
 		this.cbAddBlock.setSelected(false);
+
+		// Adjust the visibility of preset options
+		let applicablePresetExists = false;
+		const options = /** @type {OO.ui.MenuOptionWidget[]} */ (this.presetSelector.getMenu().getItems());
+		for (const option of options) {
+			const preset = /** @type {BlockPreset} */ (option.getData());
+			const isApplicable = preset.supportsTarget(targetType);
+			option.toggle(isApplicable);
+			if (isApplicable) {
+				applicablePresetExists = true;
+			}
+		}
+		this.presetSelectorContainer.toggle(applicablePresetExists);
 
 		return handler;
 	}
@@ -4608,9 +4736,10 @@ class BlockUser extends BlockField {
 	}
 
 	/**
-	 * @returns {BlockParamApplierOptions}
+	 * @param {NonNullable<BlockTargetType>} [targetType]
+	 * @returns {BlockParamApplierHookOptions}
 	 */
-	getParamApplierOptions() {
+	getParamApplierOptions(targetType) {
 		return {
 			onAfterApply: () => {
 				// Deselect "add block" since the existing settings will be reused
@@ -4621,14 +4750,12 @@ class BlockUser extends BlockField {
 				this.dialog.pushPending();
 				this.dialog.overlay.toggle(true);
 			},
-			onAfterPromise: (errors) => {
+			onAfterPromise: () => {
 				// Unlock the pending again when all promises resolve
-				errors.forEach(($err) => {
-					mw.notify($err, { type: 'error', autoHideSeconds: 'long' });
-				});
 				this.dialog.popPending();
 				this.dialog.overlay.toggle(false);
 			},
+			targetType,
 		};
 	}
 
@@ -4780,8 +4907,11 @@ class TargetField {
 		 * @private
 		 */
 		this.autoBlock = false;
-
-		const layout = new OO.ui.FieldLayout(
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 */
+		this.container = new OO.ui.FieldLayout(
 			new OO.ui.LabelWidget({
 				label: $('<span>')
 					.addClass('ajaxblock-targetlabel')
@@ -4797,7 +4927,7 @@ class TargetField {
 				align: 'left',
 			}
 		);
-		prependTo.addItems([this.messageContainer, layout], 0);
+		prependTo.addItems([this.messageContainer, this.container], 0);
 	}
 
 	/**
@@ -5517,7 +5647,9 @@ class ParamApplier {
 			e.stopPropagation();
 			console.log(params);
 			if (field instanceof BlockUser && 'expiry' in params) {
-				this.applyBlockParams(params, field, field.getParamApplierOptions());
+				this.applyBlockParams(params, field, {
+					hooks: field.getParamApplierOptions(field.getPresetType()),
+				});
 			} else if (field instanceof UnblockUser && !('expiry' in params)) {
 				this.applyUnblockParams(params, field);
 			} else {
@@ -5553,7 +5685,9 @@ class ParamApplier {
 		link.applier.addEventListener('click', (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			this.applyBlockParams(params, blockUser, blockUser.getParamApplierOptions());
+			this.applyBlockParams(params, blockUser, {
+				hooks: blockUser.getParamApplierOptions(blockUser.getPresetType()),
+			});
 		});
 
 		return link;
@@ -5688,11 +5822,27 @@ class ParamApplier {
 	/**
 	 * @param {ParamApplierBlockParams} params
 	 * @param {BlockField} blockField
-	 * @param {BlockParamApplierOptions} [options]
-	 * @returns {void}
-	 * @todo Add guard against incompatible values
+	 * @param {object} [options]
+	 * @param {BlockParamApplierHookOptions} [options.hooks]
+	 * @param {BlockParamApplierContextOptions} [options.context]
+	 * @param {mw.notification.NotificationOptions} [options.notification] Default: `{ type: 'warn', autoHideSeconds: 'long' }`
+	 * @returns {JQuery.Promise<void>} This method never rejects.
 	 */
 	static applyBlockParams(params, blockField, options = {}) {
+		const noop = () => {};
+		const { hooks = {}, context = {}, notification } = options;
+		const {
+			onAfterApply = noop,
+			onBeforePromise = noop,
+			onAfterPromise = noop,
+			targetType,
+		} = hooks;
+		const translatorOptions = targetType && {
+			targetType,
+			permissionManager: blockField.initializer.permissionManager
+		};
+		const /** @type {BlockParamApplierInvalidRestrictionMap} */ invalidRestrictions = Object.create(null);
+
 		/**
 		 * @type {BlockParamApplierHandler}
 		 */
@@ -5704,25 +5854,28 @@ class ParamApplier {
 				setter: blockField.setReason.bind(blockField),
 			},
 			hardblock: {
+				getter: v => this.translateBoolForTarget(v, 'hardblock', translatorOptions),
 				setter: blockField.cbHardblock.setSelected.bind(blockField.cbHardblock),
 			},
 			nocreate: {
 				setter: blockField.cbCreateAccount.setSelected.bind(blockField.cbCreateAccount),
 			},
 			autoblock: {
+				getter: v => this.translateBoolForTarget(v, 'autoblock', translatorOptions),
 				setter: blockField.cbAutoblock.setSelected.bind(blockField.cbAutoblock),
 			},
 			noemail: {
 				setter: blockField.cbSendEmail.setSelected.bind(blockField.cbSendEmail),
 			},
 			hidden: {
+				getter: v => this.translateBoolForTarget(v, 'hidden', translatorOptions),
 				setter: blockField.cbHideUser.setSelected.bind(blockField.cbHideUser),
 			},
 			nousertalk: {
 				setter: blockField.cbUserTalk.setSelected.bind(blockField.cbUserTalk),
 			},
 			partial: {
-				setter: blockField.partialBlock.setSelected.bind(blockField.partialBlock),
+				setter: blockField.cbPartialBlock.setSelected.bind(blockField.cbPartialBlock),
 			},
 			pagerestrictions: {
 				getter: (values) => {
@@ -5740,7 +5893,7 @@ class ParamApplier {
 
 					if (!tempValues.size) {
 						if (invalidValues.size) {
-							this.notifyInvalidRestrictions(invalidValues, 'pages');
+							invalidRestrictions.pages = invalidValues;
 						}
 						return /** @type {string[]} */ ([]);
 					}
@@ -5785,7 +5938,7 @@ class ParamApplier {
 						}
 					)(Array.from(tempValues), 0).then((titles) => {
 						if (invalidValues.size) {
-							this.notifyInvalidRestrictions(invalidValues, 'pages');
+							invalidRestrictions.pages = invalidValues;
 						}
 						return titles.slice(0, blockField.partialBlockPages.limit);
 					});
@@ -5818,7 +5971,7 @@ class ParamApplier {
 					} else {
 						// Array of numeral strings parsed from a URL query param
 						values = new Set();
-						const invalidValues = /** @type {Set<string>} */ new Set();
+						const /** @type {Set<string>} */ invalidValues = new Set();
 						for (let ns of namespaces) {
 							ns = ns.trim();
 							if (/^\d+$/.test(ns) && this.isValidNamespaceRestrictionValue(+ns)) {
@@ -5828,7 +5981,7 @@ class ParamApplier {
 							}
 						}
 						if (invalidValues.size) {
-							this.notifyInvalidRestrictions(invalidValues, 'namespaces');
+							invalidRestrictions.namespaces = invalidValues;
 						}
 					}
 
@@ -5861,7 +6014,7 @@ class ParamApplier {
 			entries.push(entries.splice(iPartial, 1)[0]);
 		}
 
-		const promises = /** @type {Promise<?JQuery<HTMLElement>>[]} */ ([]);
+		const promises = /** @type {JQuery.Promise<?JQuery<HTMLElement>>[]} */ ([]);
 		/**
 		 * @param {string} _
 		 * @param {any} res
@@ -5883,20 +6036,13 @@ class ParamApplier {
 						return null;
 					})
 					.catch(catchHandler);
-				promises.push(
-					// Don't use toNativePromise here: `p` never rejects (failures are normalized
-					// via `.catch()`), so wrapping jQuery's rejection semantics is unnecessary
-					// and would produce inconsistent error shapes.
-					new Promise(resolve => p.then(resolve))
-				);
+				promises.push(p);
 			} else {
 				// @ts-expect-error
 				setter(val);
 			}
 		}
 
-		const noop = () => {};
-		const { onAfterApply = noop, onBeforePromise = noop, onAfterPromise = noop } = options;
 		onAfterApply();
 
 		if (promises.length) {
@@ -5904,13 +6050,47 @@ class ParamApplier {
 
 			// Note: Promise.all will never reject since all async failures are
 			// converted into resolved error elements
-			Promise.all(promises).then((results) => {
-				const errors = results.filter(el => el !== null);
-				onAfterPromise(errors);
+			return $.when(...promises).then((...results) => {
+				results.forEach(($err) => {
+					if (!$err) {
+						return;
+					}
+					mw.notify($err, { type: 'error', autoHideSeconds: 'long' });
+				});
+				onAfterPromise();
 			}).catch(() => {
 				// This should never normally happen, but guarantees symmetry
-				onAfterPromise([]);
+				onAfterPromise();
+			}).then(() => {
+				if (!$.isEmptyObject(invalidRestrictions)) {
+					this.notifyInvalidRestrictions(invalidRestrictions, context, notification);
+				}
 			});
+		}
+
+		if (!$.isEmptyObject(invalidRestrictions)) {
+			this.notifyInvalidRestrictions(invalidRestrictions, context, notification);
+		}
+		return $.Deferred().resolve().promise();
+	}
+
+	/**
+	 * @param {boolean} value
+	 * @param {'hardblock' | 'autoblock' | 'hidden'} paramKey
+	 * @param {{ targetType: NonNullable<BlockTargetType>; permissionManager: PermissionManager }} [options]
+	 * @returns {boolean}
+	 * @private
+	 */
+	static translateBoolForTarget(value, paramKey, options) {
+		if (!options) {
+			return value;
+		}
+		const { targetType, permissionManager } = options;
+		switch (paramKey) {
+			case 'hardblock': return targetType === 'ip' && value;
+			case 'autoblock': return (targetType === 'named' || targetType === 'temp') && value;
+			case 'hidden': return targetType === 'named' && permissionManager.canHideUser() && value;
+			default: throw new Error('Invalid param key: ' + paramKey);
 		}
 	}
 
@@ -5928,33 +6108,67 @@ class ParamApplier {
 	}
 
 	/**
-	 * @param {Set<string> | Set<number>} invalidValues
-	 * @param {'pages' | 'namespaces'} restrictionType
+	 * @param {BlockParamApplierInvalidRestrictionMap} invalidValues
+	 * @param {BlockParamApplierContextOptions} contextOptions
+	 * @param {mw.notification.NotificationOptions} [notifOptions] Default: `{ type: 'warn', autoHideSeconds: 'long' }`
 	 * @returns {void}
 	 * @private
-	 * @todo Consider whether this should be called on the config page
 	 */
-	static notifyInvalidRestrictions(invalidValues, restrictionType) {
-		const ul = document.createElement('ul');
-
-		for (const val of invalidValues) {
-			const li = document.createElement('li');
-			const code = document.createElement('code');
-			code.textContent = String(val);
-			li.appendChild(code);
-			ul.appendChild(li);
+	static notifyInvalidRestrictions(invalidValues, contextOptions, notifOptions) {
+		if ($.isEmptyObject(invalidValues)) {
+			throw new Error('invalidValues is empty');
 		}
 
-		const msg = document.createElement('div');
-		msg.appendChild(
-			// Messages used here:
-			// - ajaxblock-notify-warning-invalidparamvalue-pages
-			// - ajaxblock-notify-warning-invalidparamvalue-namespaces
-			document.createTextNode(Messages.get(`ajaxblock-notify-warning-invalidparamvalue-${restrictionType}`))
-		);
-		msg.appendChild(ul);
+		const separator = {
+			comma: Messages.plain('comma-separator'),
+			colon: Messages.plain('colon-separator'),
+			word: Messages.plain('word-separator'),
+		};
+		const $ul = $('<ul>');
+		const { preset, domain, scriptName } = contextOptions;
 
-		mw.notify(msg, { type: 'warn', autoHideSeconds: 'long' });
+		// Add "Preset: <preset> (<domain>)"
+		if (preset) {
+			const $li = $('<li>').append(
+				Messages.get('ajaxblock-config-label-presetreasons-name'),
+				separator.colon,
+				$('<code>').text(preset)
+			);
+			if (domain) {
+				$li.append(
+					separator.word,
+					Messages.plain('parentheses', [Messages.get(`ajaxblock-config-label-tab-${domain}`)])
+				);
+			}
+			$ul.append($li);
+		}
+
+		// Add filtered values
+		for (const [restriction, invalidSet] of typedEntries(invalidValues)) {
+			if (!invalidSet) {
+				continue;
+			}
+			$ul.append(
+				$('<li>').append(
+					// Messages used here:
+					// - ajaxblock-notify-warning-paramapplier-filtered-pages
+					// - ajaxblock-notify-warning-paramapplier-filtered-namespaces
+					Messages.get(`ajaxblock-notify-warning-paramapplier-filtered-${restriction}`),
+					separator.colon,
+					Messages.listToText([...invalidSet].map(val => `<code>${val}</code>`))
+				)
+			);
+		}
+
+		const $msg = $('<div>');
+		if (scriptName) {
+			$msg.append(SCRIPT_NAME, separator.colon);
+		}
+		$msg.append(
+			Messages.get('ajaxblock-notify-warning-paramapplier-filtered-top'),
+			$ul
+		);
+		mw.notify($msg, Object.assign({ type: 'warn', autoHideSeconds: 'long' }, notifOptions));
 	}
 
 	/**
@@ -6061,6 +6275,183 @@ ParamApplier.validNamespaceRestrictionValues = new Set(
 	}, /** @type {number[]} */ ([]))
 );
 
+class BlockPreset {
+
+	/**
+	 * @overload
+	 * @param {BlockPresetJson['name']} nameOrObj
+	 * @param {BlockPresetJson['targets']} targets
+	 * @param {BlockPresetJson['params']} params
+	 */
+	/**
+	 * @overload
+	 * @param {BlockPresetJson} nameOrObj
+	 */
+	/**
+	 * @param {BlockPresetJson['name'] | BlockPresetJson} nameOrObj
+	 * @param {BlockPresetJson['targets']} [targets]
+	 * @param {BlockPresetJson['params']} [params]
+	 */
+	constructor(nameOrObj, targets, params) {
+		let /** @type {string} */ name;
+		if (typeof nameOrObj === 'string') {
+			name = nameOrObj;
+		} else {
+			name = nameOrObj.name;
+			targets = nameOrObj.targets;
+			params = nameOrObj.params;
+		}
+		if (typeof name !== 'string') {
+			throw new TypeError('Expected string for "name", but got ' + typeof name, { cause: name });
+		}
+		if (!Array.isArray(targets)) {
+			throw new TypeError('Expected array for "targets", but got ' + typeof targets, { cause: targets });
+		}
+		if (!isObject(params)) {
+			throw new TypeError('Expected object for "params", but got ' + typeof params, { cause: params });
+		}
+
+		/**
+		 * @type {string}
+		 * @readonly
+		 * @private
+		 */
+		this.name = name;
+		/**
+		 * @type {Set<NonNullable<BlockTargetType>>}
+		 * @readonly
+		 * @private
+		 */
+		this.targets = new Set(targets);
+		/**
+		 * @type {ParamApplierBlockParams}
+		 * @readonly
+		 * @private
+		 */
+		this.params = params;
+	}
+
+	getName() {
+		return this.name;
+	}
+
+	getTargets() {
+		return this.targets;
+	}
+
+	/**
+	 * @param {BlockTargetType} target
+	 * @returns {boolean}
+	 */
+	supportsTarget(target) {
+		// TODO: Add guard against null?
+		return this.targets.has(/** @type {any} */ (target));
+	}
+
+	getParams() {
+		return this.params;
+	}
+
+	/**
+	 * Returns a user-facing preset name, optionally augmented with a localized target label
+	 * (e.g. "named - Registered users").
+	 *
+	 * If the preset name corresponds to a known block target type ("named", "temp", "ip"),
+	 * a localized label is appended. Otherwise, the original preset name is returned unchanged.
+	 *
+	 * @param {string} presetName Raw preset identifier
+	 * @return {string} Display-ready preset name
+	 */
+	static getDisplayName(presetName) {
+		if (presetName === 'named' || presetName === 'temp' || presetName === 'ip') {
+			// Messages used here:
+			//  - ajaxblock-config-label-presetreasons-target-named
+			//  - ajaxblock-config-label-presetreasons-target-temp
+			//  - ajaxblock-config-label-presetreasons-target-ip
+			presetName += ' - ' + Messages.get(`ajaxblock-config-label-presetreasons-target-${presetName}`);
+		}
+		return presetName;
+	}
+
+	static getDefaultAsMap() {
+		const /** @type {Map<string, BlockPreset>} */ map = new Map();
+		for (const [preset, params] of typedEntries(this.default)) {
+			map.set(preset, new BlockPreset(preset, [preset], params));
+		}
+		return map;
+	}
+
+	/**
+	 * @param {AjaxBlockConfigStore} configStore
+	 * @returns {OO.ui.MenuOptionWidget[]}
+	 */
+	static createMenuOptions(configStore) {
+		const /** @type {OO.ui.MenuOptionWidget[]} */ options = [];
+		for (const [name, instance] of configStore.getPresets('merged')) {
+			options.push(
+				new OO.ui.MenuOptionWidget({
+					label: BlockPreset.getDisplayName(name),
+					data: instance,
+				})
+			);
+		}
+		return options;
+	}
+
+}
+/**
+ * @type {Record<NonNullable<BlockTargetType>, ParamApplierBlockParams>}
+ */
+BlockPreset.default = {
+	named: {
+		expiry: EXPIRY_INFINITE,
+		reason: '',
+		hardblock: false,
+		nocreate: true,
+		autoblock: true,
+		noemail: false,
+		hidden: false,
+		nousertalk: false,
+		partial: false,
+		pagerestrictions: [],
+		namespacerestrictions: [],
+		actionrestrictions: [],
+		watchuser: false,
+		watchlistexpiry: EXPIRY_INFINITE,
+	},
+	temp: {
+		expiry: '3 months',
+		reason: '',
+		hardblock: false,
+		nocreate: true,
+		autoblock: true,
+		noemail: false,
+		hidden: false,
+		nousertalk: false,
+		partial: false,
+		pagerestrictions: [],
+		namespacerestrictions: [],
+		actionrestrictions: [],
+		watchuser: false,
+		watchlistexpiry: EXPIRY_INFINITE,
+	},
+	ip: {
+		expiry: '1 week',
+		reason: '',
+		hardblock: false,
+		nocreate: true,
+		autoblock: false,
+		noemail: false,
+		hidden: false,
+		nousertalk: false,
+		partial: false,
+		pagerestrictions: [],
+		namespacerestrictions: [],
+		actionrestrictions: [],
+		watchuser: false,
+		watchlistexpiry: EXPIRY_INFINITE,
+	},
+};
 /**
  * @requires mediawiki.user This class must not depend on any other modules
  */
@@ -6165,21 +6556,9 @@ class AjaxBlockConfigStore {
 
 	/**
 	 * @param {AjaxBlockConfigDomains | 'merged'} format
+	 * @returns {Map<string, BlockPreset>}
 	 */
 	getPresets(format) {
-		if (format === 'merged') {
-			const ret = /** @type {Record<string, ParamApplierBlockParams>} */ (Object.create(null));
-
-			// Merge local and global presets by overriding the latter
-			// TODO: This should be moved to the constructor
-			for (const cfg of [this.presets.global, this.presets.local]) {
-				for (const [preset, params] of Object.entries(cfg)) {
-					ret[preset] = params;
-				}
-			}
-
-			return ret;
-		}
 		if (format in this.presets) {
 			return this.presets[format];
 		}
@@ -6292,16 +6671,21 @@ class AjaxBlockConfig {
 			return;
 		}
 
-		const $content = $(content).addClass('ajaxblock-config-content');
-		new AjaxBlockConfig(initializer, $content);
+		const ajaxBlockConfig = new AjaxBlockConfig(initializer);
+		const paramApplierPromises = [
+			...ajaxBlockConfig.localDialogOptions.blockPresetOptions.getFields().map(field => field.paramApplierPromise),
+			...ajaxBlockConfig.globalDialogOptions.blockPresetOptions.getFields().map(field => field.paramApplierPromise)
+		];
+		$.when(...paramApplierPromises).then(() => {
+			$(content).addClass('ajaxblock-config-content').empty().append(ajaxBlockConfig.$element);
+		});
 	}
 
 	/**
 	 * @param {FullInitializer} initializer
-	 * @param {JQuery<Element>} $content
 	 * @private
 	 */
-	constructor(initializer, $content) {
+	constructor(initializer) {
 		/**
 		 * @type {AjaxBlockConfigLanguageOptions}
 		 * @readonly
@@ -6361,11 +6745,17 @@ class AjaxBlockConfig {
 			framed: false
 		}).addTabPanels(panels, 0);
 
+		/**
+		 * @type {JQuery<HTMLElement}
+		 * @readonly
+		 */
+		this.$element = index.$element;
+
 		// const $overlay = $('<div>').addClass('sr-config-overlay').hide();
-		$content.empty().append(
+		// $content.empty().append(
 			// $overlay,
-			index.$element
-		);
+		// 	index.$element
+		// );
 		// 	.css({ position: 'relative' });
 
 		// const miscTab = new SelectiveRollbackConfigMisc($overlay);
@@ -6455,7 +6845,6 @@ class AjaxBlockConfig {
 		const onChange = OO.ui.debounce(updateReasons, 1000);
 		this.globalDialogOptions.blockReasonOptions.getTextInput().on('change', onChange);
 		this.localDialogOptions.blockReasonOptions.getTextInput().on('change', onChange);
-
 	}
 
 }
@@ -6910,7 +7299,7 @@ class AjaxBlockConfigDialogOptions {
 		 * @type {AjaxBlockConfigBlockPresetOptions}
 		 * @readonly
 		 */
-		this.blockPresetOptions = new AjaxBlockConfigBlockPresetOptions(initializer);
+		this.blockPresetOptions = new AjaxBlockConfigBlockPresetOptions(initializer, domain);
 		/**
 		 * @type {AjaxBlockConfigCustomReasonOptions}
 		 * @readonly
@@ -6935,8 +7324,9 @@ class AjaxBlockConfigBlockPresetOptions {
 
 	/**
 	 * @param {FullInitializer} initializer
+	 * @param {AjaxBlockConfigDomains} domain
 	 */
-	constructor(initializer) {
+	constructor(initializer, domain) {
 		/**
 		 * @type {FullInitializer}
 		 * @readonly
@@ -6957,13 +7347,14 @@ class AjaxBlockConfigBlockPresetOptions {
 			$element: $('<div>').addClass('ajaxblock-config-fields--constrained'),
 		});
 
-		for (const [key, params] of typedEntries(AjaxBlockConfigBlockPresetOptions.systemDefined)) {
+		for (const [key, params] of typedEntries(BlockPreset.default)) {
 			this.addField({
 				collapsed: true,
 				presetName: key,
 				targets: [key],
 				lockPreset: true,
 				params,
+				domain,
 			});
 		}
 
@@ -7017,16 +7408,13 @@ class AjaxBlockConfigBlockPresetOptions {
 	}
 
 	/**
-	 * @param {BlockPresetOptionsFieldOptions & { params?: ParamApplierBlockParams; }} [options]
+	 * @param {BlockPresetOptionsFieldOptions} [options]
 	 * @private
 	 */
 	addField(options = {}) {
 		const field = new AjaxBlockConfigBlockPresetOptionsField(this.initializer, options);
 		this.fields.push(field);
 		this.fieldContainer.$element.append(field.$container);
-		if (options.params) {
-			ParamApplier.applyBlockParams(options.params, field);
-		}
 	}
 
 	getFields() {
@@ -7034,16 +7422,17 @@ class AjaxBlockConfigBlockPresetOptions {
 	}
 
 	/**
-	 * @param {Record<string, ParamApplierBlockParams>} [localCfg]
-	 * @param {Record<string, ParamApplierBlockParams>} [globalCfg]
+	 * @param {BlockPresetJson[]} [localCfg]
+	 * @param {BlockPresetJson[]} [globalCfg]
 	 * @param {AjaxBlockLegacyConfigLocal} [legacyCfg]
-	 * @returns {Record<AjaxBlockConfigDomains, Record<string, ParamApplierBlockParams>>}
+	 * @returns {Record<AjaxBlockConfigDomains | 'merged', Map<string, BlockPreset>>}
 	 */
 	static getMerged(localCfg, globalCfg, legacyCfg) {
 		/** @type {ReturnType<typeof AjaxBlockConfigBlockPresetOptions.getMerged>} */
 		const ret = {
-			local: Object.create(null),
-			global: Object.create(null),
+			local: BlockPreset.getDefaultAsMap(),
+			global: BlockPreset.getDefaultAsMap(),
+			merged: BlockPreset.getDefaultAsMap(),
 		};
 
 		if (legacyCfg) {
@@ -7051,75 +7440,31 @@ class AjaxBlockConfigBlockPresetOptions {
 				const block = Object.assign({}, obj, { hidden: !!obj.hidden });
 				const params = ParamApplier.createBlockParamsFromApiResponse(block);
 				const preset = key === 'user' ? 'named' : key;
-				ret.local[preset] = params;
+				ret.local.set(preset, new BlockPreset(preset, [preset], params));
 			}
 		}
 
-		for (const [domain, cfg] of typedEntries({ local: localCfg, global: globalCfg })) {
-			if (!cfg) {
+		for (const [domain, presetData] of typedEntries({ local: localCfg, global: globalCfg })) {
+			if (!presetData) {
 				continue;
 			}
-			ret[domain] = cfg;
+			for (const json of presetData) {
+				ret[domain].set(json.name, new BlockPreset(json));
+			}
+		}
+
+		// Merge: global -> local (local overrides)
+		for (const [preset, instance] of ret.global) {
+			ret.merged.set(preset, instance);
+		}
+		for (const [preset, instance] of ret.local) {
+			ret.merged.set(preset, instance);
 		}
 
 		return ret;
 	}
 
-
 }
-/**
- * @type {Record<'named' | 'temp' | 'ip', ParamApplierBlockParams>}
- */
-AjaxBlockConfigBlockPresetOptions.systemDefined = {
-	named: {
-		expiry: EXPIRY_INFINITE,
-		reason: '',
-		hardblock: false,
-		nocreate: true,
-		autoblock: true,
-		noemail: false,
-		hidden: false,
-		nousertalk: false,
-		partial: false,
-		pagerestrictions: [],
-		namespacerestrictions: [],
-		actionrestrictions: [],
-		watchuser: false,
-		watchlistexpiry: EXPIRY_INFINITE,
-	},
-	temp: {
-		expiry: '3 months',
-		reason: '',
-		hardblock: false,
-		nocreate: true,
-		autoblock: true,
-		noemail: false,
-		hidden: false,
-		nousertalk: false,
-		partial: false,
-		pagerestrictions: [],
-		namespacerestrictions: [],
-		actionrestrictions: [],
-		watchuser: false,
-		watchlistexpiry: EXPIRY_INFINITE,
-	},
-	ip: {
-		expiry: '1 week',
-		reason: '',
-		hardblock: false,
-		nocreate: true,
-		autoblock: false,
-		noemail: false,
-		hidden: false,
-		nousertalk: false,
-		partial: false,
-		pagerestrictions: [],
-		namespacerestrictions: [],
-		actionrestrictions: [],
-		watchuser: false,
-		watchlistexpiry: EXPIRY_INFINITE,
-	},
-};
 
 class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 
@@ -7133,7 +7478,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		const {
 			collapsed = false,
 			presetName = '',
-			targets = typedKeys(AjaxBlockConfigBlockPresetOptions.systemDefined),
+			targets = typedKeys(BlockPreset.default),
 			lockPreset = false,
 		} = options;
 
@@ -7224,6 +7569,16 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			this.$element
 		);
 
+		/**
+		 * @type {JQuery.Promise<void>}
+		 * @readonly
+		 */
+		this.paramApplierPromise = options.params
+			? ParamApplier.applyBlockParams(options.params, this, {
+				context: { preset: options.presetName, domain: options.domain },
+			})
+			: $.Deferred().resolve().promise();
+
 		this.registerEvents();
 	}
 
@@ -7276,7 +7631,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			this.setHideUserLocked(true);
 		} else {
 			this.setHideUserLocked(false);
-			this.setHideUserAvailability(!this.partialBlock.isSelected() && this.getExpiry() === EXPIRY_INFINITE);
+			this.setHideUserAvailability(!this.cbPartialBlock.isSelected() && this.getExpiry() === EXPIRY_INFINITE);
 		}
 
 		return this;
@@ -7305,6 +7660,32 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		return this;
 	}
 
+	/**
+	 * @returns {BlockPresetJson}
+	 */
+	build() {
+		return {
+			name: this.getFieldName(),
+			targets: this.getTargets(),
+			params: {
+				expiry: this.getExpiry(),
+				reason: this.getReason(),
+				hardblock: this.cbHardblock.isSelected(),
+				nocreate: this.cbCreateAccount.isSelected(),
+				autoblock: this.cbAutoblock.isSelected(),
+				noemail: this.cbSendEmail.isSelected(),
+				hidden: this.cbHideUser.isSelected(),
+				nousertalk: this.cbUserTalk.isSelected(),
+				partial: this.cbPartialBlock.isSelected(),
+				pagerestrictions: this.getPageRestrictions(),
+				namespacerestrictions: this.getNamespaceRestrictions(),
+				actionrestrictions: this.getActionRestrictions(),
+				watchuser: this.getWatchUser(),
+				watchlistexpiry: this.getWatchlistExpiry(),
+			},
+		};
+	}
+
 }
 
 /**
@@ -7313,10 +7694,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 class CollapsibleFieldset {
 
 	constructor(collapsed = true, presetName = '') {
-		if (presetName in AjaxBlockConfigBlockPresetOptions.systemDefined) {
-			// @ts-expect-error
-			presetName = Messages.get(`ajaxblock-config-label-presetreasons-target-${presetName}`);
-		}
+		presetName = BlockPreset.getDisplayName(presetName);
 
 		/**
 		 * @type {JQuery<HTMLElement>}
@@ -7770,7 +8148,10 @@ AjaxBlockLogo.svg =
  * @typedef {import('./window/AjaxBlock').ParamApplierBlockParams} ParamApplierBlockParams
  * @typedef {import('./window/AjaxBlock').ParamApplierUnblockParams} ParamApplierUnblockParams
  * @typedef {import('./window/AjaxBlock').BlockParamApplierHandler} BlockParamApplierHandler
- * @typedef {import('./window/AjaxBlock').BlockParamApplierOptions} BlockParamApplierOptions
+ * @typedef {import('./window/AjaxBlock').BlockParamApplierHookOptions} BlockParamApplierHookOptions
+ * @typedef {import('./window/AjaxBlock').BlockParamApplierContextOptions} BlockParamApplierContextOptions
+ * @typedef {import('./window/AjaxBlock').BlockParamApplierInvalidRestrictionMap} BlockParamApplierInvalidRestrictionMap
+ * @typedef {import('./window/AjaxBlock').BlockPresetJson} BlockPresetJson
  * @typedef {import('./window/AjaxBlock').AjaxBlockLanguages} AjaxBlockLanguages
  * @typedef {import('./window/AjaxBlock').AjaxBlockConfigVersions} AjaxBlockConfigVersions
  * @typedef {import('./window/AjaxBlock').AjaxBlockConfigDomains} AjaxBlockConfigDomains

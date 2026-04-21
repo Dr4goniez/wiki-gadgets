@@ -245,6 +245,8 @@ export interface AjaxBlockMessages {
 	'ajaxblock-dialog-button-label-unblock': string;
 	'ajaxblock-dialog-button-label-docs': string;
 	'ajaxblock-dialog-button-label-config': string;
+	'ajaxblock-dialog-block-placeholder-preset': string;
+	'ajaxblock-notify-block-placeholder-preset': string;
 	'ajaxblock-dialog-block-label-reason1': string;
 	'ajaxblock-dialog-block-label-reason2': string;
 	'ajaxblock-dialog-block-label-customreasons': string;
@@ -271,8 +273,10 @@ export interface AjaxBlockMessages {
 	'ajaxblock-notify-error-noblocklinks': string;
 	'ajaxblock-notify-error-cannotopendialog': string;
 	'ajaxblock-notify-error-cannotopendialog-oneclick': string;
-	'ajaxblock-notify-warning-invalidparamvalue-pages': string;
-	'ajaxblock-notify-warning-invalidparamvalue-namespaces': string;
+	'ajaxblock-notify-error-paramapplier-presetsnotready': string;
+	'ajaxblock-notify-warning-paramapplier-filtered-top': string;
+	'ajaxblock-notify-warning-paramapplier-filtered-pages': string;
+	'ajaxblock-notify-warning-paramapplier-filtered-namespaces': string;
 	'ajaxblock-confirm-block-noreason': string;
 	'ajaxblock-confirm-block-noexpiry': string;
 	'ajaxblock-confirm-block-hardblock': string;
@@ -578,7 +582,7 @@ export interface BlockParamApplierHandler {
  * overlays, or additional side effects) without coupling the applier to a
  * specific implementation such as `BlockUser`.
  */
-export interface BlockParamApplierOptions {
+export interface BlockParamApplierHookOptions {
 	/**
 	 * Called after all synchronous parameter setters have been applied.
 	 *
@@ -598,12 +602,54 @@ export interface BlockParamApplierOptions {
 	/**
 	 * Called after all asynchronous parameter setters have finished.
 	 *
-	 * @param errors An array of jQuery error elements returned from failed
-	 * Promise chains.
-	 *
 	 * Typically used to clear pending UI state and optionally surface errors.
 	 */
-	onAfterPromise?: (errors: JQuery<HTMLElement>[]) => void;
+	onAfterPromise?: () => void;
+	/**
+	 * If provided, translate target-dependent boolean values (e.g., coerce the
+	 * "hardblock" parameter to `fase` for non-IP targets).
+	 */
+	targetType?: NonNullable<BlockTargetType>;
+}
+
+/**
+ * Contextual metadata for `ParamApplier.applyBlockParams`.
+ *
+ * This object provides optional information used when generating user-facing
+ * notifications (e.g. warnings about filtered or invalid restrictions).
+ * It does not affect how parameters are applied—only how related messages
+ * are presented.
+ */
+export interface BlockParamApplierContextOptions {
+	/**
+	 * Name of the preset being applied.
+	 *
+	 * When provided, this will be displayed in notifications to help identify
+	 * the source of the applied parameters.
+	 */
+	preset?: string;
+	/**
+	 * Domain or configuration category associated with the preset.
+	 *
+	 * Used to append additional contextual information (e.g. tab labels)
+	 * in notifications.
+	 */
+	domain?: AjaxBlockConfigDomains;
+	/**
+	 * Whether to prepend the script name (e.g. "AjaxBlock") to notifications.
+	 *
+	 * Useful for distinguishing messages originating from this script when
+	 * multiple tools may emit notifications.
+	 */
+	scriptName?: boolean;
+}
+
+export type BlockParamApplierInvalidRestrictionMap = Partial<Record<'pages' | 'namespaces', Set<string>>>;
+
+export interface BlockPresetJson {
+	name: string;
+	targets: NonNullable<BlockTargetType>[];
+	params: ParamApplierBlockParams;
 }
 
 export type AjaxBlockLanguages = 'en' | 'ja';
@@ -688,9 +734,10 @@ export type WarningKeys =
 export type AjaxBlockWarningConfig = Record<WarningKeys, Record<WarningContext, boolean>>;
 
 export interface BlockPresetOptionsFieldOptions {
-	$overlay?: JQuery<HTMLElement>;
 	collapsed?: boolean;
 	presetName?: string;
 	targets?: NonNullable<BlockTargetType>[];
 	lockPreset?: boolean;
+	domain?: AjaxBlockConfigDomains;
+	params?: ParamApplierBlockParams;
 }
