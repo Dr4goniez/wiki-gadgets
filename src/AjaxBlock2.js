@@ -5561,7 +5561,7 @@ class BlockLog {
 		const logline = Messages.get(key, parameters);
 		const comment = parsedcomment && Messages.plain('parentheses', [parsedcomment]);
 		const idLink = Messages.plain('parentheses', [
-			`<b>${BlockTarget.createBlockListLink(blockId).outerHTML}</b>`
+			`<b>#${BlockTarget.createBlockListLink(blockId).outerHTML}</b>`
 		]);
 
 		const ret = [timestamp, logline, comment, idLink].filter(Boolean);
