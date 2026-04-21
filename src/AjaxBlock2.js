@@ -45,7 +45,6 @@ if (wgCanonicalSpecialPageName === 'Block' || wgCanonicalSpecialPageName === 'Un
 	return;
 }
 
-const wgUserLanguage = mw.config.get('wgUserLanguage');
 const wgUserName = /** @type {string} */ (mw.config.get('wgUserName'));
 const wgNamespaceIds = mw.config.get('wgNamespaceIds');
 let wgEnableMultiBlocks = false;
@@ -72,7 +71,7 @@ class AjaxBlock {
 				format: 'json',
 				formatversion: '2',
 				errorformat: 'html',
-				errorlang: wgUserLanguage,
+				errorlang: configStore.getLanguage(),
 				errorsuselocal: true,
 			}
 		});
@@ -2271,67 +2270,72 @@ class Messages {
 	static loadInternalMessages(configStore) {
 		const lang = configStore.getLanguage();
 		const i18n = Messages.i18n[lang];
-		mw.messages.set(/** @type {any} */ (i18n));
+		if (lang === mw.config.get('wgUserLanguage')) {
+			// If AjaxBlock's interface language matches wgUserLanguage, reuse mw.messages
+			// as the internal message store. Otherwise, use an independent mw.Map instance,
+			// since we should not reuse messages already loaded for wgUserLanguage when
+			// they differ from AjaxBlock's interface language.
+			Messages.map = mw.messages;
+		}
+		Messages.map.set(/** @type {any} */ (i18n));
 	}
 
 	/**
-	 * Loads a set of messages via the MediaWiki API and adds them to `mw.messages`,
-	 * but only if they are missing or depend on other missing `{{int:...}}` messages.
+	 * Loads a set of messages via the MediaWiki API and stores them in `Messages.map`.
+	 * Missing messages and any nested `{{int:...}}` dependencies are fetched recursively.
 	 *
-	 * Unlike `mw.Api.loadMessagesIfMissing`, this version supports API continuation
-	 * using batches of 500 messages per request (instead of 50), improving performance.
+	 * All successfully loaded (and parsed) messages are cached in local storage.
 	 *
 	 * @param {Initializer} initializer
 	 * @param {(keyof MediaWikiMessages)[]} messages List of message keys to ensure they are available.
 	 * @returns {JQuery.Promise<boolean>} Resolves to `true` if any new messages were added; otherwise `false`.
 	 */
 	static loadMessagesIfMissing(initializer, messages) {
-		/**
-		 * Messages that are missing and need to be fetched
-		 * @type {Set<string>}
-		 */
-		const missingMessages = new Set();
-		/**
-		 * Message keys from the input that contain `{{int:...}}` and need re-parsing after dependencies are loaded
-		 * @type {Set<string>}
-		 */
-		const containsInt = new Set();
+		const userLang = initializer.configStore.getLanguage();
+		const storageKey = this.storageKey + '-' + userLang;
 
-		// Retrieve cached messages if there's any
-		const storageKey = this.storageKey + '-' + initializer.configStore.getLanguage();
+		// Hydrate cache
 		/** @type {Record<string, string> | false | null} */
 		const cached = mw.storage.getObject(storageKey);
 		if (cached && Object.values(cached).every(val => typeof val === 'string')) {
-			mw.messages.set(cached);
+			this.map.set(cached);
 		}
 
+		const /** @type {Set<string>} */ queue = new Set();
+		const /** @type {Set<string>} */ seen = new Set();
+		const /** @type {Set<string>} */ containsInt = new Set();
+
+		// Seed queue
 		for (const key of messages) {
-			/** @type {?string} */
-			const msg = mw.messages.get(key);
+			const msg = this.map.get(key);
 
 			if (msg !== null) {
-				// Parse `{{int:...}}` and track unresolved dependencies
+				// Resolve `{{int:...}}` and collect any missing dependencies
 				const unparsed = this.parseInt(msg, key);
 				if (unparsed.size > 0) {
 					containsInt.add(key);
 					for (const dep of unparsed) {
-						missingMessages.add(dep);
+						if (!this.map.exists(dep)) {
+							queue.add(dep);
+						}
 					}
 				}
 			} else {
 				// Fully missing message
-				missingMessages.add(key);
+				queue.add(key);
 			}
 		}
 
-		if (!missingMessages.size) {
+		if (!queue.size) {
 			return $.Deferred().resolve(false).promise();
 		}
 
 		const apilimit = initializer.permissionManager.getApiLimit();
+		const /** @type {Record<string, string>} */ loadedMessages = Object.create(null);
+
 		return (
 			/**
-			 * Recursively loads missing messages in batches of up to 500.
+			 * Recursively loads missing messages in batches, respecting the API limit.
 			 *
 			 * @param {string[]} keys List of message keys to load.
 			 * @param {number} index Starting index for the current batch.
@@ -2339,6 +2343,7 @@ class Messages {
 			 */
 			function execute(keys, index) {
 				const batch = keys.slice(index, index + apilimit);
+
 				let request, ajaxOptions;
 				if (batch.length <= 50) {
 					request = AjaxBlock.api.get.bind(AjaxBlock.api);
@@ -2351,24 +2356,33 @@ class Messages {
 				return request({
 					meta: 'allmessages',
 					ammessages: batch,
-					amlang: wgUserLanguage,
+					amlang: userLang,
 				}, ajaxOptions).then(/** @param {ApiResponse} res */ (res) => {
 					const allmessages = res && res.query && res.query.allmessages || [];
 					let added = false;
-					/** @type {Set<string>} */
-					const containsIntAndMissing = new Set();
 
 					for (const { name, content, missing } of allmessages) {
-						if (!missing && content) {
-							// Add to mw.messages; track whether any new message was added
-							added = mw.messages.set(name, content) || added;
+						if (seen.has(name)) {
+							continue;
+						}
+						seen.add(name);
 
+						if (!missing && content) {
+							// Add to Messages.map; track whether any new message was added
+							added = Messages.map.set(name, content) || added;
+
+							// Parse and store final value
 							const unparsed = Messages.parseInt(content, name);
+							const finalValue = Messages.map.get(name);
+							if (finalValue !== null) {
+								loadedMessages[name] = finalValue;
+							}
+
 							if (unparsed.size > 0) {
 								containsInt.add(name);
 								for (const dep of unparsed) {
-									if (!mw.messages.exists(dep)) {
-										containsIntAndMissing.add(dep);
+									if (!Messages.map.exists(dep) && !seen.has(dep)) {
+										keys.push(dep);
 									}
 								}
 							}
@@ -2379,44 +2393,34 @@ class Messages {
 
 					index += apilimit;
 
-					// Recursively process messages that contain {{int:...}}
-					if (containsIntAndMissing.size) {
-						if (keys[index] === undefined) {
-							let i = index;
-							for (const key of containsIntAndMissing) {
-								keys[i] = key;
-								i++;
-							}
-						} else {
-							keys.push(...containsIntAndMissing);
-						}
-						for (const el of containsIntAndMissing) {
-							missingMessages.add(el);
-						}
-					}
-
 					if (keys[index] !== undefined) {
 						// More messages to load
 						return execute(keys, index);
 					}
 
-					// Re-parse original messages that contained unresolved `{{int:...}}`
+					// Re-parse messages that had dependencies
 					for (const key of containsInt) {
-						const msg = mw.messages.get(key);
+						const msg = Messages.map.get(key);
 						if (msg !== null) {
 							Messages.parseInt(msg, key);
 						}
 					}
 
-					// Save cache
-					const newCache = Object.create(null);
-					for (const key of missingMessages) {
-						/** @type {?string} */
-						const value = mw.messages.get(key);
+					// Merge and save cache
+					const newCache = Object.assign(
+						{},
+						cached && typeof cached === 'object' ? cached : null,
+						loadedMessages
+					);
+
+					// Ensure requested messages are included
+					for (const key of messages) {
+						const value = Messages.map.get(key);
 						if (value !== null) {
 							newCache[key] = value;
 						}
 					}
+
 					if (!$.isEmptyObject(newCache)) {
 						mw.storage.setObject(storageKey, newCache, daysInSeconds(1));
 					}
@@ -2424,16 +2428,16 @@ class Messages {
 					return added;
 				});
 			}
-		)(Array.from(missingMessages), 0);
+		)(Array.from(queue), 0);
 	}
 
 	/**
 	 * Parses a message string and replaces any `{{int:messageKey}}` magic words with
-	 * resolved messages from `mw.messages`, if available. If not available, the message
-	 * key is returned so it can be loaded later.
+	 * resolved messages from `Messages.map`, if available. If not available, the
+	 * message key is returned so it can be loaded later.
 	 *
-	 * If any substitutions are made, the parsed version is stored in `mw.messages`
-	 * under the original key.
+	 * If any substitutions are made, the parsed version is stored back into
+	 * `Messages.map` under the original key.
 	 *
 	 * @param {string} msg The raw message string to parse.
 	 * @param {string} key The message key associated with `msg`.
@@ -2448,7 +2452,7 @@ class Messages {
 		msg = msg.replace(/\{\{\s*int:([^}]+)\}\}/g, /** @param {string} rawKey */ (match, rawKey) => {
 			const parsedKey = this.lcFirst(clean(rawKey));
 			/** @type {?string} */
-			const replacement = mw.messages.get(parsedKey);
+			const replacement = this.map.get(parsedKey);
 			if (replacement !== null) {
 				return replacement;
 			} else {
@@ -2459,14 +2463,14 @@ class Messages {
 
 		// Update the message only if it was modified
 		if (msg !== original) {
-			mw.messages.set(key, msg);
+			this.map.set(key, msg);
 		}
 
 		return missingKeys;
 	}
 
 	/**
-	 * Gets an interface message.
+	 * Gets an interface message from `Messages.map`.
 	 *
 	 * @template {keyof LoadedMessages} K
 	 * @param {K} key Key of the message to retrieve.
@@ -2481,7 +2485,7 @@ class Messages {
 	 */
 	static get(key, params = [], options = {}) {
 		const { method = 'text', restoreTags = false } = options;
-		let ret = mw.message(key, ...params)[method]();
+		let ret = new mw.Message(this.map, key, params)[method]();
 		const unparsable = Array.from(ret.match(/⧼[^⧽]+⧽/g) || []);
 		if (unparsable.length) {
 			throw new Error('Encountered unparsable message(s): ' + unparsable.join(', '));
@@ -2942,6 +2946,15 @@ Messages.storageKey = 'mw-AjaxBlock-messages';
  * @type {CachedMessage}
  */
 Messages.cache = Object.create(null);
+/**
+ * Internal message store abstraction.
+ *
+ * This may either reference `mw.messages` or an independent `mw.Map` depending on the interface language.
+ * See also {@link Messages.loadInternalMessages}.
+ *
+ * @type {mw.Map<Record<string, string>>}
+ */
+Messages.map = new mw.Map();
 
 class DropdownUtil {
 
@@ -5025,6 +5038,7 @@ class TargetField {
 		const username = target.getUsername();
 		const blocks = username ? blockLookup.getBlocksByUsername(username) : null;
 		const blockUser = this.parent instanceof BlockUser ? this.parent : undefined;
+		const configStore = this.parent.initializer.configStore;
 
 		if (id !== null) {
 			const block = blockLookup.getBlockById(id);
@@ -5033,11 +5047,11 @@ class TargetField {
 				if (username && blocks && blocks.length > 1) {
 					// Other blocks also exist
 					this.initInternal(null, username, false, true);
-					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, configStore, { radio: true, blockUser }) };
 				} else if (block.user) {
 					// Unambiguous block
 					this.initInternal(id, block.user, true, true);
-					return { type: 'log', log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, { blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, configStore, { blockUser }) };
 				} else {
 					// Autoblock
 					if (blockUser) {
@@ -5059,7 +5073,7 @@ class TargetField {
 				if (Array.isArray(blocks)) {
 					// If other active blocks exist, allow the user to choose which one to update
 					this.initInternal(null, username, false, true);
-					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, configStore, { radio: true, blockUser }) };
 				} else {
 					// No other active blocks
 					if (blockUser) {
@@ -5084,11 +5098,11 @@ class TargetField {
 				if (blocks.length > 1) {
 					// Multiple active blocks
 					this.initInternal(null, username, false, true);
-					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, configStore, { radio: true, blockUser }) };
 				} else {
 					// Single active block
 					this.initInternal(blocks[0].id, username, true, true);
-					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, configStore, { blockUser }) };
 				}
 			} else {
 				// No active blocks
@@ -5216,6 +5230,7 @@ class BlockLog {
 	/**
 	 * @param {string} username
 	 * @param {BlockLookup} blockLookup
+	 * @param {AjaxBlockConfigStore} configStore
 	 * @param {object} [options]
 	 * @param {boolean} [options.radio] Whether to use OO.ui.RadioSelectWidget in the logs:
 	 * - `true`: Returns `OO.ui.RadioOptionWidget[]` with no option selected so that
@@ -5226,7 +5241,7 @@ class BlockLog {
 	 * @returns {JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement> | null>}
 	 * `null` if the user does not have any active blocks.
 	 */
-	static generate(username, blockLookup, options = {}) {
+	static generate(username, blockLookup, configStore, options = {}) {
 		const { radio = false, blockUser } = options;
 
 		const currentBlocks = blockLookup.getBlocksByUsername(username);
@@ -5242,7 +5257,7 @@ class BlockLog {
 
 		return $.when(
 			blockLookup.refreshDataByUsername(username),
-			this.getEntries(username)
+			this.getEntries(username, configStore)
 		).then((blocks, logevents) => {
 			if (blocks === null) {
 				return null;
@@ -5308,11 +5323,12 @@ class BlockLog {
 
 	/**
 	 * @param {string} username
+	 * @param {AjaxBlockConfigStore} configStore
 	 * @param {number} [earliestTimestamp]
 	 * @returns {JQuery.Promise<ApiResponseQueryListLogevents[]>}
 	 * @private
 	 */
-	static getEntries(username, earliestTimestamp) {
+	static getEntries(username, configStore, earliestTimestamp) {
 		return AjaxBlock.api.get({
 			list: 'logevents',
 			leprop: 'user|type|timestamp|parsedcomment|details',
@@ -5320,7 +5336,7 @@ class BlockLog {
 			leend: earliestTimestamp,
 			letitle: `User:${username}`,
 			lelimit: 'max',
-			uselang: wgUserLanguage
+			uselang: configStore.getLanguage(),
 		}).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
 			if (res && res.query && res.query.logevents) {
 				return res.query.logevents;
@@ -6494,7 +6510,7 @@ class AjaxBlockConfigStore {
 	constructor() {
 		const legacy = AjaxBlockConfigStore.getLegacy();
 
-		const userLang = /** @type {AjaxBlockLanguages} */ (wgUserLanguage.replace(/-.*$/, ''));
+		const userLang = /** @type {AjaxBlockLanguages} */ (mw.config.get('wgUserLanguage').replace(/-.*$/, ''));
 		/**
 		 * @type {AjaxBlockLanguageConfig}
 		 * @readonly
