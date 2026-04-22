@@ -6762,7 +6762,7 @@ class AjaxBlockConfig {
 		}).addTabPanels(panels, 0);
 
 		/**
-		 * @type {JQuery<HTMLElement}
+		 * @type {JQuery<HTMLElement>}
 		 * @readonly
 		 */
 		this.$element = index.$element;
