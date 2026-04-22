@@ -360,6 +360,7 @@ export interface MediaWikiMessages {
 	'ipboptions': string;
 	'ipbother': string;
 	'ipbreason-dropdown': string;
+	'ipbreason-indef-dropdown': string;
 	'htmlform-selectorother-other': string;
 	'block-reason-other': string;
 
@@ -432,9 +433,10 @@ export interface MediaWikiMessages {
 export interface LoadedMessages extends AjaxBlockMessages, MediaWikiMessages {}
 
 export interface CachedMessage {
-	'ipbreason-dropdown': readonly Record<string, string | Record<string, string>>;
-	'ipboptions': readonly Map<string, string>;
-	'watchlist-expiry-options': readonly Map<string, string>;
+	'ipbreason-dropdown': Record<string, string | Record<string, string>>;
+	'ipbreason-indef-dropdown': Record<string, string | Record<string, string>>;
+	'ipboptions': Map<string, string>;
+	'watchlist-expiry-options': Map<string, string>;
 }
 
 export type BlockTargetType = 'ip' | 'temp' | 'named' | null;

@@ -545,6 +545,7 @@ class AjaxBlock {
 				'ipboptions',
 				'ipbother',
 				'ipbreason-dropdown',
+				'ipbreason-indef-dropdown',
 				'htmlform-selectorother-other',
 				'block-reason-other',
 
@@ -2538,16 +2539,16 @@ class Messages {
 	}
 
 	/**
-	 * Parses the `ipbreason-dropdown` message to an array of `OO.ui.MenuOptionWidget` instances.
+	 * Parses an `ipbreason` message and returns an array of `OO.ui.MenuOptionWidget` instances.
 	 *
+	 * @param {'ipbreason-dropdown' | 'ipbreason-indef-dropdown'} msgKey
 	 * @returns {OO.ui.MenuOptionWidget[]}
 	 */
-	static parseBlockReasonDropdown() {
+	static parseBlockReasonDropdown(msgKey) {
 		// Adapted from Html::listDropdownOptions
-		let /** @type {CachedMessage['ipbreason-dropdown']} */ options = Object.create(null);
+		let /** @type {Record<string, string | Record<string, string>>} */ options = Object.create(null);
 		let /** @type {string | false} */ optgroup = false;
 
-		const msgKey = 'ipbreason-dropdown';
 		if (this.cache[msgKey]) {
 			options = this.cache[msgKey];
 		} else {
@@ -2601,6 +2602,10 @@ class Messages {
 			}
 		}
 		return items;
+	}
+
+	static supportsIndefReasonDropdown() {
+		return this.map.exists('ipbreason-indef-dropdown');
 	}
 
 	/**
@@ -3819,6 +3824,8 @@ class BlockField extends WatchUserField {
 		const { onResize = () => {}, omitMainLabel = false } = options;
 		super(initializer, onResize);
 
+		const supportsIndefReasonDropdown = Messages.supportsIndefReasonDropdown();
+
 		/**
 		 * @type {OO.ui.DropdownWidget}
 		 * @readonly
@@ -3842,27 +3849,98 @@ class BlockField extends WatchUserField {
 		 * @readonly
 		 * @private
 		 */
-		this.reason1 = new OO.ui.DropdownWidget({
+		this.reasonPrimary = new OO.ui.DropdownWidget({
 			menu: {
-				items: Messages.parseBlockReasonDropdown()
+				items: Messages.parseBlockReasonDropdown('ipbreason-dropdown')
 			}
+		});
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.reasonPrimaryLayout = new OO.ui.FieldLayout(this.reasonPrimary, {
+			classes: ['ajaxblock-horizontalfield'],
+			label: Messages.get('ajaxblock-dialog-block-label-reason1'),
+			align: 'left',
+		});
+		/**
+		 * @type {?OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.reasonPrimaryIndef = supportsIndefReasonDropdown
+			? new OO.ui.DropdownWidget({
+				menu: {
+					items: Messages.parseBlockReasonDropdown('ipbreason-indef-dropdown')
+				}
+			})
+			: null;
+		/**
+		 * @type {?OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.reasonPrimaryIndefLayout = this.reasonPrimaryIndef && new OO.ui.FieldLayout(this.reasonPrimaryIndef, {
+			classes: ['ajaxblock-horizontalfield'],
+			label: Messages.get('ajaxblock-dialog-block-label-reason1'),
+			align: 'left',
 		});
 		/**
 		 * @type {OO.ui.DropdownWidget}
 		 * @readonly
 		 * @private
 		 */
-		this.reason2 = new OO.ui.DropdownWidget({
+		this.reasonSecondary = new OO.ui.DropdownWidget({
 			menu: {
-				items: Messages.parseBlockReasonDropdown()
+				items: Messages.parseBlockReasonDropdown('ipbreason-dropdown')
 			}
 		});
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.reasonSecondaryLayout = new OO.ui.FieldLayout(this.reasonSecondary, {
+			classes: ['ajaxblock-horizontalfield'],
+			label: Messages.get('ajaxblock-dialog-block-label-reason2'),
+			align: 'left',
+		});
+		/**
+		 * @type {?OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.reasonSecondaryIndef = supportsIndefReasonDropdown
+			? new OO.ui.DropdownWidget({
+				menu: {
+					items: Messages.parseBlockReasonDropdown('ipbreason-indef-dropdown')
+				}
+			})
+			: null;
+		/**
+		 * @type {?OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.reasonSecondaryIndefLayout = this.reasonSecondaryIndef && new OO.ui.FieldLayout(this.reasonSecondaryIndef, {
+			classes: ['ajaxblock-horizontalfield'],
+			label: Messages.get('ajaxblock-dialog-block-label-reason2'),
+			align: 'left',
+		});
+		/**
+		 * Tracks which set of reason dropdowns are currently used.
+		 *
+		 * @type {?boolean}
+		 * @private
+		 */
+		this.usingIndefDropdowns = supportsIndefReasonDropdown ? true : null;
 		/**
 		 * @type {OO.ui.TextInputWidget}
 		 * @readonly
 		 * @private
 		 */
-		this.reasonOther = new OO.ui.TextInputWidget({
+		this.reasonCustom = new OO.ui.TextInputWidget({
 			placeholder: Messages.get('block-reason-other'),
 		});
 		/**
@@ -3932,7 +4010,7 @@ class BlockField extends WatchUserField {
 		 */
 		this.mainFieldset = new OO.ui.FieldsetLayout({
 			label: omitMainLabel ? undefined : Messages.get('block'),
-			items: [
+			items: /** @type {OO.ui.FieldLayout<OO.ui.Widget>[]} */ ([
 				new OO.ui.FieldLayout(this.expiry, {
 					classes: ['ajaxblock-horizontalfield'],
 					label: Messages.get('block-expiry'),
@@ -3943,17 +4021,11 @@ class BlockField extends WatchUserField {
 					label: $('<span>'), // Blank label
 					align: 'left',
 				}),
-				new OO.ui.FieldLayout(this.reason1, {
-					classes: ['ajaxblock-horizontalfield'],
-					label: Messages.get('ajaxblock-dialog-block-label-reason1'),
-					align: 'left',
-				}),
-				new OO.ui.FieldLayout(this.reason2, {
-					classes: ['ajaxblock-horizontalfield'],
-					label: Messages.get('ajaxblock-dialog-block-label-reason2'),
-					align: 'left',
-				}),
-				new OO.ui.FieldLayout(this.reasonOther, {
+				this.reasonPrimaryLayout,
+				this.reasonPrimaryIndefLayout,
+				this.reasonSecondaryLayout,
+				this.reasonSecondaryIndefLayout,
+				new OO.ui.FieldLayout(this.reasonCustom, {
 					classes: ['ajaxblock-horizontalfield'],
 					label: $('<span>'),
 					align: 'left',
@@ -3962,9 +4034,8 @@ class BlockField extends WatchUserField {
 					label: Messages.get('ajaxblock-dialog-block-label-partial'),
 					align: 'inline',
 				}),
-				// @ts-expect-error
 				this.partialBlockLayout,
-			],
+			].filter(w => w !== null)),
 		});
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
@@ -4055,10 +4126,35 @@ class BlockField extends WatchUserField {
 			this.cbHideUserContainer,
 		], 0);
 
+		this.initializeFields(onResize);
+	}
+
+
+	/**
+	 * @param {OnResize} onResize
+	 * @private
+	 */
+	initializeFields(onResize) {
+		// Initialize expiry as "infinity"
 		DropdownUtil.selectInfinity(this.expiry);
-		DropdownUtil.selectOther(this.reason1);
-		DropdownUtil.selectOther(this.reason2);
+
+		// Initialize reason dropdowns as "other"
+		DropdownUtil.selectOther(this.reasonPrimary);
+		if (this.reasonPrimaryIndef && this.reasonPrimaryIndefLayout) {
+			this.reasonPrimaryLayout.toggle(false);
+			this.reasonPrimaryIndefLayout.toggle(true);
+			DropdownUtil.selectOther(this.reasonPrimaryIndef);
+		}
+		DropdownUtil.selectOther(this.reasonSecondary);
+		if (this.reasonSecondaryIndef && this.reasonSecondaryIndefLayout) {
+			this.reasonSecondaryLayout.toggle(false);
+			this.reasonSecondaryIndefLayout.toggle(true);
+			DropdownUtil.selectOther(this.reasonSecondaryIndef);
+		}
+
+		// Hide the partial block option layout on load, as cbPartialBlock is deselected
 		this.partialBlockLayout.toggle(false);
+
 		this.setUpEventListeners(onResize);
 		this.insertCustomReasons();
 	}
@@ -4101,26 +4197,30 @@ class BlockField extends WatchUserField {
 			if (selected) {
 				this.expiryOther.setValue('');
 			}
+			this.toggleReasonFields(selected || '');
 			this.refreshHideUserAvailability(); // ipb_expiry_temp
 		});
 
 		this.expiryOther.on('change', (value) => {
-			if (clean(value)) {
+			value = clean(value);
+			value = mw.util.isInfinity(value) ? EXPIRY_INFINITE : value;
+			if (value) {
 				DropdownUtil.selectOther(this.expiry);
 			}
+			this.toggleReasonFields(value);
 			this.refreshHideUserAvailability(); // ipb_expiry_temp
 		});
 	}
 
 	/**
-	 * Refreshes the availability of the {@link cbUserTalk} checkbox.
-	 *
-	 * Relevant rules:
-	 * - `ipb-prevent-user-talk-edit`: Access to the blocked user's own user talk page
-	 *   can be revoked only if the block is sitewide, or partial affecting `NS_USER_TALK`
+	 * Refreshes the enabled state of the {@link cbUserTalk} checkbox.
 	 *
 	 * If the current block settings do not allow user talk access to be revoked,
 	 * the checkbox is unchecked and disabled.
+	 *
+	 * Relevant rules:
+	 * - `ipb-prevent-user-talk-edit`: Access to the blocked user's own user talk page
+	 *   can be revoked only if the block is sitewide, or partially affects `NS_USER_TALK`.
 	 *
 	 * @returns {this}
 	 * @private
@@ -4135,13 +4235,13 @@ class BlockField extends WatchUserField {
 	}
 
 	/**
-	 * Refreshes the availability of the {@link cbHideUser} checkbox.
+	 * Refreshes the enabled state of the {@link cbHideUser} checkbox.
+	 *
+	 * If the current block settings do not allow a "hide user" block, the checkbox is unchecked and disabled.
 	 *
 	 * Relevant rules:
 	 * - `ipb_hide_partial`: A "hide user" block must be sitewide
 	 * - `ipb_expiry_temp`: A "hide user" block must have an indefinite expiry
-	 *
-	 * If unavailable, the checkbox is unchecked and disabled.
 	 *
 	 * @returns {this}
 	 * @protected
@@ -4187,8 +4287,14 @@ class BlockField extends WatchUserField {
 		customReasons = customReasons || this.initializer.configStore.getCustomReasons('block');
 		const groupLabel = Messages.plain('ajaxblock-dialog-block-label-customreasons');
 		const currentReason = this.getReason();
+		const dropdowns = [
+			this.reasonPrimary,
+			this.reasonSecondary,
+			this.reasonPrimaryIndef,
+			this.reasonSecondaryIndef
+		].filter(w => w !== null);
 
-		for (const dropdown of [this.reason1, this.reason2]) {
+		for (const dropdown of dropdowns) {
 			const menu = dropdown.getMenu();
 			const grouped = DropdownUtil.findGroupedOptions(menu, groupLabel);
 
@@ -4251,13 +4357,87 @@ class BlockField extends WatchUserField {
 		return this;
 	}
 
-	getReason() {
+	/**
+	 * @param {string} [expiry] If not provided, {@link getExpiry} is called.
+	 * @returns {this}
+	 * @private
+	 */
+	toggleReasonFields(expiry) {
+		if (
+			!this.reasonPrimaryIndef || !this.reasonPrimaryIndefLayout ||
+			!this.reasonSecondaryIndef || !this.reasonSecondaryIndefLayout ||
+			this.usingIndefDropdowns === null
+		) {
+			// No-op if ipbreason-indef-dropdown is unavailable
+			return this;
+		}
+
+		expiry = expiry === undefined ? this.getExpiry() : expiry;
+		const isInfinity = expiry === EXPIRY_INFINITE;
+		const expirySwitched = (isInfinity && !this.usingIndefDropdowns) || (!isInfinity && this.usingIndefDropdowns);
+		if (!expirySwitched) {
+			return this;
+		}
+
+		const previousReason = this.getReason(this.usingIndefDropdowns ? 'indef' : 'temp');
+
+		this.reasonPrimaryLayout.toggle(!isInfinity);
+		this.reasonPrimaryIndefLayout.toggle(isInfinity);
+		this.reasonSecondaryLayout.toggle(!isInfinity);
+		this.reasonSecondaryIndefLayout.toggle(isInfinity);
+		this.usingIndefDropdowns = isInfinity;
+
+		return this.setReason(previousReason);
+	}
+
+	/**
+	 * Returns the appropriate reason dropdowns based on context.
+	 *
+	 * Priority:
+	 * 1. If `options.type` is provided, it is used directly
+	 * 2. Otherwise, `options.expiry` is used if provided
+	 * 3. Otherwise, {@link getExpiry} is used
+	 *
+	 * @param {object} [options]
+	 * @param {'indef' | 'temp'} [options.type]
+	 * @param {string} [options.expiry]
+	 * @returns {[OO.ui.DropdownWidget, OO.ui.DropdownWidget]}
+	 * @private
+	 */
+	getRelevantReasonDropdowns(options = {}) {
+		if (
+			!this.reasonPrimaryIndef || !this.reasonPrimaryIndefLayout ||
+			!this.reasonSecondaryIndef || !this.reasonSecondaryIndefLayout ||
+			this.usingIndefDropdowns === null
+		) {
+			return [this.reasonPrimary, this.reasonSecondary];
+		}
+
+		switch (options.type) {
+			case 'indef': return [this.reasonPrimaryIndef, this.reasonSecondaryIndef];
+			case 'temp': return [this.reasonPrimary, this.reasonSecondary];
+		}
+
+		const { expiry = this.getExpiry() } = options;
+		if (expiry === EXPIRY_INFINITE) {
+			return [this.reasonPrimaryIndef, this.reasonSecondaryIndef];
+		} else {
+			return [this.reasonPrimary, this.reasonSecondary];
+		}
+	}
+
+	/**
+	 * @param {'indef' | 'temp'} [type] Forces which dropdown set to read from.
+	 * @returns {string}
+	 */
+	getReason(type) {
+		const [reasonPrimary, reasonSecondary] = this.getRelevantReasonDropdowns({ type });
 		const sep = Messages.plain('colon-separator');
 		const main = [
-			DropdownUtil.getSelectedOptionValue(this.reason1),
-			DropdownUtil.getSelectedOptionValue(this.reason2),
+			DropdownUtil.getSelectedOptionValue(reasonPrimary),
+			DropdownUtil.getSelectedOptionValue(reasonSecondary),
 		].filter(Boolean).join(sep);
-		let other = clean(this.reasonOther.getValue());
+		let other = clean(this.reasonCustom.getValue());
 		/**
 		 * Good patterns:
 		 * - `<!---->`
@@ -4285,38 +4465,39 @@ class BlockField extends WatchUserField {
 	 * @return {this}
 	 */
 	setReason(reason) {
+		const [reasonPrimary, reasonSecondary] = this.getRelevantReasonDropdowns();
 		const rSep = new RegExp('^' + mw.util.escapeRegExp(Messages.plain('colon-separator')));
-		let item = DropdownUtil.findItemByCallback(this.reason1, (option) => {
+		let item = DropdownUtil.findItemByCallback(reasonPrimary, (option) => {
 			const data = /** @type {string} */ (option.getData());
 			return data !== '' && reason.startsWith(data);
 		});
 		if (!item) {
-			[this.reason1, this.reason2].forEach((dropdown) => {
+			[reasonPrimary, reasonSecondary].forEach((dropdown) => {
 				DropdownUtil.selectOther(dropdown);
 			});
-			this.reasonOther.setValue(reason);
+			this.reasonCustom.setValue(reason);
 			return this;
 		} else {
-			this.reason1.getMenu().selectItem(item);
+			reasonPrimary.getMenu().selectItem(item);
 			reason = reason
 				.replace(/** @type {string} */ (item.getData()), '')
 				.replace(rSep, '');
 		}
 
-		item = DropdownUtil.findItemByCallback(this.reason2, (option) => {
+		item = DropdownUtil.findItemByCallback(reasonSecondary, (option) => {
 			const data = /** @type {string} */ (option.getData());
 			return data !== '' && reason.startsWith(data);
 		});
 		if (!item) {
-			DropdownUtil.selectOther(this.reason2);
+			DropdownUtil.selectOther(reasonSecondary);
 		} else {
-			this.reason2.getMenu().selectItem(item);
+			reasonSecondary.getMenu().selectItem(item);
 			reason = reason
 				.replace(/** @type {string} */ (item.getData()), '')
 				.replace(rSep, '');
 		}
 
-		this.reasonOther.setValue(reason);
+		this.reasonCustom.setValue(reason);
 		return this;
 	}
 
