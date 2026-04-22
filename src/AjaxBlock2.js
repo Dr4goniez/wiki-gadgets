@@ -3819,9 +3819,6 @@ class BlockField extends WatchUserField {
 		const { onResize = () => {}, omitMainLabel = false } = options;
 		super(initializer, onResize);
 
-		/** @type {OO.ui.Element[]} */
-		let items = [];
-
 		/**
 		 * @type {OO.ui.DropdownWidget}
 		 * @readonly
@@ -3832,15 +3829,6 @@ class BlockField extends WatchUserField {
 				items: DropdownUtil.getDurationMenuOptions('ipboptions'),
 			}
 		});
-		DropdownUtil.selectInfinity(this.expiry);
-		items.push(
-			new OO.ui.FieldLayout(this.expiry, {
-				classes: ['ajaxblock-horizontalfield'],
-				label: Messages.get('block-expiry'),
-				align: 'left',
-			})
-		);
-
 		/**
 		 * @type {OO.ui.TextInputWidget}
 		 * @readonly
@@ -3849,14 +3837,6 @@ class BlockField extends WatchUserField {
 		this.expiryOther = new OO.ui.TextInputWidget({
 			placeholder: Messages.get('ipbother').replace(/[:：]$/, ''),
 		});
-		items.push(
-			new OO.ui.FieldLayout(this.expiryOther, {
-				classes: ['ajaxblock-horizontalfield'],
-				label: $('<span>'), // Blank label
-				align: 'left',
-			})
-		);
-
 		/**
 		 * @type {OO.ui.DropdownWidget}
 		 * @readonly
@@ -3867,15 +3847,6 @@ class BlockField extends WatchUserField {
 				items: Messages.parseBlockReasonDropdown()
 			}
 		});
-		DropdownUtil.selectOther(this.reason1);
-		items.push(
-			new OO.ui.FieldLayout(this.reason1, {
-				classes: ['ajaxblock-horizontalfield'],
-				label: Messages.get('ajaxblock-dialog-block-label-reason1'),
-				align: 'left',
-			})
-		);
-
 		/**
 		 * @type {OO.ui.DropdownWidget}
 		 * @readonly
@@ -3886,15 +3857,6 @@ class BlockField extends WatchUserField {
 				items: Messages.parseBlockReasonDropdown()
 			}
 		});
-		DropdownUtil.selectOther(this.reason2);
-		items.push(
-			new OO.ui.FieldLayout(this.reason2, {
-				classes: ['ajaxblock-horizontalfield'],
-				label: Messages.get('ajaxblock-dialog-block-label-reason2'),
-				align: 'left',
-			})
-		);
-
 		/**
 		 * @type {OO.ui.TextInputWidget}
 		 * @readonly
@@ -3903,38 +3865,11 @@ class BlockField extends WatchUserField {
 		this.reasonOther = new OO.ui.TextInputWidget({
 			placeholder: Messages.get('block-reason-other'),
 		});
-		items.push(
-			new OO.ui.FieldLayout(this.reasonOther, {
-				classes: ['ajaxblock-horizontalfield'],
-				label: $('<span>'),
-				align: 'left',
-			})
-		);
-
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
 		 */
 		this.cbPartialBlock = new OO.ui.CheckboxInputWidget();
-		items.push(
-			new OO.ui.FieldLayout(this.cbPartialBlock, {
-				label: Messages.get('ajaxblock-dialog-block-label-partial'),
-				align: 'inline',
-			})
-		);
-
-		/**
-		 * @type {OO.ui.FieldsetLayout}
-		 * @readonly
-		 * @private
-		 */
-		this.partialBlockLayout = new OO.ui.FieldsetLayout();
-		this.partialBlockLayout.$element.css({ 'margin-left': '1.8em' });
-		this.partialBlockLayout.toggle(this.cbPartialBlock.isSelected());
-
-		/** @type {OO.ui.Element[]} */
-		const partialBlockLayoutItems = [];
-
 		/**
 		 * @type {mw.widgets.TitlesMultiselectWidget}
 		 * @readonly
@@ -3945,13 +3880,6 @@ class BlockField extends WatchUserField {
 			showMissing: false,
 			tagLimit: wgEnableMultiBlocks ? 50 : 10,
 		});
-		partialBlockLayoutItems.push(
-			new OO.ui.FieldLayout(this.partialBlockPages, {
-				label: Messages.get('ipb-pages-label'),
-				align: 'top',
-			})
-		);
-
 		/**
 		 * @type {mw.widgets.NamespacesMultiselectWidget}
 		 * @readonly
@@ -3959,88 +3887,100 @@ class BlockField extends WatchUserField {
 		this.partialBlockNamespaces = new mw.widgets.NamespacesMultiselectWidget({
 			placeholder: Messages.get('block-namespaces-placeholder'),
 		});
-		partialBlockLayoutItems.push(
-			new OO.ui.FieldLayout(this.partialBlockNamespaces, {
-				label: Messages.get('ipb-namespaces-label'),
-				align: 'top',
-			})
-		);
-
 		/**
 		 * @type {Record<string, OO.ui.CheckboxInputWidget>}
 		 * @readonly
 		 */
 		this.partialBlockActions = this.initializer.actionRestrictions.reduce((acc, action) => {
-			const checkbox = new OO.ui.CheckboxInputWidget({ data: action });
-			partialBlockLayoutItems.push(
-				new OO.ui.FieldLayout(checkbox, {
-					// Messages used here:
-					// - ipb-action-create
-					// - ipb-action-move
-					// - ipb-action-thanks
-					// - ipb-action-upload
-					// @ts-expect-error
-					label: Messages.get(`ipb-action-${action}`),
-					align: 'inline',
-				})
-			);
-			acc[action] = checkbox;
+			acc[action] = new OO.ui.CheckboxInputWidget({ data: action });
 			return acc;
 		}, /** @type {Record<string, OO.ui.CheckboxInputWidget>} */ (Object.create(null)));
-
-		this.partialBlockLayout.addItems(partialBlockLayoutItems);
-		items.push(this.partialBlockLayout);
-
 		/**
 		 * @type {OO.ui.FieldsetLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.partialBlockLayout = new OO.ui.FieldsetLayout({
+			$element: $('<div>').css({ 'margin-left': '1.8em' }),
+			items: [
+				new OO.ui.FieldLayout(this.partialBlockPages, {
+					label: Messages.get('ipb-pages-label'),
+					align: 'top',
+				}),
+				new OO.ui.FieldLayout(this.partialBlockNamespaces, {
+					label: Messages.get('ipb-namespaces-label'),
+					align: 'top',
+				}),
+				...Object.entries(this.partialBlockActions).map(([action, checkbox]) => {
+					return new OO.ui.FieldLayout(checkbox, {
+						// Messages used here:
+						// - ipb-action-create
+						// - ipb-action-move
+						// - ipb-action-thanks
+						// - ipb-action-upload
+						// @ts-expect-error
+						label: Messages.get(`ipb-action-${action}`),
+						align: 'inline',
+					});
+				}),
+			],
+		});
+		/**
+		 * @type {OO.ui.FieldsetLayout}
+		 * @readonly
 		 * @protected
 		 */
 		this.mainFieldset = new OO.ui.FieldsetLayout({
-			label: omitMainLabel? undefined : Messages.get('block'),
+			label: omitMainLabel ? undefined : Messages.get('block'),
+			items: [
+				new OO.ui.FieldLayout(this.expiry, {
+					classes: ['ajaxblock-horizontalfield'],
+					label: Messages.get('block-expiry'),
+					align: 'left',
+				}),
+				new OO.ui.FieldLayout(this.expiryOther, {
+					classes: ['ajaxblock-horizontalfield'],
+					label: $('<span>'), // Blank label
+					align: 'left',
+				}),
+				new OO.ui.FieldLayout(this.reason1, {
+					classes: ['ajaxblock-horizontalfield'],
+					label: Messages.get('ajaxblock-dialog-block-label-reason1'),
+					align: 'left',
+				}),
+				new OO.ui.FieldLayout(this.reason2, {
+					classes: ['ajaxblock-horizontalfield'],
+					label: Messages.get('ajaxblock-dialog-block-label-reason2'),
+					align: 'left',
+				}),
+				new OO.ui.FieldLayout(this.reasonOther, {
+					classes: ['ajaxblock-horizontalfield'],
+					label: $('<span>'),
+					align: 'left',
+				}),
+				new OO.ui.FieldLayout(this.cbPartialBlock, {
+					label: Messages.get('ajaxblock-dialog-block-label-partial'),
+					align: 'inline',
+				}),
+				// @ts-expect-error
+				this.partialBlockLayout,
+			],
 		});
-		this.mainFieldset.addItems(items);
-
-		items = [];
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
 		 */
 		this.cbCreateAccount = new OO.ui.CheckboxInputWidget();
-		items.push(
-			new OO.ui.FieldLayout(this.cbCreateAccount, {
-				label: Messages.get('ipbcreateaccount'),
-				align: 'inline',
-			})
-		);
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
 		 */
 		this.cbSendEmail = new OO.ui.CheckboxInputWidget();
-		items.push(
-			new OO.ui.FieldLayout(this.cbSendEmail, {
-				label: Messages.get('ipbemailban'),
-				align: 'inline',
-			})
-		);
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
 		 */
 		this.cbUserTalk = new OO.ui.CheckboxInputWidget();
-		items.push(
-			new OO.ui.FieldLayout(this.cbUserTalk, {
-				label: Messages.get('ipb-disableusertalk'),
-				align: 'inline',
-			})
-		);
-
-		const detailsFieldset = new OO.ui.FieldsetLayout({
-			label: Messages.get('block-details'),
-		});
-		detailsFieldset.addItems(items);
-
-		items = [];
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
@@ -4055,8 +3995,6 @@ class BlockField extends WatchUserField {
 			label: Messages.get('ajaxblock-dialog-block-label-option-autoblock'),
 			align: 'inline',
 		});
-		items.push(this.cbAutoblockContainer);
-
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
@@ -4071,8 +4009,6 @@ class BlockField extends WatchUserField {
 			label: Messages.get('ipb-hardblock'),
 			align: 'inline',
 		});
-		items.push(this.cbHardblockContainer);
-
 		/**
 		 * @type {boolean}
 		 * @private
@@ -4092,19 +4028,158 @@ class BlockField extends WatchUserField {
 			label: $('<b>').text(Messages.get('ipbhidename')),
 			align: 'inline',
 		});
-		items.push(this.cbHideUserContainer);
 
 		this.$element.prepend(
 			this.mainFieldset.$element,
-			detailsFieldset.$element
+			new OO.ui.FieldsetLayout({
+				label: Messages.get('block-details'),
+				items: [
+					new OO.ui.FieldLayout(this.cbCreateAccount, {
+						label: Messages.get('ipbcreateaccount'),
+						align: 'inline',
+					}),
+					new OO.ui.FieldLayout(this.cbSendEmail, {
+						label: Messages.get('ipbemailban'),
+						align: 'inline',
+					}),
+					new OO.ui.FieldLayout(this.cbUserTalk, {
+						label: Messages.get('ipb-disableusertalk'),
+						align: 'inline',
+					}),
+				],
+			}).$element
 		);
-		this.optionsFieldset.addItems(items, 0);
+		this.optionsFieldset.addItems([
+			this.cbAutoblockContainer,
+			this.cbHardblockContainer,
+			this.cbHideUserContainer,
+		], 0);
 
+		DropdownUtil.selectInfinity(this.expiry);
+		DropdownUtil.selectOther(this.reason1);
+		DropdownUtil.selectOther(this.reason2);
+		this.partialBlockLayout.toggle(false);
 		this.setUpEventListeners(onResize);
 		this.insertCustomReasons();
 	}
 
 	/**
+	 * @param {OnResize} onResize
+	 * @returns {void}
+	 * @private
+	 */
+	setUpEventListeners(onResize) {
+		this.cbPartialBlock.on('change', (selected) => {
+			this.partialBlockLayout.toggle(!!selected);
+			onResize();
+			this.refreshUserTalkAvailability(); // ipb-prevent-user-talk-edit
+			this.refreshHideUserAvailability(); // ipb_hide_partial
+		});
+
+		this.partialBlockNamespaces.on('change', () => {
+			this.refreshUserTalkAvailability(); // ipb-prevent-user-talk-edit
+		});
+
+		this.cbHideUser.on('change', (selected) => {
+			// ipb_hide_partial, ipb_expiry_temp
+			if (selected) {
+				this.cbPartialBlock.setSelected(false).setDisabled(true);
+				this.setExpiry(EXPIRY_INFINITE);
+				this.expiry.setDisabled(true);
+				this.expiryOther.setDisabled(true);
+			} else {
+				this.cbPartialBlock.setDisabled(false);
+				this.expiry.setDisabled(false);
+				this.expiryOther.setDisabled(false);
+			}
+			this.refreshUserTalkAvailability();
+			this.refreshHideUserAvailability();
+		});
+
+		this.expiry.on('labelChange', () => {
+			const selected = DropdownUtil.getSelectedOptionValue(this.expiry);
+			if (selected) {
+				this.expiryOther.setValue('');
+			}
+			this.refreshHideUserAvailability(); // ipb_expiry_temp
+		});
+
+		this.expiryOther.on('change', (value) => {
+			if (clean(value)) {
+				DropdownUtil.selectOther(this.expiry);
+			}
+			this.refreshHideUserAvailability(); // ipb_expiry_temp
+		});
+	}
+
+	/**
+	 * Refreshes the availability of the {@link cbUserTalk} checkbox.
+	 *
+	 * Relevant rules:
+	 * - `ipb-prevent-user-talk-edit`: Access to the blocked user's own user talk page
+	 *   can be revoked only if the block is sitewide, or partial affecting `NS_USER_TALK`
+	 *
+	 * If the current block settings do not allow user talk access to be revoked,
+	 * the checkbox is unchecked and disabled.
+	 *
+	 * @returns {this}
+	 * @private
+	 */
+	refreshUserTalkAvailability() {
+		if (this.cbPartialBlock.isSelected() && !this.getNamespaceRestrictions().includes(wgNamespaceIds.user_talk.toString())) {
+			this.cbUserTalk.setSelected(false).setDisabled(true);
+		} else {
+			this.cbUserTalk.setDisabled(false);
+		}
+		return this;
+	}
+
+	/**
+	 * Refreshes the availability of the {@link cbHideUser} checkbox.
+	 *
+	 * Relevant rules:
+	 * - `ipb_hide_partial`: A "hide user" block must be sitewide
+	 * - `ipb_expiry_temp`: A "hide user" block must have an indefinite expiry
+	 *
+	 * If unavailable, the checkbox is unchecked and disabled.
+	 *
+	 * @returns {this}
+	 * @protected
+	 */
+	refreshHideUserAvailability() {
+		if (!this.hideUserLocked && !this.cbPartialBlock.isSelected() && this.getExpiry() === EXPIRY_INFINITE) {
+			this.cbHideUser.setDisabled(false);
+		} else {
+			this.cbHideUser.setSelected(false).setDisabled(true);
+		}
+		return this;
+	}
+
+	/**
+	 * Locks or unlocks the availability of the {@link cbHideUser} checkbox.
+	 *
+	 * When locked, {@link refreshHideUserAvailability} keeps the checkbox disabled even if
+	 * the current block settings would otherwise allow it.
+	 *
+	 * This is used on the config page, where the target type is unknown and the checkbox is kept
+	 * visible. In the dialog on the other hand, {@link BlockUser.initTarget} hides the checkbox
+	 * for non-registered targets, so this method is not needed there.
+	 *
+	 * @param {boolean} locked
+	 * @returns {this}
+	 * @protected
+	 */
+	setHideUserLocked(locked) {
+		this.hideUserLocked = locked;
+		return this;
+	}
+
+	/**
+	 * Inserts custom block reasons into reason dropdowns.
+	 *
+	 * Existing custom reason groups are removed before insertion. The currently selected reason
+	 * is preserved if possible.
+	 *
 	 * @param {string[]} [customReasons]
 	 * @returns {this}
 	 */
@@ -4132,98 +4207,6 @@ class BlockField extends WatchUserField {
 		}
 
 		return this.setReason(currentReason);
-	}
-
-	/**
-	 * @param {OnResize} onResize
-	 * @returns {void}
-	 * @private
-	 */
-	setUpEventListeners(onResize) {
-		this.cbPartialBlock.on('change', (selected) => {
-			this.partialBlockLayout.toggle(!!selected);
-			onResize();
-
-			// ipb-prevent-user-talk-edit:
-			// `!allowusertalk` can be applied only if sitewide, or partial affecting NS_USER_TALK
-			if (selected && !this.getNamespaceRestrictions().includes(wgNamespaceIds.user_talk.toString())) {
-				this.cbUserTalk.setSelected(false).setDisabled(true);
-			} else {
-				this.cbUserTalk.setDisabled(false);
-			}
-
-			// ipb_hide_partial: A "hide user" block must be sitewide
-			this.setHideUserAvailability(!selected);
-		});
-
-		this.partialBlockNamespaces.on('change', (items) => {
-			// ipb-prevent-user-talk-edit
-			if (this.cbPartialBlock.isSelected() && !items.map(item => item.getData()).includes(wgNamespaceIds.user_talk.toString())) {
-				this.cbUserTalk.setSelected(false).setDisabled(true);
-			} else {
-				this.cbUserTalk.setDisabled(false);
-			}
-		});
-
-		this.cbHideUser.on('change', (selected) => {
-			// ipb_hide_partial
-			// ipb_expiry_temp: A "hide user" block must have an indefinite expiry
-			if (selected) {
-				this.cbPartialBlock.setSelected(false).setDisabled(true);
-
-				this.setExpiry(EXPIRY_INFINITE);
-				this.expiry.setDisabled(true);
-				this.expiryOther.setDisabled(true);
-			} else {
-				this.cbPartialBlock.setDisabled(false);
-
-				this.expiry.setDisabled(false);
-				this.expiryOther.setDisabled(false);
-			}
-		});
-
-		this.expiry.on('labelChange', () => {
-			const selected = DropdownUtil.getSelectedOptionValue(this.expiry);
-			if (selected) {
-				this.expiryOther.setValue('');
-			}
-
-			// ipb_expiry_temp
-			this.setHideUserAvailability(this.getExpiry() === EXPIRY_INFINITE);
-		});
-
-		this.expiryOther.on('change', (value) => {
-			if (clean(value)) {
-				DropdownUtil.selectOther(this.expiry);
-			}
-
-			// ipb_expiry_temp
-			this.setHideUserAvailability(this.getExpiry() === EXPIRY_INFINITE);
-		});
-	}
-
-	/**
-	 * @param {boolean} available
-	 * @returns {this}
-	 * @protected
-	 */
-	setHideUserAvailability(available) {
-		if (available && !this.hideUserLocked) {
-			this.cbHideUser.setDisabled(false);
-		} else {
-			this.cbHideUser.setSelected(false).setDisabled(true);
-		}
-		return this;
-	}
-
-	/**
-	 * @param {boolean} locked
-	 * @returns {this}
-	 * @protected
-	 */
-	setHideUserLocked(locked) {
-		this.hideUserLocked = locked;
-		return this;
 	}
 
 	getExpiry() {
@@ -4392,9 +4375,6 @@ class UnblockField extends WatchUserField {
 	constructor(initializer, onResize = () => {}) {
 		super(initializer, onResize);
 
-		/** @type {OO.ui.Element[]} */
-		const items = [];
-
 		/**
 		 * @type {OO.ui.ComboBoxInputWidget}
 		 * @readonly
@@ -4404,22 +4384,20 @@ class UnblockField extends WatchUserField {
 			placeholder: Messages.get('block-removal-reason-placeholder'),
 			options: this.initializer.configStore.getCustomReasons('unblock').map(r => ({ data: r })),
 		});
-		items.push(
-			new OO.ui.FieldLayout(this.reason, {
-				classes: ['ajaxblock-horizontalfield'],
-				label: Messages.get('block-reason'),
-				align: 'left',
-			})
-		);
-
 		/**
 		 * @type {OO.ui.FieldsetLayout}
 		 * @protected
 		 */
 		this.mainFieldset = new OO.ui.FieldsetLayout({
 			label: Messages.get('unblock'),
+			items: [
+				new OO.ui.FieldLayout(this.reason, {
+					classes: ['ajaxblock-horizontalfield'],
+					label: Messages.get('block-reason'),
+					align: 'left',
+				}),
+			],
 		});
-		this.mainFieldset.addItems(items);
 
 		this.$element.prepend(
 			this.mainFieldset.$element
@@ -7642,13 +7620,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			this.cbHardblock.setSelected(false);
 		}
 
-		if (!targetSet.has('named')) {
-			this.setHideUserAvailability(false);
-			this.setHideUserLocked(true);
-		} else {
-			this.setHideUserLocked(false);
-			this.setHideUserAvailability(!this.cbPartialBlock.isSelected() && this.getExpiry() === EXPIRY_INFINITE);
-		}
+		this.setHideUserLocked(!targetSet.has('named')).refreshHideUserAvailability();
 
 		return this;
 	}
