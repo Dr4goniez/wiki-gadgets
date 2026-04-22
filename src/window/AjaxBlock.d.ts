@@ -327,6 +327,7 @@ export interface AjaxBlockMessages {
 	'ajaxblock-config-label-warning-unblock-self': string;
 	'ajaxblock-config-label-warning-unblock-ignorepredefined': string;
 	'ajaxblock-config-label-reset': string;
+	'ajaxblock-config-label-override': string;
 	'ajaxblock-config-label-presetreasons-layout': string;
 	'ajaxblock-config-label-presetreasons-name': string;
 	'ajaxblock-config-placeholder-presetreasons-name': string;

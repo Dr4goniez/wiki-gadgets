@@ -2822,6 +2822,7 @@ Messages.i18n = {
 		'ajaxblock-config-label-warning-unblock-self': 'When performing an unblock on the performer themselves',
 		'ajaxblock-config-label-warning-unblock-ignorepredefined': 'When not using predefined unblock parameters',
 		'ajaxblock-config-label-reset': 'Reset',
+		'ajaxblock-config-label-override': 'Override global options instead of merging with them',
 		'ajaxblock-config-label-presetreasons-layout': 'Preset block options',
 		'ajaxblock-config-label-presetreasons-name': 'Preset',
 		'ajaxblock-config-placeholder-presetreasons-name': 'Enter a preset name',
@@ -2926,6 +2927,7 @@ Messages.i18n = {
 		'ajaxblock-config-label-warning-unblock-self': '実行者自身のブロックを解除する場合',
 		'ajaxblock-config-label-warning-unblock-ignorepredefined': '事前定義されたブロック解除設定を無視する場合',
 		'ajaxblock-config-label-reset': 'リセット',
+		'ajaxblock-config-label-override': 'グローバル設定を無視して上書きする',
 		'ajaxblock-config-label-presetreasons-layout': 'プリセットブロック設定',
 		'ajaxblock-config-label-presetreasons-name': 'プリセット',
 		'ajaxblock-config-placeholder-presetreasons-name': 'プリセット名を入力',
@@ -7495,7 +7497,7 @@ class AjaxBlockConfigDialogOptions {
 
 }
 
-class AjaxBlockConfigBlockPresetOptions {
+class AjaxBlockConfigDomainOptions {
 
 	/**
 	 * @param {FullInitializer} initializer
@@ -7505,9 +7507,51 @@ class AjaxBlockConfigBlockPresetOptions {
 		/**
 		 * @type {FullInitializer}
 		 * @readonly
-		 * @private
+		 * @protected
 		 */
 		this.initializer = initializer;
+		/**
+		 * @type {AjaxBlockConfigDomains}
+		 * @readonly
+		 * @private
+		 */
+		this.domain = domain;
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @protected
+		 */
+		this.cbOverrideGlobal = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @protected
+		 */
+		this.overrideGlobalLayout = new OO.ui.FieldLayout(this.cbOverrideGlobal, {
+			align: 'inline',
+			label: Messages.get('ajaxblock-config-label-override'),
+		});
+
+		if (domain !== 'local') {
+			this.overrideGlobalLayout.toggle(false);
+		}
+	}
+
+	getDomain() {
+		return this.domain;
+	}
+
+}
+
+class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
+
+	/**
+	 * @param {FullInitializer} initializer
+	 * @param {AjaxBlockConfigDomains} domain
+	 */
+	constructor(initializer, domain) {
+		super(initializer, domain);
+
 		/**
 		 * @type {AjaxBlockConfigBlockPresetOptionsField[]}
 		 * @private
@@ -7560,6 +7604,7 @@ class AjaxBlockConfigBlockPresetOptions {
 			new OO.ui.FieldLayout(this.addButton, {
 				$element: $('<div>').css({ marginTop: 0 }),
 			}),
+			this.overrideGlobalLayout,
 		]);
 
 		this.registerEvents();
@@ -7945,15 +7990,16 @@ class CollapsibleFieldset {
 
 }
 
-class AjaxBlockConfigCustomReasonOptions {
+class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 
 	/**
-	 * @param {Initializer} initializer
+	 * @param {FullInitializer} initializer
 	 * @param {BlockActions} action
 	 * @param {AjaxBlockConfigDomains} domain
 	 * @param {OO.ui.TabPanelLayout} tabPanel
 	 */
 	constructor(initializer, action, domain, tabPanel) {
+		super(initializer, domain);
 		const { configStore } = initializer;
 
 		/**
@@ -7983,7 +8029,8 @@ class AjaxBlockConfigCustomReasonOptions {
 					// - ajaxblock-config-help-customreasons-unblock
 					help: Messages.get(`ajaxblock-config-help-customreasons-${action}`),
 					helpInline: true,
-				})
+				}),
+				this.overrideGlobalLayout,
 			]
 		});
 		/**
