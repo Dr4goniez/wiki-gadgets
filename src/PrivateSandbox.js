@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.2.3
+	@version 1.2.4
 
 \**************************************************************************************************/
 // @ts-check
@@ -23,7 +23,7 @@
 (() => {
 //*************************************************************************************************
 
-const version = '1.2.3';
+const version = '1.2.4';
 
 // Initialize configs
 /** @type {PrivateSandboxConfig} */
@@ -499,8 +499,8 @@ class PrivateSandbox {
 			const modules = [
 				'ext.TemplateWizard',
 				'ext.cite.wikiEditor',
-				'ext.CodeMirror.v6.WikiEditor',
-				'ext.CodeMirror.v6.mode.mediawiki'
+				'ext.CodeMirror.WikiEditor',
+				'ext.CodeMirror.mode.mediawiki'
 			];
 			for (let i = 0; i < modules.length; i++) {
 				const mod = modules[i];
@@ -1107,11 +1107,11 @@ class PrivateSandbox {
 
 			// Load CodeMirror
 			while (typeof requireCm === 'function') {
-				const CodeMirrorWikiEditor = requireCm('ext.CodeMirror.v6.WikiEditor');
+				const CodeMirrorWikiEditor = requireCm('ext.CodeMirror.WikiEditor');
 				if (!CodeMirrorWikiEditor) {
 					break;
 				}
-				const cmMode = requireCm('ext.CodeMirror.v6.mode.mediawiki');
+				const cmMode = requireCm('ext.CodeMirror.mode.mediawiki');
 				if (!cmMode || typeof cmMode.mediawiki !== 'function') {
 					break;
 				}
