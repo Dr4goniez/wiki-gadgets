@@ -14,7 +14,7 @@
 	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
 
 	@author [[User:Dragoniez]]
-	@version 1.2.4
+	@version 1.2.5
 
 \**************************************************************************************************/
 // @ts-check
@@ -23,7 +23,7 @@
 (() => {
 //*************************************************************************************************
 
-const version = '1.2.4';
+const version = '1.2.5';
 
 // Initialize configs
 /** @type {PrivateSandboxConfig} */
@@ -975,8 +975,7 @@ class PrivateSandbox {
 				headers: {
 					'Api-User-Agent': `PrivateSandbox/${version} (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)`,
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
-					// @ts-expect-error
-					'Promise-Non-Write-API-Action': true
+					'Promise-Non-Write-API-Action': '1',
 				}
 			}
 		});
@@ -1263,9 +1262,10 @@ class PrivateSandbox {
 		// Set focus on the profile input on page load. This overrides CodeMirror's auto-focus on the editor.
 		// If some profile exists, this ensures that the page isn't scrolled down on initialization; If not,
 		// this keeps the editor (pseudo-disabled by the overlay) inaccessible.
-		this.prfInput.focus();
-		window.scrollTo(0, 0);
-
+		requestAnimationFrame(() => {
+			this.prfInput.focus();
+			window.scrollTo(0, 0);
+		});
 	}
 
 	/**
