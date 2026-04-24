@@ -11,20 +11,6 @@ export type BlockPageNames = 'Block' | 'Unblock';
 
 export type BlockActions = 'block' | 'unblock';
 
-/**
- * Object that holds required data for script initialization.
- *
- * Note: Page name aliases use **underscores**, not spaces.
- */
-export interface PrematureInitializer {
-	blockPageAliases: Record<BlockPageNames, readonly string[]>;
-	specialNamespaceAliases: readonly string[];
-	userRights: Set<string>;
-	actionRestrictions: readonly string[];
-	multiBlocksEnabled: boolean;
-	langs?: Record<AjaxBlockLanguages, string>;
-}
-
 export interface ApiResponse {
 	block?: ApiResponseBlock;
 	paraminfo?: ApiResponseParaminfo;

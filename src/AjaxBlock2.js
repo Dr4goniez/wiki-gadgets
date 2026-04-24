@@ -53,70 +53,64 @@ const EXPIRY_INFINITE = 'infinity';
 class AjaxBlock {
 
 	static async init() {
-		// Load modules needed for getInitializer()
+		BlockLinkUtil.getSpinner(); // Preload the image
+
+		// Load modules needed to initialize AjaxBlockServices
 		await mw.loader.using(['mediawiki.api', 'mediawiki.storage', 'mediawiki.util', 'mediawiki.user']);
 
-		const configStore = new AjaxBlockConfigStore();
-		Messages.loadInternalMessages(configStore);
-		const cfgContentPromise = AjaxBlockConfig.isConfigPage() && AjaxBlockConfig.preparePage();
-
-		AjaxBlock.api = new mw.Api({
-			ajax: {
-				headers: {
-					'Api-User-Agent': 'AjaxBlock/2.0.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock.js)'
+		const config = new AjaxBlockConfigStore();
+		AjaxBlockServices.setService('config', config);
+		Messages.loadInternalMessages();
+		const configPageLoaded = AjaxBlockConfig.isConfigPage() && AjaxBlockConfig.preparePage();
+		AjaxBlockServices.setService('api',
+			new mw.Api({
+				ajax: {
+					headers: {
+						'Api-User-Agent': 'AjaxBlock/2.0.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock.js)'
+					}
+				},
+				parameters: {
+					action: 'query',
+					format: 'json',
+					formatversion: '2',
+					errorformat: 'html',
+					errorlang: config.getLanguage(),
+					errorsuselocal: true,
 				}
-			},
-			parameters: {
-				action: 'query',
-				format: 'json',
-				formatversion: '2',
-				errorformat: 'html',
-				errorlang: configStore.getLanguage(),
-				errorsuselocal: true,
-			}
-		});
+			})
+		);
 
-		// Fetch initialization data (user rights, aliases, configuration)
-		let /** @type {PrematureInitializer} */ prematureInitializer;
 		try {
-			prematureInitializer = await toNativePromise(this.getInitializer());
+			await toNativePromise(AjaxBlockServices.initialize());
 		} catch (e) {
 			// Indicate initialization failure using the logo
 			console.error(toErrorTuple(e)[1]);
 			await new AjaxBlockLogo().insert().setError().remove(800);
 			return;
 		}
-		const permissionManager = new PermissionManager(prematureInitializer.userRights);
-		if (!permissionManager.canBlock() && !cfgContentPromise) {
+		if (!AjaxBlockServices.getPermissionManager().canBlock() && !configPageLoaded) {
 			return;
 		}
-		wgEnableMultiBlocks = prematureInitializer.multiBlocksEnabled;
 
-		/** @type {Initializer} */
-		const initializer = Object.assign(
-			{ permissionManager, configStore },
-			prematureInitializer
-		);
-
-		// Run the script
-		await Promise.all([
-			this.loadDependencies(initializer),
-			$.ready
-		]);
+		// Prepare all dependent modules, messages, and the DOM
+		await $.when(this.loadDependencies(), $.ready);
 		this.addStyleTag();
 
 		// Build the config interface if the user is on the config page
-		if (cfgContentPromise) {
-			cfgContentPromise.then((content) => {
+		if (configPageLoaded) {
+			configPageLoaded.then((content) => {
 				if (!content) {
-					// Failure is handled in AjaxBlockConfig.preparePage()
-					return;
+					return AjaxBlockConfig.fail(content);
 				}
-				AjaxBlockConfig.init(/** @type {FullInitializer} */ (initializer), content);
+				try {
+					AjaxBlockConfig.init(content);
+				} catch (e) {
+					console.error(e);
+					AjaxBlockConfig.fail(content);
+				}
 			});
 			return;
 		}
-		BlockLinkUtil.getSpinner(); // Preload the image
 
 		/** @type {?AjaxBlock} */
 		let ajaxBlock = null;
@@ -136,7 +130,7 @@ class AjaxBlock {
 			}
 
 			// Parse block/unblock links
-			const { links, users, ids } = this.collectBlockLinks(initializer, content);
+			const { links, users, ids } = this.collectBlockLinks(content);
 			if (ajaxBlock) {
 				// Reuse previously tracked links that are no longer present in the new scan
 				const anchorSet = new Set(links.map(obj => obj.anchor));
@@ -169,7 +163,7 @@ class AjaxBlock {
 
 			let /** @type {BlockLookup} */ blockLookup;
 			try {
-				blockLookup = await toNativePromise(BlockLookup.newFromTargets(permissionManager, users, ids));
+				blockLookup = await toNativePromise(BlockLookup.newFromTargets(users, ids));
 			} catch (e) {
 				console.error(toErrorTuple(e)[1]);
 				await logo.setError().remove(800);
@@ -179,7 +173,7 @@ class AjaxBlock {
 			const linkMap = this.injectBlockInfo(links, blockLookup);
 			if (linkMap.size) {
 				if (!ajaxBlock) {
-					ajaxBlock = new AjaxBlock(initializer, linkMap, blockLookup);
+					ajaxBlock = new AjaxBlock(linkMap, blockLookup);
 					ajaxBlock.initialize();
 				} else {
 					ajaxBlock.initialize({ linkMap, blockLookup });
@@ -190,219 +184,30 @@ class AjaxBlock {
 	}
 
 	/**
-	 * @typedef {PrematureInitializer & {
-	 *   permissionManager: PermissionManager;
-	 *   configStore: AjaxBlockConfigStore;
-	 * }} Initializer
-	 */
-	/**
-	 * @returns {JQuery.Promise<PrematureInitializer>}
-	 * @private
-	 */
-	static getInitializer() {
-		const /** @type {Partial<PrematureInitializer>} */ data = {
-			blockPageAliases: undefined,
-			specialNamespaceAliases: undefined,
-			userRights: undefined,
-			actionRestrictions: undefined,
-			multiBlocksEnabled: undefined,
-		};
-
-		// Special namespace aliases (always local)
-		const specialNamespaceAliases = [];
-		for (const [alias, ns] of Object.entries(wgNamespaceIds)) {
-			if (ns === -1) {
-				specialNamespaceAliases.push(alias);
-			}
-		}
-		data.specialNamespaceAliases = specialNamespaceAliases;
-
-		// Cached block page aliases
-		const cachedAliases = mw.storage.getObject(this.storageKeys.blockPageAliases);
-		if (
-			cachedAliases &&
-			Array.isArray(cachedAliases.Block) &&
-			Array.isArray(cachedAliases.Unblock)
-		) {
-			data.blockPageAliases = cachedAliases;
-		}
-
-		// Cached user rights
-		const cachedRights = mw.storage.getObject(this.storageKeys.userRights);
-		if (Array.isArray(cachedRights) && cachedRights.every(r => typeof r === 'string')) {
-			data.userRights = new Set(cachedRights);
-		}
-
-		// Cached action restrictions
-		const cachedRestrictions = mw.storage.getObject(this.storageKeys.actionRestrictions);
-		if (Array.isArray(cachedRestrictions) && cachedRestrictions.every(r => typeof r === 'string')) {
-			data.actionRestrictions = cachedRestrictions;
-		}
-
-		// Cached multiblocks configuration
-		const cachedMbEnabled = mw.storage.get(this.storageKeys.enableMultiblocks);
-		if (typeof cachedMbEnabled === 'string') {
-			data.multiBlocksEnabled = cachedMbEnabled === '1';
-		}
-
-		// Cached language information
-		const cachedLangs = mw.storage.getObject(this.storageKeys.langs);
-		if ($.isPlainObject(cachedLangs) && AjaxBlockConfigLanguageOptions.supported.every(code => typeof cachedLangs[code] === 'string')) {
-			data.langs = cachedLangs;
-		}
-
-		/** @type {JQuery.Promise<void>[]} */
-		const requests = [];
-
-		// Query siteinfo/userinfo if needed
-		const needsLangInfo = AjaxBlockConfig.isConfigPage();
-		if (!data.blockPageAliases || !data.userRights || (!data.langs && needsLangInfo)) {
-			const params = Object.create(null);
-			params.meta = [];
-
-			if (!data.blockPageAliases) {
-				params.meta.push('siteinfo');
-				params.siprop = 'specialpagealiases';
-			}
-
-			if (!data.userRights) {
-				params.meta.push('userinfo');
-				params.uiprop = 'rights';
-			}
-
-			if (!data.langs && needsLangInfo) {
-				params.meta.push('languageinfo');
-				params.liprop = 'autonym';
-				params.licode = AjaxBlockConfigLanguageOptions.supported.join('|');
-			}
-
-			requests.push(
-				this.api.get(params).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
-					if (!res || !res.query) {
-						return failAsEmptyResult(res, jqXHR);
-					}
-					const { specialpagealiases, userinfo, languageinfo } = res.query;
-
-					// Block aliases
-					if (Array.isArray(specialpagealiases)) {
-						const map = /** @type {PrematureInitializer['blockPageAliases']} */ (Object.create(null));
-
-						for (const { realname, aliases } of specialpagealiases) {
-							if (realname !== 'Block' && realname !== 'Unblock') {
-								continue;
-							}
-							const canonical = /** @type {BlockPageNames} */ (realname);
-							const lc = realname.toLowerCase();
-							map[canonical] = aliases.filter(a => a === realname || a.toLowerCase() !== lc) ;
-						}
-
-						const targets = /** @type {BlockPageNames[]} */ (['Block', 'Unblock']);
-						if (targets.every(name => Array.isArray(map[name]) && map[name].length)) {
-							mw.storage.setObject(this.storageKeys.blockPageAliases, map, daysInSeconds(3));
-							data.blockPageAliases = map;
-						}
-					}
-
-					// User rights
-					const rights = userinfo && userinfo.rights;
-					if (Array.isArray(rights)) {
-						mw.storage.setObject(this.storageKeys.userRights, rights, daysInSeconds(1));
-						data.userRights = new Set(rights);
-					}
-
-					if (languageinfo) {
-						const langMap = Object.create(null);
-						for (const [code, { autonym }] of Object.entries(languageinfo)) {
-							langMap[code] = autonym;
-						}
-						if (AjaxBlockConfigLanguageOptions.supported.every(code => typeof langMap[code] === 'string')) {
-							mw.storage.setObject(this.storageKeys.langs, langMap, daysInSeconds(14));
-							data.langs = langMap;
-						}
-					}
-
-					if (!data.blockPageAliases || !data.userRights || (!data.langs && needsLangInfo)) {
-						return failAsEmptyResult(res, jqXHR);
-					}
-				})
-			);
-		}
-
-		// Fetch paraminfo if needed
-		if (!data.actionRestrictions || typeof data.multiBlocksEnabled !== 'boolean') {
-			requests.push(
-				this.api.get({
-					action: 'paraminfo',
-					modules: 'block',
-				}).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
-					const mod = res && res.paraminfo && res.paraminfo.modules && res.paraminfo.modules[0];
-					if (!mod || mod.name !== 'block') {
-						return failAsEmptyResult(res, jqXHR);
-					}
-
-					const done = () => {
-						return !!data.actionRestrictions && typeof data.multiBlocksEnabled === 'boolean';
-					};
-					for (const { name, type, limit } of mod.parameters) {
-						if (name === 'pagerestrictions' && typeof limit === 'number') {
-							// Hack: There's no other way to retrieve the value of wgEnableMultiBlocks (T404508),
-							// but the limit of page restrictions is 50 when multiblocks is enabled, otherwise 10
-							if (limit !== 10 && limit !== 50) {
-								console.warn('Unexpected pagerestrictions limit:', limit);
-							}
-							const multiBlocksEnabled = limit === 50;
-							mw.storage.set(
-								this.storageKeys.enableMultiblocks,
-								multiBlocksEnabled ? '1' : '0',
-								daysInSeconds(7)
-							);
-							data.multiBlocksEnabled = multiBlocksEnabled;
-						}
-						if (name === 'actionrestrictions' && Array.isArray(type)) {
-							const actions = type;
-							mw.storage.setObject(this.storageKeys.actionRestrictions, actions, daysInSeconds(7));
-							data.actionRestrictions = actions;
-						}
-						if (done()) {
-							break;
-						}
-					}
-					if (!done()) {
-						return failAsEmptyResult(res, jqXHR);
-					}
-				})
-			);
-		}
-
-		// Everything cached
-		if (!requests.length) {
-			return $.Deferred().resolve(/** @type {PrematureInitializer} */ (data)).promise();
-		}
-
-		return $.when(...requests).then(() => /** @type {PrematureInitializer} */ (data));
-	}
-
-	/**
-	 * @param {Initializer} init
 	 * @param {ParentNode} [content] Optional root node to limit scanning (used for dynamically injected content).
 	 * @return {{ links: BlockLink[]; users: Set<string>; ids: Set<number>; }}
 	 * @private
 	 */
-	static collectBlockLinks(init, content) {
+	static collectBlockLinks(content) {
 		const wgScript = mw.config.get('wgScript');
-		/**
-		 * @param {readonly string[]} arr
-		 * @returns {string}
-		 */
-		const toEscaped = (arr) => arr.map(mw.util.escapeRegExp).join('|');
-		this.regex = this.regex || {
-			article: new RegExp(
-				mw.util.escapeRegExp(mw.config.get('wgArticlePath')).replace('\\$1', '([^#?]+)')
-			),
-			special: new RegExp('^(?:' + toEscaped(init.specialNamespaceAliases) + '):([^/]+)(?:/([^#]+))?', 'i'),
-			block: new RegExp('^(' + toEscaped(init.blockPageAliases.Block) + ')$', 'i'),
-			unblock: new RegExp('^(' + toEscaped(init.blockPageAliases.Unblock) + ')$', 'i'),
-		};
+		this.regex = this.regex || (() => {
+			/**
+			 * @param {readonly string[]} arr
+			 * @returns {string}
+			 */
+			const toEscaped = (arr) => arr.map(mw.util.escapeRegExp).join('|');
+			const specialNamespaceAliases = AjaxBlockServices.getSpecialNamespaceAliases();
+			const blockPageAliases = AjaxBlockServices.getBlockPageAliases();
+
+			return {
+				article: new RegExp(
+					mw.util.escapeRegExp(mw.config.get('wgArticlePath')).replace('\\$1', '([^#?]+)')
+				),
+				special: new RegExp('^(?:' + toEscaped(specialNamespaceAliases) + '):([^/]+)(?:/([^#]+))?', 'i'),
+				block: new RegExp('^(' + toEscaped(blockPageAliases.Block) + ')$', 'i'),
+				unblock: new RegExp('^(' + toEscaped(blockPageAliases.Unblock) + ')$', 'i'),
+			};
+		})();
 
 		const /** @type {BlockLink[]} */ links = [];
 		const /** @type {Set<string>} */ users = new Set();
@@ -481,7 +286,7 @@ class AjaxBlock {
 			const target = new BlockTarget(id, username);
 			const params = isUnblockLink
 				? ParamApplier.createUnbBlockParamsFromSearchParams(query)
-				: ParamApplier.createBlockParamsFromSearchParams(query, target.getType(), init);
+				: ParamApplier.createBlockParamsFromSearchParams(query, target.getType());
 			links.push({
 				anchor: a,
 				params,
@@ -518,12 +323,11 @@ class AjaxBlock {
 	}
 
 	/**
-	 * @param {Initializer} initializer
-	 * @returns {Promise<void>}
+	 * @returns {JQuery.Promise<void>}
 	 * @private
 	 */
-	static async loadDependencies(initializer) {
-		await Promise.all([
+	static loadDependencies() {
+		return $.when(
 			mw.loader.using([
 				'oojs-ui',
 				'mediawiki.widgets.TitlesMultiselectWidget',
@@ -533,7 +337,7 @@ class AjaxBlock {
 				'mediawiki.jqueryMsg',
 				...AjaxBlockConfig.getDependencies(),
 			]),
-			Messages.loadMessagesIfMissing(initializer, [
+			Messages.loadMessagesIfMissing([
 				'colon-separator',
 				'parentheses-start',
 				'parentheses-end',
@@ -612,9 +416,9 @@ class AjaxBlock {
 				// - ipb-action-thanks
 				// - ipb-action-upload
 				// @ts-expect-error
-				...initializer.actionRestrictions.map(r => `ipb-action-${r}`),
+				...AjaxBlockServices.getActionRestrictions().map(r => `ipb-action-${r}`),
 			])
-		]);
+		).then(() => {});
 	}
 
 	/**
@@ -827,17 +631,11 @@ class AjaxBlock {
 	}
 
 	/**
-	 * @param {Initializer} initializer
 	 * @param {BlockLinkMap} linkMap
 	 * @param {BlockLookup} blockLookup
 	 * @private
 	 */
-	constructor(initializer, linkMap, blockLookup) {
-		/**
-		 * @type {Initializer}
-		 * @readonly
-		 */
-		this.initializer = initializer;
+	constructor(linkMap, blockLookup) {
 		/**
 		 * @type {BlockLinkMap}
 		 * @private
@@ -1181,7 +979,7 @@ class AjaxBlock {
 		const result = await request(params, data).catch((c, err) => {
 			code = c;
 			console.error(err);
-			return AjaxBlock.api.getErrorMessage(err);
+			return AjaxBlockServices.getApi().getErrorMessage(err);
 		});
 		if (gen !== this.executionGeneration) {
 			// This instance has been re-initialized: skip post-processing since blockLookup
@@ -1425,7 +1223,7 @@ class AjaxBlock {
 	 * @private
 	 */
 	static execute(params, _data) {
-		return AjaxBlock.api.postWithEditToken(Object.assign(
+		return AjaxBlockServices.getApi().postWithEditToken(Object.assign(
 			{ curtimestamp: true },
 			params
 		)).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
@@ -1525,17 +1323,6 @@ class AjaxBlock {
 
 }
 /**
- * @type {mw.Api}
- */
-AjaxBlock.api = Object.create(null);
-AjaxBlock.storageKeys = {
-	blockPageAliases: 'mw-AjaxBlock-blockPageAliases',
-	userRights: 'mw-AjaxBlock-userRights',
-	enableMultiblocks: 'mw-AjaxBlock-enableMultiblocks',
-	actionRestrictions: 'mw-AjaxBlock-actionRestrictions',
-	langs: 'mw-AjaxBlock-langs',
-};
-/**
  * @type {?import('./window/AjaxBlock').AjaxBlockRegex}
  */
 AjaxBlock.regex = null;
@@ -1551,6 +1338,291 @@ AjaxBlock.confirmWindowManager = null;
  * @type {Map<string | number, NodeJS.Timeout>}
  */
 AjaxBlock.linkRestorationTimeoutMap = new Map();
+
+/**
+ * @typedef {object} Services
+ * @prop {mw.Api} api
+ * @prop {Record<BlockPageNames, readonly string[]>} blockPageAliases
+ * @prop {readonly string[]} specialNamespaceAliases
+ * @prop {readonly string[]} actionRestrictions
+ * @prop {Record<AjaxBlockLanguages, string>} languageAutonyms
+ * @prop {PermissionManager} permissionManager
+ * @prop {AjaxBlockConfigStore} config
+ */
+/**
+ * Virtual private storage for {@link AjaxBlockServices}.
+ *
+ * This is a workaround for the following limitations:
+ * - Avoid using class fields (an ES2022 feature), which are still too new for our target.
+ *   Otherwise, we could define `static services` and mark it as `@private`.
+ * - This storage should not appear in IntelliSense. Defining it as
+ *   `AjaxBlockServices.services = {}` would expose it publicly and cannot be
+ *   marked as `@private`.
+ *
+ * @type {Partial<Services>}
+ */
+const _services = Object.create(null);
+const _storageKeys = {
+	blockPageAliases: 'mw-AjaxBlock-blockPageAliases',
+	userRights: 'mw-AjaxBlock-userRights',
+	enableMultiblocks: 'mw-AjaxBlock-enableMultiblocks',
+	actionRestrictions: 'mw-AjaxBlock-actionRestrictions',
+	languageAutonyms: 'mw-AjaxBlock-languageAutonyms',
+};
+
+class AjaxBlockServices {
+
+	/**
+	 * @template {keyof Services} K
+	 * @param {K} key
+	 * @returns {NonNullable<Services[K]>}
+	 */
+	static getService(key) {
+		const value = _services[key];
+		if (value === undefined) {
+			throw new Error(`Service "${String(key)}" is not initialized`);
+		}
+		return value;
+	}
+
+	/**
+	 * @template {keyof Services} K
+	 * @param {K} key
+	 * @param {Services[K]} value
+	 * @returns {void}
+	 */
+	static setService(key, value) {
+		_services[key] = value;
+	}
+
+	/**
+	 * @template {keyof Services} K
+	 * @param {K} key
+	 * @returns {boolean}
+	 */
+	static hasService(key) {
+		return key in _services;
+	}
+
+	/**
+	 * @returns {JQuery.Promise<void>}
+	 * @internal
+	 */
+	static initialize() {
+		// Special namespace aliases (always local)
+		const specialNamespaceAliases = [];
+		for (const [alias, ns] of Object.entries(wgNamespaceIds)) {
+			if (ns === -1) {
+				specialNamespaceAliases.push(alias);
+			}
+		}
+		this.setService('specialNamespaceAliases', specialNamespaceAliases);
+
+		// Cached block page aliases
+		const cachedAliases = mw.storage.getObject(_storageKeys.blockPageAliases);
+		if (
+			cachedAliases &&
+			Array.isArray(cachedAliases.Block) &&
+			Array.isArray(cachedAliases.Unblock)
+		) {
+			this.setService('blockPageAliases', cachedAliases);
+		}
+
+		// Cached user rights
+		const cachedRights = mw.storage.getObject(_storageKeys.userRights);
+		if (isStringArray(cachedRights)) {
+			this.setService('permissionManager', new PermissionManager(new Set(cachedRights)));
+		}
+
+		// Cached action restrictions
+		const cachedRestrictions = mw.storage.getObject(_storageKeys.actionRestrictions);
+		if (isStringArray(cachedRestrictions)) {
+			this.setService('actionRestrictions', cachedRestrictions);
+		}
+
+		// Cached multiblocks configuration
+		let mbEnabledKnown = false;
+		const cachedMbEnabled = mw.storage.get(_storageKeys.enableMultiblocks);
+		if (typeof cachedMbEnabled === 'string') {
+			wgEnableMultiBlocks = cachedMbEnabled === '1';
+			mbEnabledKnown = true;
+		}
+
+		// Cached language information
+		const cachedAutonyms = mw.storage.getObject(_storageKeys.languageAutonyms);
+		if ($.isPlainObject(cachedAutonyms) && AjaxBlockConfigLanguageOptions.supported.every(code => typeof cachedAutonyms[code] === 'string')) {
+			this.setService('languageAutonyms', cachedAutonyms);
+		}
+
+		const /** @type {JQuery.Promise<void>[]} */ requests = [];
+		const api = this.getApi();
+
+		// Query siteinfo/userinfo if needed
+		const needsAutonyms = AjaxBlockConfig.isConfigPage();
+		if (
+			!this.hasService('blockPageAliases') ||
+			!this.hasService('permissionManager') ||
+			(!this.hasService('languageAutonyms') && needsAutonyms)
+		) {
+			const params = Object.create(null);
+			params.meta = [];
+
+			if (!this.hasService('blockPageAliases')) {
+				params.meta.push('siteinfo');
+				params.siprop = 'specialpagealiases';
+			}
+
+			if (!this.hasService('permissionManager')) {
+				params.meta.push('userinfo');
+				params.uiprop = 'rights';
+			}
+
+			if (!this.hasService('languageAutonyms') && needsAutonyms) {
+				params.meta.push('languageinfo');
+				params.liprop = 'autonym';
+				params.licode = AjaxBlockConfigLanguageOptions.supported.join('|');
+			}
+
+			requests.push(
+				api.get(params).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+					if (!res || !res.query) {
+						return failAsEmptyResult(res, jqXHR);
+					}
+					const { specialpagealiases, userinfo, languageinfo } = res.query;
+
+					// Block aliases
+					if (Array.isArray(specialpagealiases)) {
+						const map = /** @type {Record<BlockPageNames, readonly string[]>} */ (Object.create(null));
+
+						for (const { realname, aliases } of specialpagealiases) {
+							if (realname !== 'Block' && realname !== 'Unblock') {
+								continue;
+							}
+							const canonical = /** @type {BlockPageNames} */ (realname);
+							const lc = realname.toLowerCase();
+							map[canonical] = aliases.filter(a => a === realname || a.toLowerCase() !== lc) ;
+						}
+
+						const targets = /** @type {BlockPageNames[]} */ (['Block', 'Unblock']);
+						if (targets.every(name => Array.isArray(map[name]) && map[name].length)) {
+							mw.storage.setObject(_storageKeys.blockPageAliases, map, daysInSeconds(3));
+							this.setService('blockPageAliases', map);
+						}
+					}
+
+					// User rights
+					const rights = userinfo && userinfo.rights;
+					if (Array.isArray(rights)) {
+						mw.storage.setObject(_storageKeys.userRights, rights, daysInSeconds(1));
+						this.setService('permissionManager', new PermissionManager(new Set(rights)));
+					}
+
+					if (languageinfo) {
+						const langMap = Object.create(null);
+						for (const [code, { autonym }] of Object.entries(languageinfo)) {
+							langMap[code] = autonym;
+						}
+						if (AjaxBlockConfigLanguageOptions.supported.every(code => typeof langMap[code] === 'string')) {
+							mw.storage.setObject(_storageKeys.languageAutonyms, langMap, daysInSeconds(14));
+							this.setService('languageAutonyms', langMap);
+						}
+					}
+
+					if (
+						!this.hasService('blockPageAliases') ||
+						!this.hasService('permissionManager') ||
+						(!this.hasService('languageAutonyms') && needsAutonyms)
+					) {
+						return failAsEmptyResult(res, jqXHR);
+					}
+				})
+			);
+		}
+
+		// Fetch paraminfo if needed
+		if (!this.hasService('actionRestrictions') || !mbEnabledKnown) {
+			requests.push(
+				api.get({
+					action: 'paraminfo',
+					modules: 'block',
+				}).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+					const mod = res && res.paraminfo && res.paraminfo.modules && res.paraminfo.modules[0];
+					if (!mod || mod.name !== 'block') {
+						return failAsEmptyResult(res, jqXHR);
+					}
+
+					const done = () => {
+						return this.hasService('actionRestrictions') && mbEnabledKnown;
+					};
+					for (const { name, type, limit } of mod.parameters) {
+						if (name === 'pagerestrictions' && typeof limit === 'number') {
+							// Hack: There's no other way to retrieve the value of wgEnableMultiBlocks (T404508),
+							// but the limit of page restrictions is 50 when multiblocks is enabled, otherwise 10
+							if (limit !== 10 && limit !== 50) {
+								console.warn('Unexpected pagerestrictions limit:', limit);
+							}
+							const multiBlocksEnabled = limit === 50;
+							mw.storage.set(
+								_storageKeys.enableMultiblocks,
+								multiBlocksEnabled ? '1' : '0',
+								daysInSeconds(7)
+							);
+							wgEnableMultiBlocks = multiBlocksEnabled;
+							mbEnabledKnown = true;
+						}
+						if (name === 'actionrestrictions' && Array.isArray(type)) {
+							const actions = type;
+							mw.storage.setObject(_storageKeys.actionRestrictions, actions, daysInSeconds(7));
+							this.setService('actionRestrictions', actions);
+						}
+						if (done()) {
+							break;
+						}
+					}
+					if (!done()) {
+						return failAsEmptyResult(res, jqXHR);
+					}
+				})
+			);
+		}
+
+		// Everything cached
+		if (!requests.length) {
+			return $.Deferred().resolve().promise();
+		}
+
+		return $.when(...requests).then(() => {});
+	}
+
+	static getApi() {
+		return this.getService('api');
+	}
+
+	static getBlockPageAliases() {
+		return this.getService('blockPageAliases');
+	}
+
+	static getSpecialNamespaceAliases() {
+		return this.getService('specialNamespaceAliases');
+	}
+
+	static getActionRestrictions() {
+		return this.getService('actionRestrictions');
+	}
+
+	static getLanguageAutonyms() {
+		return this.getService('languageAutonyms');
+	}
+
+	static getPermissionManager() {
+		return this.getService('permissionManager');
+	}
+
+	static getConfig() {
+		return this.getService('config');
+	}
+
+}
 
 class BlockLinkUtil {
 
@@ -1731,14 +1803,13 @@ class PermissionManager {
 class BlockLookup {
 
 	/**
-	 * @param {PermissionManager} permissionManager
 	 * @param {Set<string>} users
 	 * @param {Set<number>} ids
 	 * @returns {JQuery.Promise<ApiResponseQueryListBlocks[]>}
 	 * @private
 	 */
-	static fetch(permissionManager, users, ids) {
-		const apilimit = permissionManager.getApiLimit();
+	static fetch(users, ids) {
+		const apilimit = AjaxBlockServices.getPermissionManager().getApiLimit();
 		const ajaxOptions = nonwritePost();
 		/**
 		 * @param {(string | number)[]} batch
@@ -1752,7 +1823,7 @@ class BlockLookup {
 				return $.Deferred().resolve(ret).promise();
 			}
 
-			return AjaxBlock.api.post({
+			return AjaxBlockServices.getApi().post({
 				list: 'blocks',
 				[`bk${batchParam}`]: batch.slice(offset, offset + apilimit).join('|'),
 				bklimit: 'max',
@@ -1804,29 +1875,21 @@ class BlockLookup {
 	}
 
 	/**
-	 * @param {PermissionManager} permissionManager
 	 * @param {Set<string>} users
 	 * @param {Set<number>} ids
 	 * @returns {JQuery.Promise<BlockLookup>}
 	 */
-	static newFromTargets(permissionManager, users, ids) {
-		return this.fetch(permissionManager, users, ids).then((blocks) => {
-			return new this(permissionManager, blocks);
+	static newFromTargets(users, ids) {
+		return this.fetch(users, ids).then((blocks) => {
+			return new this(blocks);
 		});
 	}
 
 	/**
-	 * @param {PermissionManager} permissionManager
 	 * @param {ApiResponseQueryListBlocks[]} data
 	 * @private
 	 */
-	constructor(permissionManager, data) {
-		/**
-		 * @type {PermissionManager}
-		 * @readonly
-		 * @private
-		 */
-		this.permissionManager = permissionManager;
+	constructor(data) {
 		/**
 		 * @type {ApiResponseQueryListBlocks[]}
 		 * @private
@@ -2040,7 +2103,7 @@ class BlockLookup {
 	 * @returns {JQuery.Promise<?ApiResponseQueryListBlocks[]>} Currently active blocks, or null if none
 	 */
 	refreshDataByUsername(username) {
-		return BlockLookup.fetch(this.permissionManager, new Set([username]), new Set()).then((blocks) => {
+		return BlockLookup.fetch(new Set([username]), new Set()).then((blocks) => {
 			const currentIndexes = this.usernameMap.get(username);
 			if (currentIndexes !== undefined) {
 				const indexSet = new Set(currentIndexes);
@@ -2265,20 +2328,25 @@ BlockTarget.regex = {
 
 class Messages {
 
-	/**
-	 * @param {AjaxBlockConfigStore} configStore
-	 */
-	static loadInternalMessages(configStore) {
-		const lang = configStore.getLanguage();
+	static loadInternalMessages() {
+		const lang = AjaxBlockServices.getConfig().getLanguage();
 		const i18n = Messages.i18n[lang];
+		let workAroundT424167 = false; // Temporary
 		if (lang === mw.config.get('wgUserLanguage')) {
 			// If AjaxBlock's interface language matches wgUserLanguage, reuse mw.messages
 			// as the internal message store. Otherwise, use an independent mw.Map instance,
 			// since we should not reuse messages already loaded for wgUserLanguage when
 			// they differ from AjaxBlock's interface language.
 			Messages.map = mw.messages;
+		} else {
+			workAroundT424167 = true;
 		}
 		Messages.map.set(/** @type {any} */ (i18n));
+		if (workAroundT424167) {
+			Object.entries(i18n).forEach(([key, msg]) => {
+				Messages.parseInt(msg, key);
+			});
+		}
 	}
 
 	/**
@@ -2287,18 +2355,17 @@ class Messages {
 	 *
 	 * All successfully loaded (and parsed) messages are cached in local storage.
 	 *
-	 * @param {Initializer} initializer
 	 * @param {(keyof MediaWikiMessages)[]} messages List of message keys to ensure they are available.
 	 * @returns {JQuery.Promise<boolean>} Resolves to `true` if any new messages were added; otherwise `false`.
 	 */
-	static loadMessagesIfMissing(initializer, messages) {
-		const userLang = initializer.configStore.getLanguage();
+	static loadMessagesIfMissing(messages) {
+		const userLang = AjaxBlockServices.getConfig().getLanguage();
 		const storageKey = this.storageKey + '-' + userLang;
 
 		// Hydrate cache
 		/** @type {Record<string, string> | false | null} */
 		const cached = mw.storage.getObject(storageKey);
-		if (cached && Object.values(cached).every(val => typeof val === 'string')) {
+		if (cached && isStringArray(Object.values(cached))) {
 			this.map.set(cached);
 		}
 
@@ -2331,7 +2398,7 @@ class Messages {
 			return $.Deferred().resolve(false).promise();
 		}
 
-		const apilimit = initializer.permissionManager.getApiLimit();
+		const apilimit = AjaxBlockServices.getPermissionManager().getApiLimit();
 		const /** @type {Record<string, string>} */ loadedMessages = Object.create(null);
 
 		return (
@@ -2345,12 +2412,13 @@ class Messages {
 			function execute(keys, index) {
 				const batch = keys.slice(index, index + apilimit);
 
+				const api = AjaxBlockServices.getApi();
 				let request, ajaxOptions;
 				if (batch.length <= 50) {
-					request = AjaxBlock.api.get.bind(AjaxBlock.api);
+					request = api.get.bind(api);
 					ajaxOptions = {};
 				} else {
-					request = AjaxBlock.api.post.bind(AjaxBlock.api);
+					request = api.post.bind(api);
 					ajaxOptions = nonwritePost();
 				}
 
@@ -3218,10 +3286,6 @@ function AjaxBlockDialogFactory() {
 			);
 		}
 
-		getInitializer() {
-			return this.ajaxBlock.initializer;
-		}
-
 		getBlockLookup() {
 			return this.ajaxBlock.blockLookup;
 		}
@@ -3252,7 +3316,7 @@ function AjaxBlockDialogFactory() {
 			this.$body.append(this.content.$element);
 
 			// Apply preset block options
-			const presets = this.getInitializer().configStore.getPresets('merged');
+			const presets = AjaxBlockServices.getConfig().getPresets('merged');
 			this.paramApplierPromiseMap = [this.blockNamed, this.blockTemp, this.blockIp].reduce((acc, blockUser) => {
 				const targetType = blockUser.getPresetType();
 				const preset = presets.get(targetType);
@@ -3681,15 +3745,9 @@ class AjaxBlockDialogBodyOverlay {
 class WatchUserField {
 
 	/**
-	 * @param {Initializer} initializer
 	 * @param {OnResize} onResize
 	 */
-	constructor(initializer, onResize) {
-		/**
-		 * @type {Initializer}
-		 * @readonly
-		 */
-		this.initializer = initializer;
+	constructor(onResize) {
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
@@ -3817,14 +3875,13 @@ class WatchUserField {
 class BlockField extends WatchUserField {
 
 	/**
-	 * @param {Initializer} initializer
 	 * @param {object} [options]
 	 * @param {OnResize} [options.onResize]
 	 * @param {boolean} [options.omitMainLabel]
 	 */
-	constructor(initializer, options = {}) {
+	constructor(options = {}) {
 		const { onResize = () => {}, omitMainLabel = false } = options;
-		super(initializer, onResize);
+		super(onResize);
 
 		const supportsIndefReasonDropdown = Messages.supportsIndefReasonDropdown();
 
@@ -3955,7 +4012,7 @@ class BlockField extends WatchUserField {
 		 * @readonly
 		 */
 		this.partialBlockPages = new mw.widgets.TitlesMultiselectWidget({
-			api: AjaxBlock.api,
+			api: AjaxBlockServices.getApi(),
 			placeholder: Messages.get('block-pages-placeholder'),
 			showMissing: false,
 			tagLimit: wgEnableMultiBlocks ? 50 : 10,
@@ -3971,7 +4028,7 @@ class BlockField extends WatchUserField {
 		 * @type {Record<string, OO.ui.CheckboxInputWidget>}
 		 * @readonly
 		 */
-		this.partialBlockActions = this.initializer.actionRestrictions.reduce((acc, action) => {
+		this.partialBlockActions = AjaxBlockServices.getActionRestrictions().reduce((acc, action) => {
 			acc[action] = new OO.ui.CheckboxInputWidget({ data: action });
 			return acc;
 		}, /** @type {Record<string, OO.ui.CheckboxInputWidget>} */ (Object.create(null)));
@@ -4286,7 +4343,7 @@ class BlockField extends WatchUserField {
 	 * @returns {this}
 	 */
 	insertCustomReasons(customReasons) {
-		customReasons = customReasons || this.initializer.configStore.getCustomReasons('block');
+		customReasons = customReasons || AjaxBlockServices.getConfig().getCustomReasons('block');
 		const groupLabel = Messages.plain('ajaxblock-dialog-block-label-customreasons');
 		const currentReason = this.getReason();
 		const dropdowns = [
@@ -4552,11 +4609,10 @@ class BlockField extends WatchUserField {
 class UnblockField extends WatchUserField {
 
 	/**
-	 * @param {Initializer} initializer
 	 * @param {OnResize} [onResize]
 	 */
-	constructor(initializer, onResize = () => {}) {
-		super(initializer, onResize);
+	constructor(onResize = () => {}) {
+		super(onResize);
 
 		/**
 		 * @type {OO.ui.ComboBoxInputWidget}
@@ -4565,7 +4621,7 @@ class UnblockField extends WatchUserField {
 		 */
 		this.reason = new OO.ui.ComboBoxInputWidget({
 			placeholder: Messages.get('block-removal-reason-placeholder'),
-			options: this.initializer.configStore.getCustomReasons('unblock').map(r => ({ data: r })),
+			options: AjaxBlockServices.getConfig().getCustomReasons('unblock').map(r => ({ data: r })),
 		});
 		/**
 		 * @type {OO.ui.FieldsetLayout}
@@ -4615,7 +4671,7 @@ class BlockUser extends BlockField {
 	 */
 	constructor(dialog, presetType) {
 		const onResize = () => dialog.updateSize();
-		super(dialog.getInitializer(), { onResize });
+		super({ onResize });
 
 		/**
 		 * @type {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>}
@@ -4643,7 +4699,7 @@ class BlockUser extends BlockField {
 		this.presetSelector = new OO.ui.DropdownWidget({
 			label: Messages.get('ajaxblock-dialog-block-placeholder-preset'),
 			menu: {
-				items: BlockPreset.createMenuOptions(this.initializer.configStore),
+				items: BlockPreset.createMenuOptions(),
 			},
 		});
 		/**
@@ -4742,7 +4798,7 @@ class BlockUser extends BlockField {
 			this.cbAutoblockContainer.toggle(true);
 			this.cbHardblockContainer.toggle(false);
 			this.cbHardblock.setSelected(false);
-			if (this.initializer.permissionManager.canHideUser()) {
+			if (AjaxBlockServices.getPermissionManager().canHideUser()) {
 				this.cbHideUserContainer.toggle(true);
 			} else {
 				this.cbHideUserContainer.toggle(false);
@@ -4780,7 +4836,7 @@ class BlockUser extends BlockField {
 		if (!base) {
 			return null;
 		}
-		const configStore = this.initializer.configStore;
+		const config = AjaxBlockServices.getConfig();
 		const params = /** @type {BlockParams} */ (base.params);
 		const warnings = base.warnings;
 
@@ -4843,23 +4899,23 @@ class BlockUser extends BlockField {
 		}
 
 		const reason = this.getReason();
-		if (!reason && configStore.isWarningEnabled('block-noreason', context)) {
+		if (!reason && config.isWarningEnabled('block-noreason', context)) {
 			warnings.push('ajaxblock-confirm-block-noreason');
 		}
 		params.reason = reason;
 
 		let expiry = this.getExpiry();
-		if (!expiry && configStore.isWarningEnabled('block-noexpiry', context)) {
+		if (!expiry && config.isWarningEnabled('block-noexpiry', context)) {
 			warnings.push('ajaxblock-confirm-block-noexpiry');
 			expiry = EXPIRY_INFINITE;
 		}
 		params.expiry = expiry;
 
-		if (!params.anononly && configStore.isWarningEnabled('block-hardblock', context)) {
+		if (!params.anononly && config.isWarningEnabled('block-hardblock', context)) {
 			warnings.push('ajaxblock-confirm-block-hardblock');
 		}
 
-		while (this.initializer.permissionManager.canHideUser() && userType === 'named') {
+		while (AjaxBlockServices.getPermissionManager().canHideUser() && userType === 'named') {
 			params.hidename = this.cbHideUser.isSelected();
 			if (!params.hidename) {
 				break;
@@ -4885,24 +4941,24 @@ class BlockUser extends BlockField {
 				}
 			}
 
-			if (needsWarning && configStore.isWarningEnabled('block-hideuser', context)) {
+			if (needsWarning && config.isWarningEnabled('block-hideuser', context)) {
 				warnings.push('ajaxblock-confirm-block-hideuser');
 			}
 		}
 
-		if (params.reblock && configStore.isWarningEnabled('block-reblock', context)) {
+		if (params.reblock && config.isWarningEnabled('block-reblock', context)) {
 			warnings.push('ajaxblock-confirm-block-reblock');
 		}
 
-		if (params.newblock && configStore.isWarningEnabled('block-newblock', context)) {
+		if (params.newblock && config.isWarningEnabled('block-newblock', context)) {
 			warnings.push('ajaxblock-confirm-block-newblock');
 		}
 
-		if (data.target.getUsername() === wgUserName && configStore.isWarningEnabled('block-self', context)) {
+		if (data.target.getUsername() === wgUserName && config.isWarningEnabled('block-self', context)) {
 			warnings.push('ajaxblock-confirm-block-self');
 		}
 
-		if (ParamApplier.blockParamsDiffer(params, data.params) && configStore.isWarningEnabled('block-ignorepredefined', context)) {
+		if (ParamApplier.blockParamsDiffer(params, data.params) && config.isWarningEnabled('block-ignorepredefined', context)) {
 			warnings.push('ajaxblock-confirm-block-ignorepredefined');
 		}
 
@@ -4947,7 +5003,7 @@ class UnblockUser extends UnblockField {
 	 */
 	constructor(dialog) {
 		const onResize = () => dialog.updateSize();
-		super(dialog.getInitializer(), onResize);
+		super(onResize);
 
 		/**
 		 * @type {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>}
@@ -4989,21 +5045,21 @@ class UnblockUser extends UnblockField {
 		if (!base) {
 			return null;
 		}
-		const configStore = this.initializer.configStore;
+		const config = AjaxBlockServices.getConfig();
 		const params = /** @type {UnblockParams} */ (base.params);
 		const warnings = base.warnings;
 
-		if (configStore.isWarningEnabled('unblock', context)) {
+		if (config.isWarningEnabled('unblock', context)) {
 			warnings.push('ajaxblock-confirm-unblock');
 		}
 
 		const reason = this.getReason();
-		if (!reason && configStore.isWarningEnabled('unblock-noreason', context)) {
+		if (!reason && config.isWarningEnabled('unblock-noreason', context)) {
 			warnings.push('ajaxblock-confirm-unblock-noreason');
 		}
 		params.reason = reason;
 
-		if (data.target.getUsername() === wgUserName && configStore.isWarningEnabled('unblock-self', context)) {
+		if (data.target.getUsername() === wgUserName && config.isWarningEnabled('unblock-self', context)) {
 			warnings.push('ajaxblock-confirm-unblock-self');
 		}
 
@@ -5011,7 +5067,7 @@ class UnblockUser extends UnblockField {
 			Object.assign(params, this.getWatchUserParams());
 		}
 
-		if (ParamApplier.unblockParamsDiffer(params, data.params) && configStore.isWarningEnabled('unblock-ignorepredefined', context)) {
+		if (ParamApplier.unblockParamsDiffer(params, data.params) && config.isWarningEnabled('unblock-ignorepredefined', context)) {
 			warnings.push('ajaxblock-confirm-unblock-ignorepredefined');
 		}
 
@@ -5199,7 +5255,6 @@ class TargetField {
 		const username = target.getUsername();
 		const blocks = username ? blockLookup.getBlocksByUsername(username) : null;
 		const blockUser = this.parent instanceof BlockUser ? this.parent : undefined;
-		const configStore = this.parent.initializer.configStore;
 
 		if (id !== null) {
 			const block = blockLookup.getBlockById(id);
@@ -5208,11 +5263,11 @@ class TargetField {
 				if (username && blocks && blocks.length > 1) {
 					// Other blocks also exist
 					this.initInternal(null, username, false, true);
-					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, configStore, { radio: true, blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
 				} else if (block.user) {
 					// Unambiguous block
 					this.initInternal(id, block.user, true, true);
-					return { type: 'log', log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, configStore, { blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(/** @type {string} */ (block.user), blockLookup, { blockUser }) };
 				} else {
 					// Autoblock
 					if (blockUser) {
@@ -5234,7 +5289,7 @@ class TargetField {
 				if (Array.isArray(blocks)) {
 					// If other active blocks exist, allow the user to choose which one to update
 					this.initInternal(null, username, false, true);
-					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, configStore, { radio: true, blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
 				} else {
 					// No other active blocks
 					if (blockUser) {
@@ -5259,11 +5314,11 @@ class TargetField {
 				if (blocks.length > 1) {
 					// Multiple active blocks
 					this.initInternal(null, username, false, true);
-					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, configStore, { radio: true, blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { radio: true, blockUser }) };
 				} else {
 					// Single active block
 					this.initInternal(blocks[0].id, username, true, true);
-					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, configStore, { blockUser }) };
+					return { type: 'log', log: () => BlockLog.generate(username, blockLookup, { blockUser }) };
 				}
 			} else {
 				// No active blocks
@@ -5391,7 +5446,6 @@ class BlockLog {
 	/**
 	 * @param {string} username
 	 * @param {BlockLookup} blockLookup
-	 * @param {AjaxBlockConfigStore} configStore
 	 * @param {object} [options]
 	 * @param {boolean} [options.radio] Whether to use OO.ui.RadioSelectWidget in the logs:
 	 * - `true`: Returns `OO.ui.RadioOptionWidget[]` with no option selected so that
@@ -5402,7 +5456,7 @@ class BlockLog {
 	 * @returns {JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement> | null>}
 	 * `null` if the user does not have any active blocks.
 	 */
-	static generate(username, blockLookup, configStore, options = {}) {
+	static generate(username, blockLookup, options = {}) {
 		const { radio = false, blockUser } = options;
 
 		const currentBlocks = blockLookup.getBlocksByUsername(username);
@@ -5418,7 +5472,7 @@ class BlockLog {
 
 		return $.when(
 			blockLookup.refreshDataByUsername(username),
-			this.getEntries(username, configStore)
+			this.getEntries(username)
 		).then((blocks, logevents) => {
 			if (blocks === null) {
 				return null;
@@ -5484,20 +5538,19 @@ class BlockLog {
 
 	/**
 	 * @param {string} username
-	 * @param {AjaxBlockConfigStore} configStore
 	 * @param {number} [earliestTimestamp]
 	 * @returns {JQuery.Promise<ApiResponseQueryListLogevents[]>}
 	 * @private
 	 */
-	static getEntries(username, configStore, earliestTimestamp) {
-		return AjaxBlock.api.get({
+	static getEntries(username, earliestTimestamp) {
+		return AjaxBlockServices.getApi().get({
 			list: 'logevents',
 			leprop: 'user|type|timestamp|parsedcomment|details',
 			letype: 'block',
 			leend: earliestTimestamp,
 			letitle: `User:${username}`,
 			lelimit: 'max',
-			uselang: configStore.getLanguage(),
+			uselang: AjaxBlockServices.getConfig().getLanguage(),
 		}).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
 			if (res && res.query && res.query.logevents) {
 				return res.query.logevents;
@@ -5897,10 +5950,9 @@ class ParamApplier {
 	/**
 	 * @param {URLSearchParams} params
 	 * @param {BlockTargetType} targetType
-	 * @param {Initializer} initializer
 	 * @returns {?ParamApplierBlockParams}
 	 */
-	static createBlockParamsFromSearchParams(params, targetType, initializer) {
+	static createBlockParamsFromSearchParams(params, targetType) {
 		const map = /** @type {Map<string, string>} */ (new Map());
 		for (const [key, value] of params.entries()) {
 			if (this.isBlockSearchParamSupported(key)) {
@@ -5939,7 +5991,7 @@ class ParamApplier {
 			nocreate: toPHPBool(params.get('wpCreateAccount')),
 			autoblock: targetType !== 'ip' && toPHPBool(params.get('wpAutoBlock')),
 			noemail: toPHPBool(params.get('wpDisableEmail')),
-			hidden: initializer.permissionManager.canHideUser() && toPHPBool(params.get('wpHideUser')),
+			hidden: AjaxBlockServices.getPermissionManager().canHideUser() && toPHPBool(params.get('wpHideUser')),
 			nousertalk: toPHPBool(params.get('wpDisableUTEdit')),
 			partial: isPartial,
 			pagerestrictions: getRetrictionArray('wpPageRestrictions'),
@@ -6014,10 +6066,6 @@ class ParamApplier {
 			onAfterPromise = noop,
 			targetType,
 		} = hooks;
-		const translatorOptions = targetType && {
-			targetType,
-			permissionManager: blockField.initializer.permissionManager
-		};
 		const /** @type {BlockParamApplierInvalidRestrictionMap} */ invalidRestrictions = Object.create(null);
 
 		/**
@@ -6031,21 +6079,21 @@ class ParamApplier {
 				setter: blockField.setReason.bind(blockField),
 			},
 			hardblock: {
-				getter: v => this.translateBoolForTarget(v, 'hardblock', translatorOptions),
+				getter: v => this.translateBoolForTarget(v, 'hardblock', targetType),
 				setter: blockField.cbHardblock.setSelected.bind(blockField.cbHardblock),
 			},
 			nocreate: {
 				setter: blockField.cbCreateAccount.setSelected.bind(blockField.cbCreateAccount),
 			},
 			autoblock: {
-				getter: v => this.translateBoolForTarget(v, 'autoblock', translatorOptions),
+				getter: v => this.translateBoolForTarget(v, 'autoblock', targetType),
 				setter: blockField.cbAutoblock.setSelected.bind(blockField.cbAutoblock),
 			},
 			noemail: {
 				setter: blockField.cbSendEmail.setSelected.bind(blockField.cbSendEmail),
 			},
 			hidden: {
-				getter: v => this.translateBoolForTarget(v, 'hidden', translatorOptions),
+				getter: v => this.translateBoolForTarget(v, 'hidden', targetType),
 				setter: blockField.cbHideUser.setSelected.bind(blockField.cbHideUser),
 			},
 			nousertalk: {
@@ -6075,7 +6123,7 @@ class ParamApplier {
 						return /** @type {string[]} */ ([]);
 					}
 
-					const apilimit = blockField.initializer.permissionManager.getApiLimit();
+					const apilimit = AjaxBlockServices.getPermissionManager().getApiLimit();
 					const ajaxOptions = nonwritePost();
 					return (
 						/**
@@ -6086,7 +6134,7 @@ class ParamApplier {
 						 */
 						function request(batch, offset, ret = new Set()) {
 							const titles = batch.slice(offset, offset + apilimit);
-							return AjaxBlock.api.post({
+							return AjaxBlockServices.getApi().post({
 								titles,
 							}, ajaxOptions).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
 								let pages = res && res.query && res.query.pages;
@@ -6197,7 +6245,7 @@ class ParamApplier {
 		 * @param {any} res
 		 * @returns {JQuery<HTMLElement>}
 		 */
-		const catchHandler = (_, res) => AjaxBlock.api.getErrorMessage(res);
+		const catchHandler = (_, res) => AjaxBlockServices.getApi().getErrorMessage(res);
 
 		for (const [key, value] of entries) {
 			const { getter, setter } = paramMap[key];
@@ -6254,19 +6302,18 @@ class ParamApplier {
 	/**
 	 * @param {boolean} value
 	 * @param {'hardblock' | 'autoblock' | 'hidden'} paramKey
-	 * @param {{ targetType: NonNullable<BlockTargetType>; permissionManager: PermissionManager }} [options]
+	 * @param {NonNullable<BlockTargetType>} [targetType]
 	 * @returns {boolean}
 	 * @private
 	 */
-	static translateBoolForTarget(value, paramKey, options) {
-		if (!options) {
+	static translateBoolForTarget(value, paramKey, targetType) {
+		if (!targetType) {
 			return value;
 		}
-		const { targetType, permissionManager } = options;
 		switch (paramKey) {
 			case 'hardblock': return targetType === 'ip' && value;
 			case 'autoblock': return (targetType === 'named' || targetType === 'temp') && value;
-			case 'hidden': return targetType === 'named' && permissionManager.canHideUser() && value;
+			case 'hidden': return targetType === 'named' && AjaxBlockServices.getPermissionManager().canHideUser() && value;
 			default: throw new Error('Invalid param key: ' + paramKey);
 		}
 	}
@@ -6559,12 +6606,11 @@ class BlockPreset {
 	}
 
 	/**
-	 * @param {AjaxBlockConfigStore} configStore
 	 * @returns {OO.ui.MenuOptionWidget[]}
 	 */
-	static createMenuOptions(configStore) {
+	static createMenuOptions() {
 		const /** @type {OO.ui.MenuOptionWidget[]} */ options = [];
-		for (const [name, instance] of configStore.getPresets('merged')) {
+		for (const [name, instance] of AjaxBlockServices.getConfig().getPresets('merged')) {
 			options.push(
 				new OO.ui.MenuOptionWidget({
 					label: BlockPreset.getDisplayName(name),
@@ -6799,7 +6845,6 @@ class AjaxBlockConfig {
 			const heading = document.querySelector('.mw-first-heading');
 			const content = document.querySelector('.mw-body-content');
 			if (!heading || !content) {
-				this.fail(content);
 				return null;
 			}
 			heading.textContent = title;
@@ -6818,7 +6863,6 @@ class AjaxBlockConfig {
 	/**
 	 * @param {?Element} content
 	 * @returns {void}
-	 * @private
 	 */
 	static fail(content) {
 		const msg = Messages.get('ajaxblock-config-loading-failure');
@@ -6835,20 +6879,11 @@ class AjaxBlockConfig {
 	}
 
 	/**
-	 * @typedef {Required<Initializer>} FullInitializer
-	 */
-	/**
-	 * @param {FullInitializer} initializer
 	 * @param {Element} content
 	 * @returns {void}
 	 */
-	static init(initializer, content) {
-		if (!initializer.langs) {
-			this.fail(content);
-			return;
-		}
-
-		const ajaxBlockConfig = new AjaxBlockConfig(initializer);
+	static init(content) {
+		const ajaxBlockConfig = new AjaxBlockConfig();
 		const paramApplierPromises = [
 			...ajaxBlockConfig.localDialogOptions.blockPresetOptions.getFields().map(field => field.paramApplierPromise),
 			...ajaxBlockConfig.globalDialogOptions.blockPresetOptions.getFields().map(field => field.paramApplierPromise)
@@ -6859,22 +6894,21 @@ class AjaxBlockConfig {
 	}
 
 	/**
-	 * @param {FullInitializer} initializer
 	 * @private
 	 */
-	constructor(initializer) {
+	constructor() {
 		/**
 		 * @type {AjaxBlockConfigLanguageOptions}
 		 * @readonly
 		 * @private
 		 */
-		this.languageOptions = new AjaxBlockConfigLanguageOptions(initializer);
+		this.languageOptions = new AjaxBlockConfigLanguageOptions();
 		/**
 		 * @type {AjaxBlockConfigWarningOptions}
 		 * @readonly
 		 * @private
 		 */
-		this.warningOptions = new AjaxBlockConfigWarningOptions(initializer);
+		this.warningOptions = new AjaxBlockConfigWarningOptions();
 
 		const commonTabPanel = new OO.ui.TabPanelLayout('Common', {
 			expanded: false,
@@ -6896,7 +6930,7 @@ class AjaxBlockConfig {
 		 * @readonly
 		 * @private
 		 */
-		this.localDialogOptions = new AjaxBlockConfigDialogOptions(initializer, 'local', localTabPanel);
+		this.localDialogOptions = new AjaxBlockConfigDialogOptions('local', localTabPanel);
 
 		const globalTabPanel = new OO.ui.TabPanelLayout('Global', {
 			expanded: false,
@@ -6908,7 +6942,7 @@ class AjaxBlockConfig {
 		 * @readonly
 		 * @private
 		 */
-		this.globalDialogOptions = new AjaxBlockConfigDialogOptions(initializer, 'global', globalTabPanel);
+		this.globalDialogOptions = new AjaxBlockConfigDialogOptions('global', globalTabPanel);
 
 		const miscTabPanel = new OO.ui.TabPanelLayout('Misc', {
 			expanded: false,
@@ -7028,14 +7062,11 @@ class AjaxBlockConfig {
 
 class AjaxBlockConfigLanguageOptions {
 
-	/**
-	 * @param {FullInitializer} initializer
-	 */
-	constructor(initializer) {
-		const { configStore } = initializer;
+	constructor() {
+		const config = AjaxBlockServices.getConfig();
 
 		const getLanguageOptions = () => {
-			return typedEntries(initializer.langs).map(([code, autonym]) => {
+			return typedEntries(AjaxBlockServices.getLanguageAutonyms()).map(([code, autonym]) => {
 				return {
 					label: `${code} - ${autonym}`,
 					data: code,
@@ -7053,7 +7084,7 @@ class AjaxBlockConfigLanguageOptions {
 			options: getLanguageOptions(),
 			placeholder: Messages.get('ajaxblock-config-placeholder-languages-used'),
 		});
-		this.ddUsedLanguages.setValue(configStore.getUsedLanguages());
+		this.ddUsedLanguages.setValue(config.getUsedLanguages());
 
 		/**
 		 * @type {OO.ui.DropdownWidget}
@@ -7065,7 +7096,7 @@ class AjaxBlockConfigLanguageOptions {
 				items: getLanguageOptions().map(cfg => new OO.ui.MenuOptionWidget(cfg)),
 			},
 		});
-		this.ddDefaultLanguage.getMenu().selectItemByData(configStore.getDefaultLanguage() || 'en');
+		this.ddDefaultLanguage.getMenu().selectItemByData(config.getDefaultLanguage() || 'en');
 
 		const layout = new OO.ui.FieldsetLayout({
 			label: Messages.get('ajaxblock-config-label-languages-layout'),
@@ -7137,11 +7168,9 @@ AjaxBlockConfigLanguageOptions.supported = ['en', 'ja'];
 
 class AjaxBlockConfigWarningOptions {
 
-	/**
-	 * @param {FullInitializer} initializer
-	 */
-	constructor(initializer) {
-		const { configStore } = initializer;
+	constructor() {
+		const config = AjaxBlockServices.getConfig();
+
 		/**
 		 * @type {Record<WarningKeys, Record<'cbOneClick' | 'cbDialog', OO.ui.CheckboxInputWidget>>}
 		 * @readonly
@@ -7163,12 +7192,12 @@ class AjaxBlockConfigWarningOptions {
 			flags: ['destructive'],
 			disabled: OO.compare(
 				AjaxBlockConfigWarningOptions.defaults.enabled,
-				configStore.getWarningOptions()
+				config.getWarningOptions()
 			),
 		});
 
 		const $tbody = $('<tbody>');
-		for (const [key, enabled] of typedEntries(configStore.getWarningOptions())) {
+		for (const [key, enabled] of typedEntries(config.getWarningOptions())) {
 			const disabled = AjaxBlockConfigWarningOptions.defaults.disabled[key];
 
 			const cbOneClick = new OO.ui.CheckboxInputWidget({
@@ -7467,26 +7496,25 @@ AjaxBlockConfigWarningOptions.defaults = {
 class AjaxBlockConfigDialogOptions {
 
 	/**
-	 * @param {FullInitializer} initializer
 	 * @param {AjaxBlockConfigDomains} domain
 	 * @param {OO.ui.TabPanelLayout} tabPanel
 	 */
-	constructor(initializer, domain, tabPanel) {
+	constructor(domain, tabPanel) {
 		/**
 		 * @type {AjaxBlockConfigBlockPresetOptions}
 		 * @readonly
 		 */
-		this.blockPresetOptions = new AjaxBlockConfigBlockPresetOptions(initializer, domain);
+		this.blockPresetOptions = new AjaxBlockConfigBlockPresetOptions(domain);
 		/**
 		 * @type {AjaxBlockConfigCustomReasonOptions}
 		 * @readonly
 		 */
-		this.blockReasonOptions = new AjaxBlockConfigCustomReasonOptions(initializer, 'block', domain, tabPanel);
+		this.blockReasonOptions = new AjaxBlockConfigCustomReasonOptions('block', domain, tabPanel);
 		/**
 		 * @type {AjaxBlockConfigCustomReasonOptions}
 		 * @readonly
 		 */
-		this.unblockReasonOptions = new AjaxBlockConfigCustomReasonOptions(initializer, 'unblock', domain, tabPanel);
+		this.unblockReasonOptions = new AjaxBlockConfigCustomReasonOptions('unblock', domain, tabPanel);
 
 		tabPanel.$element.append(
 			this.blockPresetOptions.$element,
@@ -7500,16 +7528,9 @@ class AjaxBlockConfigDialogOptions {
 class AjaxBlockConfigDomainOptions {
 
 	/**
-	 * @param {FullInitializer} initializer
 	 * @param {AjaxBlockConfigDomains} domain
 	 */
-	constructor(initializer, domain) {
-		/**
-		 * @type {FullInitializer}
-		 * @readonly
-		 * @protected
-		 */
-		this.initializer = initializer;
+	constructor(domain) {
 		/**
 		 * @type {AjaxBlockConfigDomains}
 		 * @readonly
@@ -7546,11 +7567,10 @@ class AjaxBlockConfigDomainOptions {
 class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 
 	/**
-	 * @param {FullInitializer} initializer
 	 * @param {AjaxBlockConfigDomains} domain
 	 */
-	constructor(initializer, domain) {
-		super(initializer, domain);
+	constructor(domain) {
+		super(domain);
 
 		/**
 		 * @type {AjaxBlockConfigBlockPresetOptionsField[]}
@@ -7632,7 +7652,7 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 	 * @private
 	 */
 	addField(options = {}) {
-		const field = new AjaxBlockConfigBlockPresetOptionsField(this.initializer, options);
+		const field = new AjaxBlockConfigBlockPresetOptionsField(options);
 		this.fields.push(field);
 		this.fieldContainer.$element.append(field.$container);
 	}
@@ -7689,11 +7709,10 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 
 	/**
-	 * @param {FullInitializer} initializer
 	 * @param {BlockPresetOptionsFieldOptions} [options]
 	 */
-	constructor(initializer, options = {}) {
-		super(initializer, { omitMainLabel: true });
+	constructor(options = {}) {
+		super({ omitMainLabel: true });
 
 		const {
 			collapsed = false,
@@ -7993,14 +8012,12 @@ class CollapsibleFieldset {
 class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 
 	/**
-	 * @param {FullInitializer} initializer
 	 * @param {BlockActions} action
 	 * @param {AjaxBlockConfigDomains} domain
 	 * @param {OO.ui.TabPanelLayout} tabPanel
 	 */
-	constructor(initializer, action, domain, tabPanel) {
-		super(initializer, domain);
-		const { configStore } = initializer;
+	constructor(action, domain, tabPanel) {
+		super(domain);
 
 		/**
 		 * @type {OO.ui.MultilineTextInputWidget}
@@ -8012,7 +8029,7 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 			rows: 1,
 			maxRows: 10,
 			placeholder: Messages.get('ajaxblock-config-placeholder-customreasons'),
-			value: configStore.getCustomReasons(action, domain).join('\n'),
+			value: AjaxBlockServices.getConfig().getCustomReasons(action, domain).join('\n'),
 		});
 
 		const layout = new OO.ui.FieldsetLayout({
@@ -8204,12 +8221,19 @@ function isObject(value) {
 }
 
 /**
- * @param {unknown[]} arr
- * @returns {arr is number[]}
- * @todo Should this check all elements?
+ * @param {unknown[]} value
+ * @returns {value is string[]}
  */
-function isNumberArray(arr) {
-	return typeof arr[0] === 'number';
+function isStringArray(value) {
+	return Array.isArray(value) && value.every(el => typeof el === 'string');
+}
+
+/**
+ * @param {unknown[]} value
+ * @returns {value is number[]}
+ */
+function isNumberArray(value) {
+	return Array.isArray(value) && value.every(el => typeof el === 'number');
 }
 
 /**
@@ -8341,7 +8365,6 @@ AjaxBlockLogo.svg =
 /**
  * @typedef {import('./window/AjaxBlock').BlockPageNames} BlockPageNames
  * @typedef {import('./window/AjaxBlock').BlockActions} BlockActions
- * @typedef {import('./window/AjaxBlock').PrematureInitializer} PrematureInitializer
  * @typedef {import('./window/AjaxBlock').ApiResponse} ApiResponse
  * @typedef {import('./window/AjaxBlock').ApiResponseBlock} ApiResponseBlock
  * @typedef {import('./window/AjaxBlock').ApiResponseUnblock} ApiResponseUnblock
