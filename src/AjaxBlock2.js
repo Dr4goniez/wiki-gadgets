@@ -3141,19 +3141,13 @@ class DropdownUtil {
 	}
 
 	/**
+	 * Returns `dropdown.getMenu().getItems()` cast to `OO.ui.MenuOptionWidget[]`.
+	 *
 	 * @param {OO.ui.DropdownWidget} dropdown
-	 * @param {(item: OO.ui.MenuOptionWidget, index: number, array: readonly OO.ui.MenuOptionWidget[]) => boolean} callback
-	 * @returns {?OO.ui.MenuOptionWidget}
+	 * @returns {OO.ui.MenuOptionWidget[]}
 	 */
-	static findItemByCallback(dropdown, callback) {
-		const items = /** @type {OO.ui.MenuOptionWidget[]} */ (dropdown.getMenu().getItems());
-		for (let i = 0; i < items.length; i++) {
-			const item = items[i];
-			if (callback(item, i, items)) {
-				return item;
-			}
-		}
-		return null;
+	static getOptions(dropdown) {
+		return /** @type {OO.ui.MenuOptionWidget[]} */ (dropdown.getMenu().getItems());
 	}
 
 	/**
@@ -4397,11 +4391,10 @@ class BlockField extends WatchUserField {
 			expiry = EXPIRY_INFINITE;
 		}
 
-		const menu = this.expiry.getMenu();
 		let selected = false;
-		for (const item of /** @type {OO.ui.MenuOptionWidget[]} */ (menu.getItems())) {
+		for (const item of DropdownUtil.getOptions(this.expiry)) {
 			if (item.getData() === expiry) {
-				menu.selectItem(item);
+				this.expiry.getMenu().selectItem(item);
 				selected = true;
 				break;
 			}
@@ -4526,10 +4519,28 @@ class BlockField extends WatchUserField {
 	setReason(reason) {
 		const [reasonPrimary, reasonSecondary] = this.getRelevantReasonDropdowns();
 		const rSep = new RegExp('^' + mw.util.escapeRegExp(Messages.plain('colon-separator')));
-		let item = DropdownUtil.findItemByCallback(reasonPrimary, (option) => {
-			const data = /** @type {string} */ (option.getData());
-			return data !== '' && reason.startsWith(data);
-		});
+
+		/**
+		 * @param {OO.ui.DropdownWidget} dropdown
+		 * @returns {?OO.ui.MenuOptionWidget}
+		 */
+		const findMatchingOption = (dropdown) => {
+			let /** @type {?OO.ui.MenuOptionWidget} */ item = null;
+			for (const option of DropdownUtil.getOptions(dropdown)) {
+				const data = /** @type {string} */ (option.getData());
+				if (
+					data !== '' && reason.startsWith(data) &&
+					// Select the item with the **longest** matching data to avoid partial matches
+					// (e.g., reason === "FooBar", data === "Foo", while another item has "FooBar")
+					(!item || /** @type {string} */ (item.getData()).length < data.length)
+				) {
+					item = option;
+				}
+			}
+			return item;
+		};
+
+		let item = findMatchingOption(reasonPrimary);
 		if (!item) {
 			[reasonPrimary, reasonSecondary].forEach((dropdown) => {
 				DropdownUtil.selectOther(dropdown);
@@ -4543,10 +4554,7 @@ class BlockField extends WatchUserField {
 				.replace(rSep, '');
 		}
 
-		item = DropdownUtil.findItemByCallback(reasonSecondary, (option) => {
-			const data = /** @type {string} */ (option.getData());
-			return data !== '' && reason.startsWith(data);
-		});
+		item = findMatchingOption(reasonSecondary);
 		if (!item) {
 			DropdownUtil.selectOther(reasonSecondary);
 		} else {
@@ -4810,8 +4818,7 @@ class BlockUser extends BlockField {
 
 		// Adjust the visibility of preset options
 		let applicablePresetExists = false;
-		const options = /** @type {OO.ui.MenuOptionWidget[]} */ (this.presetSelector.getMenu().getItems());
-		for (const option of options) {
+		for (const option of DropdownUtil.getOptions(this.presetSelector)) {
 			const preset = /** @type {BlockPreset} */ (option.getData());
 			const isApplicable = preset.supportsTarget(targetType);
 			option.toggle(isApplicable);
