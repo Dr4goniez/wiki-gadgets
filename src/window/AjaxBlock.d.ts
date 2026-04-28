@@ -329,6 +329,19 @@ export interface AjaxBlockMessages {
 	'ajaxblock-config-label-customreasons-unblock-layout': string;
 	'ajaxblock-config-help-customreasons-block': string;
 	'ajaxblock-config-help-customreasons-unblock': string;
+	'ajaxblock-config-label-purgecache': string;
+	'ajaxblock-config-label-deletelocal': string;
+	'ajaxblock-config-help-deletelocal-absent': string;
+	'ajaxblock-config-label-deletelocalall': string;
+	'ajaxblock-config-help-deletelocalall-present': string;
+	'ajaxblock-config-help-deletelocalall-absent': string;
+	'ajaxblock-config-label-deleteglobal': string;
+	'ajaxblock-config-help-deleteglobal-absent': string;
+	'ajaxblock-config-label-deletedata': string;
+	'ajaxblock-config-label-deletedata-short': string;
+	'ajaxblock-config-confirm-deletedata': string;
+	'ajaxblock-config-notify-deletedata-success': string;
+	'ajaxblock-config-notify-deletedata-failure': string;
 }
 
 /**

@@ -47,6 +47,7 @@ if (wgCanonicalSpecialPageName === 'Block' || wgCanonicalSpecialPageName === 'Un
 
 const wgUserName = /** @type {string} */ (mw.config.get('wgUserName'));
 const wgNamespaceIds = mw.config.get('wgNamespaceIds');
+const wgWikiID = mw.config.get('wgWikiID');
 let wgEnableMultiBlocks = false;
 const EXPIRY_INFINITE = 'infinity';
 
@@ -62,23 +63,7 @@ class AjaxBlock {
 		AjaxBlockServices.setService('config', config);
 		Messages.loadInternalMessages();
 		const configPageLoaded = AjaxBlockConfig.isConfigPage() && AjaxBlockConfig.preparePage();
-		AjaxBlockServices.setService('api',
-			new mw.Api({
-				ajax: {
-					headers: {
-						'Api-User-Agent': 'AjaxBlock/2.0.0 (https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock.js)'
-					}
-				},
-				parameters: {
-					action: 'query',
-					format: 'json',
-					formatversion: '2',
-					errorformat: 'html',
-					errorlang: config.getLanguage(),
-					errorsuselocal: true,
-				}
-			})
-		);
+		AjaxBlockServices.setService('api', new mw.Api(this.apiOptions));
 
 		try {
 			await toNativePromise(AjaxBlockServices.initialize());
@@ -181,6 +166,24 @@ class AjaxBlock {
 			}
 			logo.remove(1000);
 		});
+	}
+
+	static get apiOptions() {
+		return {
+			ajax: {
+				headers: {
+					'Api-User-Agent': `AjaxBlock/${VERSION} (https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock.js)`,
+				},
+			},
+			parameters: {
+				action: 'query',
+				format: 'json',
+				formatversion: '2',
+				errorformat: 'html',
+				errorlang: AjaxBlockServices.getConfig().getLanguage(),
+				errorsuselocal: true,
+			},
+		};
 	}
 
 	/**
@@ -492,6 +495,9 @@ class AjaxBlock {
 			.ajaxblock-hiddenlink {
 				display: none;
 			}
+			.ajaxblock-error {
+				color: var(--color-icon-error, #f54739);
+			}
 			${/* Format processed links (used for anchors' containers) */''}
 			.ajaxblock-processed::before {
 				content: "[";
@@ -531,11 +537,11 @@ class AjaxBlock {
 				height: 1em;
 				border: 0;
 			}
-			${/* Dialog content overlay to disallow user interaction */''}
-			.ajaxblock-dialog .ajaxblock-dialog-overlay-container {
+			${/* Content overlay to disallow user interaction */''}
+			.ajaxblock-overlay-container {
 				position: relative;
 			}
-			.ajaxblock-dialog-overlay {
+			.ajaxblock-overlay {
 				position: absolute;
 				top: 0;
 				right: 0;
@@ -625,6 +631,14 @@ class AjaxBlock {
 			${/* Limit width to match OO.ui.FieldLayout */''}
 			.ajaxblock-config-fields--constrained {
 				max-width: 50em;
+			}
+			${/** For {@link AjaxBlockConfigMisc.doDelete} */''}
+			.ajaxblock-config-deletedata-result img {
+				display: inline-block;
+				width: 1em;
+				vertical-align: middle;
+				border: 0;
+				margin-right: 0.2em;
 			}
 		`.replace(/[\t\n\r]+/g, '');
 		document.head.appendChild(style);
@@ -1592,6 +1606,10 @@ class AjaxBlockServices {
 		}
 
 		return $.when(...requests).then(() => {});
+	}
+
+	static getStorageKeys() {
+		return _storageKeys;
 	}
 
 	static getApi() {
@@ -2906,6 +2924,19 @@ Messages.i18n = {
 		'ajaxblock-config-label-customreasons-unblock-layout': 'Custom unblock reason options',
 		'ajaxblock-config-help-customreasons-block': 'Reasons specified here will be added to the block reason dropdown',
 		'ajaxblock-config-help-customreasons-unblock': 'Reasons specified here will be shown as autocomplete suggestions in the unblock reason textbox',
+		'ajaxblock-config-label-purgecache': 'Purge cache for AjaxBlock',
+		'ajaxblock-config-label-deletelocal': 'Delete local config',
+		'ajaxblock-config-help-deletelocal-absent': 'You do not have any local settings configured.',
+		'ajaxblock-config-label-deletelocalall': 'Delete local config on all other projects',
+		'ajaxblock-config-help-deletelocalall-present': 'To perform this action, you need to be logged in on $1.',
+		'ajaxblock-config-help-deletelocalall-absent': 'You do not have any local settings configured on other projects.',
+		'ajaxblock-config-label-deleteglobal': 'Delete global config',
+		'ajaxblock-config-help-deleteglobal-absent': 'You do not have any global settings configured.',
+		'ajaxblock-config-label-deletedata': 'Delete data',
+		'ajaxblock-config-label-deletedata-short': 'Delete',
+		'ajaxblock-config-confirm-deletedata': 'Are you sure you want to delete configuration data? This cannot be undone.',
+		'ajaxblock-config-notify-deletedata-success': 'Deleted the specified configuration data',
+		'ajaxblock-config-notify-deletedata-failure': 'Failed to delete some of the specified configuration data',
 	},
 	ja: {
 		'ajaxblock-link-title-unprocessable': '$1非対応のリンク',
@@ -3011,6 +3042,19 @@ Messages.i18n = {
 		'ajaxblock-config-label-customreasons-unblock-layout': 'カスタムブロック解除理由設定',
 		'ajaxblock-config-help-customreasons-block': 'ここで指定した理由はブロック理由ドロップダウンに追加されます',
 		'ajaxblock-config-help-customreasons-unblock': 'ここで指定した理由はブロック解除理由入力欄のオートコンプリート候補として表示されます',
+		'ajaxblock-config-label-purgecache': 'AjaxBlockのキャッシュを破棄',
+		'ajaxblock-config-label-deletelocal': 'ローカル設定を削除',
+		'ajaxblock-config-help-deletelocal-absent': 'ローカル設定は保存されていません。',
+		'ajaxblock-config-label-deletelocalall': '他のすべてのプロジェクトのローカル設定を削除',
+		'ajaxblock-config-help-deletelocalall-present': 'この操作を行うには、$1でログインしている必要があります。',
+		'ajaxblock-config-help-deletelocalall-absent': 'ローカル設定が保存されている他プロジェクトはありません。',
+		'ajaxblock-config-label-deleteglobal': 'グローバル設定を削除',
+		'ajaxblock-config-help-deleteglobal-absent': 'グローバル設定は保存されていません。',
+		'ajaxblock-config-label-deletedata': 'データを削除',
+		'ajaxblock-config-label-deletedata-short': '削除',
+		'ajaxblock-config-confirm-deletedata': '設定データを本当に削除しますか？この操作は元に戻せません。',
+		'ajaxblock-config-notify-deletedata-success': '指定された設定データを削除しました',
+		'ajaxblock-config-notify-deletedata-failure': '指定された設定データの一部を削除できませんでした',
 	},
 };
 /**
@@ -3236,11 +3280,6 @@ function AjaxBlockDialogFactory() {
 			 */
 			this.unblockUser = new UnblockUser(this);
 			/**
-			 * @type {AjaxBlockDialogBodyOverlay}
-			 * @readonly
-			 */
-			this.overlay = new AjaxBlockDialogBodyOverlay();
-			/**
 			 * @type {?BlockLink}
 			 * @private
 			 */
@@ -3266,10 +3305,14 @@ function AjaxBlockDialogFactory() {
 			 * @private
 			 */
 			this.content = new OO.ui.PanelLayout({
-				$element: $('<div>').addClass('ajaxblock-dialog-overlay-container'),
 				padded: true,
 				expanded: false
 			});
+			/**
+			 * @type {AjaxBlockOverlay}
+			 * @readonly
+			 */
+			this.overlay = new AjaxBlockOverlay(this.content.$element);
 
 			this.content.$element.append(
 				this.overlay.$element,
@@ -3696,14 +3739,21 @@ function AjaxBlockDialogFactory() {
 	return AjaxBlockDialog;
 }
 
-class AjaxBlockDialogBodyOverlay {
+class AjaxBlockOverlay {
 
-	constructor() {
+	/**
+	 * @param {JQuery<HTMLElement>} $container The container of the overlay. It is only
+	 * marked as the container, and the overlay itself must be added to the DOM manually
+	 * via {@link $element}.
+	 */
+	constructor($container) {
+		$container.addClass('ajaxblock-overlay-container');
+
 		/**
 		 * @type {JQuery<HTMLElement>}
 		 * @readonly
 		 */
-		this.$element = $('<div>').addClass('ajaxblock-dialog-overlay').hide();
+		this.$element = $('<div>').addClass('ajaxblock-overlay').hide();
 		/**
 		 * @type {boolean}
 		 * @private
@@ -5691,7 +5741,7 @@ class BlockLog {
 			return BlockLog.create(id, logData);
 		} else {
 			const line = Messages.get('ajaxblock-dialog-message-blocklog-missing', [BlockTarget.createBlockListLink(id).outerHTML]);
-			return `<span style="color: var(--color-icon-error, #f54739);">${line}</span>`;
+			return `<span class="ajaxblock-error">${line}</span>`;
 		}
 	}
 
@@ -6759,6 +6809,22 @@ class AjaxBlockConfigStore {
 		this.customReasons = AjaxBlockConfigCustomReasonOptions.getMerged(legacy.local, legacy.global);
 	}
 
+	/**
+	 * @param {AjaxBlockConfigDomains} domain
+	 * @returns {boolean}
+	 */
+	exists(domain) {
+		return mw.user.options.exists(AjaxBlockConfigStore.optionKeys.current[domain]);
+	}
+
+	/**
+	 * @returns {Record<string, string>}
+	 * @todo Update this
+	 */
+	getMutableWikiMap() {
+		return Object.create(null); // Object.assign({}, this.wikiMap);
+	}
+
 	getUsedLanguages() {
 		return this.configuredLanguages.used;
 	}
@@ -6817,14 +6883,14 @@ class AjaxBlockConfigStore {
 	}
 
 }
-/**
- * @type {Record<AjaxBlockConfigVersions, Record<AjaxBlockConfigDomains, string>>}
- */
 AjaxBlockConfigStore.optionKeys = {
+	/** @type {Record<AjaxBlockConfigDomains | 'localexists', string>} */
 	current: {
-		local: 'userjs-ajaxblock2',
+		local: 'userjs-ajaxblock2-local',
 		global: 'userjs-ajaxblock2-global',
+		localexists: 'userjs-ajaxblock2-localexists',
 	},
+	/** @type {Record<AjaxBlockConfigDomains, string>} */
 	legacy: {
 		local: 'userjs-ajaxblock',
 		global: 'userjs-ajaxblock-global',
@@ -6840,7 +6906,8 @@ class AjaxBlockConfig {
 	static getDependencies() {
 		return !this.isConfigPage() ? [] : [
 			'jquery.makeCollapsible',
-			'oojs-ui.styles.icons-movement'
+			'oojs-ui.styles.icons-movement',
+			'mediawiki.ForeignApi',
 		];
 	}
 
@@ -6878,7 +6945,7 @@ class AjaxBlockConfig {
 
 		if (content) {
 			const span = document.createElement('span');
-			span.style.color = 'var(--color-icon-error, #f54739)';
+			span.classList.add('ajaxblock-error');
 			span.textContent = msg;
 
 			content.replaceChildren(span);
@@ -6904,6 +6971,22 @@ class AjaxBlockConfig {
 	 * @private
 	 */
 	constructor() {
+		const container = new OO.ui.IndexLayout({
+			expanded: false,
+			framed: false
+		});
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = container.$element;
+		/**
+		 * @type {AjaxBlockOverlay}
+		 * @readonly
+		 * @private
+		 */
+		this.overlay = new AjaxBlockOverlay(container.$element);
+
 		/**
 		 * @type {AjaxBlockConfigLanguageOptions}
 		 * @readonly
@@ -6956,33 +7039,37 @@ class AjaxBlockConfig {
 			label: Messages.get('ajaxblock-config-label-tab-misc'),
 			scrollable: false
 		});
+		const miscTab = new AjaxBlockConfigMisc(this.overlay);
+		miscTabPanel.$element.append(
+			miscTab.$element
+		);
 
 		const panels = [commonTabPanel, localTabPanel, globalTabPanel, miscTabPanel];
-		const index = new OO.ui.IndexLayout({
-			expanded: false,
-			framed: false
-		}).addTabPanels(panels, 0);
+		container.addTabPanels(panels, 0);
 
+		const PendingButtonWidget = PendingButtonWidgetFactory();
 		/**
-		 * @type {JQuery<HTMLElement>}
+		 * @type {InstanceType<ReturnType<PendingButtonWidgetFactory>>}
 		 * @readonly
+		 * @private
 		 */
-		this.$element = index.$element;
+		this.saveButton = new PendingButtonWidget({
+			label: 'Save',
+			flags: ['primary', 'progressive'],
+		});
 
-		// const $overlay = $('<div>').addClass('sr-config-overlay').hide();
-		// $content.empty().append(
-			// $overlay,
-		// 	index.$element
-		// );
-		// 	.css({ position: 'relative' });
+		container.$element.append(
+			this.overlay.$element,
+			this.saveButton.$element
+		);
 
-		// const miscTab = new SelectiveRollbackConfigMisc($overlay);
+		// const miscTab = new AjaxBlockConfigMisc($overlay);
 		// const globalTab = new this('global', $overlay, miscTab);
 		// const localTab = new this('local', $overlay, miscTab);
 
 		// globalTabPanel.$element.append(
 		// 	new OO.ui.MessageWidget({
-		// 		classes: ['sr-config-notice'],
+		// 		classes: ['ajaxblock-config-notice'],
 		// 		type: 'notice',
 		// 		label: msg['config-notice-global']
 		// 	}).$element,
@@ -6990,7 +7077,7 @@ class AjaxBlockConfig {
 		// );
 		// localTabPanel.$element.append(
 		// 	new OO.ui.MessageWidget({
-		// 		classes: ['sr-config-notice'],
+		// 		classes: ['ajaxblock-config-notice'],
 		// 		type: 'notice',
 		// 		label: msg['config-notice-local']
 		// 	}).$element,
@@ -6999,11 +7086,6 @@ class AjaxBlockConfig {
 		// miscTabPanel.$element.append(
 		// 	miscTab.$element
 		// );
-
-		// const dirMismatch = document.dir !== dir;
-		// if (dirMismatch) {
-		// 	this.handleDirMismatch();
-		// }
 
 		// const beforeunloadMap = {
 		// 	local: localTab,
@@ -7063,6 +7145,64 @@ class AjaxBlockConfig {
 		const onChange = OO.ui.debounce(updateReasons, 1000);
 		this.globalDialogOptions.blockReasonOptions.getTextInput().on('change', onChange);
 		this.localDialogOptions.blockReasonOptions.getTextInput().on('change', onChange);
+	}
+
+	/**
+	 * Saves user options via the API.
+	 *
+	 * @param {Record<string, ?string>} change Object mapping from option keys to their values.
+	 * Keys valued with `null` will be reset.
+	 * @param {'options' | 'globalpreferences'} action
+	 * @param {mw.ForeignApi} [foreignApi] Optional `mw.ForeignApi` instance to use, if the options
+	 * should be saved to a foreign wiki instead of the local one.
+	 * @returns {JQuery.Promise<?JQuery<HTMLElement>>} `null` on success, or a jQuery object containing
+	 * a human-readable error message.
+	 */
+	static saveOptions(change, action, foreignApi) {
+		if (foreignApi && action === 'globalpreferences') {
+			console.error('There is no need to access the foreign API to save global preferences.');
+		}
+		const api = foreignApi || AjaxBlockServices.getApi();
+		return api.postWithEditToken({
+			action,
+			change: Object.entries(change).reduce((acc, [key, value]) => {
+				acc += '\u001F' + key;
+				if (value !== null) {
+					acc += '=' + value;
+				}
+				return acc;
+			}, ''),
+			assertuser: wgUserName
+		}).then(() => {
+			mw.user.options.set(change);
+			return null;
+		}).catch((_, err) => {
+			console.warn(err);
+			return api.getErrorMessage(err);
+		});
+	}
+
+	/**
+	 * Saves user options via the API.
+	 *
+	 * @param {Record<string, ?string>} _change
+	 * @param {'options' | 'globalpreferences'} _action
+	 * @param {mw.ForeignApi} [_foreignApi]
+	 * @returns {JQuery.Promise<?JQuery<HTMLElement>>} `null` on success, or a jQuery object containing
+	 * a human-readable error message.
+	 */
+	static testSaveOptions(_change, _action, _foreignApi) {
+		const def = $.Deferred();
+
+		const rand = Math.random();
+		if (rand < 0.1) {
+			const $error = $('<span>').text('Fabricated error');
+			def.resolve($error);
+		} else {
+			def.resolve(null);
+		}
+
+		return def.promise();
 	}
 
 }
@@ -8134,6 +8274,492 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 
 }
 
+class AjaxBlockConfigMisc {
+
+	/**
+	 * @param {AjaxBlockOverlay} overlay
+	 */
+	constructor(overlay) {
+		/**
+		 * @type {AjaxBlockOverlay}
+		 * @readonly
+		 * @private
+		 */
+		this.overlay = overlay;
+		// /**
+		//  * @type {DeleteConfigCallback[]}
+		//  * @readonly
+		//  * @private
+		//  */
+		// this.deleteConfigCallbacks = [];
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.purgeCache = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.deleteLocal = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.deleteLocalAll = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.deleteGlobal = new OO.ui.CheckboxInputWidget();
+		/**
+		 * @type {InstanceType<ReturnType<typeof PendingButtonWidgetFactory>>}
+		 * @readonly
+		 * @private
+		 */
+		this.deleteButton = new (PendingButtonWidgetFactory())({
+			flags: ['primary', 'destructive'],
+			label: Messages.get('ajaxblock-config-label-deletedata-short'),
+		});
+
+		const fieldset = new OO.ui.FieldsetLayout({
+			label: Messages.get('ajaxblock-config-label-deletedata'),
+			items: [
+				new OO.ui.FieldLayout(this.purgeCache, {
+					align: 'inline',
+					label: Messages.get('ajaxblock-config-label-purgecache'),
+				}),
+				new OO.ui.FieldLayout(this.deleteLocal, {
+					align: 'inline',
+					label: Messages.get('ajaxblock-config-label-deletelocal'),
+					help: new OO.ui.HtmlSnippet('<span id="ajaxblock-config-help-deletelocal"></span>'),
+					helpInline: true
+				}),
+				new OO.ui.FieldLayout(this.deleteLocalAll, {
+					align: 'inline',
+					label: Messages.get('ajaxblock-config-label-deletelocalall'),
+					help: new OO.ui.HtmlSnippet('<span id="ajaxblock-config-help-deletelocalall"></span>'),
+					helpInline: true
+				}),
+				new OO.ui.FieldLayout(this.deleteGlobal, {
+					align: 'inline',
+					label: Messages.get('ajaxblock-config-label-deleteglobal'),
+					help: new OO.ui.HtmlSnippet('<span id="ajaxblock-config-help-deleteglobal"></span>'),
+					helpInline: true
+				}),
+				new OO.ui.FieldLayout(this.deleteButton),
+			],
+		});
+		/**
+		 * @type {JQuery<HTMLElement>}
+		 * @readonly
+		 */
+		this.$element = fieldset.$element;
+
+		this.registerEvents();
+	}
+
+	/**
+	 * @private
+	 */
+	registerEvents() {
+		// Delete configs when the Delete button is clicked
+		this.deleteButton.on('click', async () => {
+			const confirmed = await OO.ui.confirm(
+				Messages.get('ajaxblock-config-confirm-deletedata'),
+				{ size: 'medium' }
+			);
+			if (confirmed) {
+				this.doDelete();
+			}
+		});
+
+		// Update the disabled state of the Delete button when the selector checkboxes
+		// are checked or unchecked
+		[
+			this.purgeCache,
+			this.deleteLocal,
+			this.deleteLocalAll,
+			this.deleteGlobal,
+		]
+		.forEach((checkbox) => {
+			checkbox.on('change', () => this.updateDeleteButtonAccessibility());
+		});
+
+		// Initialize the state of checkboxes when the instance's $element is attached
+		onAttach(this.$element, () => {
+			requestAnimationFrame(() => this.updateCheckboxes());
+		});
+	}
+
+	// /**
+	//  * @param {DeleteConfigCallback} callback
+	//  */
+	// onConfigDeleted(callback) {
+	// 	this.deleteConfigCallbacks.push(callback);
+	// }
+
+	/**
+	 * @private
+	 */
+	updateDeleteButtonAccessibility() {
+		const enable = Object.values(this.collect()).some(Boolean);
+		this.deleteButton.setDisabled(!enable);
+	}
+
+	/**
+	 * Retrives an object mapping from checkbox property names in `this` to
+	 * the checked states of the checkboxes.
+	 * @private
+	 */
+	collect() {
+		/** @param {OO.ui.CheckboxInputWidget} widget */
+		const falseFallback = (widget) => {
+			return !widget.isDisabled() ? widget.isSelected() : false;
+		};
+		return {
+			purgeCache: falseFallback(this.purgeCache),
+			deleteLocal: falseFallback(this.deleteLocal),
+			deleteLocalAll: falseFallback(this.deleteLocalAll),
+			deleteGlobal: falseFallback(this.deleteGlobal),
+		};
+	}
+
+	/**
+	 * Retrieves the given help element injected to `OO.ui.FieldLayout`.
+	 *
+	 * This serves as a workaround for the technical limitation that `OO.ui.FieldLayout` does not
+	 * accept a jQuery object for its `help` configuration parameter, meaning no such jQuery objects
+	 * can be registered as instance properties for this class.
+	 *
+	 * @param {'deleteglobal' | 'deletelocal' | 'deletelocalall' | 'deletelocalall-list'} target
+	 * @returns {JQuery<HTMLElement>}
+	 * @private
+	 */
+	getHelpElement(target) {
+		const id = 'ajaxblock-config-help-' + target;
+		const el = document.getElementById(id);
+		if (!el) {
+			console.error(`Could not find #${id}`);
+		}
+		return $(el || []);
+	}
+
+	/**
+	 * Updates checkboxes used to specify what kind of data to delete:
+	 * * Sets the `disabled` state depending on whether the corresponding config exists
+	 *   in user options.
+	 * * Rewrites the help text for each checkbox in accordance with the `disabled` state.
+	 */
+	updateCheckboxes() {
+		const config = AjaxBlockServices.getConfig();
+
+		const $deleteLocalHelp = this.getHelpElement('deletelocal');
+		if (config.exists('local')) {
+			this.deleteLocal.setDisabled(false);
+			$deleteLocalHelp.text('');
+		} else {
+			this.deleteLocal.setSelected(false).setDisabled(true);
+			$deleteLocalHelp.text(Messages.get('ajaxblock-config-help-deletelocal-absent'));
+		}
+
+		const wikiMap = config.getMutableWikiMap();
+		delete wikiMap[wgWikiID]; // The local wiki ID is irrelevant here
+		const $deleteLocalAllHelp = this.getHelpElement('deletelocalall');
+		if (!$.isEmptyObject(wikiMap)) {
+			this.deleteLocalAll.setDisabled(false);
+			const message = Messages.get(
+				'ajaxblock-config-help-deletelocalall-present',
+				['<span id="ajaxblock-config-help-deletelocalall-list"></span>']
+			);
+			$deleteLocalAllHelp.html(message);
+
+			const $deleteLocalAllHelpWikiList = this.getHelpElement('deletelocalall-list');
+			let i = 0;
+			for (const [wikiId, apiUrl] of Object.entries(wikiMap)) {
+				/** @type {(string | JQuery<HTMLElement>)[]} */
+				const elements = [];
+				if (i !== 0) {
+					elements.push(', ');
+				}
+				elements.push(AjaxBlockConfigMisc.getLinkFromWikiID(wikiId, apiUrl));
+				$deleteLocalAllHelpWikiList.append(...elements);
+			}
+		} else {
+			this.deleteLocalAll.setSelected(false).setDisabled(true);
+			$deleteLocalAllHelp.html(Messages.get('ajaxblock-config-help-deletelocalall-absent'));
+		}
+
+		const $deleteGlobalHelp = this.getHelpElement('deleteglobal');
+		if (config.exists('global')) {
+			this.deleteGlobal.setDisabled(false);
+			$deleteGlobalHelp.text('');
+		} else {
+			this.deleteGlobal.setSelected(false).setDisabled(true);
+			$deleteGlobalHelp.text(Messages.get('ajaxblock-config-help-deleteglobal-absent'));
+		}
+
+		requestAnimationFrame(() => this.updateDeleteButtonAccessibility());
+	}
+
+	/**
+	 * Generates a link to the given wiki, e.g. `enwiki` linking to `//en.wikipedia.org`.
+	 * @param {string} wikiID
+	 * @param {string} apiUrl
+	 * @returns {JQuery<HTMLAnchorElement>}
+	 * @private
+	 */
+	static getLinkFromWikiID(wikiID, apiUrl) {
+		const regex = /^\/\/[^/]+/;
+		const baseUrl = (apiUrl.match(regex) || [])[0] || apiUrl;
+		return /** @type {JQuery<HTMLAnchorElement>} */ ($('<a>'))
+			.prop({
+				target: '_blank',
+				href: baseUrl
+			})
+			.text(wikiID);
+	}
+
+	/**
+	 * Deletes configuration data as specified in the field.
+	 *
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async doDelete() {
+		this.overlay.toggle(true);
+		this.deleteButton.setPending();
+
+		const deleteFor = this.collect();
+		const keys = AjaxBlockConfigStore.optionKeys.current;
+		const saveOptions = DEBUG_MODE ? AjaxBlockConfig.testSaveOptions : AjaxBlockConfig.saveOptions;
+		const /** @type {ReturnType<typeof AjaxBlockConfig.saveOptions>[]} */ promises = [];
+		const /** @type {{ msgKey: keyof LoadedMessages; wikiID?: string; }[]} */ tasks = [];
+		const /** @type {AjaxBlockConfigDomains[]} */ deletionTypes = [];
+
+		// Purge cache
+		if (deleteFor.purgeCache) {
+			if (!DEBUG_MODE) {
+				for (const key of Object.values(AjaxBlockServices.getStorageKeys())) {
+					mw.storage.remove(key);
+				}
+				promises.push($.Deferred().resolve(null).promise());
+			} else {
+				promises.push(AjaxBlockConfig.testSaveOptions({}, 'options'));
+			}
+
+			tasks.push({ msgKey: 'ajaxblock-config-label-purgecache' });
+		}
+
+		// Delete local config
+		if (deleteFor.deleteLocal) {
+			const change = { [keys.local]: null };
+			promises.push(saveOptions(change, 'options'));
+			tasks.push({
+				msgKey: 'ajaxblock-config-label-deletelocal',
+				wikiID: wgWikiID,
+			});
+			deletionTypes.push('local');
+		}
+
+		// Delete all other local configs
+		if (deleteFor.deleteLocalAll) {
+			const wikiMap = AjaxBlockServices.getConfig().getMutableWikiMap();
+			delete wikiMap[wgWikiID];
+
+			for (const [wikiID, apiUrl] of Object.entries(wikiMap)) {
+				const foreignApi = new mw.ForeignApi(apiUrl, AjaxBlock.apiOptions);
+				const change = { [keys.local]: null };
+
+				promises.push(saveOptions(change, 'options', foreignApi));
+				tasks.push({
+					msgKey: 'ajaxblock-config-label-deletelocalall',
+					wikiID,
+				});
+			}
+		}
+
+		// Delete global config
+		if (deleteFor.deleteGlobal) {
+			const change = { [keys.global]: null };
+			promises.push(saveOptions(change, 'globalpreferences'));
+			tasks.push({ msgKey: 'ajaxblock-config-label-deleteglobal' });
+			deletionTypes.push('global');
+		}
+
+		// Process results
+		let errCount = 0;
+		const results = await Promise.all(promises);
+		const $errorList = $('<ul>');
+		let /** @type {?JQuery<HTMLElement>} */ $errorListGlobalAll = null;
+		const /** @type {string[]} */ wikiIDsConfigDeleted = [];
+
+		results.forEach(($error, i) => {
+			const { msgKey, wikiID } = tasks[i];
+
+			if (wikiID && msgKey === 'ajaxblock-config-label-deletelocalall') {
+				if (!$errorListGlobalAll) {
+					$errorListGlobalAll = $('<ul>');
+					$errorList.append(
+						$('<li>').append(
+							Messages.get(msgKey),
+							$errorListGlobalAll
+						)
+					);
+				}
+
+				const wiki = document.createElement('span');
+				wiki.textContent = wikiID;
+				$errorListGlobalAll.append(
+					AjaxBlockConfigMisc.getResult(wiki, $error)
+				);
+			} else {
+				$errorList.append(
+					AjaxBlockConfigMisc.getResult(msgKey, $error)
+				);
+			}
+
+			if ($error) {
+				errCount++;
+			} else if (wikiID) {
+				wikiIDsConfigDeleted.push(wikiID);
+			}
+		});
+
+		// Sync deleted wikiIDs to global
+		if (wikiIDsConfigDeleted.length) {
+			const change = AjaxBlockConfigMisc.getWikiIdOptions('delete', wikiIDsConfigDeleted);
+
+			for (let i = 0; i <= 3; i++) {
+				const $error = await saveOptions(change, 'globalpreferences');
+				if (!$error) {
+					break;
+				}
+				// This should not fail: Retry up to 3 times
+				if (i !== 3) {
+					await sleep(5000);
+				}
+			}
+		}
+
+		// Process callbacks
+		// if (deletionTypes.length) {
+		// 	this.deleteConfigCallbacks.forEach((cb) => cb(deletionTypes));
+		// }
+
+		this.updateCheckboxes();
+		this.overlay.toggle(false);
+		this.deleteButton.unsetPending();
+
+		if (errCount) {
+			OO.ui.alert(
+				$('<div>').addClass('ajaxblock-config-deletedata-result').append(
+					Messages.get('ajaxblock-config-notify-deletedata-failure'),
+					$errorList
+				),
+				{ size: 'medium' }
+			);
+		} else {
+			mw.notify(
+				Messages.get('ajaxblock-config-notify-deletedata-success'),
+				{ type: 'success' }
+			);
+		}
+	}
+
+	/**
+	 * @param {keyof LoadedMessages | HTMLElement} keyOrElement
+	 * @param {?JQuery<HTMLElement>} $errorInfo
+	 * @returns {JQuery<HTMLElement>}
+	 * @private
+	 */
+	static getResult(keyOrElement, $errorInfo) {
+		const result = $errorInfo ? 'failure' : 'success';
+		const $li = $('<li>').append(
+			$('<img>').prop({ src: this.iconMap[result] }),
+			keyOrElement instanceof HTMLElement ? keyOrElement : Messages.get(keyOrElement)
+		);
+
+		if ($errorInfo) {
+			$li.append(
+				Messages.plain('colon-separator'),
+				$errorInfo.addClass('ajaxblock-error')
+			);
+		}
+
+		return $li;
+	}
+
+	/**
+	 * Returns an object keyed by `localexists` for the GlobalPreferences API.
+	 *
+	 * This option tracks wikis where local options exist for AjaxBlock.
+	 *
+	 * @param {'add' | 'delete'} method How to handle the local wiki ID(s).
+	 * @param {string[]} [wikiIDs] Optional wiki IDs to process in accordance with `method`. Defaults to
+	 * the local wiki ID.
+	 * @returns {Record<string, ?string>} If no change is needed, an empty object is returned.
+	 * @private
+	 */
+	static getWikiIdOptions(method, wikiIDs) {
+		let cfg = AjaxBlockServices.getConfig().getMutableWikiMap();
+		if (wikiIDs && method !== 'delete') {
+			throw new Error('Constructing API endpoints for foreign wikis is not supported.');
+		}
+		wikiIDs = wikiIDs || [wgWikiID];
+
+		let changed = false;
+		for (const wikiID of wikiIDs) {
+			if ((method === 'add' && wikiID in cfg) || (method === 'delete' && !(wikiID in cfg))) {
+				// No change needed
+			} else if (method === 'add') {
+				cfg[wikiID] = mw.config.get('wgServer') + mw.util.wikiScript('api');
+				changed = true;
+			} else if (method === 'delete') {
+				delete cfg[wikiID];
+				changed = true;
+			}
+		}
+
+		if (!changed) {
+			return Object.create(null); // No change needed
+		}
+		const key = AjaxBlockConfigStore.optionKeys.current.localexists;
+		const value = $.isEmptyObject(cfg) ? null : JSON.stringify(cfg);
+		return { [key]: value };
+	}
+
+}
+AjaxBlockConfigMisc.iconMap = {
+	success: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Antu_mail-mark-notjunk.svg/20px-Antu_mail-mark-notjunk.svg.png',
+	failure: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Cross_reject.svg/20px-Cross_reject.svg.png'
+};
+
+function PendingButtonWidgetFactory() {
+	const classPending = 'oo-ui-pendingElement-pending';
+	return class PendingButtonWidget extends OO.ui.ButtonWidget {
+
+		setPending() {
+			this.setDisabled(true)
+				.$element.children('.oo-ui-buttonElement-button').eq(0)
+					.addClass(classPending);
+			return this;
+		}
+
+		unsetPending() {
+			this.setDisabled(false)
+				.$element.children('.oo-ui-buttonElement-button').eq(0)
+					.removeClass(classPending);
+			return this;
+		}
+
+	};
+}
+
 /**
  * Removes unicode bidirectional characters from the given string and trims it.
  * @param {string} str
@@ -8293,6 +8919,40 @@ function setProp(obj, ...keys) {
 	prop[ arguments[ arguments.length - 2 ] ] = arguments[ arguments.length - 1 ];
 }
 
+/**
+ * Runs a callback once a jQuery-wrapped element is attached to the DOM.
+ *
+ * If the element is already in the document, the callback is invoked immediately.
+ * Otherwise, a MutationObserver is used to detect when the element gets inserted.
+ *
+ * @template {HTMLElement} T
+ * @param {JQuery<T>} $el jQuery object containing the element to observe
+ * (first element is used).
+ * @param {(this: T) => void} callback Function to run once the element is attached.
+ * The callback is invoked with `this` bound to the DOM element.
+ */
+function onAttach($el, callback) {
+	const el = $el[0];
+
+	// If it's already in the DOM, run immediately
+	if (document.contains(el)) {
+		callback.call(el);
+		return;
+	}
+
+	const observer = new MutationObserver(() => {
+		if (document.contains(el)) {
+			observer.disconnect();
+			callback.call(el);
+		}
+	});
+
+	observer.observe(document.body, {
+		childList: true,
+		subtree: true
+	});
+}
+
 class AjaxBlockLogo {
 
 	constructor() {
@@ -8335,7 +8995,7 @@ class AjaxBlockLogo {
 			this.insert();
 		}
 		this.inserted = Date.now();
-		this.logo.style.color = 'var(--color-icon-error, #f54739)';
+		this.logo.classList.add('ajaxblock-error');
 		return this;
 	}
 
