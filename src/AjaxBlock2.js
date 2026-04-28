@@ -8995,7 +8995,7 @@ class AjaxBlockLogo {
 			this.insert();
 		}
 		this.inserted = Date.now();
-		this.logo.classList.add('ajaxblock-error');
+		this.logo.style.color = 'var(--color-icon-error, #f54739)'; // Inline override (base color is also inline)
 		return this;
 	}
 
