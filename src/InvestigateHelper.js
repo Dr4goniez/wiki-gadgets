@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.2.3
+ * @version 1.2.4
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -887,7 +887,7 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.2.3 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
+					'Api-User-Agent': 'InvestigateHelper/1.2.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
 				}
 			},
 			parameters: {
@@ -4391,8 +4391,8 @@ class BlockTarget {
 /** @type {Map<IconTypes, string>} */
 BlockTarget.iconMap = new Map([
 	['doing', 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif'],
-	['done', 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Antu_mail-mark-notjunk.svg/30px-Antu_mail-mark-notjunk.svg.png'],
-	['failed', 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Cross_reject.svg/30px-Cross_reject.svg.png'],
+	['done', 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Antu_mail-mark-notjunk.svg/40px-Antu_mail-mark-notjunk.svg.png'],
+	['failed', 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Cross_reject.svg/40px-Cross_reject.svg.png'],
 	['warning', 'https://upload.wikimedia.org/wikipedia/commons/3/38/Imbox_content.png'],
 ]);
 
