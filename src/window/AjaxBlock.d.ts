@@ -317,8 +317,9 @@ export interface AjaxBlockMessages {
 	'ajaxblock-config-label-presetreasons-layout': string;
 	'ajaxblock-config-label-presetreasons-name': string;
 	'ajaxblock-config-placeholder-presetreasons-name': string;
-	'ajaxblock-config-error-presetreasons-name-empty': string;
-	'ajaxblock-config-error-presetreasons-name-duplicate': string;
+	'ajaxblock-config-message-presetreasons-name-empty': string;
+	'ajaxblock-config-message-presetreasons-name-duplicate': string;
+	'ajaxblock-config-notify-presetreasons-resolveerrors': string;
 	'ajaxblock-config-label-presetreasons-target-named': string;
 	'ajaxblock-config-label-presetreasons-target-temp': string;
 	'ajaxblock-config-label-presetreasons-target-ip': string;
@@ -736,13 +737,3 @@ export type WarningKeys =
 	| 'unblock-ignorepredefined';
 
 export type AjaxBlockWarningConfig = Record<WarningKeys, Record<WarningContext, boolean>>;
-
-export interface BlockPresetOptionsFieldOptions {
-	collapsed?: boolean;
-	presetName?: string;
-	targets?: NonNullable<BlockTargetType>[];
-	lockPreset?: boolean;
-	onNameChange?: () => boolean;
-	domain?: AjaxBlockConfigDomains;
-	params?: ParamApplierBlockParams;
-}

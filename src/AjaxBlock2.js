@@ -2918,8 +2918,9 @@ Messages.i18n = {
 		'ajaxblock-config-label-presetreasons-layout': 'Preset block options',
 		'ajaxblock-config-label-presetreasons-name': 'Preset',
 		'ajaxblock-config-placeholder-presetreasons-name': 'Enter a preset name',
-		'ajaxblock-config-error-presetreasons-name-empty': 'The preset name must not be empty.',
-		'ajaxblock-config-error-presetreasons-name-duplicate': 'The preset name must be unique.',
+		'ajaxblock-config-message-presetreasons-name-empty': 'The preset name must not be empty.',
+		'ajaxblock-config-message-presetreasons-name-duplicate': 'The preset name must be unique.',
+		'ajaxblock-config-notify-presetreasons-resolveerrors': 'Please fix the errors in the preset fields before continuing.',
 		'ajaxblock-config-label-presetreasons-target-named': 'Registered users',
 		'ajaxblock-config-label-presetreasons-target-temp': 'Temporary users',
 		'ajaxblock-config-label-presetreasons-target-ip': 'IP users',
@@ -3038,8 +3039,9 @@ Messages.i18n = {
 		'ajaxblock-config-label-presetreasons-layout': 'プリセットブロック設定',
 		'ajaxblock-config-label-presetreasons-name': 'プリセット',
 		'ajaxblock-config-placeholder-presetreasons-name': 'プリセット名を入力',
-		'ajaxblock-config-error-presetreasons-name-empty': '空文字はプリセット名に使用できません。',
-		'ajaxblock-config-error-presetreasons-name-duplicate': '重複したプリセット名は使用できません。',
+		'ajaxblock-config-message-presetreasons-name-empty': '空文字はプリセット名に使用できません。',
+		'ajaxblock-config-message-presetreasons-name-duplicate': '重複したプリセット名は使用できません。',
+		'ajaxblock-config-notify-presetreasons-resolveerrors': 'プリセット設定フィールド内のエラーを解消してください。',
 		'ajaxblock-config-label-presetreasons-target-named': '登録利用者',
 		'ajaxblock-config-label-presetreasons-target-temp': '仮利用者',
 		'ajaxblock-config-label-presetreasons-target-ip': 'IP利用者',
@@ -6981,7 +6983,12 @@ class AjaxBlockConfig {
 	 * @private
 	 */
 	constructor() {
-		const container = new OO.ui.IndexLayout({
+		/**
+		 * @type {OO.ui.IndexLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.indexLayout = new OO.ui.IndexLayout({
 			expanded: false,
 			framed: false
 		});
@@ -6989,13 +6996,34 @@ class AjaxBlockConfig {
 		 * @type {JQuery<HTMLElement>}
 		 * @readonly
 		 */
-		this.$element = container.$element;
+		this.$element = this.indexLayout.$element;
 		/**
 		 * @type {AjaxBlockOverlay}
 		 * @readonly
 		 * @private
 		 */
-		this.overlay = new AjaxBlockOverlay(container.$element);
+		this.overlay = new AjaxBlockOverlay(this.indexLayout.$element);
+
+		/** @type {(keyof typeof this.panels)[]} */
+		const panelNames = ['common', 'local', 'global', 'misc'];
+		/**
+		 * @type {Record<'common' | 'local' | 'global' | 'misc', OO.ui.TabPanelLayout>}
+		 * @readonly
+		 * @private
+		 */
+		this.panels = panelNames.reduce((acc, name) => {
+			acc[name] = new OO.ui.TabPanelLayout(name, {
+				expanded: false,
+				// Messages used here:
+				// - ajaxblock-config-label-tab-common
+				// - ajaxblock-config-label-tab-local
+				// - ajaxblock-config-label-tab-global
+				// - ajaxblock-config-label-tab-misc
+				label: Messages.get(`ajaxblock-config-label-tab-${name}`),
+				scrollable: false
+			});
+			return acc;
+		}, Object.create(null));
 
 		/**
 		 * @type {AjaxBlockConfigLanguageOptions}
@@ -7010,52 +7038,28 @@ class AjaxBlockConfig {
 		 */
 		this.warningOptions = new AjaxBlockConfigWarningOptions();
 
-		const commonTabPanel = new OO.ui.TabPanelLayout('Common', {
-			expanded: false,
-			label: Messages.get('ajaxblock-config-label-tab-common'),
-			scrollable: false
-		});
-		commonTabPanel.$element.append(
+		this.panels.common.$element.append(
 			this.languageOptions.$element,
 			this.warningOptions.$element
 		);
 
-		const localTabPanel = new OO.ui.TabPanelLayout('Local', {
-			expanded: false,
-			label: Messages.get('ajaxblock-config-label-tab-local'),
-			scrollable: false
-		});
 		/**
 		 * @type {AjaxBlockConfigDialogOptions}
 		 * @readonly
 		 * @private
 		 */
-		this.localDialogOptions = new AjaxBlockConfigDialogOptions('local', localTabPanel);
-
-		const globalTabPanel = new OO.ui.TabPanelLayout('Global', {
-			expanded: false,
-			label: Messages.get('ajaxblock-config-label-tab-global'),
-			scrollable: false
-		});
+		this.localDialogOptions = new AjaxBlockConfigDialogOptions('local', this.panels.local);
 		/**
 		 * @type {AjaxBlockConfigDialogOptions}
 		 * @readonly
 		 * @private
 		 */
-		this.globalDialogOptions = new AjaxBlockConfigDialogOptions('global', globalTabPanel);
+		this.globalDialogOptions = new AjaxBlockConfigDialogOptions('global', this.panels.global);
 
-		const miscTabPanel = new OO.ui.TabPanelLayout('Misc', {
-			expanded: false,
-			label: Messages.get('ajaxblock-config-label-tab-misc'),
-			scrollable: false
-		});
 		const miscTab = new AjaxBlockConfigMisc(this.overlay);
-		miscTabPanel.$element.append(
+		this.panels.misc.$element.append(
 			miscTab.$element
 		);
-
-		const panels = [commonTabPanel, localTabPanel, globalTabPanel, miscTabPanel];
-		container.addTabPanels(panels, 0);
 
 		const PendingButtonWidget = PendingButtonWidgetFactory();
 		/**
@@ -7068,7 +7072,8 @@ class AjaxBlockConfig {
 			flags: ['primary', 'progressive'],
 		});
 
-		container.$element.append(
+		this.indexLayout.addTabPanels(Object.values(this.panels), 0);
+		this.indexLayout.$element.append(
 			this.overlay.$element,
 			this.saveButton.$element
 		);
@@ -7112,16 +7117,15 @@ class AjaxBlockConfig {
 		// 	}
 		// };
 
-		this.registerEvents(panels);
+		this.registerEvents();
 	}
 
 	/**
-	 * @param {OO.ui.TabPanelLayout[]} panels
 	 * @private
 	 */
-	registerEvents(panels) {
+	registerEvents() {
 		// On panel activation, clear any automatically assigned focus within the panel
-		panels.forEach((panel) => {
+		Object.values(this.panels).forEach((panel) => {
 			panel.on('active', (activated) => {
 				if (activated) {
 					requestAnimationFrame(() => {
@@ -7155,6 +7159,9 @@ class AjaxBlockConfig {
 		const onChange = OO.ui.debounce(updateReasons, 1000);
 		this.globalDialogOptions.blockReasonOptions.getTextInput().on('change', onChange);
 		this.localDialogOptions.blockReasonOptions.getTextInput().on('change', onChange);
+
+		// Save options when the Save button is clicked
+		this.saveButton.on('click', () => this.save());
 	}
 
 	/**
@@ -7213,6 +7220,14 @@ class AjaxBlockConfig {
 		}
 
 		return def.promise();
+	}
+
+	save() {
+		// TODO: Complete this
+		const localPresets = this.localDialogOptions.blockPresetOptions.build(this.indexLayout);
+		if (!localPresets) {
+			return;
+		}
 	}
 
 }
@@ -7810,7 +7825,7 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 	 * @private
 	 */
 	addField(options = {}) {
-		options.onNameChange = this.validatePresetNames.bind(this);
+		options.validatePresetNames = this.validatePresetNames.bind(this);
 		const field = new AjaxBlockConfigBlockPresetOptionsField(options);
 		this.fields.push(field);
 		this.fieldContainer.$element.append(field.$container);
@@ -7821,7 +7836,7 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 	}
 
 	/**
-	 * @returns {boolean} `true` if all fields have valid preset names; otherwise `false`.
+	 * @returns {AjaxBlockConfigBlockPresetOptionsField[]} An array of preset fields that failed validation.
 	 * @private
 	 */
 	validatePresetNames() {
@@ -7835,24 +7850,58 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 			}
 		}
 
-		let hasErrors = false;
+		const /** @type {AjaxBlockConfigBlockPresetOptionsField[]} */ failed = [];
 		fields.forEach((field, i) => {
 			if (field.isLocked()) {
 				return;
 			}
 			const v = values[i];
 			if (v && valueMap[v] > 1) {
-				field.setPresetErrors([Messages.get('ajaxblock-config-error-presetreasons-name-duplicate')]);
-				hasErrors = true;
+				field.setPresetErrors([Messages.get('ajaxblock-config-message-presetreasons-name-duplicate')]);
+				failed.push(field);
 			} else if (v) {
 				field.setPresetErrors([]);
 			} else {
-				field.setPresetErrors([Messages.get('ajaxblock-config-error-presetreasons-name-empty')]);
-				hasErrors = true;
+				field.setPresetErrors([Messages.get('ajaxblock-config-message-presetreasons-name-empty')]);
+				failed.push(field);
 			}
 		});
 
-		return !hasErrors;
+		return failed;
+	}
+
+	/**
+	 * @param {OO.ui.IndexLayout} indexLayout
+	 * @returns {?BlockPresetJson[]}
+	 */
+	build(indexLayout) {
+		const presetsWithErrors = this.validatePresetNames();
+		if (presetsWithErrors.length) {
+			indexLayout.setTabPanel(this.getDomain());
+			requestAnimationFrame(() => presetsWithErrors[0].focusPresetInput());
+			mw.notify(
+				Messages.get('ajaxblock-config-notify-presetreasons-resolveerrors'),
+				{ type: 'error' }
+			);
+			return null;
+		}
+
+		const /** @type {BlockPresetJson[]} */ presets = [];
+		const defaults = BlockPreset.default;
+
+		for (const field of this.getFields()) {
+			const preset = field.build();
+			const name = /** @type {NonNullable<BlockTargetType>} */ (preset.name);
+
+			if (name in defaults && OO.compare(preset, defaults[name])) {
+				// Filter unmodified built-in presets
+				continue;
+			}
+
+			presets.push(preset);
+		}
+
+		return presets;
 	}
 
 	/**
@@ -7913,7 +7962,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			presetName = '',
 			targets = typedKeys(BlockPreset.default),
 			lockPreset = false,
-			onNameChange,
+			validatePresetNames,
 		} = options;
 		const forcedBaseColor = { color: 'var(--color-base, #202122)' };
 
@@ -7931,6 +7980,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			placeholder: Messages.get('ajaxblock-config-placeholder-presetreasons-name'),
 			value: presetName,
 			disabled: lockPreset,
+			validate: lockPreset || !validatePresetNames ? undefined: () => !validatePresetNames().includes(this),
 		});
 		/**
 		 * @type {OO.ui.FieldLayout}
@@ -8024,19 +8074,15 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			})
 			: $.Deferred().resolve().promise();
 
-		this.registerEvents(onNameChange);
+		this.registerEvents();
 	}
 
 	/**
-	 * @param {BlockPresetOptionsFieldOptions['onNameChange']} onNameChange
 	 * @private
 	 */
-	registerEvents(onNameChange) {
+	registerEvents() {
 		this.presetNameInput.on('change', (value) => {
 			this.collapsibleFieldset.setPresetName(value);
-			if (onNameChange) {
-				onNameChange();
-			}
 		});
 
 		this.targetSelector.on('change', (items) => {
@@ -8111,6 +8157,11 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			this.presetNameInput.setValue(value);
 		}
 		return value;
+	}
+
+	focusPresetInput() {
+		this.collapsibleFieldset.setCollapsed(false);
+		requestAnimationFrame(() => this.presetNameInput.focus());
 	}
 
 	isLocked() {
@@ -8208,8 +8259,13 @@ class CollapsibleFieldset {
 		});
 		wrapper.$element.append(this.fieldset.$element);
 
-		const $legend = this.fieldset.$element.children('legend'); // header
-		$legend
+		/**
+		 * @type {JQuery<HTMLLegendElement>}
+		 * @readonly
+		 * @private
+		 */
+		this.$legend = this.fieldset.$element.children('legend'); // header
+		this.$legend
 			.attr({ role: 'button' })
 			.addClass('mw-collapsible-toggle')
 			// Change the icon when the fieldset is expanded/collapsed
@@ -8217,7 +8273,7 @@ class CollapsibleFieldset {
 			.on('click', () => {
 				this.fieldset.setIcon(this.fieldset.$element.hasClass('mw-collapsed') ? 'collapse' : 'expand');
 			});
-		$legend.children('.oo-ui-labelElement-label')
+		this.$legend.children('.oo-ui-labelElement-label')
 			.css({ marginBottom: 0 });
 
 		this.fieldset.$element.makeCollapsible();
@@ -8239,7 +8295,7 @@ class CollapsibleFieldset {
 	setCollapsed(collapse) {
 		const isCollapsed = this.fieldset.$element.hasClass('mw-collapsed');
 		if (isCollapsed !== collapse) {
-			this.fieldset.$element.trigger('click');
+			this.$legend.trigger('click');
 		}
 		return this;
 	}
@@ -9167,7 +9223,6 @@ AjaxBlockLogo.svg =
  * @typedef {import('./window/AjaxBlock').AjaxBlockLanguageConfig} AjaxBlockLanguageConfig
  * @typedef {import('./window/AjaxBlock').WarningKeys} WarningKeys
  * @typedef {import('./window/AjaxBlock').AjaxBlockWarningConfig} AjaxBlockWarningConfig
- * @typedef {import('./window/AjaxBlock').BlockPresetOptionsFieldOptions} BlockPresetOptionsFieldOptions
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogevents} ApiResponseQueryListLogevents
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
  * @typedef {import('./window/InvestigateHelper').BlockLogMap} BlockLogMap
@@ -9187,6 +9242,16 @@ AjaxBlockLogo.svg =
  * A number key always indicates it's mapped to autoblock-unblock links.
  *
  * @typedef {Map<string | number, BlockLink[]>} BlockLinkMap
+ */
+/**
+ * @typedef {object} BlockPresetOptionsFieldOptions
+ * @prop {boolean} [collapsed]
+ * @prop {string} [presetName]
+ * @prop {NonNullable<BlockTargetType>[]} [targets]
+ * @prop {boolean} [lockPreset]
+ * @prop {AjaxBlockConfigBlockPresetOptions['validatePresetNames']} [validatePresetNames]
+ * @prop {AjaxBlockConfigDomains} [domain]
+ * @prop {ParamApplierBlockParams} [params]
  */
 
 AjaxBlock.init();
