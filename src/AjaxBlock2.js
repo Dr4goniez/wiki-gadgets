@@ -587,6 +587,9 @@ class AjaxBlock {
 			.ajaxblock-config-content .ajaxblock-horizontalfield .oo-ui-fieldLayout-field {
 				width: 80% !important;
 			}
+			.ajaxblock-horizontalfield .oo-ui-fieldLayout-messages {
+				margin-left: 20%;
+			}
 			${/* Vertically align the FieldLayout text field with its label */''}
 			.ajaxblock-dialog .ajaxblock-targetlabel {
 				display: block;
@@ -609,6 +612,9 @@ class AjaxBlock {
 			.ajaxblock-config-content .ajaxblock-collapsiblefieldset-container {
 				padding: 8px 12px;
 				margin: 0 0 12px 0;
+			}
+			.ajaxblock-collapsiblefieldset-container--redborder {
+				border-color: var(--border-color-error, #f54739);
 			}
 			${/* Warning options */''}
 			.ajaxblock-config-options-warnings > tbody > tr:nth-child(2n + 1) {
@@ -2912,6 +2918,8 @@ Messages.i18n = {
 		'ajaxblock-config-label-presetreasons-layout': 'Preset block options',
 		'ajaxblock-config-label-presetreasons-name': 'Preset',
 		'ajaxblock-config-placeholder-presetreasons-name': 'Enter a preset name',
+		'ajaxblock-config-error-presetreasons-name-empty': 'The preset name must not be empty.',
+		'ajaxblock-config-error-presetreasons-name-duplicate': 'The preset name must be unique.',
 		'ajaxblock-config-label-presetreasons-target-named': 'Registered users',
 		'ajaxblock-config-label-presetreasons-target-temp': 'Temporary users',
 		'ajaxblock-config-label-presetreasons-target-ip': 'IP users',
@@ -3030,6 +3038,8 @@ Messages.i18n = {
 		'ajaxblock-config-label-presetreasons-layout': 'プリセットブロック設定',
 		'ajaxblock-config-label-presetreasons-name': 'プリセット',
 		'ajaxblock-config-placeholder-presetreasons-name': 'プリセット名を入力',
+		'ajaxblock-config-error-presetreasons-name-empty': '空文字はプリセット名に使用できません。',
+		'ajaxblock-config-error-presetreasons-name-duplicate': '重複したプリセット名は使用できません。',
 		'ajaxblock-config-label-presetreasons-target-named': '登録利用者',
 		'ajaxblock-config-label-presetreasons-target-temp': '仮利用者',
 		'ajaxblock-config-label-presetreasons-target-ip': 'IP利用者',
@@ -7788,6 +7798,7 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 					throw new Error('Field not found');
 				}
 				this.fields.splice(index, 1);
+				this.validatePresetNames();
 			});
 		});
 
@@ -7799,6 +7810,7 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 	 * @private
 	 */
 	addField(options = {}) {
+		options.onNameChange = this.validatePresetNames.bind(this);
 		const field = new AjaxBlockConfigBlockPresetOptionsField(options);
 		this.fields.push(field);
 		this.fieldContainer.$element.append(field.$container);
@@ -7806,6 +7818,41 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 
 	getFields() {
 		return /** @type {readonly AjaxBlockConfigBlockPresetOptionsField[]} */ (this.fields);
+	}
+
+	/**
+	 * @returns {boolean} `true` if all fields have valid preset names; otherwise `false`.
+	 * @private
+	 */
+	validatePresetNames() {
+		const fields = this.getFields();
+		const values = fields.map(f => f.getPresetName());
+
+		const valueMap = /** @type {Record<string, number>} */ (Object.create(null));
+		for (const v of values) {
+			if (v) {
+				valueMap[v] = (valueMap[v] || 0) + 1;
+			}
+		}
+
+		let hasErrors = false;
+		fields.forEach((field, i) => {
+			if (field.isLocked()) {
+				return;
+			}
+			const v = values[i];
+			if (v && valueMap[v] > 1) {
+				field.setPresetErrors([Messages.get('ajaxblock-config-error-presetreasons-name-duplicate')]);
+				hasErrors = true;
+			} else if (v) {
+				field.setPresetErrors([]);
+			} else {
+				field.setPresetErrors([Messages.get('ajaxblock-config-error-presetreasons-name-empty')]);
+				hasErrors = true;
+			}
+		});
+
+		return !hasErrors;
 	}
 
 	/**
@@ -7856,9 +7903,9 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 
 	/**
-	 * @param {BlockPresetOptionsFieldOptions} [options]
+	 * @param {BlockPresetOptionsFieldOptions} options
 	 */
-	constructor(options = {}) {
+	constructor(options) {
 		super({ omitMainLabel: true });
 
 		const {
@@ -7866,8 +7913,15 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			presetName = '',
 			targets = typedKeys(BlockPreset.default),
 			lockPreset = false,
+			onNameChange,
 		} = options;
+		const forcedBaseColor = { color: 'var(--color-base, #202122)' };
 
+		/**
+		 * @type {string[]}
+		 * @private
+		 */
+		this.errors = [];
 		/**
 		 * @type {OO.ui.TextInputWidget}
 		 * @readonly
@@ -7877,6 +7931,16 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			placeholder: Messages.get('ajaxblock-config-placeholder-presetreasons-name'),
 			value: presetName,
 			disabled: lockPreset,
+		});
+		/**
+		 * @type {OO.ui.FieldLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.presetNameInputLayout = new OO.ui.FieldLayout(this.presetNameInput, {
+			classes: ['ajaxblock-horizontalfield'],
+			align: 'left',
+			label: $('<b>').text(Messages.get('ajaxblock-config-label-presetreasons-name')).css(forcedBaseColor),
 		});
 		/**
 		 * @type {OO.ui.MenuTagMultiselectWidget}
@@ -7895,13 +7959,8 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			disabled: lockPreset,
 		});
 
-		const forcedBaseColor = { color: 'var(--color-base, #202122)' };
 		this.mainFieldset.addItems([
-			new OO.ui.FieldLayout(this.presetNameInput, {
-				classes: ['ajaxblock-horizontalfield'],
-				align: 'left',
-				label: $('<b>').text(Messages.get('ajaxblock-config-label-presetreasons-name')).css(forcedBaseColor),
-			}),
+			this.presetNameInputLayout,
 			new OO.ui.FieldLayout(this.targetSelector, {
 				classes: ['ajaxblock-horizontalfield'],
 				align: 'left',
@@ -7965,15 +8024,19 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			})
 			: $.Deferred().resolve().promise();
 
-		this.registerEvents();
+		this.registerEvents(onNameChange);
 	}
 
 	/**
+	 * @param {BlockPresetOptionsFieldOptions['onNameChange']} onNameChange
 	 * @private
 	 */
-	registerEvents() {
+	registerEvents(onNameChange) {
 		this.presetNameInput.on('change', (value) => {
 			this.collapsibleFieldset.setPresetName(value);
+			if (onNameChange) {
+				onNameChange();
+			}
 		});
 
 		this.targetSelector.on('change', (items) => {
@@ -8017,9 +8080,36 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		return this;
 	}
 
-	getFieldName() {
+	/**
+	 * @param {string[]} errors
+	 * @return {this}
+	 */
+	setPresetErrors(errors) {
+		this.errors = errors.slice();
+		this.presetNameInputLayout.setErrors(this.errors);
+		const invalid = !!this.errors.length;
+		this.presetNameInput.setFlags({ invalid });
+		this.collapsibleFieldset.toggleRedBorder(invalid);
+		return this;
+	}
+
+	/**
+	 * @private
+	 */
+	hasPresetErrors() {
+		return !!this.errors.length;
+	}
+
+	/**
+	 * @param {boolean} [setValue] Whether to set the current value after being retrieved and
+	 * sanitized via {@link clean} (default: `false`).
+	 * @returns {string}
+	 */
+	getPresetName(setValue = false) {
 		const value = clean(this.presetNameInput.getValue());
-		this.presetNameInput.setValue(value);
+		if (setValue) {
+			this.presetNameInput.setValue(value);
+		}
 		return value;
 	}
 
@@ -8045,7 +8135,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 	 */
 	build() {
 		return {
-			name: this.getFieldName(),
+			name: this.getPresetName(true),
 			targets: this.getTargets(),
 			params: {
 				expiry: this.getExpiry(),
@@ -8151,6 +8241,15 @@ class CollapsibleFieldset {
 		if (isCollapsed !== collapse) {
 			this.fieldset.$element.trigger('click');
 		}
+		return this;
+	}
+
+	/**
+	 * @param {boolean} show
+	 * @returns {this}
+	 */
+	toggleRedBorder(show) {
+		this.$element.toggleClass('ajaxblock-collapsiblefieldset-container--redborder', show);
 		return this;
 	}
 
