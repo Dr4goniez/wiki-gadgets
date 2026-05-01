@@ -2849,7 +2849,7 @@ Messages.i18n = {
 		'ajaxblock-dialog-message-applyparams-short': 'apply',
 		'ajaxblock-dialog-message-applyparams-long': 'apply parameters',
 		'ajaxblock-dialog-message-blocklog-missing': 'Failed to load the log for the block with ID <b>#$1</b>',
-		'ajaxblock-notify-error-loadblocklogs': 'Failed to load block information ($1)',
+		'ajaxblock-notify-error-loadblocklogs': 'Failed to load block information ($1).',
 		'ajaxblock-notify-error-idinactivenousername': 'This link cannot be processed because the block with ID <b>#$1</b> is no longer active and no username is specified.',
 		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> does not have any active blocks and cannot be unblocked.',
 		'ajaxblock-notify-error-ambiguousblock': 'Select the block you want to update.',
@@ -2928,6 +2928,10 @@ Messages.i18n = {
 		'ajaxblock-config-notice-presetreasons-additionaloptions': 'In the dialog, some of the options below may be hidden depending on the target and user permissions.',
 		'ajaxblock-config-label-presetreasons-add': 'Add preset',
 		'ajaxblock-config-label-presetreasons-delete': 'Delete preset',
+		'ajaxblock-config-confirm-presetreasons-empty': 'The following empty presets will be removed before saving the options. Do you want to continue?',
+		'ajaxblock-config-notify-save-nochange': 'No configuration changes detected.',
+		'ajaxblock-config-notify-save-success': 'Configuration saved successfully.',
+		'ajaxblock-config-notify-save-failure': 'Failed to save the configuration.',
 		'ajaxblock-config-placeholder-customreasons': 'Enter reasons separated by line breaks',
 		'ajaxblock-config-label-customreasons-block-layout': 'Custom block reason options',
 		'ajaxblock-config-label-customreasons-unblock-layout': 'Custom unblock reason options',
@@ -2944,8 +2948,8 @@ Messages.i18n = {
 		'ajaxblock-config-label-deletedata': 'Delete data',
 		'ajaxblock-config-label-deletedata-short': 'Delete',
 		'ajaxblock-config-confirm-deletedata': 'Are you sure you want to delete configuration data? This cannot be undone.',
-		'ajaxblock-config-notify-deletedata-success': 'Deleted the specified configuration data',
-		'ajaxblock-config-notify-deletedata-failure': 'Failed to delete some of the specified configuration data',
+		'ajaxblock-config-notify-deletedata-success': 'Deleted the specified configuration data.',
+		'ajaxblock-config-notify-deletedata-failure': 'Failed to delete some of the specified configuration data.',
 	},
 	ja: {
 		'ajaxblock-link-title-unprocessable': '$1非対応のリンク',
@@ -2954,7 +2958,7 @@ Messages.i18n = {
 		'ajaxblock-dialog-button-label-docs': '解説',
 		'ajaxblock-dialog-button-label-config': '設定',
 		'ajaxblock-dialog-block-placeholder-preset': '読み込むプリセットを選択',
-		'ajaxblock-notify-block-placeholder-preset': 'プリセット「$1」を読み込みました',
+		'ajaxblock-notify-block-placeholder-preset': 'プリセット「$1」を読み込みました。',
 		'ajaxblock-dialog-block-label-reason1': '理由1',
 		'ajaxblock-dialog-block-label-reason2': '理由2',
 		'ajaxblock-dialog-block-label-customreasons': 'カスタムブロック理由',
@@ -2970,7 +2974,7 @@ Messages.i18n = {
 		'ajaxblock-dialog-message-applyparams-short': '反映',
 		'ajaxblock-dialog-message-applyparams-long': 'パラメータを反映',
 		'ajaxblock-dialog-message-blocklog-missing': 'ID <b>#$1</b> に紐付けられたブロック記録を取得できませんでした',
-		'ajaxblock-notify-error-loadblocklogs': 'ブロック情報の取得に失敗しました ($1)',
+		'ajaxblock-notify-error-loadblocklogs': 'ブロック情報の取得に失敗しました ($1)。',
 		'ajaxblock-notify-error-idinactivenousername': 'このリンクに紐付けられたID <b>#$1</b> のブロックは既に解除されており、利用者名も指定されていないため処理できません。',
 		'ajaxblock-notify-error-cannotunblock': '<b>$1</b> は現在ブロックされていないため、ブロックを解除できません。',
 		'ajaxblock-notify-error-ambiguousblock': '更新するブロックを選択してください。',
@@ -3049,6 +3053,10 @@ Messages.i18n = {
 		'ajaxblock-config-notice-presetreasons-additionaloptions': 'ダイアログ上では、対象と利用者権限に応じて以下のオプションのいくつかは非表示になる場合があります。',
 		'ajaxblock-config-label-presetreasons-add': 'プリセットを追加',
 		'ajaxblock-config-label-presetreasons-delete': 'プリセットを削除',
+		'ajaxblock-config-confirm-presetreasons-empty': '以下の空のプリセットは、設定の保存前に除去されます。続行しますか？',
+		'ajaxblock-config-notify-save-nochange': '設定の変更が検出されませんでした。',
+		'ajaxblock-config-notify-save-success': '設定を保存しました。',
+		'ajaxblock-config-notify-save-failure': '設定の保存に失敗しました。',
 		'ajaxblock-config-placeholder-customreasons': '理由を改行区切りで入力',
 		'ajaxblock-config-label-customreasons-block-layout': 'カスタムブロック理由設定',
 		'ajaxblock-config-label-customreasons-unblock-layout': 'カスタムブロック解除理由設定',
@@ -3065,8 +3073,8 @@ Messages.i18n = {
 		'ajaxblock-config-label-deletedata': 'データを削除',
 		'ajaxblock-config-label-deletedata-short': '削除',
 		'ajaxblock-config-confirm-deletedata': '設定データを本当に削除しますか？この操作は元に戻せません。',
-		'ajaxblock-config-notify-deletedata-success': '指定された設定データを削除しました',
-		'ajaxblock-config-notify-deletedata-failure': '指定された設定データの一部を削除できませんでした',
+		'ajaxblock-config-notify-deletedata-success': '指定された設定データを削除しました。',
+		'ajaxblock-config-notify-deletedata-failure': '指定された設定データの一部を削除できませんでした。',
 	},
 };
 /**
@@ -6690,6 +6698,14 @@ class BlockPreset {
 		return options;
 	}
 
+	/**
+	 * @param {string} name
+	 * @returns {name is NonNullable<BlockTargetType>}
+	 */
+	static isDefaultName(name) {
+		return name in this.default;
+	}
+
 }
 /**
  * @type {Record<NonNullable<BlockTargetType>, ParamApplierBlockParams>}
@@ -6822,19 +6838,36 @@ class AjaxBlockConfigStore {
 	}
 
 	/**
+	 * Checks whether the given config exists for the user.
+	 *
 	 * @param {AjaxBlockConfigDomains} domain
+	 * @param {'current' | 'legacy'} [version] Default: `'current'`
 	 * @returns {boolean}
 	 */
-	exists(domain) {
-		return mw.user.options.exists(AjaxBlockConfigStore.optionKeys.current[domain]);
+	static exists(domain, version = 'current') {
+		return typeof mw.user.options.get(this.optionKeys[version][domain]) === 'string';
 	}
 
 	/**
-	 * @returns {Record<string, string>}
-	 * @todo Update this
+	 * @returns {Record<string, string>} <wikiID, apiUrl>
 	 */
-	getMutableWikiMap() {
-		return Object.create(null); // Object.assign({}, this.wikiMap);
+	static getMutableWikiMap() {
+		/** @type {?string} */
+		const cfgStr = mw.user.options.get(AjaxBlockConfigStore.optionKeys.current.localexists);
+		if (!cfgStr) {
+			return Object.create(null);
+		}
+
+		try {
+			const parsed = JSON.parse(cfgStr);
+			if (!$.isPlainObject(parsed)) {
+				throw new Error(`Encountered a non-plain object as the "localexist" config`);
+			}
+			return parsed;
+		} catch (e) {
+			console.error(e, cfgStr);
+			return Object.create(null);
+		}
 	}
 
 	getUsedLanguages() {
@@ -7037,12 +7070,6 @@ class AjaxBlockConfig {
 		 * @private
 		 */
 		this.warningOptions = new AjaxBlockConfigWarningOptions();
-
-		this.panels.common.$element.append(
-			this.languageOptions.$element,
-			this.warningOptions.$element
-		);
-
 		/**
 		 * @type {AjaxBlockConfigDialogOptions}
 		 * @readonly
@@ -7056,10 +7083,12 @@ class AjaxBlockConfig {
 		 */
 		this.globalDialogOptions = new AjaxBlockConfigDialogOptions('global', this.panels.global);
 
-		const miscTab = new AjaxBlockConfigMisc(this.overlay);
-		this.panels.misc.$element.append(
-			miscTab.$element
-		);
+		/**
+		 * @type {AjaxBlockConfigMisc}
+		 * @readonly
+		 * @private
+		 */
+		this.miscOptions = new AjaxBlockConfigMisc(this.overlay);
 
 		const PendingButtonWidget = PendingButtonWidgetFactory();
 		/**
@@ -7071,51 +7100,20 @@ class AjaxBlockConfig {
 			label: 'Save',
 			flags: ['primary', 'progressive'],
 		});
+		this.saveButton.$element.css({ 'margin-left': '20px' });
 
+		this.panels.common.$element.append(
+			this.languageOptions.$element,
+			this.warningOptions.$element
+		);
+		this.panels.misc.$element.append(
+			this.miscOptions.$element
+		);
 		this.indexLayout.addTabPanels(Object.values(this.panels), 0);
 		this.indexLayout.$element.append(
 			this.overlay.$element,
 			this.saveButton.$element
 		);
-
-		// const miscTab = new AjaxBlockConfigMisc($overlay);
-		// const globalTab = new this('global', $overlay, miscTab);
-		// const localTab = new this('local', $overlay, miscTab);
-
-		// globalTabPanel.$element.append(
-		// 	new OO.ui.MessageWidget({
-		// 		classes: ['ajaxblock-config-notice'],
-		// 		type: 'notice',
-		// 		label: msg['config-notice-global']
-		// 	}).$element,
-		// 	globalTab.$element
-		// );
-		// localTabPanel.$element.append(
-		// 	new OO.ui.MessageWidget({
-		// 		classes: ['ajaxblock-config-notice'],
-		// 		type: 'notice',
-		// 		label: msg['config-notice-local']
-		// 	}).$element,
-		// 	localTab.$element
-		// );
-		// miscTabPanel.$element.append(
-		// 	miscTab.$element
-		// );
-
-		// const beforeunloadMap = {
-		// 	local: localTab,
-		// 	global: globalTab
-		// };
-		// window.onbeforeunload = (e) => {
-		// 	const unsaved = Object.entries(beforeunloadMap).some(([k, field]) => {
-		// 		const key = /** @type {'local' | 'global'} */ (k);
-		// 		return !objectsEqual(this.get(key), field.retrieve());
-		// 	});
-		// 	if (unsaved) {
-		// 		e.preventDefault();
-		// 		e.returnValue = 'You have unsaved changes. Do you want to leave the page?';
-		// 	}
-		// };
 
 		this.registerEvents();
 	}
@@ -7127,6 +7125,7 @@ class AjaxBlockConfig {
 		// On panel activation, clear any automatically assigned focus within the panel
 		Object.values(this.panels).forEach((panel) => {
 			panel.on('active', (activated) => {
+				this.saveButton.toggle(panel.getName() !== 'misc');
 				if (activated) {
 					requestAnimationFrame(() => {
 						const activeEl = document.activeElement;
@@ -7161,7 +7160,14 @@ class AjaxBlockConfig {
 		this.localDialogOptions.blockReasonOptions.getTextInput().on('change', onChange);
 
 		// Save options when the Save button is clicked
-		this.saveButton.on('click', () => this.save());
+		this.saveButton.on('click', () => {
+			this.overlay.toggle(true);
+			try {
+				this.save();
+			} finally {
+				this.overlay.toggle(false);
+			}
+		});
 	}
 
 	/**
@@ -7222,12 +7228,192 @@ class AjaxBlockConfig {
 		return def.promise();
 	}
 
-	save() {
-		// TODO: Complete this
-		const localPresets = this.localDialogOptions.blockPresetOptions.build(this.indexLayout);
-		if (!localPresets) {
+	async save() {
+		const merged = await this.build();
+		if (!merged) {
 			return;
 		}
+
+		const optionKeys = AjaxBlockConfigStore.optionKeys;
+		/** @type {Record<AjaxBlockConfigDomains, Record<string, ?string>>} */
+		const change = {
+			local: Object.create(null),
+			global: Object.create(null),
+		};
+
+		typedKeys(change).forEach((domain) => {
+			if (!$.isEmptyObject(merged[domain])) {
+				// Some configs differ from their default values: Update
+				change[domain][optionKeys.current[domain]] = JSON.stringify(merged[domain]);
+			} else if (AjaxBlockConfigStore.exists(domain)) {
+				// All configs have the same values as their default ones: Delete
+				change[domain][optionKeys.current[domain]] = null;
+			}
+			// Noop: No change, no existing config
+		});
+
+		const localExists = !!change.local[optionKeys.current.local];
+		const leChange = AjaxBlockConfigMisc.getWikiIdOptions(localExists ? 'add' : 'delete');
+		Object.assign(change.global, leChange);
+
+		// Migrate legecy config if present
+		if (AjaxBlockConfigStore.exists('local', 'legacy')) {
+			change.local[optionKeys.legacy.local] = null;
+		}
+		if (AjaxBlockConfigStore.exists('global', 'legacy')) {
+			change.global[optionKeys.legacy.global] = null;
+		}
+
+		if ($.isEmptyObject(change.local) && $.isEmptyObject(change.global)) {
+			mw.notify(Messages.get('ajaxblock-config-notify-save-nochange'), { type: 'warn' });
+			return;
+		}
+
+		console.log(change);
+		this.saveButton.pushPending();
+		const promises = [];
+		if (!$.isEmptyObject(change.local)) {
+			promises.push(AjaxBlockConfig.saveOptions(change.local, 'options'));
+		}
+		if (!$.isEmptyObject(change.global)) {
+			promises.push(AjaxBlockConfig.saveOptions(change.global, 'globalpreferences'));
+		}
+
+		const results = await Promise.all(promises);
+		let failed = false;
+		for (const $error of results) {
+			if ($error) {
+				mw.notify($error, { type: 'error' });
+				failed = true;
+			}
+		}
+
+		if (failed) {
+			mw.notify(Messages.get('ajaxblock-config-notify-save-failure'), { type: 'error' });
+		} else {
+			mw.notify(Messages.get('ajaxblock-config-notify-save-success'), { type: 'success' });
+		}
+		this.saveButton.popPending();
+	}
+
+	/**
+	 * @private This method is specifically for {@link save}.
+	 */
+	async build() {
+		/**
+		 * @type {{
+		 * 	local: {
+		 * 		presets?: PartialBlockPresetJson[];
+		 * 	};
+		 * 	global: {
+		 * 		presets?: PartialBlockPresetJson[];
+		 * 		langs?: Partial<AjaxBlockLanguageConfig>;
+		 * 		warnings?: ReturnType<AjaxBlockConfigWarningOptions['build']>;
+		 * 	};
+		 * }}
+		 */
+		const ret = {
+			local: Object.create(null),
+			global: Object.create(null),
+		};
+
+		const localPresets = this.localDialogOptions.blockPresetOptions.build(this.indexLayout);
+		if (!localPresets) {
+			return null;
+		}
+		const globalPresets = this.globalDialogOptions.blockPresetOptions.build(this.indexLayout);
+		if (!globalPresets) {
+			return null;
+		}
+
+		// Remove empty presets if present
+		if (localPresets.empty.size || globalPresets.empty.size) {
+			this.overlay.$element.css({ 'z-index': 100 });
+			const confirmed = await AjaxBlockConfig.confirmPresetRemoval(localPresets.empty, globalPresets.empty);
+			this.overlay.$element.css({ 'z-index': '' });
+			if (!confirmed) {
+				return null;
+			}
+
+			[localPresets.empty, globalPresets.empty].forEach((map) => {
+				for (const field of map.keys()) {
+					field.delete();
+				}
+			});
+		}
+
+		if (localPresets.filled.size) {
+			ret.local.presets = [...localPresets.filled.values()];
+		}
+		if (globalPresets.filled.size) {
+			ret.global.presets = [...globalPresets.filled.values()];
+		}
+
+		const langs = this.languageOptions.build();
+		if (!$.isEmptyObject(langs)) {
+			ret.global.langs = langs;
+		}
+
+		const warnings = this.warningOptions.build();
+		if (!$.isEmptyObject(warnings)) {
+			ret.global.warnings = warnings;
+		}
+
+		return ret;
+	}
+
+	/**
+	 * @param {BuiltBlockPresetMap} emptyLocalPresets
+	 * @param {BuiltBlockPresetMap} emptyGlobalPresets
+	 * @returns {JQuery.Promise<boolean>}
+	 */
+	static confirmPresetRemoval(emptyLocalPresets, emptyGlobalPresets) {
+		const $msg = $('<div>').append(
+			new OO.ui.MessageWidget({
+				$element: $('<div>').css({ 'margin-bottom': '0.5em' }),
+				label: Messages.get('ajaxblock-config-confirm-presetreasons-empty'),
+				type: 'warning',
+			}).$element
+		);
+
+		typedEntries({ local: emptyLocalPresets, global: emptyGlobalPresets }).forEach(([domain, map]) => {
+			if (!map.size) {
+				return;
+			}
+
+			const $ul = $('<ul>');
+			for (const [_, preset] of map) {
+				$ul.append(
+					$('<li>').text(preset.name)
+				);
+			}
+
+			$msg.append(
+				$('<div>').append(
+					// Messages used here:
+					// - ajaxblock-config-label-tab-local
+					// - ajaxblock-config-label-tab-global
+					$('<b>').text(Messages.get(`ajaxblock-config-label-tab-${domain}`)),
+					$ul
+				)
+			);
+		});
+
+		return OO.ui.confirm($msg, {
+			actions: [
+				{
+					action: 'accept',
+					label: Messages.get('confirm'),
+					flags: ['primary', 'progressive'],
+				},
+				{
+					action: 'reject',
+					label: Messages.get('cancel'),
+					flags: 'safe',
+				}
+			],
+			size: 'medium',
+		});
 	}
 
 }
@@ -7297,13 +7483,22 @@ class AjaxBlockConfigLanguageOptions {
 	}
 
 	/**
-	 * @returns {AjaxBlockLanguageConfig}
+	 * @returns {Partial<AjaxBlockLanguageConfig>}
 	 */
 	build() {
-		return {
-			used: /** @type {AjaxBlockLanguages[]} */ (this.ddUsedLanguages.getValue()),
-			default: /** @type {AjaxBlockLanguages} */ (DropdownUtil.getSelectedOptionValueThrow(this.ddDefaultLanguage)),
-		};
+		const /** @type {Partial<AjaxBlockLanguageConfig>} */ ret = Object.create(null);
+
+		const used = /** @type {AjaxBlockLanguages[]} */ (this.ddUsedLanguages.getValue());
+		if (!arraysEqual(used, AjaxBlockConfigLanguageOptions.defaults.used)) {
+			ret.used = used;
+		}
+
+		const def = /** @type {AjaxBlockLanguages} */ (DropdownUtil.getSelectedOptionValueThrow(this.ddDefaultLanguage));
+		if (def !== AjaxBlockConfigLanguageOptions.defaults.default) {
+			ret.default = def;
+		}
+
+		return ret;
 	}
 
 	/**
@@ -7329,7 +7524,7 @@ class AjaxBlockConfigLanguageOptions {
 			}
 		}
 
-		return { used: [], default: null };
+		return { used: [], default: 'en' };
 	}
 
 }
@@ -7337,6 +7532,13 @@ class AjaxBlockConfigLanguageOptions {
  * @type {AjaxBlockLanguages[]}
  */
 AjaxBlockConfigLanguageOptions.supported = ['en', 'ja'];
+/**
+ * @type {AjaxBlockLanguageConfig}
+ */
+AjaxBlockConfigLanguageOptions.defaults = {
+	used: ['en'],
+	default: 'en',
+};
 
 class AjaxBlockConfigWarningOptions {
 
@@ -7736,6 +7938,9 @@ class AjaxBlockConfigDomainOptions {
 
 }
 
+/**
+ * @typedef {Map<AjaxBlockConfigBlockPresetOptionsField, PartialBlockPresetJson>} BuiltBlockPresetMap
+ */
 class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 
 	/**
@@ -7763,7 +7968,6 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 				collapsed: true,
 				presetName: key,
 				targets: [key],
-				lockPreset: true,
 				params,
 				domain,
 			});
@@ -7806,17 +8010,6 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 	 * @private
 	 */
 	registerEvents() {
-		this.fields.forEach((field) => {
-			field.onPresetDelete(() => {
-				const index = this.fields.indexOf(field);
-				if (index === -1) {
-					throw new Error('Field not found');
-				}
-				this.fields.splice(index, 1);
-				this.validatePresetNames();
-			});
-		});
-
 		this.addButton.on('click', () => this.addField());
 	}
 
@@ -7827,6 +8020,14 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 	addField(options = {}) {
 		options.validatePresetNames = this.validatePresetNames.bind(this);
 		const field = new AjaxBlockConfigBlockPresetOptionsField(options);
+		field.onPresetDelete(() => {
+			const index = this.fields.indexOf(field);
+			if (index === -1) {
+				throw new Error('Field not found');
+			}
+			this.fields.splice(index, 1);
+			this.validatePresetNames();
+		});
 		this.fields.push(field);
 		this.fieldContainer.$element.append(field.$container);
 	}
@@ -7852,7 +8053,7 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 
 		const /** @type {AjaxBlockConfigBlockPresetOptionsField[]} */ failed = [];
 		fields.forEach((field, i) => {
-			if (field.isLocked()) {
+			if (field.isDefaultPreset()) {
 				return;
 			}
 			const v = values[i];
@@ -7872,7 +8073,8 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 
 	/**
 	 * @param {OO.ui.IndexLayout} indexLayout
-	 * @returns {?BlockPresetJson[]}
+	 * @returns {?Record<'filled' | 'empty', BuiltBlockPresetMap>}
+	 * `null` if presets have unresolved errors
 	 */
 	build(indexLayout) {
 		const presetsWithErrors = this.validatePresetNames();
@@ -7886,22 +8088,26 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 			return null;
 		}
 
-		const /** @type {BlockPresetJson[]} */ presets = [];
-		const defaults = BlockPreset.default;
+		/** @type {Record<'filled' | 'empty', BuiltBlockPresetMap>} */
+		const ret = {
+			filled: new Map(),
+			empty: new Map(),
+		};
 
 		for (const field of this.getFields()) {
-			const preset = field.build();
-			const name = /** @type {NonNullable<BlockTargetType>} */ (preset.name);
-
-			if (name in defaults && OO.compare(preset, defaults[name])) {
-				// Filter unmodified built-in presets
+			const p = field.build();
+			if (field.isDefaultPreset() && $.isEmptyObject(p.params)) {
+				// Filter unmodified default presets
 				continue;
 			}
-
-			presets.push(preset);
+			if ($.isEmptyObject(p.params)) {
+				ret.empty.set(field, p);
+			} else {
+				ret.filled.set(field, p);
+			}
 		}
 
-		return presets;
+		return ret;
 	}
 
 	/**
@@ -7961,11 +8167,16 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			collapsed = false,
 			presetName = '',
 			targets = typedKeys(BlockPreset.default),
-			lockPreset = false,
 			validatePresetNames,
 		} = options;
 		const forcedBaseColor = { color: 'var(--color-base, #202122)' };
 
+		/**
+		 * @type {boolean}
+		 * @readonly
+		 * @private
+		 */
+		this.isDefault = BlockPreset.isDefaultName(presetName);
 		/**
 		 * @type {string[]}
 		 * @private
@@ -7979,8 +8190,8 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		this.presetNameInput = new OO.ui.TextInputWidget({
 			placeholder: Messages.get('ajaxblock-config-placeholder-presetreasons-name'),
 			value: presetName,
-			disabled: lockPreset,
-			validate: lockPreset || !validatePresetNames ? undefined: () => !validatePresetNames().includes(this),
+			disabled: this.isDefault,
+			validate: this.isDefault || !validatePresetNames ? undefined: () => !validatePresetNames().includes(this),
 		});
 		/**
 		 * @type {OO.ui.FieldLayout}
@@ -8006,7 +8217,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			],
 			placeholder: Messages.get('ajaxblock-config-placeholder-presetreasons-target'),
 			selected: targets,
-			disabled: lockPreset,
+			disabled: this.isDefault,
 		});
 
 		this.mainFieldset.addItems([
@@ -8091,11 +8302,9 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		});
 		this.initFieldAccessibility(this.getTargets());
 
-		this.deleteButton.on('click', () => {
-			this.onPresetDeleteCallbacks.forEach(cb => cb());
-		});
+		this.deleteButton.on('click', () => this.delete());
 
-		if (this.isLocked()) {
+		if (this.isDefaultPreset()) {
 			this.deleteButton.toggle(false);
 		}
 
@@ -8164,12 +8373,16 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		requestAnimationFrame(() => this.presetNameInput.focus());
 	}
 
-	isLocked() {
-		return this.presetNameInput.isDisabled();
+	isDefaultPreset() {
+		return this.isDefault;
 	}
 
 	getTargets() {
 		return /** @type {NonNullable<BlockTargetType>[]} */ (this.targetSelector.getValue());
+	}
+
+	delete() {
+		this.onPresetDeleteCallbacks.forEach(cb => cb());
 	}
 
 	/**
@@ -8182,29 +8395,78 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 	}
 
 	/**
-	 * @returns {BlockPresetJson}
+	 * @returns {PartialBlockPresetJson}
 	 */
 	build() {
+		const presetName = this.getPresetName(true);
 		return {
-			name: this.getPresetName(true),
+			name: presetName,
 			targets: this.getTargets(),
-			params: {
-				expiry: this.getExpiry(),
-				reason: this.getReason(),
-				hardblock: this.cbHardblock.isSelected(),
-				nocreate: this.cbCreateAccount.isSelected(),
-				autoblock: this.cbAutoblock.isSelected(),
-				noemail: this.cbSendEmail.isSelected(),
-				hidden: this.cbHideUser.isSelected(),
-				nousertalk: this.cbUserTalk.isSelected(),
-				partial: this.cbPartialBlock.isSelected(),
-				pagerestrictions: this.getPageRestrictions(),
-				namespacerestrictions: this.getNamespaceRestrictions(),
-				actionrestrictions: this.getActionRestrictions(),
-				watchuser: this.getWatchUser(),
-				watchlistexpiry: this.getWatchlistExpiry(),
-			},
+			params: this.buildParams(presetName),
 		};
+	}
+
+	/**
+	 * @param {string} presetName
+	 * @returns {Partial<ParamApplierBlockParams>}
+	 * @private
+	 */
+	buildParams(presetName) {
+		const fieldMap = {
+			expiry: this.getExpiry.bind(this),
+			reason: this.getReason.bind(this),
+			hardblock: this.cbHardblock.isSelected.bind(this.cbHardblock),
+			nocreate: this.cbCreateAccount.isSelected.bind(this.cbCreateAccount),
+			autoblock: this.cbAutoblock.isSelected.bind(this.cbAutoblock),
+			noemail: this.cbSendEmail.isSelected.bind(this.cbSendEmail),
+			hidden: this.cbHideUser.isSelected.bind(this.cbHideUser),
+			nousertalk: this.cbUserTalk.isSelected.bind(this.cbUserTalk),
+			partial: this.cbPartialBlock.isSelected.bind(this.cbPartialBlock),
+			pagerestrictions: this.getPageRestrictions.bind(this),
+			namespacerestrictions: this.getNamespaceRestrictions.bind(this),
+			actionrestrictions: this.getActionRestrictions.bind(this),
+			watchuser: this.getWatchUser.bind(this),
+			watchlistexpiry: this.getWatchlistExpiry.bind(this),
+		};
+
+		const /** @type {Partial<ParamApplierBlockParams>} */ ret = Object.create(null);
+
+		for (const [key, getter] of typedEntries(fieldMap)) {
+			const value = getter();
+			if (this.isSameAsDefaultValue(key, value, presetName)) {
+				// Filter unmodified values
+				continue;
+			}
+			// @ts-expect-error
+			ret[key] = value;
+		}
+
+		return ret;
+	}
+
+	/**
+	 * @param {keyof ParamApplierBlockParams} key
+	 * @param {any} value
+	 * @param {string} presetName
+	 * @returns {boolean}
+	 * @private
+	 */
+	isSameAsDefaultValue(key, value, presetName) {
+		if (this.isDefaultPreset()) {
+			const name = /** @type {NonNullable<BlockTargetType>} */ (presetName);
+			const defaultValue = BlockPreset.default[name][key];
+			if (Array.isArray(defaultValue)) {
+				// @ts-expect-error
+				return arraysEqual(value, defaultValue);
+			} else {
+				return value === defaultValue;
+			}
+		} else {
+			return value === false ||
+				value === '' ||
+				((key === 'expiry' || key === 'watchlistexpiry') && value === EXPIRY_INFINITE) ||
+				(Array.isArray(value) && value.length === 0);
+		}
 	}
 
 }
@@ -8441,12 +8703,12 @@ class AjaxBlockConfigMisc {
 		 * @private
 		 */
 		this.overlay = overlay;
-		// /**
-		//  * @type {DeleteConfigCallback[]}
-		//  * @readonly
-		//  * @private
-		//  */
-		// this.deleteConfigCallbacks = [];
+		/**
+		 * @type {DeleteConfigCallback[]}
+		 * @readonly
+		 * @private
+		 */
+		this.deleteConfigCallbacks = [];
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
@@ -8551,12 +8813,13 @@ class AjaxBlockConfigMisc {
 		});
 	}
 
-	// /**
-	//  * @param {DeleteConfigCallback} callback
-	//  */
-	// onConfigDeleted(callback) {
-	// 	this.deleteConfigCallbacks.push(callback);
-	// }
+	/**
+	 * @param {DeleteConfigCallback} callback
+	 * @todo Use this
+	 */
+	onConfigDeleted(callback) {
+		this.deleteConfigCallbacks.push(callback);
+	}
 
 	/**
 	 * @private
@@ -8611,10 +8874,8 @@ class AjaxBlockConfigMisc {
 	 * * Rewrites the help text for each checkbox in accordance with the `disabled` state.
 	 */
 	updateCheckboxes() {
-		const config = AjaxBlockServices.getConfig();
-
 		const $deleteLocalHelp = this.getHelpElement('deletelocal');
-		if (config.exists('local')) {
+		if (AjaxBlockConfigStore.exists('local')) {
 			this.deleteLocal.setDisabled(false);
 			$deleteLocalHelp.text('');
 		} else {
@@ -8622,7 +8883,7 @@ class AjaxBlockConfigMisc {
 			$deleteLocalHelp.text(Messages.get('ajaxblock-config-help-deletelocal-absent'));
 		}
 
-		const wikiMap = config.getMutableWikiMap();
+		const wikiMap = AjaxBlockConfigStore.getMutableWikiMap();
 		delete wikiMap[wgWikiID]; // The local wiki ID is irrelevant here
 		const $deleteLocalAllHelp = this.getHelpElement('deletelocalall');
 		if (!$.isEmptyObject(wikiMap)) {
@@ -8650,7 +8911,7 @@ class AjaxBlockConfigMisc {
 		}
 
 		const $deleteGlobalHelp = this.getHelpElement('deleteglobal');
-		if (config.exists('global')) {
+		if (AjaxBlockConfigStore.exists('global')) {
 			this.deleteGlobal.setDisabled(false);
 			$deleteGlobalHelp.text('');
 		} else {
@@ -8687,7 +8948,7 @@ class AjaxBlockConfigMisc {
 	 */
 	async doDelete() {
 		this.overlay.toggle(true);
-		this.deleteButton.setPending();
+		this.deleteButton.pushPending();
 
 		const deleteFor = this.collect();
 		const keys = AjaxBlockConfigStore.optionKeys.current;
@@ -8723,7 +8984,7 @@ class AjaxBlockConfigMisc {
 
 		// Delete all other local configs
 		if (deleteFor.deleteLocalAll) {
-			const wikiMap = AjaxBlockServices.getConfig().getMutableWikiMap();
+			const wikiMap = AjaxBlockConfigStore.getMutableWikiMap();
 			delete wikiMap[wgWikiID];
 
 			for (const [wikiID, apiUrl] of Object.entries(wikiMap)) {
@@ -8802,13 +9063,13 @@ class AjaxBlockConfigMisc {
 		}
 
 		// Process callbacks
-		// if (deletionTypes.length) {
-		// 	this.deleteConfigCallbacks.forEach((cb) => cb(deletionTypes));
-		// }
+		if (deletionTypes.length) {
+			this.deleteConfigCallbacks.forEach((cb) => cb(deletionTypes));
+		}
 
 		this.updateCheckboxes();
 		this.overlay.toggle(false);
-		this.deleteButton.unsetPending();
+		this.deleteButton.popPending();
 
 		if (errCount) {
 			OO.ui.alert(
@@ -8858,10 +9119,9 @@ class AjaxBlockConfigMisc {
 	 * @param {string[]} [wikiIDs] Optional wiki IDs to process in accordance with `method`. Defaults to
 	 * the local wiki ID.
 	 * @returns {Record<string, ?string>} If no change is needed, an empty object is returned.
-	 * @private
 	 */
 	static getWikiIdOptions(method, wikiIDs) {
-		let cfg = AjaxBlockServices.getConfig().getMutableWikiMap();
+		let cfg = AjaxBlockConfigStore.getMutableWikiMap();
 		if (wikiIDs && method !== 'delete') {
 			throw new Error('Constructing API endpoints for foreign wikis is not supported.');
 		}
@@ -8898,14 +9158,14 @@ function PendingButtonWidgetFactory() {
 	const classPending = 'oo-ui-pendingElement-pending';
 	return class PendingButtonWidget extends OO.ui.ButtonWidget {
 
-		setPending() {
+		pushPending() {
 			this.setDisabled(true)
 				.$element.children('.oo-ui-buttonElement-button').eq(0)
 					.addClass(classPending);
 			return this;
 		}
 
-		unsetPending() {
+		popPending() {
 			this.setDisabled(false)
 				.$element.children('.oo-ui-buttonElement-button').eq(0)
 					.removeClass(classPending);
@@ -9022,6 +9282,42 @@ function isStringArray(value) {
  */
 function isNumberArray(value) {
 	return Array.isArray(value) && value.every(el => typeof el === 'number');
+}
+
+/**
+ * @template {string | number | boolean | undefined | null} Primitive
+ * @param {readonly Primitive[]} array1
+ * @param {readonly Primitive[]} array2
+ * @param {boolean} [orderSensitive] Default: `false`
+ */
+function arraysEqual(array1, array2, orderSensitive = false) {
+	if (array1.length !== array2.length) {
+		return false;
+	}
+
+	if (orderSensitive) {
+		return array1.every((v, i) => Object.is(v, array2[i]));
+	}
+
+	/** @type {Map<Primitive, number>} */
+	const counts = new Map();
+	for (const v of array1) {
+		counts.set(v, (counts.get(v) || 0) + 1);
+	}
+
+	for (const v of array2) {
+		let count = counts.get(v);
+		if (count === undefined) {
+			return false;
+		}
+		if (--count === 0) {
+			counts.delete(v);
+		} else {
+			counts.set(v, count);
+		}
+	}
+
+	return counts.size === 0;
 }
 
 /**
@@ -9213,6 +9509,7 @@ AjaxBlockLogo.svg =
  * @typedef {import('./window/AjaxBlock').BlockParamApplierContextOptions} BlockParamApplierContextOptions
  * @typedef {import('./window/AjaxBlock').BlockParamApplierInvalidRestrictionMap} BlockParamApplierInvalidRestrictionMap
  * @typedef {import('./window/AjaxBlock').BlockPresetJson} BlockPresetJson
+ * @typedef {import('./window/AjaxBlock').PartialBlockPresetJson} PartialBlockPresetJson
  * @typedef {import('./window/AjaxBlock').AjaxBlockLanguages} AjaxBlockLanguages
  * @typedef {import('./window/AjaxBlock').AjaxBlockConfigVersions} AjaxBlockConfigVersions
  * @typedef {import('./window/AjaxBlock').AjaxBlockConfigDomains} AjaxBlockConfigDomains
@@ -9223,6 +9520,7 @@ AjaxBlockLogo.svg =
  * @typedef {import('./window/AjaxBlock').AjaxBlockLanguageConfig} AjaxBlockLanguageConfig
  * @typedef {import('./window/AjaxBlock').WarningKeys} WarningKeys
  * @typedef {import('./window/AjaxBlock').AjaxBlockWarningConfig} AjaxBlockWarningConfig
+ * @typedef {import('./window/AjaxBlock').DeleteConfigCallback} DeleteConfigCallback
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogevents} ApiResponseQueryListLogevents
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
  * @typedef {import('./window/InvestigateHelper').BlockLogMap} BlockLogMap
@@ -9248,7 +9546,6 @@ AjaxBlockLogo.svg =
  * @prop {boolean} [collapsed]
  * @prop {string} [presetName]
  * @prop {NonNullable<BlockTargetType>[]} [targets]
- * @prop {boolean} [lockPreset]
  * @prop {AjaxBlockConfigBlockPresetOptions['validatePresetNames']} [validatePresetNames]
  * @prop {AjaxBlockConfigDomains} [domain]
  * @prop {ParamApplierBlockParams} [params]

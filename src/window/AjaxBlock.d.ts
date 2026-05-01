@@ -327,6 +327,10 @@ export interface AjaxBlockMessages {
 	'ajaxblock-config-notice-presetreasons-additionaloptions': string;
 	'ajaxblock-config-label-presetreasons-add': string;
 	'ajaxblock-config-label-presetreasons-delete': string;
+	'ajaxblock-config-confirm-presetreasons-empty': string;
+	'ajaxblock-config-notify-save-nochange': string;
+	'ajaxblock-config-notify-save-success': string;
+	'ajaxblock-config-notify-save-failure': string;
 	'ajaxblock-config-placeholder-customreasons': string;
 	'ajaxblock-config-label-customreasons-block-layout': string;
 	'ajaxblock-config-label-customreasons-unblock-layout': string;
@@ -657,6 +661,8 @@ export interface BlockPresetJson {
 	params: ParamApplierBlockParams;
 }
 
+export type PartialBlockPresetJson = Omit<BlockPresetJson, 'params'> & { params: Partial<ParamApplierBlockParams>; };
+
 export type AjaxBlockLanguages = 'en' | 'ja';
 
 export type AjaxBlockConfigVersions = 'current' | 'legacy';
@@ -719,7 +725,7 @@ export interface AjaxBlockLegacyConfigWarning {
 
 export interface AjaxBlockLanguageConfig {
 	used: AjaxBlockLanguages[];
-	default: AjaxBlockLanguages | null;
+	default: AjaxBlockLanguages;
 }
 
 export type WarningKeys =
@@ -737,3 +743,5 @@ export type WarningKeys =
 	| 'unblock-ignorepredefined';
 
 export type AjaxBlockWarningConfig = Record<WarningKeys, Record<WarningContext, boolean>>;
+
+export type DeleteConfigCallback = (domains: AjaxBlockConfigDomains[]) => unknown;
