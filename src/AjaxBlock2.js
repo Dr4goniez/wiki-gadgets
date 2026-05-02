@@ -6766,37 +6766,110 @@ BlockPreset.default = {
 class AjaxBlockConfigStore {
 
 	/**
-	 * @private
+	 * @template {keyof typeof AjaxBlockConfigStore.optionKeys.current} D
+	 * @param {D} domain
+	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.current[D]} key
+	 * @returns {string}
 	 */
-	static getLegacy() {
-		return {
-			local: /** @type {?AjaxBlockLegacyConfigLocal} */ (this.getParsed('legacy', 'local')) || undefined,
-			global: /** @type {?AjaxBlockLegacyConfigGlobal} */ (this.getParsed('legacy', 'global')) || undefined,
-		};
+	static getOptionKey(domain, key) {
+		return /** @type {string} */ (this.optionKeys.current[domain][key]);
 	}
 
 	/**
-	 * @template T
-	 * @param {AjaxBlockConfigVersions} version
-	 * @param {AjaxBlockConfigDomains} domain
-	 * @returns {?T}
+	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.legacy} domain
+	 * @returns {string}
+	 */
+	static getLegacyOptionKey(domain) {
+		return this.optionKeys.legacy[domain];
+	}
+
+	/**
+	 * @typedef {(obj: unknown) => boolean} ParsedConfigValidator
+	 */
+	/**
+	 * @template {keyof typeof AjaxBlockConfigStore.optionKeys.current} D
+	 * @param {D} domain
+	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.current[D]} key
+	 * @param {ParsedConfigValidator} validate
+	 * @returns {object | null}
+	 */
+	static getParsed(domain, key, validate) {
+		return this.parseOption(this.getOptionKey(domain, key), validate);
+	}
+
+	/**
+	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.legacy} domain
+	 * @param {ParsedConfigValidator} validate
+	 * @returns {object | null}
+	 */
+	static getLegacyParsed(domain, validate) {
+		return this.parseOption(this.getLegacyOptionKey(domain), validate);
+	}
+
+	/**
+	 * @param {string} key
+	 * @param {ParsedConfigValidator} validate
+	 * @returns {object | null}
 	 * @private
 	 */
-	static getParsed(version, domain) {
-		const cfgStr = mw.user.options.get(this.optionKeys[version][domain], null);
+	static parseOption(key, validate) {
+		const cfgStr = mw.user.options.get(key, null);
 		if (!cfgStr) {
 			return null;
 		}
+
 		try {
 			const parsed = JSON.parse(cfgStr);
-			if (!$.isPlainObject(parsed)) {
-				throw new Error(`Encountered a non-plain object as the ${domain} ${version} config`);
+			if (!validate(parsed)) {
+				throw new Error('Validation failed');
 			}
 			return parsed;
 		} catch (e) {
-			console.error(e, cfgStr);
+			console.error(
+				`Failed to parse config`,
+				{ key, value: cfgStr, error: e }
+			);
 			return null;
 		}
+	}
+
+	/**
+	 * @template {keyof typeof AjaxBlockConfigStore.optionKeys.current} D
+	 * @param {D} domain
+	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.current[D]} key
+	 * @returns {boolean}
+	 */
+	static exists(domain, key) {
+		const optionKey = this.getOptionKey(domain, key);
+		return typeof mw.user.options.get(optionKey) === 'string';
+	}
+
+	/**
+	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.legacy} domain
+	 * @returns {boolean}
+	 */
+	static existsLegacy(domain) {
+		return typeof mw.user.options.get(this.getLegacyOptionKey(domain)) === 'string';
+	}
+
+	/**
+	 * @returns {Record<string, string>} <wikiID, apiUrl>
+	 */
+	static getMutableWikiMap() {
+		const parsed = this.getParsed('global', 'localexists', v => $.isPlainObject(v));
+		return /** @type {Record<string, string>} */ (parsed || Object.create(null));
+	}
+
+	/**
+	 * @private
+	 */
+	static getLegacy() {
+		/** @type {ParsedConfigValidator} */
+		const validate = value => $.isPlainObject(value);
+		return {
+			local: /** @type {?AjaxBlockLegacyConfigLocal} */ (this.getLegacyParsed('local', validate)) || undefined,
+			global: /** @type {?AjaxBlockLegacyConfigGlobal} */ (this.getLegacyParsed('global', validate)) || undefined,
+		};
 	}
 
 	constructor() {
@@ -6835,39 +6908,6 @@ class AjaxBlockConfigStore {
 		 * @private
 		 */
 		this.customReasons = AjaxBlockConfigCustomReasonOptions.getMerged(legacy.local, legacy.global);
-	}
-
-	/**
-	 * Checks whether the given config exists for the user.
-	 *
-	 * @param {AjaxBlockConfigDomains} domain
-	 * @param {'current' | 'legacy'} [version] Default: `'current'`
-	 * @returns {boolean}
-	 */
-	static exists(domain, version = 'current') {
-		return typeof mw.user.options.get(this.optionKeys[version][domain]) === 'string';
-	}
-
-	/**
-	 * @returns {Record<string, string>} <wikiID, apiUrl>
-	 */
-	static getMutableWikiMap() {
-		/** @type {?string} */
-		const cfgStr = mw.user.options.get(AjaxBlockConfigStore.optionKeys.current.localexists);
-		if (!cfgStr) {
-			return Object.create(null);
-		}
-
-		try {
-			const parsed = JSON.parse(cfgStr);
-			if (!$.isPlainObject(parsed)) {
-				throw new Error(`Encountered a non-plain object as the "localexist" config`);
-			}
-			return parsed;
-		} catch (e) {
-			console.error(e, cfgStr);
-			return Object.create(null);
-		}
 	}
 
 	getUsedLanguages() {
@@ -6929,13 +6969,18 @@ class AjaxBlockConfigStore {
 
 }
 AjaxBlockConfigStore.optionKeys = {
-	/** @type {Record<AjaxBlockConfigDomains | 'localexists', string>} */
 	current: {
-		local: 'userjs-ajaxblock2-local',
-		global: 'userjs-ajaxblock2-global',
-		localexists: 'userjs-ajaxblock2-localexists',
+		local: {
+			presets: 'userjs-ajaxblock2-local-presets',
+			customreasons: 'userjs-ajaxblock2-local-customreasons',
+		},
+		global: {
+			presets: 'userjs-ajaxblock2-global-presets',
+			customreasons: 'userjs-ajaxblock2-global-customreasons',
+			common: 'userjs-ajaxblock2-global-common',
+			localexists: 'userjs-ajaxblock2-global-localexists',
+		},
 	},
-	/** @type {Record<AjaxBlockConfigDomains, string>} */
 	legacy: {
 		local: 'userjs-ajaxblock',
 		global: 'userjs-ajaxblock-global',
@@ -7004,8 +7049,8 @@ class AjaxBlockConfig {
 	static init(content) {
 		const ajaxBlockConfig = new AjaxBlockConfig();
 		const paramApplierPromises = [
-			...ajaxBlockConfig.localDialogOptions.blockPresetOptions.getFields().map(field => field.paramApplierPromise),
-			...ajaxBlockConfig.globalDialogOptions.blockPresetOptions.getFields().map(field => field.paramApplierPromise)
+			...ajaxBlockConfig.localDialogOptions.getPresetFields().map(field => field.paramApplierPromise),
+			...ajaxBlockConfig.globalDialogOptions.getPresetFields().map(field => field.paramApplierPromise)
 		];
 		$.when(...paramApplierPromises).then(() => {
 			$(content).addClass('ajaxblock-config-content').empty().append(ajaxBlockConfig.$element);
@@ -7057,6 +7102,7 @@ class AjaxBlockConfig {
 			});
 			return acc;
 		}, Object.create(null));
+		this.indexLayout.addTabPanels(Object.values(this.panels), 0);
 
 		/**
 		 * @type {AjaxBlockConfigLanguageOptions}
@@ -7075,14 +7121,13 @@ class AjaxBlockConfig {
 		 * @readonly
 		 * @private
 		 */
-		this.localDialogOptions = new AjaxBlockConfigDialogOptions('local', this.panels.local);
+		this.localDialogOptions = new AjaxBlockConfigDialogOptions('local', this.indexLayout);
 		/**
 		 * @type {AjaxBlockConfigDialogOptions}
 		 * @readonly
 		 * @private
 		 */
-		this.globalDialogOptions = new AjaxBlockConfigDialogOptions('global', this.panels.global);
-
+		this.globalDialogOptions = new AjaxBlockConfigDialogOptions('global', this.indexLayout);
 		/**
 		 * @type {AjaxBlockConfigMisc}
 		 * @readonly
@@ -7102,14 +7147,20 @@ class AjaxBlockConfig {
 		});
 		this.saveButton.$element.css({ 'margin-left': '20px' });
 
+		// Construct the DOM
 		this.panels.common.$element.append(
 			this.languageOptions.$element,
 			this.warningOptions.$element
 		);
+		this.localDialogOptions.appendTo(
+			this.panels.local.$element
+		);
+		this.globalDialogOptions.appendTo(
+			this.panels.global.$element
+		);
 		this.panels.misc.$element.append(
 			this.miscOptions.$element
 		);
-		this.indexLayout.addTabPanels(Object.values(this.panels), 0);
 		this.indexLayout.$element.append(
 			this.overlay.$element,
 			this.saveButton.$element
@@ -7139,25 +7190,31 @@ class AjaxBlockConfig {
 
 		// Debounced update of block reason dropdown options when custom reasons change
 		const updateReasons = () => {
-			const globalCustomReasons = this.globalDialogOptions.blockReasonOptions.build(false);
-			const localCustomReasons = this.localDialogOptions.blockReasonOptions.build(false);
-			const combinedCustomReasons = Array.from(
-				new Set([...localCustomReasons, ...globalCustomReasons])
-			);
+			const globalCustomReasons = this.globalDialogOptions.buildBlockReasons(false);
+			const localCustomReasons = this.localDialogOptions.buildBlockReasons(false);
 
 			// Apply global-only
-			this.globalDialogOptions.blockPresetOptions.getFields().forEach((field) => {
-				field.insertCustomReasons(globalCustomReasons);
+			this.globalDialogOptions.getPresetFields().forEach((field) => {
+				field.insertCustomReasons(globalCustomReasons.data);
 			});
 
 			// Apply combined to local
-			this.localDialogOptions.blockPresetOptions.getFields().forEach((field) => {
-				field.insertCustomReasons(combinedCustomReasons);
-			});
+			if (localCustomReasons.override) {
+				this.localDialogOptions.getPresetFields().forEach((field) => {
+					field.insertCustomReasons(localCustomReasons.data);
+				});
+			} else {
+				const combinedCustomReasons = Array.from(
+					new Set([...localCustomReasons.data, ...globalCustomReasons.data])
+				);
+				this.localDialogOptions.getPresetFields().forEach((field) => {
+					field.insertCustomReasons(combinedCustomReasons);
+				});
+			}
 		};
 		const onChange = OO.ui.debounce(updateReasons, 1000);
-		this.globalDialogOptions.blockReasonOptions.getTextInput().on('change', onChange);
-		this.localDialogOptions.blockReasonOptions.getTextInput().on('change', onChange);
+		this.globalDialogOptions.getBlockReasonInput().on('change', onChange);
+		this.localDialogOptions.getBlockReasonInput().on('change', onChange);
 
 		// Save options when the Save button is clicked
 		this.saveButton.on('click', () => {
@@ -7229,137 +7286,188 @@ class AjaxBlockConfig {
 	}
 
 	async save() {
-		const merged = await this.build();
-		if (!merged) {
+		const built = await this.build();
+		if (!built) {
 			return;
 		}
-
-		const optionKeys = AjaxBlockConfigStore.optionKeys;
-		/** @type {Record<AjaxBlockConfigDomains, Record<string, ?string>>} */
-		const change = {
-			local: Object.create(null),
-			global: Object.create(null),
-		};
-
-		typedKeys(change).forEach((domain) => {
-			if (!$.isEmptyObject(merged[domain])) {
-				// Some configs differ from their default values: Update
-				change[domain][optionKeys.current[domain]] = JSON.stringify(merged[domain]);
-			} else if (AjaxBlockConfigStore.exists(domain)) {
-				// All configs have the same values as their default ones: Delete
-				change[domain][optionKeys.current[domain]] = null;
-			}
-			// Noop: No change, no existing config
-		});
-
-		const localExists = !!change.local[optionKeys.current.local];
-		const leChange = AjaxBlockConfigMisc.getWikiIdOptions(localExists ? 'add' : 'delete');
-		Object.assign(change.global, leChange);
-
-		// Migrate legecy config if present
-		if (AjaxBlockConfigStore.exists('local', 'legacy')) {
-			change.local[optionKeys.legacy.local] = null;
-		}
-		if (AjaxBlockConfigStore.exists('global', 'legacy')) {
-			change.global[optionKeys.legacy.global] = null;
-		}
-
-		if ($.isEmptyObject(change.local) && $.isEmptyObject(change.global)) {
-			mw.notify(Messages.get('ajaxblock-config-notify-save-nochange'), { type: 'warn' });
-			return;
-		}
-
-		console.log(change);
-		this.saveButton.pushPending();
-		const promises = [];
-		if (!$.isEmptyObject(change.local)) {
-			promises.push(AjaxBlockConfig.saveOptions(change.local, 'options'));
-		}
-		if (!$.isEmptyObject(change.global)) {
-			promises.push(AjaxBlockConfig.saveOptions(change.global, 'globalpreferences'));
-		}
-
-		const results = await Promise.all(promises);
-		let failed = false;
-		for (const $error of results) {
-			if ($error) {
-				mw.notify($error, { type: 'error' });
-				failed = true;
-			}
-		}
-
-		if (failed) {
-			mw.notify(Messages.get('ajaxblock-config-notify-save-failure'), { type: 'error' });
-		} else {
-			mw.notify(Messages.get('ajaxblock-config-notify-save-success'), { type: 'success' });
-		}
-		this.saveButton.popPending();
-	}
-
-	/**
-	 * @private This method is specifically for {@link save}.
-	 */
-	async build() {
-		/**
-		 * @type {{
-		 * 	local: {
-		 * 		presets?: PartialBlockPresetJson[];
-		 * 	};
-		 * 	global: {
-		 * 		presets?: PartialBlockPresetJson[];
-		 * 		langs?: Partial<AjaxBlockLanguageConfig>;
-		 * 		warnings?: ReturnType<AjaxBlockConfigWarningOptions['build']>;
-		 * 	};
-		 * }}
-		 */
-		const ret = {
-			local: Object.create(null),
-			global: Object.create(null),
-		};
-
-		const localPresets = this.localDialogOptions.blockPresetOptions.build(this.indexLayout);
-		if (!localPresets) {
-			return null;
-		}
-		const globalPresets = this.globalDialogOptions.blockPresetOptions.build(this.indexLayout);
-		if (!globalPresets) {
-			return null;
-		}
+		const { data, emptyPresets } = built;
 
 		// Remove empty presets if present
-		if (localPresets.empty.size || globalPresets.empty.size) {
+		if (emptyPresets.local.size || emptyPresets.global.size) {
 			this.overlay.$element.css({ 'z-index': 100 });
-			const confirmed = await AjaxBlockConfig.confirmPresetRemoval(localPresets.empty, globalPresets.empty);
+			const confirmed = await AjaxBlockConfig.confirmPresetRemoval(emptyPresets.local, emptyPresets.global);
 			this.overlay.$element.css({ 'z-index': '' });
 			if (!confirmed) {
-				return null;
+				return;
 			}
 
-			[localPresets.empty, globalPresets.empty].forEach((map) => {
+			Object.values(emptyPresets).forEach((map) => {
 				for (const field of map.keys()) {
 					field.delete();
 				}
 			});
 		}
 
+		let localExists = false;
+		/**
+		 * @type {Record<AjaxBlockConfigDomains, Record<string, ?string>>}
+		 */
+		const change = {
+			local: Object.create(null),
+			global: Object.create(null),
+		};
+		/**
+		 * @template {keyof typeof AjaxBlockConfigStore.optionKeys.current} D
+		 * @param {D} domain
+		 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.current[D]} key
+		 */
+		const setChange = (domain, key) => {
+			const value = /** @type {any} */ (data[domain])[key];
+			const target = /** @type {Record<string, string | null>} */ (change[domain]);
+			const optionKey = AjaxBlockConfigStore.getOptionKey(domain, key);
+			if (value !== undefined) {
+				target[optionKey] = JSON.stringify(value);
+				if (domain === 'local') {
+					localExists = true;
+				}
+			} else if (AjaxBlockConfigStore.exists(domain, key)) {
+				target[optionKey] = null;
+			}
+		};
+
+		setChange('local', 'presets');
+		setChange('local', 'customreasons');
+		setChange('global', 'presets');
+		setChange('global', 'customreasons');
+		setChange('global', 'common');
+
+		// Add or remove this wiki's ID to track which project the user has local config on
+		Object.assign(
+			change.global,
+			AjaxBlockConfigMisc.getWikiIdOptions(localExists ? 'add' : 'delete')
+		);
+
+		// Migrate legacy config if present
+		const legacyOptionKeys = AjaxBlockConfigStore.optionKeys.legacy;
+		if (AjaxBlockConfigStore.existsLegacy('local')) {
+			change.local[legacyOptionKeys.local] = null;
+		}
+		if (AjaxBlockConfigStore.existsLegacy('global')) {
+			change.global[legacyOptionKeys.global] = null;
+		}
+
+		// Bail if there's nothing to update
+		const hasLocal = !$.isEmptyObject(change.local);
+		const hasGlobal = !$.isEmptyObject(change.global);
+		if (!hasLocal && !hasGlobal) {
+			mw.notify(Messages.get('ajaxblock-config-notify-save-nochange'), { type: 'warn' });
+			return;
+		}
+
+		// Do save options
+		console.log(change);
+		this.saveButton.pushPending();
+		try {
+			const promises = [];
+			if (hasLocal) {
+				promises.push(AjaxBlockConfig.saveOptions(change.local, 'options'));
+			}
+			if (hasGlobal) {
+				promises.push(AjaxBlockConfig.saveOptions(change.global, 'globalpreferences'));
+			}
+
+			const results = await Promise.all(promises);
+			let failed = false;
+			for (const $error of results) {
+				if ($error) {
+					mw.notify($error, { type: 'error' });
+					failed = true;
+				}
+			}
+
+			if (failed) {
+				mw.notify(Messages.get('ajaxblock-config-notify-save-failure'), { type: 'error' });
+			} else {
+				mw.notify(Messages.get('ajaxblock-config-notify-save-success'), { type: 'success' });
+			}
+		} finally {
+			this.miscOptions.updateCheckboxes();
+			this.saveButton.popPending();
+		}
+	}
+
+	/**
+	 * @private This method is specifically for {@link save}.
+	 */
+	async build() {
+		/**  @type {AjaxBlockConfigSchema} */
+		const data = {
+			local: Object.create(null),
+			global: Object.create(null),
+		};
+
+		// Build presets and ensure no fields have unresolved errors
+		const localPresets = this.localDialogOptions.buildPresets();
+		if (!localPresets) {
+			return null;
+		}
+		const globalPresets = this.globalDialogOptions.buildPresets();
+		if (!globalPresets) {
+			return null;
+		}
+
+		// Register preset settings
 		if (localPresets.filled.size) {
-			ret.local.presets = [...localPresets.filled.values()];
+			data.local.presets = {
+				data: [...localPresets.filled.values()],
+				override: localPresets.override,
+			};
 		}
 		if (globalPresets.filled.size) {
-			ret.global.presets = [...globalPresets.filled.values()];
+			data.global.presets = {
+				data: [...globalPresets.filled.values()],
+				override: globalPresets.override,
+			};
 		}
 
+		// Register custom block/unblock reasons
+		const customReasons = {
+			local: {
+				block: this.localDialogOptions.buildBlockReasons(),
+				unblock: this.localDialogOptions.buildUnblockReasons(),
+			},
+			global: {
+				block: this.globalDialogOptions.buildBlockReasons(),
+				unblock: this.globalDialogOptions.buildUnblockReasons(),
+			},
+		};
+		typedEntries(customReasons).forEach(([domain, obj]) => {
+			typedEntries(obj).forEach(([action, reasons]) => {
+				if (reasons.data.length || reasons.override) {
+					OO.setProp(data[domain], 'customreasons', action, 'reasons', reasons);
+				}
+			});
+		});
+
+		// Register language settings
 		const langs = this.languageOptions.build();
 		if (!$.isEmptyObject(langs)) {
-			ret.global.langs = langs;
+			OO.setProp(data.global, 'common', 'langs', langs);
 		}
 
+		// Register warning settings
 		const warnings = this.warningOptions.build();
 		if (!$.isEmptyObject(warnings)) {
-			ret.global.warnings = warnings;
+			OO.setProp(data.global, 'common', 'warnings', warnings);
 		}
 
-		return ret;
+		return {
+			data,
+			emptyPresets: {
+				local: localPresets.empty,
+				global: globalPresets.empty,
+			},
+		};
 	}
 
 	/**
@@ -7871,30 +7979,66 @@ class AjaxBlockConfigDialogOptions {
 
 	/**
 	 * @param {AjaxBlockConfigDomains} domain
-	 * @param {OO.ui.TabPanelLayout} tabPanel
+	 * @param {OO.ui.IndexLayout} indexLayout
 	 */
-	constructor(domain, tabPanel) {
+	constructor(domain, indexLayout) {
 		/**
 		 * @type {AjaxBlockConfigBlockPresetOptions}
 		 * @readonly
+		 * @private
 		 */
-		this.blockPresetOptions = new AjaxBlockConfigBlockPresetOptions(domain);
+		this.blockPresetOptions = new AjaxBlockConfigBlockPresetOptions(domain, indexLayout);
 		/**
 		 * @type {AjaxBlockConfigCustomReasonOptions}
 		 * @readonly
+		 * @private
 		 */
-		this.blockReasonOptions = new AjaxBlockConfigCustomReasonOptions('block', domain, tabPanel);
+		this.blockReasonOptions = new AjaxBlockConfigCustomReasonOptions('block', domain, indexLayout);
 		/**
 		 * @type {AjaxBlockConfigCustomReasonOptions}
 		 * @readonly
+		 * @private
 		 */
-		this.unblockReasonOptions = new AjaxBlockConfigCustomReasonOptions('unblock', domain, tabPanel);
+		this.unblockReasonOptions = new AjaxBlockConfigCustomReasonOptions('unblock', domain, indexLayout);
+	}
 
-		tabPanel.$element.append(
+	/**
+	 * @param {JQuery<HTMLElement>} $element
+	 */
+	appendTo($element) {
+		$element.append(
 			this.blockPresetOptions.$element,
 			this.blockReasonOptions.$element,
 			this.unblockReasonOptions.$element
 		);
+	}
+
+	getPresetFields() {
+		return this.blockPresetOptions.getFields();
+	}
+
+	getBlockReasonInput() {
+		return this.blockReasonOptions.getTextInput();
+	}
+
+	buildPresets() {
+		return this.blockPresetOptions.build();
+	}
+
+	/**
+	 * @param {boolean} [setValue] Whether to set the return value to the input (default: `true`)
+	 * @returns
+	 */
+	buildBlockReasons(setValue) {
+		return this.blockReasonOptions.build(setValue);
+	}
+
+	/**
+	 * @param {boolean} [setValue] Whether to set the return value to the input (default: `true`)
+	 * @returns
+	 */
+	buildUnblockReasons(setValue) {
+		return this.unblockReasonOptions.build(setValue);
 	}
 
 }
@@ -7914,7 +8058,7 @@ class AjaxBlockConfigDomainOptions {
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
-		 * @protected
+		 * @private
 		 */
 		this.cbOverrideGlobal = new OO.ui.CheckboxInputWidget();
 		/**
@@ -7936,6 +8080,10 @@ class AjaxBlockConfigDomainOptions {
 		return this.domain;
 	}
 
+	overrideGlobal() {
+		return this.getDomain() === 'local' && this.cbOverrideGlobal.isSelected();
+	}
+
 }
 
 /**
@@ -7945,10 +8093,17 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 
 	/**
 	 * @param {AjaxBlockConfigDomains} domain
+	 * @param {OO.ui.IndexLayout} indexLayout
 	 */
-	constructor(domain) {
+	constructor(domain, indexLayout) {
 		super(domain);
 
+		/**
+		 * @type {OO.ui.IndexLayout}
+		 * @readonly
+		 * @private
+		 */
+		this.indexLayout = indexLayout;
 		/**
 		 * @type {AjaxBlockConfigBlockPresetOptionsField[]}
 		 * @private
@@ -8072,14 +8227,13 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 	}
 
 	/**
-	 * @param {OO.ui.IndexLayout} indexLayout
-	 * @returns {?Record<'filled' | 'empty', BuiltBlockPresetMap>}
+	 * @returns {?{ filled: BuiltBlockPresetMap; empty: BuiltBlockPresetMap; override: boolean; }}
 	 * `null` if presets have unresolved errors
 	 */
-	build(indexLayout) {
+	build() {
 		const presetsWithErrors = this.validatePresetNames();
 		if (presetsWithErrors.length) {
-			indexLayout.setTabPanel(this.getDomain());
+			this.indexLayout.setTabPanel(this.getDomain());
 			requestAnimationFrame(() => presetsWithErrors[0].focusPresetInput());
 			mw.notify(
 				Messages.get('ajaxblock-config-notify-presetreasons-resolveerrors'),
@@ -8088,10 +8242,10 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 			return null;
 		}
 
-		/** @type {Record<'filled' | 'empty', BuiltBlockPresetMap>} */
 		const ret = {
-			filled: new Map(),
-			empty: new Map(),
+			filled: /** @type {BuiltBlockPresetMap} */ (new Map()),
+			empty: /** @type {BuiltBlockPresetMap} */ (new Map()),
+			override: this.overrideGlobal(),
 		};
 
 		for (const field of this.getFields()) {
@@ -8578,9 +8732,9 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 	/**
 	 * @param {BlockActions} action
 	 * @param {AjaxBlockConfigDomains} domain
-	 * @param {OO.ui.TabPanelLayout} tabPanel
+	 * @param {OO.ui.IndexLayout} indexLayout
 	 */
-	constructor(action, domain, tabPanel) {
+	constructor(action, domain, indexLayout) {
 		super(domain);
 
 		/**
@@ -8620,18 +8774,19 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 		 */
 		this.$element = layout.$element;
 
-		this.registerEvents(tabPanel);
+		this.registerEvents(indexLayout);
 	}
 
 	/**
-	 * @param {OO.ui.TabPanelLayout} tabPanel
+	 * @param {OO.ui.IndexLayout} indexLayout
 	 * @private
 	 */
-	registerEvents(tabPanel) {
+	registerEvents(indexLayout) {
 		// Work around OOUI autosize issue:
 		// adjustSize() relies on layout measurements (innerHeight, scrollHeight, etc.),
 		// which are incorrect while the widget is inside a hidden tab (`display: none`).
 		// Recalculate after the tab becomes visible.
+		const tabPanel = /** @type {OO.ui.TabPanelLayout} */ (indexLayout.getTabPanel(this.getDomain()));
 		tabPanel.once('active', () => {
 			requestAnimationFrame(() => this.input.adjustSize(true));
 		});
@@ -8639,7 +8794,7 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 
 	/**
 	 * @param {boolean} [setValue] Whether to set the return value to the input (default: `true`)
-	 * @returns
+	 * @returns {{ data: string[]; override: boolean; }}
 	 */
 	build(setValue = true) {
 		const valueSet = new Set(
@@ -8649,7 +8804,10 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 		if (setValue) {
 			this.input.setValue(values.join('\n'));
 		}
-		return values;
+		return {
+			data: values,
+			override: this.overrideGlobal(),
+		};
 	}
 
 	getTextInput() {
@@ -8874,8 +9032,10 @@ class AjaxBlockConfigMisc {
 	 * * Rewrites the help text for each checkbox in accordance with the `disabled` state.
 	 */
 	updateCheckboxes() {
+		const exists = AjaxBlockConfigStore.exists.bind(AjaxBlockConfigStore);
+
 		const $deleteLocalHelp = this.getHelpElement('deletelocal');
-		if (AjaxBlockConfigStore.exists('local')) {
+		if (exists('local', 'presets') || exists('local', 'customreasons')) {
 			this.deleteLocal.setDisabled(false);
 			$deleteLocalHelp.text('');
 		} else {
@@ -8911,7 +9071,7 @@ class AjaxBlockConfigMisc {
 		}
 
 		const $deleteGlobalHelp = this.getHelpElement('deleteglobal');
-		if (AjaxBlockConfigStore.exists('global')) {
+		if (exists('global', 'presets') || exists('global', 'customreasons') || exists('global', 'common')) {
 			this.deleteGlobal.setDisabled(false);
 			$deleteGlobalHelp.text('');
 		} else {
@@ -8951,7 +9111,7 @@ class AjaxBlockConfigMisc {
 		this.deleteButton.pushPending();
 
 		const deleteFor = this.collect();
-		const keys = AjaxBlockConfigStore.optionKeys.current;
+		const getOptionKey = AjaxBlockConfigStore.getOptionKey.bind(AjaxBlockConfigStore);
 		const saveOptions = DEBUG_MODE ? AjaxBlockConfig.testSaveOptions : AjaxBlockConfig.saveOptions;
 		const /** @type {ReturnType<typeof AjaxBlockConfig.saveOptions>[]} */ promises = [];
 		const /** @type {{ msgKey: keyof LoadedMessages; wikiID?: string; }[]} */ tasks = [];
@@ -8973,7 +9133,10 @@ class AjaxBlockConfigMisc {
 
 		// Delete local config
 		if (deleteFor.deleteLocal) {
-			const change = { [keys.local]: null };
+			const change = {
+				[getOptionKey('local', 'presets')]: null,
+				[getOptionKey('local', 'customreasons')]: null,
+			};
 			promises.push(saveOptions(change, 'options'));
 			tasks.push({
 				msgKey: 'ajaxblock-config-label-deletelocal',
@@ -8989,7 +9152,10 @@ class AjaxBlockConfigMisc {
 
 			for (const [wikiID, apiUrl] of Object.entries(wikiMap)) {
 				const foreignApi = new mw.ForeignApi(apiUrl, AjaxBlock.apiOptions);
-				const change = { [keys.local]: null };
+				const change = {
+					[getOptionKey('local', 'presets')]: null,
+					[getOptionKey('local', 'customreasons')]: null,
+				};
 
 				promises.push(saveOptions(change, 'options', foreignApi));
 				tasks.push({
@@ -9001,7 +9167,10 @@ class AjaxBlockConfigMisc {
 
 		// Delete global config
 		if (deleteFor.deleteGlobal) {
-			const change = { [keys.global]: null };
+			const change = {
+				[getOptionKey('global', 'presets')]: null,
+				[getOptionKey('global', 'common')]: null,
+			};
 			promises.push(saveOptions(change, 'globalpreferences'));
 			tasks.push({ msgKey: 'ajaxblock-config-label-deleteglobal' });
 			deletionTypes.push('global');
@@ -9143,7 +9312,7 @@ class AjaxBlockConfigMisc {
 		if (!changed) {
 			return Object.create(null); // No change needed
 		}
-		const key = AjaxBlockConfigStore.optionKeys.current.localexists;
+		const key = AjaxBlockConfigStore.getOptionKey('global', 'localexists');
 		const value = $.isEmptyObject(cfg) ? null : JSON.stringify(cfg);
 		return { [key]: value };
 	}
@@ -9521,6 +9690,7 @@ AjaxBlockLogo.svg =
  * @typedef {import('./window/AjaxBlock').WarningKeys} WarningKeys
  * @typedef {import('./window/AjaxBlock').AjaxBlockWarningConfig} AjaxBlockWarningConfig
  * @typedef {import('./window/AjaxBlock').DeleteConfigCallback} DeleteConfigCallback
+ * @typedef {import('./window/AjaxBlock').AjaxBlockConfigSchema} AjaxBlockConfigSchema
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogevents} ApiResponseQueryListLogevents
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
  * @typedef {import('./window/InvestigateHelper').BlockLogMap} BlockLogMap

@@ -745,3 +745,26 @@ export type WarningKeys =
 export type AjaxBlockWarningConfig = Record<WarningKeys, Record<WarningContext, boolean>>;
 
 export type DeleteConfigCallback = (domains: AjaxBlockConfigDomains[]) => unknown;
+
+interface OverrideGlobal {
+	override: boolean;
+}
+
+interface AjaxBlockConfigSchemaData<T> extends OverrideGlobal {
+	data: T;
+}
+
+export interface AjaxBlockConfigSchema {
+	local: {
+		presets?: AjaxBlockConfigSchemaData<PartialBlockPresetJson[]>;
+		customreasons?: Partial<Record<BlockActions, AjaxBlockConfigSchemaData<string[]>>>;
+	};
+	global: {
+		presets?: AjaxBlockConfigSchemaData<PartialBlockPresetJson[]>;
+		customreasons?: Partial<Record<BlockActions, AjaxBlockConfigSchemaData<string[]>>>;
+		common?: {
+			langs?: Partial<AjaxBlockLanguageConfig>;
+			warnings?: import('ts-essentials').DeepPartial<AjaxBlockWarningConfig>;
+		};
+	};
+}
