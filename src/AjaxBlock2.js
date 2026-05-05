@@ -6837,6 +6837,17 @@ class AjaxBlockConfigStore {
 	}
 
 	/**
+	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.current} domain
+	 * @returns {boolean}
+	 */
+	static existsAny(domain) {
+		const keys = typedKeys(this.optionKeys.current[domain])
+			// @ts-expect-error
+			.filter(k => k !== 'localexists');
+		return keys.some(key => this.exists(domain, key));
+	}
+
+	/**
 	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.legacy} domain
 	 * @returns {boolean}
 	 */
@@ -6862,6 +6873,22 @@ class AjaxBlockConfigStore {
 			local: /** @type {?AjaxBlockLegacyConfigLocal} */ (this.getLegacyParsed('local', validate)) || undefined,
 			global: /** @type {?AjaxBlockLegacyConfigGlobal} */ (this.getLegacyParsed('global', validate)) || undefined,
 		};
+	}
+
+	/**
+	 * @param {AjaxBlockConfigDomains} domain
+	 * @returns {Record<string, null>}
+	 */
+	static getOptionsForReset(domain) {
+		/** @type {Record<string, null>} */
+		const ret = Object.create(null);
+		for (const optionKey of Object.values(this.optionKeys.current[domain])) {
+			if (optionKey === 'localexists') {
+				continue;
+			}
+			ret[optionKey] = null;
+		}
+		return ret;
 	}
 
 	constructor() {
@@ -6969,7 +6996,8 @@ AjaxBlockConfigStore.optionKeys = {
 		global: {
 			presets: 'userjs-ajaxblock2-global-presets',
 			customreasons: 'userjs-ajaxblock2-global-customreasons',
-			common: 'userjs-ajaxblock2-global-common',
+			langs: 'userjs-ajaxblock2-global-langs',
+			warnings: 'userjs-ajaxblock2-global-warnings',
 			localexists: 'userjs-ajaxblock2-global-localexists',
 		},
 	},
@@ -7278,7 +7306,7 @@ class AjaxBlockConfig {
 	}
 
 	async save() {
-		const built = await this.build();
+		const built = this.build();
 		if (!built) {
 			return;
 		}
@@ -7331,7 +7359,8 @@ class AjaxBlockConfig {
 		setChange('local', 'customreasons');
 		setChange('global', 'presets');
 		setChange('global', 'customreasons');
-		setChange('global', 'common');
+		setChange('global', 'langs');
+		setChange('global', 'warnings');
 
 		// Add or remove this wiki's ID to track which project the user has local config on
 		Object.assign(
@@ -7389,9 +7418,10 @@ class AjaxBlockConfig {
 	}
 
 	/**
+	 * @returns {?{ data: AjaxBlockConfigSchema; emptyPresets: Record<AjaxBlockConfigDomains, BuiltBlockPresetMap>; }}
 	 * @private This method is specifically for {@link save}.
 	 */
-	async build() {
+	build() {
 		/**  @type {AjaxBlockConfigSchema} */
 		const data = {
 			local: Object.create(null),
@@ -7444,13 +7474,13 @@ class AjaxBlockConfig {
 		// Register language settings
 		const langs = this.languageOptions.build();
 		if (!$.isEmptyObject(langs)) {
-			OO.setProp(data.global, 'common', 'langs', langs);
+			data.global.langs = langs;
 		}
 
 		// Register warning settings
 		const warnings = this.warningOptions.build();
 		if (!$.isEmptyObject(warnings)) {
-			OO.setProp(data.global, 'common', 'warnings', warnings);
+			data.global.warnings = warnings;
 		}
 
 		return {
@@ -9024,10 +9054,8 @@ class AjaxBlockConfigMisc {
 	 * * Rewrites the help text for each checkbox in accordance with the `disabled` state.
 	 */
 	updateCheckboxes() {
-		const exists = AjaxBlockConfigStore.exists.bind(AjaxBlockConfigStore);
-
 		const $deleteLocalHelp = this.getHelpElement('deletelocal');
-		if (exists('local', 'presets') || exists('local', 'customreasons')) {
+		if (AjaxBlockConfigStore.existsAny('local')) {
 			this.deleteLocal.setDisabled(false);
 			$deleteLocalHelp.text('');
 		} else {
@@ -9063,7 +9091,7 @@ class AjaxBlockConfigMisc {
 		}
 
 		const $deleteGlobalHelp = this.getHelpElement('deleteglobal');
-		if (exists('global', 'presets') || exists('global', 'customreasons') || exists('global', 'common')) {
+		if (AjaxBlockConfigStore.existsAny('global')) {
 			this.deleteGlobal.setDisabled(false);
 			$deleteGlobalHelp.text('');
 		} else {
@@ -9103,7 +9131,6 @@ class AjaxBlockConfigMisc {
 		this.deleteButton.pushPending();
 
 		const deleteFor = this.collect();
-		const getOptionKey = AjaxBlockConfigStore.getOptionKey.bind(AjaxBlockConfigStore);
 		const saveOptions = DEBUG_MODE ? AjaxBlockConfig.testSaveOptions : AjaxBlockConfig.saveOptions;
 		const /** @type {ReturnType<typeof AjaxBlockConfig.saveOptions>[]} */ promises = [];
 		const /** @type {{ msgKey: keyof LoadedMessages; wikiID?: string; }[]} */ tasks = [];
@@ -9125,10 +9152,7 @@ class AjaxBlockConfigMisc {
 
 		// Delete local config
 		if (deleteFor.deleteLocal) {
-			const change = {
-				[getOptionKey('local', 'presets')]: null,
-				[getOptionKey('local', 'customreasons')]: null,
-			};
+			const change = AjaxBlockConfigStore.getOptionsForReset('local');
 			promises.push(saveOptions(change, 'options'));
 			tasks.push({
 				msgKey: 'ajaxblock-config-label-deletelocal',
@@ -9144,11 +9168,7 @@ class AjaxBlockConfigMisc {
 
 			for (const [wikiID, apiUrl] of Object.entries(wikiMap)) {
 				const foreignApi = new mw.ForeignApi(apiUrl, AjaxBlock.apiOptions);
-				const change = {
-					[getOptionKey('local', 'presets')]: null,
-					[getOptionKey('local', 'customreasons')]: null,
-				};
-
+				const change = AjaxBlockConfigStore.getOptionsForReset('local');
 				promises.push(saveOptions(change, 'options', foreignApi));
 				tasks.push({
 					msgKey: 'ajaxblock-config-label-deletelocalall',
@@ -9159,10 +9179,7 @@ class AjaxBlockConfigMisc {
 
 		// Delete global config
 		if (deleteFor.deleteGlobal) {
-			const change = {
-				[getOptionKey('global', 'presets')]: null,
-				[getOptionKey('global', 'common')]: null,
-			};
+			const change = AjaxBlockConfigStore.getOptionsForReset('global');
 			promises.push(saveOptions(change, 'globalpreferences'));
 			tasks.push({ msgKey: 'ajaxblock-config-label-deleteglobal' });
 			deletionTypes.push('global');

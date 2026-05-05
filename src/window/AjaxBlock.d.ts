@@ -762,9 +762,7 @@ export interface AjaxBlockConfigSchema {
 	global: {
 		presets?: AjaxBlockConfigSchemaData<PartialBlockPresetJson[]>;
 		customreasons?: Partial<Record<BlockActions, AjaxBlockConfigSchemaData<string[]>>>;
-		common?: {
-			langs?: Partial<AjaxBlockLanguageConfig>;
-			warnings?: import('ts-essentials').DeepPartial<AjaxBlockWarningConfig>;
-		};
+		langs?: Partial<AjaxBlockLanguageConfig>;
+		warnings?: import('ts-essentials').DeepPartial<AjaxBlockWarningConfig>;
 	};
 }
