@@ -2355,22 +2355,14 @@ class Messages {
 	static loadInternalMessages() {
 		const lang = AjaxBlockServices.getConfig().getLanguage();
 		const i18n = Messages.i18n[lang];
-		let workAroundT424167 = false; // Temporary
 		if (lang === mw.config.get('wgUserLanguage')) {
 			// If AjaxBlock's interface language matches wgUserLanguage, reuse mw.messages
 			// as the internal message store. Otherwise, use an independent mw.Map instance,
 			// since we should not reuse messages already loaded for wgUserLanguage when
 			// they differ from AjaxBlock's interface language.
 			Messages.map = mw.messages;
-		} else {
-			workAroundT424167 = true;
 		}
 		Messages.map.set(/** @type {any} */ (i18n));
-		if (workAroundT424167) {
-			Object.entries(i18n).forEach(([key, msg]) => {
-				Messages.parseInt(msg, key);
-			});
-		}
 	}
 
 	/**
