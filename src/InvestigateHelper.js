@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.2.4
+ * @version 1.2.5
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -9,6 +9,8 @@
 // <nowiki>
 (() => {
 // *******************************************************************************************************
+
+const VERSION = '1.2.5';
 
 /** @type {mw.Api} */
 let api;
@@ -887,14 +889,14 @@ class InvestigateHelper {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'InvestigateHelper/1.2.4 (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)'
-				}
+					'Api-User-Agent': `InvestigateHelper/${VERSION} (https://meta.wikimedia.org/wiki/User:Dragoniez/InvestigateHelper.js)`,
+				},
 			},
 			parameters: {
 				action: 'query',
 				format: 'json',
 				formatversion: '2'
-			}
+			},
 		};
 	}
 
@@ -1347,14 +1349,6 @@ class Messages {
 	}
 
 	/**
-	 * @param {unknown} value
-	 * @returns {boolean}
-	 */
-	static isIndefExpiry(value) {
-		return typeof value === 'string' && /^(infinite|indefinite|infinity|never)$/.test(value);
-	}
-
-	/**
 	 * Translates an expiry value to its localized label if available.
 	 *
 	 * @param {string} expiry
@@ -1363,9 +1357,9 @@ class Messages {
 	 */
 	static translateBlockExpiry(expiry) {
 		const map = this.parseOptionsMessage(this.get('ipboptions'));
-		const isInputIndef = this.isIndefExpiry(expiry);
+		const isInputIndef = mw.util.isInfinity(expiry);
 		for (const [label, value] of map) {
-			if (expiry === value || isInputIndef && this.isIndefExpiry(value)) {
+			if (expiry === value || isInputIndef && mw.util.isInfinity(value)) {
 				return label;
 			}
 		}
@@ -2402,12 +2396,12 @@ class BlockField {
 	 * @param {UserList} list
 	 */
 	constructor(fieldset, list) {
-
 		/**
 		 * Map from usernames to arrays of {@link UserListItem} instances.
 		 *
 		 * @type {Map<string, UserListItem[]>}
 		 * @readonly
+		 * @private
 		 */
 		this.checkboxMap = new Map();
 
@@ -2422,11 +2416,10 @@ class BlockField {
 		}
 
 		// Block targets
-		const targetField = new OO.ui.FieldsetLayout({
-			label: Messages.get('checkuser-investigateblock-target')
-		});
-		/** @type {string[]} */
-		const presetTargets = [ // For debugging
+		/**
+		 * @type {string[]} For debugging
+		 */
+		const presetTargets = [
 			// '192.168.0.0/28',
 			// '192.168.0.0/24',
 			// 'DragoTest',
@@ -2435,6 +2428,8 @@ class BlockField {
 		 * The target selector widget.
 		 *
 		 * @type {mw.widgets.UsersMultiselectWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.target = new mw.widgets.UsersMultiselectWidget({
 			inputPosition: 'outline',
@@ -2450,98 +2445,107 @@ class BlockField {
 		 * actions from taking place in its event handlers.
 		 *
 		 * @type {boolean}
+		 * @private
 		 */
 		this.inChangeEvent = false;
-
-		this.bindCheckboxesWithTags();
-
-		const investigateButton = this.createInvestigateButton(!presetTargets.length);
-
-		const clearButton = new OO.ui.ButtonWidget({
-			label: Messages.get('apisandbox-reset')
-		});
-		clearButton.off('click').on('click', () => {
-			this.target.setValue('');
-		});
-
-		const buttonRow = new OO.ui.Widget({
-			$element: $('<div>').append(
-				investigateButton.$element,
-				clearButton.$element
-			)
-		});
-		targetField.addItems([
-			new OO.ui.FieldLayout(this.target),
-			new OO.ui.FieldLayout(buttonRow)
-		]);
-
-		// Block expiry
-		const expiryField = new OO.ui.FieldsetLayout({
-			label: Messages.get('block-expiry')
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.investigateButton = new OO.ui.ButtonWidget({
+			label: Messages.get('checkuser-investigate'),
+			disabled: !presetTargets.length,
+			flags: 'progressive'
 		});
 		/**
+		 * @type {OO.ui.ButtonWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.clearButton = new OO.ui.ButtonWidget({
+			label: Messages.get('apisandbox-reset')
+		});
+
+		const targetField = new OO.ui.FieldsetLayout({
+			label: Messages.get('checkuser-investigateblock-target'),
+			items: [
+				new OO.ui.FieldLayout(this.target),
+				new OO.ui.FieldLayout(
+					new OO.ui.Widget({
+						$element: $('<div>').append(
+							this.investigateButton.$element,
+							this.clearButton.$element
+						)
+					})
+				),
+			],
+		});
+
+		// Block expiry
+		/**
 		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.expiry = new OO.ui.DropdownWidget({
 			menu: {
 				items: Messages.getBlockDurations()
 			}
 		});
-		let indefData = '';
-		for (const item of /** @type {OO.ui.MenuOptionWidget[]} */ (this.expiry.getMenu().getItems())) {
-			indefData = /** @type {string} */ (item.getData());
-			if (Messages.isIndefExpiry(indefData)) {
-				break;
-			}
-		}
-		if (indefData) {
-			this.expiry.getMenu().selectItemByData(indefData);
-		}
 		/**
 		 * @type {OO.ui.TextInputWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.expiryCustom = new OO.ui.TextInputWidget({
 			placeholder: Messages.get('ipbother').replace(/[:：]$/, '')
 		});
-		this.expiryCustom.on('change', (value) => {
-			if (value) this.expiry.getMenu().selectItemByData('');
+
+		const expiryField = new OO.ui.FieldsetLayout({
+			label: Messages.get('block-expiry'),
+			items: [
+				new OO.ui.FieldLayout(this.expiry),
+				new OO.ui.FieldLayout(this.expiryCustom)
+			],
 		});
-		expiryField.addItems([
-			new OO.ui.FieldLayout(this.expiry),
-			new OO.ui.FieldLayout(this.expiryCustom)
-		]);
 
 		// Block reasons
-		const reasonField = new OO.ui.FieldsetLayout({
-			label: Messages.get('checkuser-investigateblock-reason')
-		});
 		/**
 		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.reason1 = new OO.ui.DropdownWidget({
 			menu: {
 				items: Messages.parseBlockReasonDropdown()
 			}
 		});
-		this.reason1.getMenu().selectItemByData('');
 		/**
 		 * @type {OO.ui.DropdownWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.reason2 = new OO.ui.DropdownWidget({
 			menu: {
 				items: Messages.parseBlockReasonDropdown()
 			}
 		});
-		this.reason2.getMenu().selectItemByData('');
 		/**
 		 * @type {OO.ui.TextInputWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.reasonC = new OO.ui.TextInputWidget();
-		reasonField.addItems([
-			new OO.ui.FieldLayout(this.reason1),
-			new OO.ui.FieldLayout(this.reason2),
-			new OO.ui.FieldLayout(this.reasonC)
-		]);
+
+		const reasonField = new OO.ui.FieldsetLayout({
+			label: Messages.get('checkuser-investigateblock-reason'),
+			items: [
+				new OO.ui.FieldLayout(this.reason1),
+				new OO.ui.FieldLayout(this.reason2),
+				new OO.ui.FieldLayout(this.reasonC)
+			],
+		});
 
 		// Block actions
 		const actionField = new OO.ui.FieldsetLayout({
@@ -2550,26 +2554,38 @@ class BlockField {
 
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.nocreate = new OO.ui.CheckboxInputWidget({ selected: true });
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.noemail = new OO.ui.CheckboxInputWidget();
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.nousertalk = new OO.ui.CheckboxInputWidget();
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.autoblock = new OO.ui.CheckboxInputWidget({ selected: true });
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.hidename = new OO.ui.CheckboxInputWidget();
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
+		 * @readonly
+		 * @private
 		 */
 		this.hardblock = new OO.ui.CheckboxInputWidget();
 
@@ -2578,7 +2594,12 @@ class BlockField {
 			(mw.config.get('wgUserGroups') || [])
 			.concat(/** @type {?string[]} */ (mw.config.get('wgGlobalGroups')) || [])
 			.some((group) => canSuppressGroups.has(group));
-		let hidename;
+		const hidenameLayout = new OO.ui.FieldLayout(this.hidename, {
+			label: Messages.get('ipbhidename'),
+			align: 'inline',
+		});
+		hidenameLayout.toggle(canSuppress);
+
 		actionField.addItems([
 			new OO.ui.FieldLayout(this.nocreate, {
 				label: Messages.get('ipbcreateaccount'),
@@ -2604,26 +2625,28 @@ class BlockField {
 				]),
 				align: 'inline'
 			}),
-			(hidename = new OO.ui.FieldLayout(this.hidename, {
-				label: Messages.get('ipbhidename'),
-				align: 'inline'
-			})),
+			hidenameLayout,
 			new OO.ui.FieldLayout(this.hardblock, {
 				label: Messages.get('ipb-hardblock'),
 				align: 'inline'
 			})
 		]);
-		hidename.toggle(canSuppress);
 
-		this.block = new OO.ui.ButtonWidget({
+		// Block button
+		/**
+		 * @type {OO.ui.ButtonWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.blockButton = new OO.ui.ButtonWidget({
 			label: Messages.ucFirst(Messages.get('blocklink')),
 			flags: ['progressive', 'primary'],
 			disabled: !presetTargets.length
 		});
-		this.block.off('click').on('click', () => this.blockUsers());
 
-		const blockButtonLayout = new OO.ui.FieldLayout(this.block);
-		blockButtonLayout.$element.css('margin-top', '0.5em');
+		const blockButtonLayout = new OO.ui.FieldLayout(this.blockButton, {
+			$element: $('<div>').css('margin-top', '0.5em'),
+		});
 
 		fieldset.addItems([
 			targetField,
@@ -2633,18 +2656,32 @@ class BlockField {
 			blockButtonLayout
 		]);
 
-		// Define a "change" event listener for `target` once, to keep checkboxes and tag selector in sync efficiently
-		/** @type {Set<string>} */
-		let prevSet = new Set();
+		/**
+		 * @type {ReturnType<BlockDialogFactory>}
+		 * @readonly
+		 * @private
+		 */
+		this.BlockDialog = BlockDialogFactory();
 
+		this.initialize();
+	}
+
+	/**
+	 * @private
+	 */
+	initialize() {
+		this.bindCheckboxesWithTags();
+
+		// Define a "change" event listener for `target` once, to keep checkboxes and tag selector in sync efficiently
+		let /** @type {Set<string>} */ prevSet = new Set();
 		this.target.on('change', () => {
 			// Enable or disable the investigate button based on selection
 			const selected = this.target.getSelectedUsernames();
 			const deduplicated = BlockField.filterTargets(selected);
-			investigateButton.setDisabled(!(deduplicated.length > 0 && deduplicated.length <= 10));
+			this.investigateButton.setDisabled(!(deduplicated.length > 0 && deduplicated.length <= 10));
 
 			// Enable or disable the block button based on selection
-			this.block.setDisabled(!selected.length);
+			this.blockButton.setDisabled(!selected.length);
 
 			// Synchronize tag selector changes with username checkboxes
 			const currSet = new Set(selected);
@@ -2674,10 +2711,40 @@ class BlockField {
 			this.inChangeEvent = false;
 		});
 
-		/**
-		 * @type {ReturnType<BlockDialogFactory>}
-		 */
-		this.BlockDialog = BlockDialogFactory();
+		// When the Investigate button is clicked, open Special:Investigate in a new tab
+		// with selected usernames (note: the button is disabled when no user is selected)
+		this.investigateButton.off('click').on('click', () => {
+			const selected = this.target.getSelectedUsernames();
+			const targets = BlockField.filterTargets(selected);
+			window.open(mw.util.getUrl('Special:Investigate', { targets: targets.join('\n') }), '_blank');
+		});
+
+		// Clear the target selector when the Clear button is clicked
+		this.clearButton.on('click', () => {
+			this.target.setValue('');
+		});
+
+		// Select "infinity" in the block expiry dropdown
+		for (const item of /** @type {OO.ui.MenuOptionWidget[]} */ (this.expiry.getMenu().getItems())) {
+			const data = /** @type {string} */ (item.getData());
+			if (mw.util.isInfinity(data)) {
+				this.expiry.getMenu().selectItem(item);
+				break;
+			}
+		}
+
+		// Select "other" when a non-empty value is typed into the custom expiry textbox
+		this.expiryCustom.on('change', (value) => {
+			if (value) {
+				this.expiry.getMenu().selectItemByData('');
+			}
+		});
+
+		// Select "other" in the reason dropdowns
+		this.reason1.getMenu().selectItemByData('');
+		this.reason2.getMenu().selectItemByData('');
+
+		this.blockButton.on('click', () => this.blockUsers());
 	}
 
 	/**
@@ -2713,30 +2780,6 @@ class BlockField {
 				});
 			});
 		}
-	}
-
-	/**
-	 * Creates a button to open Special:Investigate on a new tab, inheriting usernames
-	 * selected in {@link target}.
-	 *
-	 * @param {boolean} [disabled=true]
-	 * @returns {OO.ui.ButtonWidget}
-	 * @private
-	 */
-	createInvestigateButton(disabled = true) {
-		const button = new OO.ui.ButtonWidget({
-			label: Messages.get('checkuser-investigate'),
-			disabled,
-			flags: 'progressive'
-		});
-		button.off('click').on('click', () => {
-			// Open Special:Investigate in a new tab with selected usernames
-			// This presumes that the button is unclickable when no user is selected
-			const selected = this.target.getSelectedUsernames();
-			const targets = BlockField.filterTargets(selected);
-			window.open(mw.util.getUrl('Special:Investigate', { targets: targets.join('\n') }), '_blank');
-		});
-		return button;
 	}
 
 	/**
@@ -2807,14 +2850,14 @@ class BlockField {
 	 * @private
 	 */
 	async blockUsers() {
-		this.block.setDisabled(true);
+		this.blockButton.setDisabled(true);
 
 		const targets = this.getCategorizedUsernames();
 		if (!targets || !Object.values(targets).some(arr => arr.length)) {
 			// The user should never get caught in this block because we disable the block button
 			// when no user is selected; hence the message is not translated
 			await OO.ui.alert('No users are selected as the block targets.');
-			this.block.setDisabled(false);
+			this.blockButton.setDisabled(false);
 			return;
 		}
 
@@ -2827,7 +2870,7 @@ class BlockField {
 		 */
 		const handleClosure = (win) => {
 			if (win === dialog) {
-				this.block.setDisabled(false);
+				this.blockButton.setDisabled(false);
 				this.BlockDialog.windowManager.off('closing', handleClosure);
 				// Note: BlockDialog.teardown removes the dialog from the window
 			}
