@@ -750,7 +750,7 @@ interface OverrideGlobal {
 	override: boolean;
 }
 
-interface AjaxBlockConfigSchemaData<T> extends OverrideGlobal {
+export interface AjaxBlockConfigSchemaData<T> extends OverrideGlobal {
 	data: T;
 }
 
@@ -766,3 +766,9 @@ export interface AjaxBlockConfigSchema {
 		warnings?: import('ts-essentials').DeepPartial<AjaxBlockWarningConfig>;
 	};
 }
+
+export type OptionKeysFromSchema = {
+	[Domain in keyof AjaxBlockConfigSchema]: {
+		[Key in keyof AjaxBlockConfigSchema[Domain]]-?: string;
+	};
+};

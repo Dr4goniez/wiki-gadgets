@@ -6624,6 +6624,21 @@ class BlockPreset {
 		this.params = params;
 	}
 
+	/**
+	 * @param {PartialBlockPresetJson} json
+	 * @returns {BlockPreset}
+	 */
+	static newFromPartialJSON(json) {
+		const baseJSON = this.isDefaultName(json.name)
+			? this.default[json.name]
+			: this.baseJSON;
+
+		/** @type {ParamApplierBlockParams} */
+		const params = $.extend(true, {}, baseJSON, json.params);
+
+		return new BlockPreset(json.name, json.targets, params);
+	}
+
 	getName() {
 		return this.name;
 	}
@@ -6753,18 +6768,44 @@ BlockPreset.default = {
 	},
 };
 /**
+ * @type {ParamApplierBlockParams}
+ */
+BlockPreset.baseJSON = {
+	expiry: EXPIRY_INFINITE,
+	reason: '',
+	hardblock: false,
+	nocreate: false,
+	autoblock: false,
+	noemail: false,
+	hidden: false,
+	nousertalk: false,
+	partial: false,
+	pagerestrictions: [],
+	namespacerestrictions: [],
+	actionrestrictions: [],
+	watchuser: false,
+	watchlistexpiry: EXPIRY_INFINITE,
+};
+
+/**
  * @requires mediawiki.user This class must not depend on any other modules
  */
 class AjaxBlockConfigStore {
 
 	/**
-	 * @template {keyof typeof AjaxBlockConfigStore.optionKeys.current} D
-	 * @param {D} domain
-	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.current[D]} key
-	 * @returns {string}
+	 * @template {keyof AjaxBlockConfigSchema} Domain
+	 * @template {keyof AjaxBlockConfigSchema[Domain]} Key
+	 * @typedef {NonNullable<AjaxBlockConfigSchema[Domain][Key]>} ParsedFor
+	 */
+	/**
+	 * @template {keyof AjaxBlockConfigSchema} Domain
+	 * @template {keyof AjaxBlockConfigSchema[Domain]} Key
+	 * @param {Domain} domain
+	 * @param {Key} key
+	 * @returns {typeof AjaxBlockConfigStore.optionKeys.current[Domain][Key]}
 	 */
 	static getOptionKey(domain, key) {
-		return /** @type {string} */ (this.optionKeys.current[domain][key]);
+		return this.optionKeys.current[domain][key];
 	}
 
 	/**
@@ -6776,32 +6817,38 @@ class AjaxBlockConfigStore {
 	}
 
 	/**
-	 * @typedef {(obj: unknown) => boolean} ParsedConfigValidator
+	 * @template T
+	 * @typedef {(obj: T) => boolean} ParsedConfigValidator
+	 * XXX: This should instead be `(obj: unknown) => obj is T`, but we don't need
+	 * such a strict type check.
 	 */
 	/**
-	 * @template {keyof typeof AjaxBlockConfigStore.optionKeys.current} D
-	 * @param {D} domain
-	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.current[D]} key
-	 * @param {ParsedConfigValidator} validate
-	 * @returns {object | null}
+	 * @template {keyof AjaxBlockConfigSchema} Domain
+	 * @template {keyof AjaxBlockConfigSchema[Domain]} Key
+	 * @param {Domain} domain
+	 * @param {Key} key
+	 * @param {ParsedConfigValidator<ParsedFor<Domain, Key>>} validate
+	 * @returns {ParsedFor<Domain, Key> | null}
 	 */
 	static getParsed(domain, key, validate) {
 		return this.parseOption(this.getOptionKey(domain, key), validate);
 	}
 
 	/**
-	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.legacy} domain
-	 * @param {ParsedConfigValidator} validate
-	 * @returns {object | null}
+	 * @template {keyof typeof AjaxBlockConfigStore.optionKeys.legacy} Domain
+	 * @param {Domain} domain
+	 * @param {ParsedConfigValidator<Record<string, any>>} validate
+	 * @returns {Record<string, any> | null}
 	 */
 	static getLegacyParsed(domain, validate) {
 		return this.parseOption(this.getLegacyOptionKey(domain), validate);
 	}
 
 	/**
+	 * @template T
 	 * @param {string} key
-	 * @param {ParsedConfigValidator} validate
-	 * @returns {object | null}
+	 * @param {ParsedConfigValidator<T>} validate
+	 * @returns {T | null}
 	 * @private
 	 */
 	static parseOption(key, validate) {
@@ -6818,7 +6865,7 @@ class AjaxBlockConfigStore {
 			return parsed;
 		} catch (e) {
 			console.error(
-				`Failed to parse config`,
+				'Failed to parse config',
 				{ key, value: cfgStr, error: e }
 			);
 			return null;
@@ -6826,9 +6873,10 @@ class AjaxBlockConfigStore {
 	}
 
 	/**
-	 * @template {keyof typeof AjaxBlockConfigStore.optionKeys.current} D
-	 * @param {D} domain
-	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.current[D]} key
+	 * @template {keyof AjaxBlockConfigSchema} Domain
+	 * @template {keyof AjaxBlockConfigSchema[Domain]} Key
+	 * @param {Domain} domain
+	 * @param {Key} key
 	 * @returns {boolean}
 	 */
 	static exists(domain, key) {
@@ -6837,13 +6885,11 @@ class AjaxBlockConfigStore {
 	}
 
 	/**
-	 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.current} domain
+	 * @param {keyof AjaxBlockConfigSchema} domain
 	 * @returns {boolean}
 	 */
 	static existsAny(domain) {
-		const keys = typedKeys(this.optionKeys.current[domain])
-			// @ts-expect-error
-			.filter(k => k !== 'localexists');
+		const keys = typedKeys(this.optionKeys.current[domain]);
 		return keys.some(key => this.exists(domain, key));
 	}
 
@@ -6852,22 +6898,28 @@ class AjaxBlockConfigStore {
 	 * @returns {boolean}
 	 */
 	static existsLegacy(domain) {
-		return typeof mw.user.options.get(this.getLegacyOptionKey(domain)) === 'string';
+		const optionKey = this.getLegacyOptionKey(domain);
+		return typeof mw.user.options.get(optionKey) === 'string';
 	}
 
 	/**
 	 * @returns {Record<string, string>} <wikiID, apiUrl>
 	 */
 	static getMutableWikiMap() {
-		const parsed = this.getParsed('global', 'localexists', v => $.isPlainObject(v));
-		return /** @type {Record<string, string>} */ (parsed || Object.create(null));
+		/** @type {ParsedConfigValidator<Record<string, string>>} */
+		const validate = value =>
+			isObject(value) &&
+			Object.values(value).every(v => typeof v === 'string');
+
+		const parsed = this.parseOption(this.localexists, validate);
+		return parsed || Object.create(null);
 	}
 
 	/**
 	 * @private
 	 */
 	static getLegacy() {
-		/** @type {ParsedConfigValidator} */
+		/** @type {ParsedConfigValidator<Record<string, any>>} */
 		const validate = value => $.isPlainObject(value);
 		return {
 			local: /** @type {?AjaxBlockLegacyConfigLocal} */ (this.getLegacyParsed('local', validate)) || undefined,
@@ -6883,9 +6935,6 @@ class AjaxBlockConfigStore {
 		/** @type {Record<string, null>} */
 		const ret = Object.create(null);
 		for (const optionKey of Object.values(this.optionKeys.current[domain])) {
-			if (optionKey === 'localexists') {
-				continue;
-			}
 			ret[optionKey] = null;
 		}
 		return ret;
@@ -6908,7 +6957,7 @@ class AjaxBlockConfigStore {
 		 */
 		this.language = this.configuredLanguages.used.includes(userLang)
 			? userLang
-			: this.configuredLanguages.default || 'en';
+			: this.configuredLanguages.default;
 		/**
 		 * @type {AjaxBlockWarningConfig}
 		 * @readonly
@@ -6920,7 +6969,7 @@ class AjaxBlockConfigStore {
 		 * @readonly
 		 * @private
 		 */
-		this.presets = AjaxBlockConfigBlockPresetOptions.getMerged(undefined, undefined, legacy.local);
+		this.presets = AjaxBlockConfigBlockPresetOptions.getMerged(legacy.local);
 		/**
 		 * @type {ReturnType<typeof AjaxBlockConfigCustomReasonOptions.getMerged>}
 		 * @readonly
@@ -6955,12 +7004,25 @@ class AjaxBlockConfigStore {
 	}
 
 	/**
+	 * @param {DialogOptionType} type
+	 * @returns {boolean}
+	 */
+	overridesGlobal(type) {
+		switch (type) {
+			case 'presets': return this.presets.override;
+			case 'customreasons-block': return this.customReasons.override.block;
+			case 'customreasons-unblock': return this.customReasons.override.unblock;
+			default: throw new Error('Invalid type: ' + type);
+		}
+	}
+
+	/**
 	 * @param {AjaxBlockConfigDomains | 'merged'} format
 	 * @returns {Map<string, BlockPreset>}
 	 */
 	getPresets(format) {
-		if (format in this.presets) {
-			return this.presets[format];
+		if (format in this.presets.data) {
+			return this.presets.data[format];
 		}
 		throw new Error('Invalid format: ' + format);
 	}
@@ -6975,11 +7037,11 @@ class AjaxBlockConfigStore {
 		const reasons = [];
 
 		if (domain) {
-			reasons.push(...this.customReasons[domain][action]);
+			reasons.push(...this.customReasons.data[domain][action]);
 		} else {
 			reasons.push(
-				...this.customReasons.local[action],
-				...this.customReasons.global[action]
+				...this.customReasons.data.local[action],
+				...this.customReasons.data.global[action]
 			);
 		}
 
@@ -6987,6 +7049,9 @@ class AjaxBlockConfigStore {
 	}
 
 }
+/**
+ * @type {{ current: OptionKeysFromSchema; legacy: { local: string; global: string; }; }}
+ */
 AjaxBlockConfigStore.optionKeys = {
 	current: {
 		local: {
@@ -6998,7 +7063,6 @@ AjaxBlockConfigStore.optionKeys = {
 			customreasons: 'userjs-ajaxblock2-global-customreasons',
 			langs: 'userjs-ajaxblock2-global-langs',
 			warnings: 'userjs-ajaxblock2-global-warnings',
-			localexists: 'userjs-ajaxblock2-global-localexists',
 		},
 	},
 	legacy: {
@@ -7006,6 +7070,7 @@ AjaxBlockConfigStore.optionKeys = {
 		global: 'userjs-ajaxblock-global',
 	},
 };
+AjaxBlockConfigStore.localexists = 'userjs-ajaxblock2-global-localexists';
 
 class AjaxBlockConfig {
 
@@ -7337,9 +7402,10 @@ class AjaxBlockConfig {
 			global: Object.create(null),
 		};
 		/**
-		 * @template {keyof typeof AjaxBlockConfigStore.optionKeys.current} D
-		 * @param {D} domain
-		 * @param {keyof typeof AjaxBlockConfigStore.optionKeys.current[D]} key
+		 * @template {keyof AjaxBlockConfigSchema} Domain
+		 * @template {keyof AjaxBlockConfigSchema[Domain]} Key
+		 * @param {Domain} domain
+		 * @param {Key} key
 		 */
 		const setChange = (domain, key) => {
 			const value = /** @type {any} */ (data[domain])[key];
@@ -7466,7 +7532,7 @@ class AjaxBlockConfig {
 		typedEntries(customReasons).forEach(([domain, obj]) => {
 			typedEntries(obj).forEach(([action, reasons]) => {
 				if (reasons.data.length || reasons.override) {
-					OO.setProp(data[domain], 'customreasons', action, 'reasons', reasons);
+					OO.setProp(data[domain], 'customreasons', action, reasons);
 				}
 			});
 		});
@@ -7638,6 +7704,30 @@ class AjaxBlockConfigLanguageOptions {
 	 * Note: This method must not depend on any modules.
 	 */
 	static getMerged(legacyLocalCfg, legacyGlobalCfg) {
+		const currentCfg = AjaxBlockConfigStore.getParsed('global', 'langs', (obj) => {
+			if (!$.isPlainObject(obj) || $.isEmptyObject(obj)) {
+				return false;
+			}
+
+			const supportedLangs = new Set(AjaxBlockConfigLanguageOptions.supported);
+
+			if ('used' in obj) {
+				if (!Array.isArray(obj.used) || !obj.used.every(l => supportedLangs.has(l))) {
+					return false;
+				}
+			}
+			if ('default' in obj) {
+				if (typeof obj.default !== 'string' || !supportedLangs.has(obj.default)) {
+					return false;
+				}
+			}
+
+			return true;
+		});
+		if (currentCfg) {
+			return $.extend(true, {}, this.defaults, currentCfg);
+		}
+
 		/**
 		 * @param {string} lang
 		 * @returns {AjaxBlockLanguages}
@@ -7654,7 +7744,7 @@ class AjaxBlockConfigLanguageOptions {
 			}
 		}
 
-		return { used: [], default: 'en' };
+		return $.extend(true, {}, this.defaults);
 	}
 
 }
@@ -7842,11 +7932,21 @@ class AjaxBlockConfigWarningOptions {
 	 * Note: This method must not depend on any modules.
 	 */
 	static getMerged(legacyCfg) {
+		const currentCfg = AjaxBlockConfigStore.getParsed('global', 'warnings', (obj) => {
+			if (!$.isPlainObject(obj) || $.isEmptyObject(obj)) {
+				return false;
+			}
+			return Object.values(obj).every((obj2) => {
+				return !$.isEmptyObject(obj2) && Object.values(obj2).every(val => typeof val === 'boolean');
+			});
+		});
+
 		return $.extend(
 			true,
 			{},
 			AjaxBlockConfigWarningOptions.defaults.enabled,
-			AjaxBlockConfigWarningOptions.mapLegacyConfig(legacyCfg && legacyCfg.warning)
+			AjaxBlockConfigWarningOptions.mapLegacyConfig(legacyCfg && legacyCfg.warning),
+			currentCfg
 		);
 	}
 
@@ -8065,12 +8165,16 @@ class AjaxBlockConfigDialogOptions {
 
 }
 
+/**
+ * @typedef {'presets' | 'customreasons-block' | 'customreasons-unblock'} DialogOptionType
+ */
 class AjaxBlockConfigDomainOptions {
 
 	/**
 	 * @param {AjaxBlockConfigDomains} domain
+	 * @param {DialogOptionType} optionType
 	 */
-	constructor(domain) {
+	constructor(domain, optionType) {
 		/**
 		 * @type {AjaxBlockConfigDomains}
 		 * @readonly
@@ -8082,7 +8186,9 @@ class AjaxBlockConfigDomainOptions {
 		 * @readonly
 		 * @private
 		 */
-		this.cbOverrideGlobal = new OO.ui.CheckboxInputWidget();
+		this.cbOverrideGlobal = new OO.ui.CheckboxInputWidget({
+			selected: domain === 'local' && AjaxBlockServices.getConfig().overridesGlobal(optionType),
+		});
 		/**
 		 * @type {OO.ui.FieldLayout}
 		 * @readonly
@@ -8118,7 +8224,7 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 	 * @param {OO.ui.IndexLayout} indexLayout
 	 */
 	constructor(domain, indexLayout) {
-		super(domain);
+		super(domain, 'presets');
 
 		/**
 		 * @type {OO.ui.IndexLayout}
@@ -8140,12 +8246,12 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 			$element: $('<div>').addClass('ajaxblock-config-fields--constrained'),
 		});
 
-		for (const [key, params] of typedEntries(BlockPreset.default)) {
+		for (const preset of AjaxBlockServices.getConfig().getPresets(domain).values()) {
 			this.addField({
 				collapsed: true,
-				presetName: key,
-				targets: [key],
-				params,
+				presetName: preset.getName(),
+				targets: Array.from(preset.getTargets()),
+				params: preset.getParams(),
 				domain,
 			});
 		}
@@ -8287,46 +8393,66 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 	}
 
 	/**
-	 * @param {BlockPresetJson[]} [localCfg]
-	 * @param {BlockPresetJson[]} [globalCfg]
 	 * @param {AjaxBlockLegacyConfigLocal} [legacyCfg]
-	 * @returns {Record<AjaxBlockConfigDomains | 'merged', Map<string, BlockPreset>>}
+	 * @returns {{ data: Record<AjaxBlockConfigDomains | 'merged', Map<string, BlockPreset>>; override: boolean; }}
 	 */
-	static getMerged(localCfg, globalCfg, legacyCfg) {
-		/** @type {ReturnType<typeof AjaxBlockConfigBlockPresetOptions.getMerged>} */
-		const ret = {
+	static getMerged(legacyCfg) {
+		/** @type {Record<AjaxBlockConfigDomains | 'merged', Map<string, BlockPreset>>} */
+		const data = {
 			local: BlockPreset.getDefaultAsMap(),
 			global: BlockPreset.getDefaultAsMap(),
 			merged: BlockPreset.getDefaultAsMap(),
 		};
+		let overrideGlobal = false;
 
 		if (legacyCfg) {
 			for (const [key, obj] of typedEntries(legacyCfg.preset.block)) {
 				const block = Object.assign({}, obj, { hidden: !!obj.hidden });
 				const params = ParamApplier.createBlockParamsFromApiResponse(block);
 				const preset = key === 'user' ? 'named' : key;
-				ret.local.set(preset, new BlockPreset(preset, [preset], params));
+				data.local.set(preset, new BlockPreset(preset, [preset], params));
 			}
 		}
 
-		for (const [domain, presetData] of typedEntries({ local: localCfg, global: globalCfg })) {
-			if (!presetData) {
+		/**
+		 * @type {ParsedConfigValidator<import('./window/AjaxBlock').AjaxBlockConfigSchemaData<PartialBlockPresetJson[]>>}
+		 */
+		const validate = (obj) => {
+			if (
+				!Array.isArray(obj.data) ||
+				!obj.data.every(json => $.isPlainObject(json) && !$.isEmptyObject(json)) ||
+				typeof obj.override !== 'boolean'
+			) {
+				return false;
+			}
+			return true;
+		};
+		const currenctCfg = {
+			local: AjaxBlockConfigStore.getParsed('local', 'presets', validate),
+			global: AjaxBlockConfigStore.getParsed('global', 'presets', validate),
+		};
+
+		for (const [domain, presetObj] of typedEntries(currenctCfg)) {
+			if (!presetObj) {
 				continue;
 			}
-			for (const json of presetData) {
-				ret[domain].set(json.name, new BlockPreset(json));
+			overrideGlobal = overrideGlobal || presetObj.override;
+			for (const partialJson of presetObj.data) {
+				data[domain].set(partialJson.name, BlockPreset.newFromPartialJSON(partialJson));
 			}
 		}
 
 		// Merge: global -> local (local overrides)
-		for (const [preset, instance] of ret.global) {
-			ret.merged.set(preset, instance);
+		if (!overrideGlobal) {
+			for (const [preset, instance] of data.global) {
+				data.merged.set(preset, instance);
+			}
 		}
-		for (const [preset, instance] of ret.local) {
-			ret.merged.set(preset, instance);
+		for (const [preset, instance] of data.local) {
+			data.merged.set(preset, instance);
 		}
 
-		return ret;
+		return { data, override: overrideGlobal };
 	}
 
 }
@@ -8625,23 +8751,26 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 	 * @param {any} value
 	 * @param {string} presetName
 	 * @returns {boolean}
-	 * @private
+	 * @private For {@link buildParams}
 	 */
 	isSameAsDefaultValue(key, value, presetName) {
-		if (this.isDefaultPreset()) {
-			const name = /** @type {NonNullable<BlockTargetType>} */ (presetName);
-			const defaultValue = BlockPreset.default[name][key];
-			if (Array.isArray(defaultValue)) {
-				// @ts-expect-error
-				return arraysEqual(value, defaultValue);
-			} else {
-				return value === defaultValue;
+		let defaultValue;
+		if (BlockPreset.isDefaultName(presetName)) {
+			if (!this.isDefaultPreset()) {
+				// buildParams() should not be called when there's a preset
+				// whose name conflicts with the name of a default preset
+				throw new Error(`Got the default preset name "${presetName}", but isDefaultPreset() returned false`);
 			}
+			defaultValue = BlockPreset.default[presetName][key];
 		} else {
-			return value === false ||
-				value === '' ||
-				((key === 'expiry' || key === 'watchlistexpiry') && value === EXPIRY_INFINITE) ||
-				(Array.isArray(value) && value.length === 0);
+			defaultValue = BlockPreset.baseJSON[key];
+		}
+
+		if (Array.isArray(defaultValue)) {
+			// @ts-expect-error
+			return arraysEqual(value, defaultValue);
+		} else {
+			return value === defaultValue;
 		}
 	}
 
@@ -8757,7 +8886,7 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 	 * @param {OO.ui.IndexLayout} indexLayout
 	 */
 	constructor(action, domain, indexLayout) {
-		super(domain);
+		super(domain, `customreasons-${action}`);
 
 		/**
 		 * @type {OO.ui.MultilineTextInputWidget}
@@ -8814,6 +8943,10 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 		});
 	}
 
+	getTextInput() {
+		return this.input;
+	}
+
 	/**
 	 * @param {boolean} [setValue] Whether to set the return value to the input (default: `true`)
 	 * @returns {{ data: string[]; override: boolean; }}
@@ -8832,41 +8965,100 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 		};
 	}
 
-	getTextInput() {
-		return this.input;
-	}
-
 	/**
 	 * @param {AjaxBlockLegacyConfigLocal} [legacyLocalCfg]
 	 * @param {AjaxBlockLegacyConfigGlobal} [legacyGlobalCfg]
-	 * @returns {Record<AjaxBlockConfigDomains, Record<BlockActions, string[]>>}
+	 * @returns {{ data: Record<AjaxBlockConfigDomains, Record<BlockActions, string[]>>; override: Record<BlockActions, boolean>; }}
 	 * Note: This method must not depend on any modules.
 	 */
 	static getMerged(legacyLocalCfg, legacyGlobalCfg) {
-		/** @type {ReturnType<typeof AjaxBlockConfigCustomReasonOptions.getMerged>} */
-		const ret = {
+		/** @type {Record<AjaxBlockConfigDomains, Record<BlockActions, Set<string>>>} */
+		const dataWithSets = {
 			local: {
-				block: [],
-				unblock: [],
+				block: new Set(),
+				unblock: new Set(),
 			},
 			global: {
-				block: [],
-				unblock: [],
+				block: new Set(),
+				unblock: new Set(),
 			},
+		};
+		let overrideGlobal = {
+			block: false,
+			unblock: false,
+		};
+		/**
+		 * @param {Set<string>} set
+		 * @param {string | string[]} elements
+		 */
+		const addToSet = (set, elements) => {
+			elements = Array.isArray(elements) ? elements : [elements];
+			for (const el of elements) {
+				if (el) {
+					set.add(el);
+				}
+			}
 		};
 
 		if (legacyLocalCfg && legacyLocalCfg.dropdown.local.length) {
-			ret.local.block.push(...legacyLocalCfg.dropdown.local.filter(Boolean));
+			addToSet(dataWithSets.local.block, legacyLocalCfg.dropdown.local);
 		}
 		if (legacyGlobalCfg && legacyGlobalCfg.dropdown.length) {
-			ret.global.block.push(...legacyGlobalCfg.dropdown.filter(Boolean));
+			addToSet(dataWithSets.global.block, legacyGlobalCfg.dropdown);
 		}
 
 		if (legacyLocalCfg && legacyLocalCfg.preset.unblock.reason) {
-			ret.local.unblock.push(legacyLocalCfg.preset.unblock.reason);
+			addToSet(dataWithSets.local.unblock, legacyLocalCfg.preset.unblock.reason);
 		}
 
-		return ret;
+		/** @type {ParsedConfigValidator<Partial<Record<BlockActions, import('./window/AjaxBlock').AjaxBlockConfigSchemaData<string[]>>>>} */
+		const validate = (obj) => {
+			if (!$.isPlainObject(obj) || $.isEmptyObject(obj)) {
+				return false;
+			}
+			return typedEntries(obj).every(([action, obj2]) => {
+				if (!obj2) {
+					return true;
+				}
+				if (
+					(action !== 'block' && action !== 'unblock') ||
+					!$.isPlainObject(obj2) ||
+					!isStringArray(obj2.data) ||
+					typeof obj2.override !== 'boolean'
+				) {
+					return false;
+				}
+				return true;
+			});
+		};
+		const currentCfg = {
+			local: AjaxBlockConfigStore.getParsed('local', 'customreasons', validate),
+			global: AjaxBlockConfigStore.getParsed('global', 'customreasons', validate),
+		};
+
+		for (const [domain, reasonObj] of typedEntries(currentCfg)) {
+			if (!reasonObj) {
+				continue;
+			}
+			for (const [action, dataObj] of typedEntries(reasonObj)) {
+				if (!dataObj) {
+					continue;
+				}
+				overrideGlobal[action] = overrideGlobal[action] || dataObj.override;
+				addToSet(dataWithSets[domain][action], dataObj.data);
+			}
+		}
+
+		/** @type {Record<AjaxBlockConfigDomains, Record<BlockActions, string[]>>} */
+		const data = Object.create(null);
+		for (const [domain, obj] of typedEntries(dataWithSets)) {
+			data[domain] = Object.create(null);
+			for (const [action, set] of typedEntries(obj)) {
+				data[domain][action] = [...set];
+			}
+		}
+
+		return { data, override: overrideGlobal };
 	}
 
 }
@@ -9321,7 +9513,7 @@ class AjaxBlockConfigMisc {
 		if (!changed) {
 			return Object.create(null); // No change needed
 		}
-		const key = AjaxBlockConfigStore.getOptionKey('global', 'localexists');
+		const key = AjaxBlockConfigStore.localexists;
 		const value = $.isEmptyObject(cfg) ? null : JSON.stringify(cfg);
 		return { [key]: value };
 	}
@@ -9700,6 +9892,7 @@ AjaxBlockLogo.svg =
  * @typedef {import('./window/AjaxBlock').AjaxBlockWarningConfig} AjaxBlockWarningConfig
  * @typedef {import('./window/AjaxBlock').DeleteConfigCallback} DeleteConfigCallback
  * @typedef {import('./window/AjaxBlock').AjaxBlockConfigSchema} AjaxBlockConfigSchema
+ * @typedef {import('./window/AjaxBlock').OptionKeysFromSchema} OptionKeysFromSchema
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogevents} ApiResponseQueryListLogevents
  * @typedef {import('./window/InvestigateHelper').ApiResponseQueryListLogeventsParamsRestrictions} ApiResponseQueryListLogeventsParamsRestrictions
  * @typedef {import('./window/InvestigateHelper').BlockLogMap} BlockLogMap
