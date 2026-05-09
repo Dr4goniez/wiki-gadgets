@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.2.13
+ * @version 3.2.14
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -31,7 +31,7 @@ class MarkBLocked {
 	 * Initializes `MarkBLocked`.
 	 *
 	 * @param {ConstructorConfig} [config]
-	 * @returns {JQueryPromise<MarkBLocked>}
+	 * @returns {JQuery.Promise<MarkBLocked>}
 	 */
 	static init(config) {
 
@@ -74,14 +74,14 @@ class MarkBLocked {
 			const api = new mw.Api(this.getApiOptions());
 
 			// For backwards compatibility, clear old config if any
-			/** @type {JQueryPromise<void>} */
+			/** @type {JQuery.Promise<void>} */
 			const backwards = (() => {
 				const oldOptionKey = 'userjs-gmbl-preferences';
-				/** @type {string?} */
+				/** @type {?string} */
 				const oldCfgStr = mw.user.options.get(oldOptionKey);
 				if (
 					oldCfgStr &&
-					(cfg.optionKey === void 0 || cfg.optionKey === this.defaultOptionKey) &&
+					(cfg.optionKey === undefined || cfg.optionKey === this.defaultOptionKey) &&
 					!mw.user.options.get(this.defaultOptionKey)
 				) {
 					const options = {
@@ -126,7 +126,7 @@ class MarkBLocked {
 				 * @param {JQuery<HTMLElement>} [$content] Defaults to `.mw-body-content` if not provided.
 				 */
 				const run = ($content = $('.mw-body-content')) => {
-					hookTimeout = void 0; // Clear the hook timeout reference
+					hookTimeout = undefined; // Clear the hook timeout reference
 					if (isRCW) {
 						// Abort in-flight requests only on Special:RecentChanges or Special:Watchlist, where
 						// `$content` is fully replaced on each dynamic page update. In these cases, any
@@ -192,26 +192,30 @@ class MarkBLocked {
 	 * @private
 	 */
 	static getApiOptions(options = {}) {
-		const ret = {
-			ajax: {
-				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.2.13 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)'
-				}
+		/**
+		 * @type {Omit<JQuery.AjaxSettings, 'headers'> & Required<Pick<JQuery.AjaxSettings, 'headers'>>}
+		 */
+		const ajax = {
+			headers: {
+				'Api-User-Agent': 'MarkBLocked-core/3.2.14 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)',
 			},
-			parameters: {
-				action: 'query',
-				format: 'json',
-				formatversion: '2'
-			}
 		};
 		if (typeof options.timeout === 'number') {
-			ret.ajax.timeout = options.timeout;
+			ajax.timeout = options.timeout;
 		}
 		if (options.nonwritepost) {
 			// See https://www.mediawiki.org/wiki/API:Etiquette#Other_notes
-			ret.ajax.headers['Promise-Non-Write-API-Action'] = true;
+			ajax.headers['Promise-Non-Write-API-Action'] = '1';
 		}
-		return ret;
+
+		return {
+			ajax,
+			parameters: {
+				action: 'query',
+				format: 'json',
+				formatversion: '2',
+			},
+		};
 	}
 
 	/**
@@ -221,7 +225,7 @@ class MarkBLocked {
 	 * If any are missing or invalid, it makes an API request to fetch the data.
 	 *
 	 * @param {mw.Api} api Instance of `mw.Api` for making the request.
-	 * @returns {JQueryPromise<Initializer>} A promise that resolves to the initializer object.
+	 * @returns {JQuery.Promise<Initializer>} A promise that resolves to the initializer object.
 	 * @private
 	 */
 	static getInitializer(api) {
@@ -236,17 +240,12 @@ class MarkBLocked {
 		/**
 		 * API request parameters. Will be populated based on what's missing from cache.
 		 * @type {{
-		 *   action: 'query';
-		 *   formatversion: '2';
 		 *   meta?: ('siteinfo' | 'userinfo')[];
 		 *   uiprop?: 'rights';
 		 *   siprop?: 'specialpagealiases';
 		 * }}
 		 */
-		const params = {
-			action: 'query',
-			formatversion: '2'
-		};
+		const params = Object.create(null);
 
 		/** @type {Set<keyof SpecialPageAliases>} */
 		const canonicalSpecialPageNames = new Set([
@@ -257,31 +256,30 @@ class MarkBLocked {
 		]);
 
 		/**
-		 * Type guard to check if a value is a string array.
-		 * @param {unknown} value
-		 * @returns {value is string[]}
-		 */
-		const isStringArray = (value) => Array.isArray(value) && value.every(el => typeof el === 'string');
-
-		/**
 		 * Cache validators for each initializer key. These check whether the value loaded from storage is valid.
 		 * @type {CacheValidator}
 		 */
 		const cacheValidator = {
 			// @ts-expect-error - Return type inferred as boolean instead of type guard
 			specialpagealiases: (cache) => {
-				if (!cache || typeof cache !== 'object') return false;
-				for (const key in cache) {
-					if (!canonicalSpecialPageNames.has(/** @type {keyof SpecialPageAliases} */ (key))) return false;
-					if (!isStringArray(cache[key])) return false;
+				if (!cache || typeof cache !== 'object') {
+					return false;
+				}
+				for (const key of typedKeys(cache)) {
+					if (
+						!canonicalSpecialPageNames.has(key) ||
+						!isStringArray(cache[key])
+					) {
+						return false;
+					}
 				}
 				return true;
 			},
-			userrights: isStringArray
+			userrights: isStringArray,
 		};
 
 		// Attempt to load values from localStorage
-		for (const key of /** @type {(keyof Initializer)[]} */ (Object.keys(initializer))) {
+		for (const key of typedKeys(initializer)) {
 			const cache = mw.storage.getObject(storageKeyPrefix + key);
 
 			if (key === 'specialpagealiases' && cacheValidator[key](cache)) {
@@ -309,37 +307,34 @@ class MarkBLocked {
 		}
 
 		// API params not populated, meaning all initializer values have been fetched from the storage
-		if (Object.keys(params).length <= 2) {
-			return $.Deferred().resolve(initializer);
+		if ($.isEmptyObject(params)) {
+			return $.Deferred().resolve(initializer).promise();
 		}
 
 		return api.get(params).then(/** @param {ApiResponse} res */ ({ query }) => {
 			if (!query) {
 				return initializer;
 			}
-			let storageKey;
-			const expiry = {
-				_3days: 3 * 24 * 60 * 60,
-				_3hours: 3 * 60 * 60
-			};
 
+			let storageKey;
 			const specialpagealiases = query.specialpagealiases;
 			if (specialpagealiases) {
 				storageKey = `${storageKeyPrefix}specialpagealiases`;
 				const data = initializer.specialpagealiases;
 				specialpagealiases.forEach(({ realname, aliases }) => {
-					if (canonicalSpecialPageNames.has(/** @type {keyof SpecialPageAliases} */ (realname))) {
-						data[realname] = aliases.filter(el => el !== realname);
+					const name = /** @type {keyof SpecialPageAliases} */ (realname);
+					if (canonicalSpecialPageNames.has(name)) {
+						data[name] = aliases.filter(el => el !== name);
 					}
 				});
-				mw.storage.set(storageKey, JSON.stringify(data), expiry._3days);
+				mw.storage.set(storageKey, JSON.stringify(data), daysInSeconds(3));
 			}
 
 			const userrights = query.userinfo && query.userinfo.rights;
 			if (userrights) {
 				storageKey = `${storageKeyPrefix}userrights`;
 				initializer.userrights = new Set(userrights);
-				mw.storage.set(storageKey, JSON.stringify(userrights), expiry._3hours);
+				mw.storage.set(storageKey, JSON.stringify(userrights), daysInSeconds(1));
 			}
 
 			return initializer;
@@ -376,6 +371,7 @@ class MarkBLocked {
 					ipRevealHook.fire($arg0);
 				}
 			}
+			// @ts-expect-error
 			return originalReplaceWith.apply(this, arguments);
 		};
 
@@ -416,7 +412,7 @@ class MarkBLocked {
 	constructor(cfg, initializer) {
 		const {
 			specialpagealiases: aliasMap,
-			userrights
+			userrights,
 		} = initializer;
 		if ($.isEmptyObject(aliasMap)) {
 			// Defensive: This object should never be empty
@@ -426,20 +422,26 @@ class MarkBLocked {
 
 		/**
 		 * @type {mw.Api}
+		 * @readonly
+		 * @private
 		 */
-		this.api = new mw.Api(MarkBLocked.getApiOptions({ timeout: 60*1000 }));
+		this.api = new mw.Api(MarkBLocked.getApiOptions({ timeout: 60 * 1000 }));
 		/**
 		 * @type {mw.Api}
+		 * @readonly
+		 * @private
 		 */
-		this.readApi = new mw.Api(MarkBLocked.getApiOptions({ timeout: 60*1000, nonwritepost: true }));
+		this.readApi = new mw.Api(MarkBLocked.getApiOptions({ timeout: 60 * 1000, nonwritepost: true }));
 		/**
 		 * @type {mw.Api}
+		 * @readonly
+		 * @private
 		 */
 		this.metaApi = mw.config.get('wgWikiID') === 'metawiki'
 			? this.api
-			: new mw.ForeignApi('https://meta.wikimedia.org/w/api.php', MarkBLocked.getApiOptions({ timeout: 60*1000 }));
+			: new mw.ForeignApi('https://meta.wikimedia.org/w/api.php', MarkBLocked.getApiOptions({ timeout: 60 * 1000 }));
 
-		// Show Warning if the config has any invalid property
+		// Show warnings for invalid config properties, if any
 		const validKeys = new Set(['defaultOptions', 'optionKey', 'globalize', 'i18n', 'lang']);
 		const invalidKeys = Object.keys(cfg).reduce(/** @param {string[]} acc */ (acc, key) => {
 			if (!validKeys.has(key)) {
@@ -454,10 +456,16 @@ class MarkBLocked {
 		// User options
 		/**
 		 * The key of `mw.user.options`.
+		 *
+		 * @type {string}
+		 * @readonly
+		 * @private
 		 */
 		this.optionKey = cfg.optionKey || MarkBLocked.defaultOptionKey;
 		/**
 		 * @type {UserOptions}
+		 * @readonly
+		 * @private
 		 */
 		this.options = (() => {
 			const defaultOptions = Object.assign({
@@ -486,7 +494,7 @@ class MarkBLocked {
 					options.g_rangeblocks = options.globalips;
 					delete options.globalips;
 				}
-			} catch(err) {
+			} catch (err) {
 				console.error(err);
 				options = defaultOptions;
 			}
@@ -498,8 +506,11 @@ class MarkBLocked {
 			}
 			return ret;
 		})();
+
 		/**
 		 * @type {boolean}
+		 * @readonly
+		 * @private
 		 */
 		this.globalize = !!cfg.globalize;
 		console.log('MarkBLocked globalization: ' + this.globalize);
@@ -510,10 +521,12 @@ class MarkBLocked {
 		}
 		/**
 		 * @type {Lang}
+		 * @readonly
+		 * @private
 		 */
 		this.msg = (() => {
 			let langCode = 'en';
-			if (cfg.lang !== void 0) {
+			if (cfg.lang !== undefined) {
 				cfg.lang = String(cfg.lang);
 			}
 			if (cfg.lang) {
@@ -528,13 +541,15 @@ class MarkBLocked {
 
 		/**
 		 * @type {LinkRegex}
+		 * @readonly
+		 * @private
 		 */
 		this.regex = (() => {
 			// Collect namespace aliases
 			const wgNamespaceIds = mw.config.get('wgNamespaceIds'); // { "special": -1, "user": 2, ... }
 			const nsAliases = {
 				special: /** @type {string[]} */ ([]),
-				user: /** @type {string[]} */ ([])
+				user: /** @type {string[]} */ ([]),
 			};
 			for (const alias in wgNamespaceIds) {
 				const nsId = wgNamespaceIds[alias];
@@ -552,8 +567,7 @@ class MarkBLocked {
 			// Process special page aliases
 			const /** @type {string[]} */ spAliases = [];
 			const /** @type {string[]} */ spAliasesOverrideTarget = [];
-			for (const realname in aliasMap) {
-				/** @type {string[]} */
+			for (const realname of typedKeys(aliasMap)) {
 				const aliases = aliasMap[realname];
 				if (Array.isArray(aliases)) {
 					const escaped = [realname, ...aliases].map(mw.util.escapeRegExp);
@@ -569,7 +583,9 @@ class MarkBLocked {
 			const rSpecialNoTarget = `(?:${nsAliases.special.join('|')}):(?:${spAliasesOverrideTarget.join('|')})`;
 			const rUser = `(?:${nsAliases.user.join('|')}):`;
 			return {
-				article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
+				article: new RegExp(
+					mw.util.escapeRegExp(mw.config.get('wgArticlePath')).replace('\\$1', '([^#?]+)')
+				),
 				script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)'),
 				special: new RegExp(`^${rSpecialNoTarget}($|/)`, 'i'),
 				user: new RegExp(`^(?:${rSpecial}/|${rUser})([^/#]+|[a-f\\d:\\.]+/\\d\\d)$`, 'i')
@@ -578,10 +594,12 @@ class MarkBLocked {
 
 		/**
 		 * The maximum number of batch parameter values for the API.
+		 *
 		 * @type {500 | 50}
+		 * @readonly
+		 * @private
 		 */
 		this.apilimit = userrights.has('apihighlimits') ? 500 : 50;
-
 	}
 
 	/**
@@ -595,17 +613,16 @@ class MarkBLocked {
 	 * @requires mediawiki.user
 	 */
 	createConfigInterface() {
-
 		document.title = 'MarkBLockedConfig - ' + mw.config.get('wgSiteName');
 
 		// Collect DOM elements
-		const $heading = $('.mw-first-heading');
-		const $body = $('.mw-body-content');
-		if (!$heading.length || !$body.length) {
+		const heading = document.querySelector('.mw-first-heading');
+		const content = document.querySelector('.mw-body-content');
+		if (!(heading instanceof HTMLElement) || !(content instanceof HTMLElement)) {
 			mw.notify(this.getMessage('config-notify-notloaded'));
 			return;
 		}
-		$heading.text(this.getMessage('config-label-heading'));
+		heading.textContent = this.getMessage('config-label-heading');
 
 		// Transparent overlay of the container used to make elements in it unclickable
 		const $overlay = $('<div>');
@@ -620,25 +637,25 @@ class MarkBLocked {
 				new OO.ui.FieldLayout(genportlet, {
 					label: this.getMessage('config-label-genportlet'),
 					align: 'inline'
-				})
-			]
+				}),
+			],
 		});
 
 		// Markup options
 		const rangeblocks = new OO.ui.CheckboxInputWidget({
-			selected: this.options.rangeblocks
+			selected: this.options.rangeblocks,
 		});
 		const g_locks = new OO.ui.CheckboxInputWidget({
-			selected: this.options.g_locks
+			selected: this.options.g_locks,
 		});
 		const g_blocks = new OO.ui.CheckboxInputWidget({
-			selected: this.options.g_blocks
+			selected: this.options.g_blocks,
 		});
 		const g_rangeblocks = new OO.ui.CheckboxInputWidget({
 			selected: this.options.g_rangeblocks,
-			disabled: !g_blocks.isSelected()
+			disabled: !g_blocks.isSelected(),
 		});
-		g_blocks.off('change').on('change', () => {
+		g_blocks.on('change', () => {
 			if (!g_blocks.isSelected()) {
 				g_rangeblocks.setSelected(false).setDisabled(true);
 			} else {
@@ -665,23 +682,23 @@ class MarkBLocked {
 			items: [
 				new OO.ui.FieldLayout(rangeblocks, {
 					label: getExclMessage('config-label-rangeblocks'),
-					align: 'inline'
+					align: 'inline',
 				}),
 				new OO.ui.FieldLayout(g_locks, {
 					label: getExclMessage('config-label-g_locks'),
-					align: 'inline'
+					align: 'inline',
 				}),
 				new OO.ui.FieldLayout(g_blocks, {
 					label: getExclMessage('config-label-g_blocks', true),
-					align: 'inline'
+					align: 'inline',
 				}),
 				new OO.ui.FieldLayout(g_rangeblocks, {
 					label: getExclMessage('config-label-g_rangeblocks'),
 					align: 'inline',
 					help: this.getMessage('config-help-g_rangeblocks'),
-					helpInline: true
-				})
-			]
+					helpInline: true,
+				}),
+			],
 		});
 
 		// Save button
@@ -689,8 +706,8 @@ class MarkBLocked {
 			id: 'mblc-save',
 			label: this.getMessage('config-label-save'),
 			icon: 'bookmarkOutline',
-			flags: ['primary', 'progressive']
-		}).off('click').on('click', () => {
+			flags: ['primary', 'progressive'],
+		}).on('click', () => {
 
 			$overlay.show();
 
@@ -716,7 +733,7 @@ class MarkBLocked {
 				rangeblocks: rangeblocks.isSelected(),
 				g_locks: g_locks.isSelected(),
 				g_blocks: g_blocks.isSelected(),
-				g_rangeblocks: g_rangeblocks.isSelected()
+				g_rangeblocks: g_rangeblocks.isSelected(),
 			};
 			const cfgStr = JSON.stringify(cfg);
 
@@ -731,7 +748,7 @@ class MarkBLocked {
 			}).catch(/** @param {string} code */ (code, err) => {
 				console.warn(err);
 				return code;
-			}).then(/** @param {string?} err */ (err) => {
+			}).then(/** @param {?string} err */ (err) => {
 				if (err) {
 					mw.notify(this.getMessage('config-notify-savefailed') + '(' + err + ')', { type: 'error' });
 				} else {
@@ -744,7 +761,7 @@ class MarkBLocked {
 		});
 
 		// Construct the config body
-		$body.empty().append(
+		$(content).empty().append(
 			$('<div>')
 				.prop('id', 'mblc-container')
 				.append(
@@ -760,7 +777,6 @@ class MarkBLocked {
 				.prop('id', 'mblc-container-overlay')
 				.hide()
 		);
-
 	}
 
 	/**
@@ -821,15 +837,13 @@ class MarkBLocked {
 	 * @private
 	 */
 	createToggleButton(hookHandler) {
-
-		// Create toggle button
 		const toggle = new OO.ui.ButtonWidget({
 			id: 'mbl-toggle',
 			label: 'MBL',
 			icon: 'unLock',
 			flags: 'progressive',
-			title: this.getMessage('toggle-title-enabled')
-		}).off('click').on('click', () => {
+			title: this.getMessage('toggle-title-enabled'),
+		}).on('click', () => {
 			const disable = toggle.getFlags().includes('progressive');
 			let icon, title, hookToggle, msg;
 			if (disable) {
@@ -882,7 +896,6 @@ class MarkBLocked {
 			selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-watchlistTopSectionWidget-savedLinks';
 			$(selector).eq(0).before($wrapper);
 		}
-
 	}
 
 	/**
@@ -890,14 +903,13 @@ class MarkBLocked {
 	 *
 	 * @param {JQuery<HTMLElement>} $content
 	 * @param {boolean} isRCW
-	 * @returns {JQueryPromise<void>}
+	 * @returns {JQuery.Promise<void>}
 	 * @private
 	 * @requires mediawiki.util
 	 * @requires mediawiki.api
 	 * @requires mediawiki.ForeignApi
 	 */
 	markup($content, isRCW) {
-
 		if (!this.options.g_blocks && this.options.g_rangeblocks) {
 			throw new Error('g_rangeblocks is unexpectedly turned on when g_blocks is turned off.');
 		}
@@ -907,7 +919,7 @@ class MarkBLocked {
 		if (!userLinks.size) {
 			console.log('MarkBLocked', {
 				$content,
-				links: 0
+				links: 0,
 			});
 			return $.Deferred().resolve();
 		}
@@ -930,7 +942,7 @@ class MarkBLocked {
 					links: Array.from(userLinks.values()).reduce((sum, arr) => sum + arr.length, 0),
 					user_registered: users.size,
 					user_ip: ips.size,
-					user_temporary: temps.size
+					user_temporary: temps.size,
 				});
 			}
 
@@ -952,12 +964,12 @@ class MarkBLocked {
 						params: {
 							list: 'blocks',
 							bkip: ip,
-							bkprop: 'user|by|expiry|reason|flags'
+							bkprop: 'user|by|expiry|reason|flags',
 						},
 						callback: (res) => {
 							// An IP may have multiple blocks
 							const resBlk = res && res.query && res.query.blocks || [];
-							const resObj = resBlk.reduce(/** @param {ApiResponseQueryListBlocks?} acc */ (acc, obj, i) => {
+							const resObj = resBlk.reduce(/** @param {?ApiResponseQueryListBlocks} acc */ (acc, obj, i) => {
 								if (i === 0) {
 									acc = obj; // Just save the object in the first loop
 								} else {
@@ -987,7 +999,7 @@ class MarkBLocked {
 								const tooltip = mw.format(this.getMessage('title-rangeblocked'), ...titleVars);
 								MarkBLocked.addClass(userLinks, ip, clss, tooltip);
 							}
-						}
+						},
 					});
 				});
 			}
@@ -1004,7 +1016,7 @@ class MarkBLocked {
 							aguprop: 'lockinfo',
 							leaction: 'globalauth/setstatus',
 							leprop: 'user|timestamp|comment|details',
-							letitle: `User:${user}@global`
+							letitle: `User:${user}@global`,
 						},
 						callback: (res) => {
 							if (res && res.query) {
@@ -1047,10 +1059,8 @@ class MarkBLocked {
 													)
 												) ||
 												// In the case of an old log entry, the numeral keys should have fixed values
-												(
-													params['0'] && params['0'] !== 'locked' ||
-													params['1'] && params['1'] !== '(none)'
-												)
+												// @ts-expect-error
+												(params['0'] !== 'locked' || params['1'] !== '(none)')
 											) {
 												continue;
 											}
@@ -1070,7 +1080,7 @@ class MarkBLocked {
 									MarkBLocked.addClass(userLinks, user, 'mbl-globally-locked', tooltip);
 								}
 							}
-						}
+						},
 					});
 				});
 			}
@@ -1081,11 +1091,11 @@ class MarkBLocked {
 						params: {
 							list: 'globalblocks',
 							bgip: ip,
-							bgprop: 'target|by|expiry|reason'
+							bgprop: 'target|by|expiry|reason',
 						},
 						callback: (res) => {
 							const resGblk = res && res.query && res.query.globalblocks || [];
-							const resObj = resGblk.reduce(/** @param {ApiResponseQueryListGlobalblocks?} acc */ (acc, obj, i) => {
+							const resObj = resGblk.reduce(/** @param {?ApiResponseQueryListGlobalblocks} acc */ (acc, obj, i) => {
 								if (i === 0) {
 									acc = obj;
 								} else {
@@ -1114,7 +1124,7 @@ class MarkBLocked {
 								const tooltip = mw.format(this.getMessage('title-rangeblocked'), ...titleVars);
 								MarkBLocked.addClass(userLinks, ip, clss, tooltip);
 							}
-						}
+						},
 					});
 				});
 			}
@@ -1124,7 +1134,6 @@ class MarkBLocked {
 			}
 
 		});
-
 	}
 
 	/**
@@ -1141,7 +1150,6 @@ class MarkBLocked {
 	 * @requires mediawiki.util
 	 */
 	collectLinks($content, isRCW) {
-
 		// Get all anchors in the content
 		let $anchors = $content.find('a');
 		const $pNamespaces = $('#p-associated-pages, #p-namespaces, .skin-monobook #ca-nstab-user, .skin-monobook #ca-talk');
@@ -1162,17 +1170,8 @@ class MarkBLocked {
 			temps: new Set(),
 		};
 		const prIgnore = /(^|\s)(twg?-rollback-\S+|autocomment|cd-commentLink-\S+)($|\s)/;
-		/**
-		 * @param {string} username
-		 * @returns {boolean=}
-		 */
-		const isTempUser = (username) => {
-			// Defensive: Ensure MediaWiki version support
-			return mw.util.isTemporaryUser && mw.util.isTemporaryUser(username);
-		};
 
 		$anchors.each((_, a) => {
-
 			// Ignore some anchors
 			const href = a.href;
 			const pr = a.parentElement;
@@ -1193,7 +1192,7 @@ class MarkBLocked {
 			}
 
 			// Get the associated pagetitle
-			let /** @type {RegExpExecArray?} */ m,
+			let /** @type {?RegExpExecArray} */ m,
 				/** @type {string} */ pagetitle;
 			if ((m = this.regex.article.exec(href))) {
 				pagetitle = m[1];
@@ -1222,7 +1221,7 @@ class MarkBLocked {
 			if (mw.util.isIPAddress(username, true)) {
 				username = mw.util.sanitizeIP(username) || username; // The right operand is never reached
 				key = 'ips';
-			} else if (isTempUser(username)) {
+			} else if (mw.util.isTemporaryUser(username)) {
 				key = 'temps';
 			} else if (/[/@#<>[\]|{}:]|^(\d{1,3}\.){3}\d{1,3}$/.test(username)) {
 				// Ensure the username doesn't contain characters that can't be used for usernames (do this here or block status query might fail)
@@ -1253,16 +1252,18 @@ class MarkBLocked {
 	 * @param {"local" | "global"} domain The block domain to query: `"local"` or `"global"`.
 	 * @param {UserLinks} userLinks The object containing user link references to be marked.
 	 * @param {string[]} usersArr A list of usernames or IPs to process.
-	 * @returns {JQueryPromise<Set<string>?>} A promise resolving to the set of usernames/IPs whose links were marked,
+	 * @returns {JQuery.Promise<?Set<string>>} A promise resolving to the set of usernames/IPs whose links were marked,
 	 * or `null` if the operation was aborted.
 	 * @private
 	 * @requires mediawiki.api
 	 */
 	bulkMarkup(domain, userLinks, usersArr) {
-		if (!usersArr.length) return $.Deferred().resolve([]);
+		if (!usersArr.length) {
+			return $.Deferred().resolve(new Set()).promise();
+		}
 		usersArr = usersArr.slice();
 
-		const /** @type {JQueryPromise<Set<string>?>[]} */ deferreds = [];
+		const /** @type {JQuery.Promise<?Set<string>>[]} */ deferreds = [];
 		const request = domain === 'local' ? this.bulkMarkupLocal.bind(this): this.bulkMarkupGlobal.bind(this);
 		while (usersArr.length) {
 			deferreds.push(request(userLinks, usersArr.splice(0, this.apilimit)));
@@ -1272,7 +1273,9 @@ class MarkBLocked {
 			const /** @type {Set<string>} */ ret = new Set();
 			for (let i = 0; i < args.length; i++) {
 				const marked = args[i];
-				if (!marked) return null;
+				if (!marked) {
+					return null;
+				}
 				for (const user of marked) {
 					ret.add(user);
 				}
@@ -1285,7 +1288,7 @@ class MarkBLocked {
 	 * @param {UserLinks} userLinks
 	 * @param {string[]} users
 	 * @param {boolean} [isRetry]
-	 * @returns {JQueryPromise<?Set<string>>} A set of marked users' names or `null` if aborted.
+	 * @returns {JQuery.Promise<?Set<string>>} A set of marked users' names or `null` if aborted.
 	 * @private
 	 */
 	bulkMarkupLocal(userLinks, users, isRetry = false) {
@@ -1294,7 +1297,7 @@ class MarkBLocked {
 			bklimit: 'max',
 			bkusers: users.join('|'),
 			bkprop: 'user|by|expiry|reason|flags',
-			errorformat: 'raw'
+			errorformat: 'raw',
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resBlk = res && res.query && res.query.blocks || [];
 			const /** @type {Set<string>} */ ret = new Set();
@@ -1359,14 +1362,14 @@ class MarkBLocked {
 	/**
 	 * @param {UserLinks} userLinks
 	 * @param {string[]} users
-	 * @returns {JQueryPromise<Set<string>?>} An array of marked users' names or `null` if aborted
+	 * @returns {JQuery.Promise<?Set<string>>} An array of marked users' names or `null` if aborted
 	 * @private
 	 */
 	bulkMarkupGlobal(userLinks, users) {
 		return this.readApi.post({
 			list: 'globalblocks',
 			bgtargets: users.join('|'),
-			bgprop: 'target|by|expiry|reason'
+			bgprop: 'target|by|expiry|reason',
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resGblk = res && res.query && res.query.globalblocks || [];
 			const /** @type {Set<string>} */ ret = new Set();
@@ -1388,7 +1391,7 @@ class MarkBLocked {
 				}
 			}
 			return ret;
-		}).catch(/** @param {object} err */ (_, err) => {
+		}).catch(/** @param {Record<string, any>} err */ (_, err) => {
 			if (err.exception === 'abort') {
 				return null;
 			} else {
@@ -1405,7 +1408,7 @@ class MarkBLocked {
 	 * @param {string} userName
 	 * @param {string} className
 	 * @param {string} tooltip
-	 * @returns {string?} The username if any link is marked up, or else `null`.
+	 * @returns {?string} The username if any link is marked up, or else `null`.
 	 * @private
 	 */
 	static addClass(userLinks, userName, className, tooltip) {
@@ -1467,7 +1470,7 @@ class MarkBLocked {
 					position: {
 						my: 'left bottom',
 						at: 'left top'
-					}
+					},
 				});
 		}
 	}
@@ -1488,7 +1491,7 @@ class MarkBLocked {
 	 * batch sequentially after the previous one has resolved.
 	 *
 	 * @param {BatchObject[]} batchArray An array of request batches to be processed.
-	 * @returns {JQueryPromise<void>} A promise that resolves when all batches have been processed.
+	 * @returns {JQuery.Promise<void>} A promise that resolves when all batches have been processed.
 	 * @private
 	 * @requires mediawiki.api
 	 */
@@ -1508,12 +1511,12 @@ class MarkBLocked {
 		/**
 		 * Send an API request.
 		 * @param {BatchObject} batchObj
-		 * @returns {JQueryPromise<void>}
+		 * @returns {JQuery.Promise<void>}
 		 */
 		const req = (batchObj) => {
 			return (batchObj.api || this.api).get(batchObj.params)
 				.then(batchObj.callback)
-				.catch(/** @param {object} err */ (_, err) => {
+				.catch(/** @param {Record<string, any>} err */ (_, err) => {
 					if (err.exception === 'abort') {
 						aborted = true;
 					} else {
@@ -1522,41 +1525,42 @@ class MarkBLocked {
 				});
 		};
 
-		/**
-		 * Send batched API requests.
-		 * @param {number} index
-		 * @returns {JQueryPromise<void>}
-		 */
-		return (function batch(index) {
-			return $.when(...unflattened[index].map(req)).then((...args) => {
-				console.log('MarkBLocked batch count: ' + args.length);
+		return (
+			/**
+			 * @param {number} index
+			 * @returns {JQuery.Promise<void>}
+			 */
+			function batch(index) {
+				return $.when(...unflattened[index].map(req)).then((...args) => {
+					console.log('MarkBLocked batch count: ' + args.length);
 
-				if (!aborted && unflattened[++index]) {
-					const deferred = $.Deferred();
+					if (!aborted && unflattened[++index]) {
+						const deferred = $.Deferred();
 
-					// Throttle the next batch to avoid rate limiting (e.g., HTTP 429)
-					console.log('Next batch scheduled in 10 seconds...');
-					const batchTimeout = setTimeout(() => {
-						MarkBLocked.abortHook.remove(hookHandler);
-						deferred.resolve(batch(index));
-					}, 10000);
+						// Throttle the next batch to avoid rate limiting (e.g., HTTP 429)
+						console.log('Next batch scheduled in 10 seconds...');
+						const batchTimeout = setTimeout(() => {
+							MarkBLocked.abortHook.remove(hookHandler);
+							deferred.resolve(batch(index));
+						}, 10000);
 
-					// If aborted before the timeout completes, cancel the delay and resolve early
-					const hookHandler = () => {
-						console.log('Batch aborted: request sequence cancelled');
-						clearTimeout(batchTimeout);
-						MarkBLocked.abortHook.remove(hookHandler);
-						deferred.resolve();
-					};
-					MarkBLocked.abortHook.add(hookHandler);
+						// If aborted before the timeout completes, cancel the delay and resolve early
+						const hookHandler = () => {
+							console.log('Batch aborted: request sequence cancelled');
+							clearTimeout(batchTimeout);
+							MarkBLocked.abortHook.remove(hookHandler);
+							deferred.resolve();
+						};
+						MarkBLocked.abortHook.add(hookHandler);
 
-					return deferred.promise();
-				}
+						return deferred.promise();
+					}
 
-				// No more batches or processing was aborted; resolve to complete the chain
-				return $.Deferred().resolve().promise();
-			});
-		})(0);
+					// No more batches or processing was aborted; resolve to complete the chain
+					return $.Deferred().resolve().promise();
+				});
+			}
+		)(0);
 	}
 
 }
@@ -1631,6 +1635,31 @@ MarkBLocked.defaultOptionKey = 'userjs-markblocked-config';
 MarkBLocked.abortHook = mw.hook('userjs.markblocked.aborted');
 
 /**
+ * @template {object} T
+ * @param {T} obj
+ * @returns {Array<Extract<keyof T, string>>}
+ */
+function typedKeys(obj) {
+	return /** @type {Array<Extract<keyof T, string>>} */ (Object.keys(obj));
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is string[]}
+ */
+function isStringArray(value) {
+	return Array.isArray(value) && value.every(el => typeof el === 'string');
+}
+
+/**
+ * @param {number} days
+ * @returns {number}
+ */
+function daysInSeconds(days) {
+	return days * 24 * 60 * 60;
+}
+
+/**
  * Creates a new Set containing only the elements that satisfy the provided predicate.
  *
  * This function behaves similarly to `Array.prototype.filter`, but for `Set` instances.
@@ -1663,6 +1692,7 @@ function filterSet(set, predicate) {
  * @typedef {import('./window/MarkBLocked.d.ts').ApiResponseQueryListBlocks} ApiResponseQueryListBlocks
  * @typedef {import('./window/MarkBLocked.d.ts').ApiResponseQueryListGlobalblocks} ApiResponseQueryListGlobalblocks
  */
+
 return MarkBLocked;
 })();
 //</nowiki>
