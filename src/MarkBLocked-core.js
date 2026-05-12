@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.3.1
+ * @version 3.3.2
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -182,7 +182,7 @@ class MarkBLocked {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.3.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)',
+					'Api-User-Agent': 'MarkBLocked-core/3.3.2 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)',
 				},
 			},
 			parameters: {
@@ -1340,6 +1340,7 @@ class MarkBLocked {
 			list: 'globalblocks',
 			bgtargets: users.join('|'),
 			bgprop: 'target|by|expiry|reason',
+			bglimit: 'max',
 		}, nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
 			const resGblk = res && res.query && res.query.globalblocks || [];
 			const /** @type {Set<string>} */ ret = new Set();
@@ -1440,9 +1441,10 @@ class MarkBLocked {
 
 			return request({
 				list: 'logevents',
-				leids: logids.join('|'),
+				leids: batch,
 				leaction: 'globalauth/setstatus',
 				leprop: 'ids|user|timestamp|comment|details',
+				lelimit: 'max',
 			}/*, nonwritePost()*/).then(/** @param {ApiResponse} res */ (res) => {
 				const logevents = res && res.query && res.query.logevents || [];
 
