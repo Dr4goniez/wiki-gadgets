@@ -42,14 +42,14 @@ export interface ConstructorConfig {
 	 * messages or adding new interface languages. For the latter to work, the {@link lang} property
 	 * must also be set.
 	 */
-	i18n?: Record<string, Lang>;
+	i18n?: Record<string, Messages>;
 	/**
 	 * The language code to use for interface messages. Defaults to `en`.
 	 */
 	lang?: string;
 }
 
-export interface Lang {
+export interface Messages {
 	'config-notify-notloaded': string;
 	'config-label-heading': string;
 	'config-label-fsgeneral': string;
@@ -93,11 +93,13 @@ declare global {
 export interface Initializer {
 	specialpagealiases: SpecialPageAliases;
 	userrights: Set<string>;
+	userrights_meta: Set<string>;
 }
 
-export interface CachedInitializer {
+interface CachedInitializer {
 	specialpagealiases: SpecialPageAliases;
 	userrights: string[];
+	userrights_meta: string[];
 }
 
 export type CacheValidator = {
@@ -137,22 +139,22 @@ export interface ApiResponse {
 	query?: ApiResponseQuery;
 }
 
-export interface ApiResponseQuery {
+interface ApiResponseQuery {
 	userinfo?: ApiResponseQueryUserinfo;
 	specialpagealiases?: ApiResponseQuerySpecialpagealiases[];
 	blocks?: ApiResponseQueryListBlocks[];
-	globalallusers?: ApiResponseQueryListGlobalallusers[];
 	globalblocks?: ApiResponseQueryListGlobalblocks[];
+	globalusers?: ApiResponseQueryListGlobalusers[];
 	logevents?: ApiResponseQueryListLogevents[];
 }
 
-export interface ApiResponseQueryUserinfo {
+interface ApiResponseQueryUserinfo {
 	id: number;
 	name: string;
 	rights?: string[];
 }
 
-export interface ApiResponseQuerySpecialpagealiases {
+interface ApiResponseQuerySpecialpagealiases {
 	realname: string;
 	aliases: string[];
 }
@@ -165,10 +167,6 @@ export interface ApiResponseQueryListBlocks {
 	partial: boolean;
 }
 
-export interface ApiResponseQueryListGlobalallusers {
-	locked?: string;
-}
-
 export interface ApiResponseQueryListGlobalblocks {
 	target: string;
 	by: string;
@@ -176,16 +174,39 @@ export interface ApiResponseQueryListGlobalblocks {
 	reason: string;
 }
 
-export interface ApiResponseQueryListLogevents {
-	/**
-	 * Note: This is basically of type `Record<string, any>`. Keys and values for this property are radically different
-	 * depending on what kind of logevent we fetch.
-	 */
+interface ApiResponseQueryListGlobalusers {
+	centralid?: number;
+	name: string;
+	invalid?: true;
+	missing?: true;
+	hidden?: true;
+	suppressed?: true;
+	locked?: boolean;
+	locklogid?: number;
+}
+
+interface ApiResponseQueryListLogevents {
+	logid: number;
+
+	actionhidden?: true;
+	pageid?: number;
+	logpage?: number;
+	revid?: number;
 	params?: {
 		added?: string[];
 		removed?: string[];
+		0?: string;
+		1?: string;
 	};
+
+	userhidden?: true;
 	user?: string;
-	timestamp?: string;
+	userid?: number;
+	temp?: true;
+	anon?: true;
+
+	timestamp: string;
+
+	commenthidden?: true;
 	comment?: string;
 }
