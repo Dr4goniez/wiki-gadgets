@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.3.0
+ * @version 3.3.1
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -51,7 +51,7 @@ class MarkBLocked {
 			'jquery.ui'
 		];
 		const isConfigPage = mw.config.get('wgNamespaceNumber') === -1 && /^(markblockedconfig|mblc)$/i.test(mw.config.get('wgTitle'));
-		const isRCW = ['Recentchanges', 'Watchlist'].includes(mw.config.get('wgCanonicalSpecialPageName') || '');
+		const isRCW = ['Recentchanges', 'Recentchangeslinked', 'Watchlist'].includes(mw.config.get('wgCanonicalSpecialPageName') || '');
 		if (isConfigPage || isRCW) {
 			modules.push(
 				'oojs-ui',
@@ -182,7 +182,7 @@ class MarkBLocked {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.3.0 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)',
+					'Api-User-Agent': 'MarkBLocked-core/3.3.1 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)',
 				},
 			},
 			parameters: {
@@ -872,6 +872,21 @@ class MarkBLocked {
 	 * @private
 	 */
 	createToggleButton(hookHandler) {
+		let /** @type {?string} */ selector = null;
+		switch (mw.config.get('wgCanonicalSpecialPageName')) {
+			case 'Recentchanges':
+				selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-rcTopSectionWidget-savedLinks';
+				break;
+			case 'Recentchangeslinked':
+				selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-rclTopSectionWidget-savedLinks';
+				break;
+			case 'Watchlist':
+				selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-watchlistTopSectionWidget-savedLinks';
+		}
+		if (selector === null) {
+			return;
+		}
+
 		const toggle = new OO.ui.ButtonWidget({
 			id: 'mbl-toggle',
 			label: 'MBL',
@@ -917,20 +932,12 @@ class MarkBLocked {
 			hookToggle(hookHandler);
 			mw.notify(msg);
 		});
-		const $wrapper = $('<div>')
-			.prop('id', 'mbl-toggle-wrapper')
-			.append(toggle.$element);
 
-		// Append the toggle button
-		const spName = mw.config.get('wgCanonicalSpecialPageName');
-		let selector = '';
-		if (spName === 'Recentchanges') {
-			selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-rcTopSectionWidget-savedLinks';
-			$(selector).eq(0).before($wrapper);
-		} else if (spName === 'Watchlist') {
-			selector = '.mw-rcfilters-ui-cell.mw-rcfilters-ui-watchlistTopSectionWidget-savedLinks';
-			$(selector).eq(0).before($wrapper);
-		}
+		$(selector).eq(0).before(
+			$('<div>')
+				.prop('id', 'mbl-toggle-wrapper')
+				.append(toggle.$element)
+		);
 	}
 
 	/**

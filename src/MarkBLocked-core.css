@@ -103,7 +103,8 @@ body a.mbl-globally-blocked-temp:not(.mbl-globally-locked) {
 	}
 }
 
-/* Improve alignment of the MBL toggle button on Watchlist */
+/* Improve alignment of the MBL toggle button on Recentchangeslinked and Watchlist */
+.mw-rcfilters-ui-rclTopSectionWidget #mbl-toggle-wrapper,
 .mw-rcfilters-ui-watchlistTopSectionWidget-savedLinksTable #mbl-toggle-wrapper {
 	margin-left: auto;
 	margin-right: 0.5em;
