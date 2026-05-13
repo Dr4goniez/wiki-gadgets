@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.3.2
+ * @version 3.3.3
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -182,7 +182,7 @@ class MarkBLocked {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.3.2 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)',
+					'Api-User-Agent': 'MarkBLocked-core/3.3.3 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)',
 				},
 			},
 			parameters: {
@@ -1433,19 +1433,13 @@ class MarkBLocked {
 		 * @returns {JQuery.Promise<boolean>} `false` if aborted
 		 */
 		const fetchAndAddTooltips = (logids, logidMap) => {
-			// Temporary workaround for [[phab:T425972]]
-			const batch = logids.join('|');
-			const request = batch.length < 1800
-				? MarkBLocked.metaApi.get.bind(MarkBLocked.metaApi)
-				: MarkBLocked.metaApi.post.bind(MarkBLocked.metaApi);
-
-			return request({
+			return MarkBLocked.metaApi.post({
 				list: 'logevents',
-				leids: batch,
+				leids: logids.join('|'),
 				leaction: 'globalauth/setstatus',
 				leprop: 'ids|user|timestamp|comment|details',
 				lelimit: 'max',
-			}/*, nonwritePost()*/).then(/** @param {ApiResponse} res */ (res) => {
+			}, nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
 				const logevents = res && res.query && res.query.logevents || [];
 
 				for (const log of logevents) {
