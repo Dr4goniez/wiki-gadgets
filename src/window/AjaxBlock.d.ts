@@ -398,6 +398,7 @@ export interface MediaWikiMessages {
 
 	'confirm': string;
 	'cancel': string;
+	'saveprefs': string;
 
 	// Copied from InvestigateHelper
 	'logentry-block-block': string;
