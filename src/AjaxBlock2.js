@@ -64,6 +64,7 @@ class AjaxBlock {
 		Messages.loadInternalMessages();
 		const configPageLoaded = AjaxBlockConfig.isConfigPage() && AjaxBlockConfig.preparePage();
 		AjaxBlockServices.setService('api', new mw.Api(this.apiOptions));
+		await AjaxBlockConfig.migrateLegacy();
 
 		try {
 			await toNativePromise(AjaxBlockServices.initialize());
@@ -7626,20 +7627,6 @@ class AjaxBlockConfig {
 		}
 
 		const change = AjaxBlockConfig.mapChanges(data);
-		console.log(
-			'Configuration changes',
-			typedEntries(change).reduce((acc, [domain, obj]) => {
-				acc[domain] = Object.entries(obj).reduce((acc2, [key, option]) => {
-					if (option === null) {
-						acc2[key] = null;
-					} else {
-						acc2[key] = JSON.parse(option);
-					}
-					return acc2;
-				}, Object.create(null));
-				return acc;
-			}, Object.create(null))
-		);
 
 		// Bail if there's nothing to update
 		const hasLocal = !$.isEmptyObject(change.local);
@@ -7711,9 +7698,9 @@ class AjaxBlockConfig {
 
 			if (serialized !== current) {
 				target[optionKey] = serialized;
-				if (serialized !== null && domain === 'local') {
-					localExists = true;
-				}
+			}
+			if (domain === 'local' && (serialized !== null || current !== null)) {
+				localExists = true;
 			}
 		};
 
@@ -7724,20 +7711,39 @@ class AjaxBlockConfig {
 		setChange('global', 'langs');
 		setChange('global', 'warnings');
 
-		// Add or remove this wiki's ID to track which project the user has local config on
+		// Add or remove this wiki's ID to track where the user has local config
 		Object.assign(
 			change.global,
 			AjaxBlockConfigMisc.getWikiIdOptions(localExists ? 'add' : 'delete')
 		);
 
-		// Migrate legacy config if present
+		// Remove legacy config options if present
 		const legacyOptionKeys = AjaxBlockConfigStore.optionKeys.legacy;
 		if (AjaxBlockConfigStore.existsLegacy('local')) {
 			change.local[legacyOptionKeys.local] = null;
 		}
 		if (AjaxBlockConfigStore.existsLegacy('global')) {
+			// "userjs-ajaxblock-global" may exist in options instead of globalpreferences,
+			// probably due to a bug in v1
+			change.local[legacyOptionKeys.global] = null;
 			change.global[legacyOptionKeys.global] = null;
 		}
+
+		// For debugging
+		console.log(
+			'Configuration changes',
+			typedEntries(change).reduce((acc, [domain, obj]) => {
+				acc[domain] = Object.entries(obj).reduce((acc2, [key, option]) => {
+					if (option === null) {
+						acc2[key] = null;
+					} else {
+						acc2[key] = JSON.parse(option);
+					}
+					return acc2;
+				}, Object.create(null));
+				return acc;
+			}, Object.create(null))
+		);
 
 		return change;
 	}
@@ -7863,6 +7869,40 @@ class AjaxBlockConfig {
 			],
 			size: 'medium',
 		});
+	}
+
+	/**
+	 * Migrates any existing legacy config to the current config format.
+	 *
+	 * @returns {Promise<void>}
+	 * @requires mediawiki.user
+	 * @requires mediawiki.api
+	 */
+	static async migrateLegacy() {
+		if (!(AjaxBlockConfigStore.existsLegacy('local') || AjaxBlockConfigStore.existsLegacy('global'))) {
+			return;
+		}
+
+		const cfg = AjaxBlockServices.getConfig().getSchema();
+		console.log('Built configuration', cfg);
+		const change = AjaxBlockConfig.mapChanges(cfg);
+
+		const hasLocal = !$.isEmptyObject(change.local);
+		const hasGlobal = !$.isEmptyObject(change.global);
+		if (!hasLocal && !hasGlobal) {
+			console.warn(Messages.get('ajaxblock-config-notify-save-nochange'));
+			return;
+		}
+
+		const promises = [];
+		if (hasLocal) {
+			promises.push(AjaxBlockConfig.saveOptions(change.local, 'options'));
+		}
+		if (hasGlobal) {
+			promises.push(AjaxBlockConfig.saveOptions(change.global, 'globalpreferences'));
+		}
+
+		await Promise.all(promises);
 	}
 
 }
