@@ -1245,13 +1245,10 @@ class AjaxBlock {
 	 * @private
 	 */
 	static execute(params, _data) {
-		return AjaxBlockServices.getApi().postWithEditToken(Object.assign(
-			{ curtimestamp: true },
-			params
-		)).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+		return AjaxBlockServices.getApi().postWithEditToken(params).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
 			if (res) {
 				if (res.block) {
-					return Object.assign(res.block, { timestamp: res.curtimestamp });
+					return res.block;
 				} else if (res.unblock) {
 					return res.unblock;
 				}
@@ -2012,7 +2009,7 @@ class BlockLookup {
 			id: res.id,
 			user: res.user,
 			by: wgUserName,
-			timestamp: res.timestamp, // TODO: The API module should itself return this
+			timestamp: res.timestamp,
 			expiry: res.expiry,
 			// 'duration-l10n': string; // Cannot be fabricated from ApiResponseBlock
 			reason: res.reason,

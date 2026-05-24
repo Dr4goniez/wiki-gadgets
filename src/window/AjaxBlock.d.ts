@@ -16,8 +16,6 @@ export interface ApiResponse {
 	paraminfo?: ApiResponseParaminfo;
 	query?: ApiResponseQuery;
 	unblock?: ApiResponseUnblock;
-
-	curtimestamp?: string;
 }
 
 interface ApiResponseParaminfo {
@@ -179,14 +177,10 @@ interface ApiResponseQueryInterwikiTitles {
 	url?: string;
 }
 
-// Temporary hack around T420404
-interface CurtimestampToTimestamp {
-	timestamp: string;
-}
-
-export interface ApiResponseBlock extends CurtimestampToTimestamp {
+export interface ApiResponseBlock {
 	user: string;
 	userID: number;
+	timestamp: string;
 	expiry: string;
 	id: number;
 	reason: string;
