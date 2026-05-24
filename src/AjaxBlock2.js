@@ -144,15 +144,17 @@ class AjaxBlock {
 				return;
 			}
 
-			// Show logo while loading
-			const logo = new AjaxBlockLogo().insert();
+			// Show logo while loading (only on the first run)
+			const logo = !ajaxBlock && new AjaxBlockLogo().insert();
 
 			let /** @type {BlockLookup} */ blockLookup;
 			try {
 				blockLookup = await toNativePromise(BlockLookup.newFromTargets(users, ids));
 			} catch (e) {
 				console.error(toErrorTuple(e)[1]);
-				await logo.setError().remove(800);
+				if (logo) {
+					await logo.setError().remove(800);
+				}
 				return;
 			}
 
@@ -165,7 +167,9 @@ class AjaxBlock {
 					ajaxBlock.initialize({ linkMap, blockLookup });
 				}
 			}
-			logo.remove(1000);
+			if (logo) {
+				logo.remove(1000);
+			}
 		});
 	}
 
@@ -3858,8 +3862,7 @@ class WatchUserField {
 
 		// When the "watch user" checkbox is checked/unchecked, show/hide the expiry field
 		this.cbWatchUser.on('change', (selected) => {
-			const checked = !!selected;
-			this.watchlistExpiryLayout.toggle(checked);
+			this.watchlistExpiryLayout.toggle(!!selected);
 			onResize();
 		});
 	}
@@ -5233,8 +5236,7 @@ class TargetField {
 	 * @return {this}
 	 */
 	addMessage(config = {}) {
-		// TODO: Should we shallow-copy the array before mutating it?
-		config.classes = config.classes || [];
+		config.classes = config.classes ? config.classes.slice() : [];
 		config.classes.push('ajaxblock-message-container');
 
 		const message = new OO.ui.MessageWidget(config);
@@ -5977,7 +5979,7 @@ class ParamApplier {
 	 * @returns {ReturnType<typeof ParamApplier.generateApplierLink>}
 	 */
 	static generateBlockInfoApplier(blockUser, block) {
-		const params = this.createBlockParamsFromApiResponse(block);
+		const params = this.createBlockParamsFromApiResponse(block, blockUser.getPresetType());
 		const link = this.generateApplierLink('long');
 
 		link.applier.addEventListener('click', (e) => {
@@ -6094,23 +6096,24 @@ class ParamApplier {
 
 	/**
 	 * @param {Omit<ApiResponseQueryListBlocks, 'id' | 'by' | 'timestamp'> & Partial<AjaxBlockLegacyConfigWatchOptions>} block
+	 * @param {NonNullable<BlockTargetType>} userType
 	 * @returns {ParamApplierBlockParams}
 	 */
-	static createBlockParamsFromApiResponse(block) {
+	static createBlockParamsFromApiResponse(block, userType) {
 		const restr = Array.isArray(block.restrictions) ? {} : block.restrictions;
 		return {
 			expiry: block.expiry,
 			reason: block.reason,
-			hardblock: !block.anononly,
+			hardblock: userType === 'ip' && !block.anononly,
 			nocreate: block.nocreate,
-			autoblock: block.autoblock,
+			autoblock: userType !== 'ip' && block.autoblock,
 			noemail: block.noemail,
-			hidden: block.hidden,
+			hidden: userType === 'named' && block.hidden,
 			nousertalk: !block.allowusertalk,
 			partial: block.partial,
 			pagerestrictions: restr.pages ? restr.pages.map(obj => obj.title) : [],
-			namespacerestrictions: restr.namespaces || [],
-			actionrestrictions: restr.actions || [],
+			namespacerestrictions: restr.namespaces ? restr.namespaces.slice() : [],
+			actionrestrictions: restr.actions ? restr.actions.slice() : [],
 			watchuser: block.watchlist !== undefined ? block.watchlist : null,
 			watchlistexpiry: block.watchlistexpiry !== undefined ? block.watchlistexpiry : null,
 		};
@@ -6667,7 +6670,7 @@ class BlockPreset {
 		return {
 			name: this.name,
 			targets: Array.from(this.targets),
-			params: this.params,
+			params: $.extend(true, {}, this.params),
 		};
 	}
 
@@ -6684,9 +6687,9 @@ class BlockPreset {
 	static getDisplayName(presetName) {
 		if (presetName === 'named' || presetName === 'temp' || presetName === 'ip') {
 			// Messages used here:
-			//  - ajaxblock-config-label-presetreasons-target-named
-			//  - ajaxblock-config-label-presetreasons-target-temp
-			//  - ajaxblock-config-label-presetreasons-target-ip
+			// - ajaxblock-config-label-presetreasons-target-named
+			// - ajaxblock-config-label-presetreasons-target-temp
+			// - ajaxblock-config-label-presetreasons-target-ip
 			presetName += ' - ' + Messages.get(`ajaxblock-config-label-presetreasons-target-${presetName}`);
 		}
 		return presetName;
@@ -6695,7 +6698,7 @@ class BlockPreset {
 	static getDefaultAsMap() {
 		const /** @type {Map<string, BlockPreset>} */ map = new Map();
 		for (const [preset, params] of typedEntries(this.default)) {
-			map.set(preset, new BlockPreset(preset, [preset], params));
+			map.set(preset, new BlockPreset(preset, [preset], $.extend(true, {}, params)));
 		}
 		return map;
 	}
@@ -7091,19 +7094,16 @@ class AjaxBlockConfigStore {
 	 * @returns {string[]}
 	 */
 	getCustomReasons(action, domain) {
-		/** @type {string[]} */
-		const reasons = [];
-
 		if (domain) {
-			reasons.push(...this.customReasons[domain][action].data);
+			return this.customReasons[domain][action].data.slice();
 		} else {
-			reasons.push(
-				...this.customReasons.local[action].data,
-				...this.customReasons.global[action].data
+			return Array.from(
+				new Set([
+					...this.customReasons.local[action].data,
+					...this.customReasons.global[action].data
+				])
 			);
 		}
-
-		return Array.from(new Set(reasons));
 	}
 
 	/**
@@ -7172,11 +7172,11 @@ class AjaxBlockConfigStore {
 	}
 
 	/**
-	 * @param {Record<AjaxBlockConfigDomains, Record<BlockActions, import('./window/AjaxBlock').AjaxBlockConfigSchemaData<string[]>>>} cfgCustomReasons
-	 * @returns {Record<AjaxBlockConfigDomains, Partial<Record<BlockActions, import('./window/AjaxBlock').AjaxBlockConfigSchemaData<string[]>>>>}
+	 * @param {Record<AjaxBlockConfigDomains, Record<BlockActions, AjaxBlockConfigSchemaData<string[]>>>} cfgCustomReasons
+	 * @returns {Record<AjaxBlockConfigDomains, Partial<Record<BlockActions, AjaxBlockConfigSchemaData<string[]>>>>}
 	 */
 	static compactCustomReasons(cfgCustomReasons) {
-		/** @type {Record<AjaxBlockConfigDomains, Partial<Record<BlockActions, import('./window/AjaxBlock').AjaxBlockConfigSchemaData<string[]>>>>} */
+		/** @type {Record<AjaxBlockConfigDomains, Partial<Record<BlockActions, AjaxBlockConfigSchemaData<string[]>>>>} */
 		const ret = {
 			local: Object.create(null),
 			global: Object.create(null),
@@ -7696,7 +7696,7 @@ class AjaxBlockConfig {
 			if (serialized !== current) {
 				target[optionKey] = serialized;
 			}
-			if (domain === 'local' && (serialized !== null || current !== null)) {
+			if (domain === 'local' && serialized !== null) {
 				localExists = true;
 			}
 		};
@@ -7750,12 +7750,12 @@ class AjaxBlockConfig {
 	 * @private This method is specifically for {@link save}.
 	 */
 	build() {
-		/**  @type {AjaxBlockConfigSchema} */
+		/** @type {AjaxBlockConfigSchema} */
 		const data = {
 			local: Object.create(null),
 			global: Object.create(null),
 		};
-		/**  @type {Record<AjaxBlockConfigDomains, BuiltBlockPresetMap>} */
+		/** @type {Record<AjaxBlockConfigDomains, BuiltBlockPresetMap>} */
 		const emptyPresets = {
 			local: new Map(),
 			global: new Map(),
@@ -7834,9 +7834,9 @@ class AjaxBlockConfig {
 			}
 
 			const $ul = $('<ul>');
-			for (const [_, preset] of map) {
+			for (const { name } of map.values()) {
 				$ul.append(
-					$('<li>').text(preset.name)
+					$('<li>').text(name)
 				);
 			}
 
@@ -7940,7 +7940,7 @@ class AjaxBlockConfigLanguageOptions {
 				items: getLanguageOptions().map(cfg => new OO.ui.MenuOptionWidget(cfg)),
 			},
 		});
-		this.ddDefaultLanguage.getMenu().selectItemByData(config.getDefaultLanguage() || 'en');
+		this.ddDefaultLanguage.getMenu().selectItemByData(config.getDefaultLanguage());
 
 		const layout = new OO.ui.FieldsetLayout({
 			label: Messages.get('ajaxblock-config-label-languages-layout'),
@@ -7991,16 +7991,11 @@ class AjaxBlockConfigLanguageOptions {
 			}
 
 			const supportedLangs = new Set(AjaxBlockConfigLanguageOptions.supported);
-
-			if ('used' in obj) {
-				if (!Array.isArray(obj.used) || !obj.used.every(l => supportedLangs.has(l))) {
-					return false;
-				}
-			}
-			if ('default' in obj) {
-				if (typeof obj.default !== 'string' || !supportedLangs.has(obj.default)) {
-					return false;
-				}
+			if (
+				('used' in obj && (!Array.isArray(obj.used) || !obj.used.every(l => supportedLangs.has(l)))) ||
+				('default' in obj && (typeof obj.default !== 'string' || !supportedLangs.has(obj.default)))
+			) {
+				return false;
 			}
 
 			return true;
@@ -8597,14 +8592,14 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 		if (legacyCfg) {
 			for (const [key, obj] of typedEntries(legacyCfg.preset.block)) {
 				const block = Object.assign({}, obj, { hidden: !!obj.hidden });
-				const params = ParamApplier.createBlockParamsFromApiResponse(block);
 				const preset = key === 'user' ? 'named' : key;
+				const params = ParamApplier.createBlockParamsFromApiResponse(block, preset);
 				data.local.set(preset, new BlockPreset(preset, [preset], params));
 			}
 		}
 
 		/**
-		 * @type {ParsedConfigValidator<import('./window/AjaxBlock').AjaxBlockConfigSchemaData<PartialBlockPresetJson[]>>}
+		 * @type {ParsedConfigValidator<AjaxBlockConfigSchemaData<PartialBlockPresetJson[]>>}
 		 */
 		const validate = (obj) => {
 			if (
@@ -8668,11 +8663,6 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		 * @private
 		 */
 		this.isDefault = BlockPreset.isDefaultName(presetName);
-		/**
-		 * @type {string[]}
-		 * @private
-		 */
-		this.errors = [];
 		/**
 		 * @type {OO.ui.TextInputWidget}
 		 * @readonly
@@ -8831,19 +8821,11 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 	 * @return {this}
 	 */
 	setPresetErrors(errors) {
-		this.errors = errors.slice();
-		this.presetNameInputLayout.setErrors(this.errors);
-		const invalid = !!this.errors.length;
+		this.presetNameInputLayout.setErrors(errors);
+		const invalid = errors.length > 0;
 		this.presetNameInput.setFlags({ invalid });
 		this.collapsibleFieldset.toggleRedBorder(invalid);
 		return this;
-	}
-
-	/**
-	 * @private
-	 */
-	hasPresetErrors() {
-		return !!this.errors.length;
 	}
 
 	/**
@@ -9105,13 +9087,13 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 	/**
 	 * @param {AjaxBlockLegacyConfigLocal} [legacyLocalCfg]
 	 * @param {AjaxBlockLegacyConfigGlobal} [legacyGlobalCfg]
-	 * @returns {Record<AjaxBlockConfigDomains, Record<BlockActions, import('./window/AjaxBlock').AjaxBlockConfigSchemaData<string[]>>>}
+	 * @returns {Record<AjaxBlockConfigDomains, Record<BlockActions, AjaxBlockConfigSchemaData<string[]>>>}
 	 * Note: This method must not depend on any modules.
 	 */
 	static getMerged(legacyLocalCfg, legacyGlobalCfg) {
 		const getDefaultOptions = () => ({ data: /** @type {string[]} */ ([]), override: false });
 		/**
-		 * @type {Record<AjaxBlockConfigDomains, Record<BlockActions, import('./window/AjaxBlock').AjaxBlockConfigSchemaData<string[]>>>}
+		 * @type {Record<AjaxBlockConfigDomains, Record<BlockActions, AjaxBlockConfigSchemaData<string[]>>>}
 		 */
 		const cfg = {
 			local: { block: getDefaultOptions(), unblock: getDefaultOptions() },
@@ -9132,7 +9114,7 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 		}
 
 		// Merge current config into cfg
-		/** @type {ParsedConfigValidator<Partial<Record<BlockActions, import('./window/AjaxBlock').AjaxBlockConfigSchemaData<string[]>>>>} */
+		/** @type {ParsedConfigValidator<Partial<Record<BlockActions, AjaxBlockConfigSchemaData<string[]>>>>} */
 		const validate = (obj) => {
 			if (!$.isPlainObject(obj) || $.isEmptyObject(obj)) {
 				return false;
@@ -9999,7 +9981,6 @@ AjaxBlockLogo.svg =
  * @typedef {import('./window/AjaxBlock').BlockPresetJson} BlockPresetJson
  * @typedef {import('./window/AjaxBlock').PartialBlockPresetJson} PartialBlockPresetJson
  * @typedef {import('./window/AjaxBlock').AjaxBlockLanguages} AjaxBlockLanguages
- * @typedef {import('./window/AjaxBlock').AjaxBlockConfigVersions} AjaxBlockConfigVersions
  * @typedef {import('./window/AjaxBlock').AjaxBlockConfigDomains} AjaxBlockConfigDomains
  * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigLocal} AjaxBlockLegacyConfigLocal
  * @typedef {import('./window/AjaxBlock').AjaxBlockLegacyConfigWatchOptions} AjaxBlockLegacyConfigWatchOptions
@@ -10016,6 +9997,10 @@ AjaxBlockLogo.svg =
  * @typedef {import('./window/InvestigateHelper').BlockLogMap} BlockLogMap
  * @typedef {import('./window/InvestigateHelper').BlockLogMapValue} BlockLogMapValue
  * @typedef {import('./window/InvestigateHelper').BlockFlags} BlockFlags
+ */
+/**
+ * @template T
+ * @typedef {import('./window/AjaxBlock').AjaxBlockConfigSchemaData<T>} AjaxBlockConfigSchemaData
  */
 /**
  * @typedef {object} BlockLink

@@ -660,8 +660,6 @@ export type PartialBlockPresetJson = Omit<BlockPresetJson, 'params'> & { params:
 
 export type AjaxBlockLanguages = 'en' | 'ja';
 
-export type AjaxBlockConfigVersions = 'current' | 'legacy';
-
 export type AjaxBlockConfigDomains = 'local' | 'global';
 
 export interface AjaxBlockLegacyConfigGlobal {
