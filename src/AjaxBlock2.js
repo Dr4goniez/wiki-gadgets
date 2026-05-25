@@ -294,7 +294,7 @@ class AjaxBlock {
 			const target = new BlockTarget(id, username);
 			const params = isUnblockLink
 				? ParamApplier.createUnbBlockParamsFromSearchParams(query)
-				: ParamApplier.createBlockParamsFromSearchParams(query, target.getType());
+				: ParamApplier.createBlockParamsFromSearchParams(query, target);
 			links.push({
 				anchor: a,
 				params,
@@ -2314,6 +2314,42 @@ class BlockTarget {
 	}
 
 	/**
+	 * Throws an error if the block target type is `null`.
+	 *
+	 * @returns {void}
+	 * @throws {Error}
+	 */
+	requireType() {
+		if (this.type === null) {
+			throw new Error('BlockTarget.type was unexpectedly null');
+		}
+	}
+
+	/**
+	 * @returns {NonNullable<BlockTargetType>}
+	 */
+	getTypeThrow() {
+		this.requireType();
+		return /** @type {NonNullable<BlockTargetType>} */ (this.type);
+	}
+
+	isRegistered() {
+		return this.isNamed() || this.isTemp();
+	}
+
+	isNamed() {
+		return this.type === 'named';
+	}
+
+	isTemp() {
+		return this.type === 'temp';
+	}
+
+	isAnon() {
+		return this.type === 'ip';
+	}
+
+	/**
 	 * Internally called after {@link setUsername} is called.
 	 *
 	 * @private
@@ -3447,12 +3483,11 @@ function AjaxBlockDialogFactory() {
 		 */
 		setActiveField() {
 			const data = this.getCurrentData();
-			const targetType = data.target.getType();
 			const isBlock = data.type === 'block';
 
-			this.blockNamed.toggle(isBlock && targetType === 'named');
-			this.blockTemp.toggle(isBlock && targetType === 'temp');
-			this.blockIp.toggle(isBlock && targetType === 'ip');
+			this.blockNamed.toggle(isBlock && data.target.isNamed());
+			this.blockTemp.toggle(isBlock && data.target.isTemp());
+			this.blockIp.toggle(isBlock && data.target.isAnon());
 			this.unblockUser.toggle(!isBlock);
 
 			return this;
@@ -3538,7 +3573,7 @@ function AjaxBlockDialogFactory() {
 				});
 				$logLines = blockSelector.$element;
 			} else {
-				msgKey = data.target.getType() === 'ip'
+				msgKey = data.target.isAnon()
 					? 'blocked-notice-logextract-anon'
 					: 'blocked-notice-logextract';
 				msgType = 'notice';
@@ -4859,8 +4894,8 @@ class BlockUser extends BlockField {
 		this.optionsFieldset.toggle(!this.targetField.isAutoBlock());
 
 		// Adjust the visibility of field items
-		const targetType = target.getType();
-		if (targetType === 'ip') {
+		target.requireType();
+		if (target.isAnon()) {
 			this.cbAutoblockContainer.toggle(false);
 			this.cbAutoblock.setSelected(false);
 			this.cbHardblockContainer.toggle(true);
@@ -4884,7 +4919,7 @@ class BlockUser extends BlockField {
 		let applicablePresetExists = false;
 		for (const option of DropdownUtil.getOptions(this.presetSelector)) {
 			const preset = /** @type {BlockPreset} */ (option.getData());
-			const isApplicable = preset.supportsTarget(targetType);
+			const isApplicable = preset.supportsTarget(target);
 			option.toggle(isApplicable);
 			if (isApplicable) {
 				applicablePresetExists = true;
@@ -4936,14 +4971,10 @@ class BlockUser extends BlockField {
 			return null;
 		}
 
-		const userType = data.target.getType();
-		if (userType === null) {
-			throw new Error('BlockTarget.getType() expectedly returned null');
-		}
-		if (userType === 'ip') {
+		data.target.requireType();
+		if (data.target.isAnon()) {
 			params.anononly = !this.cbHardblock.isSelected();
-		}
-		if (userType !== 'ip') {
+		} else {
 			params.autoblock = this.cbAutoblock.isSelected();
 		}
 
@@ -4986,7 +5017,7 @@ class BlockUser extends BlockField {
 			warnings.push('ajaxblock-confirm-block-hardblock');
 		}
 
-		while (AjaxBlockServices.getPermissionManager().canHideUser() && userType === 'named') {
+		while (AjaxBlockServices.getPermissionManager().canHideUser() && data.target.isRegistered()) {
 			params.hidename = this.cbHideUser.isSelected();
 			if (!params.hidename) {
 				break;
@@ -6019,10 +6050,10 @@ class ParamApplier {
 
 	/**
 	 * @param {URLSearchParams} params
-	 * @param {BlockTargetType} targetType
+	 * @param {BlockTarget} target
 	 * @returns {?ParamApplierBlockParams}
 	 */
-	static createBlockParamsFromSearchParams(params, targetType) {
+	static createBlockParamsFromSearchParams(params, target) {
 		const map = /** @type {Map<string, string>} */ (new Map());
 		for (const [key, value] of params.entries()) {
 			if (this.isBlockSearchParamSupported(key)) {
@@ -6057,11 +6088,11 @@ class ParamApplier {
 				(r = params.get('wpReason')) === 'other' ? '' : r,
 				params.get('wpReason-other')
 			].filter(Boolean).join(Messages.plain('colon-separator')),
-			hardblock: targetType === 'ip' && toPHPBool(params.get('wpHardBlock')),
+			hardblock: target.isAnon() && toPHPBool(params.get('wpHardBlock')),
 			nocreate: toPHPBool(params.get('wpCreateAccount')),
-			autoblock: targetType !== 'ip' && toPHPBool(params.get('wpAutoBlock')),
+			autoblock: target.isRegistered() && toPHPBool(params.get('wpAutoBlock')),
 			noemail: toPHPBool(params.get('wpDisableEmail')),
-			hidden: AjaxBlockServices.getPermissionManager().canHideUser() && toPHPBool(params.get('wpHideUser')),
+			hidden: target.isRegistered() && AjaxBlockServices.getPermissionManager().canHideUser() && toPHPBool(params.get('wpHideUser')),
 			nousertalk: toPHPBool(params.get('wpDisableUTEdit')),
 			partial: isPartial,
 			pagerestrictions: getRetrictionArray('wpPageRestrictions'),
@@ -6096,19 +6127,20 @@ class ParamApplier {
 
 	/**
 	 * @param {Omit<ApiResponseQueryListBlocks, 'id' | 'by' | 'timestamp'> & Partial<AjaxBlockLegacyConfigWatchOptions>} block
-	 * @param {NonNullable<BlockTargetType>} userType
+	 * @param {NonNullable<BlockTargetType>} targetType
 	 * @returns {ParamApplierBlockParams}
 	 */
-	static createBlockParamsFromApiResponse(block, userType) {
+	static createBlockParamsFromApiResponse(block, targetType) {
+		const isAnon = targetType === 'ip';
 		const restr = Array.isArray(block.restrictions) ? {} : block.restrictions;
 		return {
 			expiry: block.expiry,
 			reason: block.reason,
-			hardblock: userType === 'ip' && !block.anononly,
+			hardblock: isAnon && !block.anononly,
 			nocreate: block.nocreate,
-			autoblock: userType !== 'ip' && block.autoblock,
+			autoblock: !isAnon && block.autoblock,
 			noemail: block.noemail,
-			hidden: userType === 'named' && block.hidden,
+			hidden: !isAnon && block.hidden,
 			nousertalk: !block.allowusertalk,
 			partial: block.partial,
 			pagerestrictions: restr.pages ? restr.pages.map(obj => obj.title) : [],
@@ -6381,10 +6413,11 @@ class ParamApplier {
 		if (!targetType) {
 			return value;
 		}
+		const isAnon = targetType === 'ip';
 		switch (paramKey) {
-			case 'hardblock': return targetType === 'ip' && value;
-			case 'autoblock': return (targetType === 'named' || targetType === 'temp') && value;
-			case 'hidden': return targetType === 'named' && AjaxBlockServices.getPermissionManager().canHideUser() && value;
+			case 'hardblock': return isAnon && value;
+			case 'autoblock': return !isAnon && value;
+			case 'hidden': return !isAnon && AjaxBlockServices.getPermissionManager().canHideUser() && value;
 			default: throw new Error('Invalid param key: ' + paramKey);
 		}
 	}
@@ -6650,12 +6683,11 @@ class BlockPreset {
 	}
 
 	/**
-	 * @param {BlockTargetType} target
+	 * @param {BlockTarget} target
 	 * @returns {boolean}
 	 */
 	supportsTarget(target) {
-		// TODO: Add guard against null?
-		return this.targets.has(/** @type {any} */ (target));
+		return this.targets.has(target.getTypeThrow());
 	}
 
 	getParams() {
@@ -8801,7 +8833,8 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 	initFieldAccessibility(targets) {
 		const targetSet = new Set(targets);
 
-		this.cbAutoblock.setDisabled(!(targetSet.has('named') || targetSet.has('temp')));
+		const includesRegistered = targetSet.has('named') || targetSet.has('temp');
+		this.cbAutoblock.setDisabled(!includesRegistered);
 		if (this.cbAutoblock.isDisabled()) {
 			this.cbAutoblock.setSelected(false);
 		}
@@ -8811,7 +8844,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			this.cbHardblock.setSelected(false);
 		}
 
-		this.setHideUserLocked(!targetSet.has('named')).refreshHideUserAvailability();
+		this.setHideUserLocked(!includesRegistered).refreshHideUserAvailability();
 
 		return this;
 	}
