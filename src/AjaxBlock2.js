@@ -771,7 +771,14 @@ class AjaxBlock {
 			mw.notify(Messages.get('ajaxblock-notify-error-paramapplier-presetsnotready'), { type: 'error' });
 			return;
 		}
-		callback();
+
+		// Prevent unexpected dialog errors from failing silently
+		// eslint-disable-next-line no-useless-catch
+		try {
+			callback();
+		} catch (e) {
+			throw e;
+		}
 	}
 
 	/**
@@ -4459,7 +4466,7 @@ class BlockField extends WatchUserField {
 			if (customReasons.length) {
 				menu.addItems([
 					new OO.ui.MenuSectionOptionWidget({ label: groupLabel }),
-					...customReasons.map(r => new OO.ui.MenuOptionWidget({ label: r })),
+					...customReasons.map(r => new OO.ui.MenuOptionWidget({ label: r, data: r })),
 				], 1);
 			}
 		}
