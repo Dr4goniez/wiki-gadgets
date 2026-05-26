@@ -611,7 +611,7 @@ export interface BlockParamApplierHookOptions {
 	onAfterPromise?: () => void;
 	/**
 	 * If provided, translate target-dependent boolean values (e.g., coerce the
-	 * "hardblock" parameter to `fase` for non-IP targets).
+	 * "hardblock" parameter to `false` for non-IP targets).
 	 */
 	targetType?: NonNullable<BlockTargetType>;
 }

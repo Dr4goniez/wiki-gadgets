@@ -7544,11 +7544,22 @@ class AjaxBlockConfig {
 				this.overlay.toggle(false);
 			}
 		});
+
+		// Reset fields on config deletion
+		this.miscOptions.onConfigDeleted((domains) => {
+			if (domains.includes('local')) {
+				this.resetLocal();
+			}
+			if (domains.includes('global')) {
+				this.resetGlobal();
+			}
+		});
 	}
 
 	/**
 	 * @param {AjaxBlockConfigDomains} domain
 	 * @returns {AjaxBlockConfigBlockPresetOptions}
+	 * @private
 	 */
 	getPresetOptions(domain) {
 		return this.mainOptions[domain].presetOptions;
@@ -7557,6 +7568,7 @@ class AjaxBlockConfig {
 	/**
 	 * @param {AjaxBlockConfigDomains} domain
 	 * @returns {AjaxBlockConfigCustomReasonOptions}
+	 * @private
 	 */
 	getBlockReasonOptions(domain) {
 		return this.mainOptions[domain].blockReasonOptions;
@@ -7565,9 +7577,34 @@ class AjaxBlockConfig {
 	/**
 	 * @param {AjaxBlockConfigDomains} domain
 	 * @returns {AjaxBlockConfigCustomReasonOptions}
+	 * @private
 	 */
 	getUnblockReasonOptions(domain) {
 		return this.mainOptions[domain].unblockReasonOptions;
+	}
+
+	/**
+	 * @returns {void}
+	 * @private
+	 * @todo This should update data in {@link AjaxBlockConfigStore}.
+	 */
+	resetLocal() {
+		Object.values(this.mainOptions.local).forEach((options) => {
+			options.reset();
+		});
+	}
+
+	/**
+	 * @returns {void}
+	 * @private
+	 * @todo This should update data in {@link AjaxBlockConfigStore}.
+	 */
+	resetGlobal() {
+		Object.values(this.mainOptions.global).forEach((options) => {
+			options.reset();
+		});
+		this.languageOptions.reset();
+		this.warningOptions.reset();
 	}
 
 	/**
@@ -7628,6 +7665,10 @@ class AjaxBlockConfig {
 		return def.promise();
 	}
 
+	/**
+	 * @returns {Promise<void>}
+	 * @private
+	 */
 	async save() {
 		// Ensure there's no errors in preset fields
 		for (const domain of typedKeys(this.mainOptions)) {
@@ -8062,6 +8103,16 @@ class AjaxBlockConfigLanguageOptions {
 		return $.extend(true, {}, this.defaults);
 	}
 
+	/**
+	 * @returns {this}
+	 */
+	reset() {
+		const defaults = AjaxBlockConfigLanguageOptions.defaults;
+		this.ddUsedLanguages.setValue(defaults.used);
+		this.ddUsedLanguages.setValue(defaults.default);
+		return this;
+	}
+
 }
 /**
  * @type {AjaxBlockLanguages[]}
@@ -8087,10 +8138,13 @@ class AjaxBlockConfigWarningOptions {
 		 */
 		this.map = Object.create(null);
 		/**
+		 * Whether checkbox change handlers are temporarily suppressed while
+		 * resetting the controls to their default values.
+		 *
 		 * @type {boolean}
 		 * @private
 		 */
-		this.pauseEvents = false;
+		this.isResetting = false;
 		/**
 		 * @type {OO.ui.ButtonWidget}
 		 * @readonly
@@ -8182,7 +8236,7 @@ class AjaxBlockConfigWarningOptions {
 		for (const { cbOneClick, cbDialog } of Object.values(this.map)) {
 			for (const cb of [cbOneClick, cbDialog]) {
 				cb.on('change', () => {
-					if (this.pauseEvents) {
+					if (this.isResetting) {
 						return;
 					}
 					const differ = !$.isEmptyObject(this.build());
@@ -8193,20 +8247,7 @@ class AjaxBlockConfigWarningOptions {
 
 		// Reset settings to their default values when the reset button is clicked
 		this.resetButton.on('click', () => {
-			this.pauseEvents = true;
-
-			const defaults = AjaxBlockConfigWarningOptions.defaults.enabled;
-			for (const [key, { cbOneClick, cbDialog }] of typedEntries(this.map)) {
-				const def = defaults[key];
-				if (cbOneClick.isSelected() !== def.oneclick) {
-					cbOneClick.setSelected(def.oneclick);
-				}
-				if (cbDialog.isSelected() !== def.dialog) {
-					cbDialog.setSelected(def.dialog);
-				}
-			}
-
-			this.pauseEvents = false;
+			this.reset();
 			this.resetButton.setDisabled(true);
 		});
 	}
@@ -8299,6 +8340,28 @@ class AjaxBlockConfigWarningOptions {
 			}
 		}
 		return ret;
+	}
+
+	/**
+	 * @returns {this}
+	 */
+	reset() {
+		this.isResetting = true;
+
+		const defaults = AjaxBlockConfigWarningOptions.defaults.enabled;
+		for (const [key, { cbOneClick, cbDialog }] of typedEntries(this.map)) {
+			const cbMap = {
+				oneclick: cbOneClick,
+				dialog: cbDialog,
+			};
+			for (const [context, cb] of typedEntries(cbMap)) {
+				const enabled = AjaxBlockConfigWarningOptions.resolveEnabled(key, context, defaults[key][context]);
+				cb.setSelected(enabled);
+			}
+		}
+
+		this.isResetting = false;
+		return this;
 	}
 
 }
@@ -8431,7 +8494,7 @@ class AjaxBlockConfigDomainOptions {
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
-		 * @private
+		 * @protected
 		 */
 		this.cbOverrideGlobal = new OO.ui.CheckboxInputWidget({
 			selected: domain === 'local' && AjaxBlockServices.getConfig().overridesGlobal(optionType),
@@ -8676,6 +8739,30 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 		}
 
 		return { data, override: overrideGlobal };
+	}
+
+	/**
+	 * @returns {this}
+	 */
+	reset() {
+		for (const field of this.getFields()) {
+			const name = field.getPresetName();
+			if (BlockPreset.isDefaultName(name)) {
+				ParamApplier.applyBlockParams(
+					BlockPreset.default[name],
+					field,
+					{ hooks: { targetType: name }}
+				);
+			} else {
+				field.delete();
+			}
+		}
+
+		if (this.getDomain() === 'local') {
+			this.cbOverrideGlobal.setSelected(false);
+		}
+
+		return this;
 	}
 
 }
@@ -9097,8 +9184,10 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 		// which are incorrect while the widget is inside a hidden tab (`display: none`).
 		// Recalculate after the tab becomes visible.
 		const tabPanel = /** @type {OO.ui.TabPanelLayout} */ (indexLayout.getTabPanel(this.getDomain()));
-		tabPanel.once('active', () => {
-			requestAnimationFrame(() => this.input.adjustSize(true));
+		tabPanel.on('active', (activated) => {
+			if (activated) {
+				requestAnimationFrame(() => this.input.adjustSize(true));
+			}
 		});
 	}
 
@@ -9199,6 +9288,19 @@ class AjaxBlockConfigCustomReasonOptions extends AjaxBlockConfigDomainOptions {
 		}
 
 		return cfg;
+	}
+
+	/**
+	 * @returns {this}
+	 */
+	reset() {
+		this.input.setValue('');
+
+		if (this.getDomain() === 'local') {
+			this.cbOverrideGlobal.setSelected(false);
+		}
+
+		return this;
 	}
 
 }
@@ -9465,8 +9567,7 @@ class AjaxBlockConfigMisc {
 		const deleteFor = this.collect();
 		const saveOptions = DEBUG_MODE ? AjaxBlockConfig.testSaveOptions : AjaxBlockConfig.saveOptions;
 		const /** @type {ReturnType<typeof AjaxBlockConfig.saveOptions>[]} */ promises = [];
-		const /** @type {{ msgKey: keyof LoadedMessages; wikiID?: string; }[]} */ tasks = [];
-		const /** @type {AjaxBlockConfigDomains[]} */ deletionTypes = [];
+		const /** @type {{ msgKey: keyof LoadedMessages; wikiID?: string; domain?: AjaxBlockConfigDomains; }[]} */ tasks = [];
 
 		// Purge cache
 		if (deleteFor.purgeCache) {
@@ -9489,8 +9590,8 @@ class AjaxBlockConfigMisc {
 			tasks.push({
 				msgKey: 'ajaxblock-config-label-deletelocal',
 				wikiID: wgWikiID,
+				domain: 'local',
 			});
-			deletionTypes.push('local');
 		}
 
 		// Delete all other local configs
@@ -9513,8 +9614,10 @@ class AjaxBlockConfigMisc {
 		if (deleteFor.deleteGlobal) {
 			const change = AjaxBlockConfigStore.getOptionsForReset('global');
 			promises.push(saveOptions(change, 'globalpreferences'));
-			tasks.push({ msgKey: 'ajaxblock-config-label-deleteglobal' });
-			deletionTypes.push('global');
+			tasks.push({
+				msgKey: 'ajaxblock-config-label-deleteglobal',
+				domain: 'global',
+			});
 		}
 
 		// Process results
@@ -9523,9 +9626,10 @@ class AjaxBlockConfigMisc {
 		const $errorList = $('<ul>');
 		let /** @type {?JQuery<HTMLElement>} */ $errorListGlobalAll = null;
 		const /** @type {string[]} */ wikiIDsConfigDeleted = [];
+		const /** @type {AjaxBlockConfigDomains[]} */ affectedDomains = [];
 
 		results.forEach(($error, i) => {
-			const { msgKey, wikiID } = tasks[i];
+			const { msgKey, wikiID, domain } = tasks[i];
 
 			if (wikiID && msgKey === 'ajaxblock-config-label-deletelocalall') {
 				if (!$errorListGlobalAll) {
@@ -9551,8 +9655,13 @@ class AjaxBlockConfigMisc {
 
 			if ($error) {
 				errCount++;
-			} else if (wikiID) {
-				wikiIDsConfigDeleted.push(wikiID);
+			} else {
+				if (wikiID) {
+					wikiIDsConfigDeleted.push(wikiID);
+				}
+				if (domain) {
+					affectedDomains.push(domain);
+				}
 			}
 		});
 
@@ -9573,8 +9682,8 @@ class AjaxBlockConfigMisc {
 		}
 
 		// Process callbacks
-		if (deletionTypes.length) {
-			this.deleteConfigCallbacks.forEach((cb) => cb(deletionTypes));
+		if (affectedDomains.length) {
+			this.deleteConfigCallbacks.forEach((cb) => cb(affectedDomains));
 		}
 
 		this.updateCheckboxes();
