@@ -63,7 +63,7 @@ class AjaxBlock {
 		AjaxBlockServices.setService('config', config);
 		Messages.loadInternalMessages();
 		const configPageLoaded = AjaxBlockConfig.isConfigPage() && AjaxBlockConfig.preparePage();
-		AjaxBlockServices.setService('api', new mw.Api(this.apiOptions));
+		AjaxBlockServices.setService('api', new mw.Api(this.createApiOptions()));
 		await AjaxBlockConfig.migrateLegacy();
 
 		try {
@@ -173,7 +173,7 @@ class AjaxBlock {
 		});
 	}
 
-	static get apiOptions() {
+	static createApiOptions() {
 		return {
 			ajax: {
 				headers: {
@@ -9635,7 +9635,7 @@ class AjaxBlockConfigMisc {
 			delete wikiMap[wgWikiID];
 
 			for (const [wikiID, apiUrl] of Object.entries(wikiMap)) {
-				const foreignApi = new mw.ForeignApi(apiUrl, AjaxBlock.apiOptions);
+				const foreignApi = new mw.ForeignApi(apiUrl, AjaxBlock.createApiOptions());
 				const change = AjaxBlockConfigStore.getOptionsForReset('local');
 				promises.push(saveOptions(change, 'options', foreignApi));
 				tasks.push({
