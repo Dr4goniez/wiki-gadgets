@@ -4421,7 +4421,7 @@ class BlockField extends WatchUserField {
 	 * the current block settings would otherwise allow it.
 	 *
 	 * This is used on the config page, where the target type is unknown and the checkbox is kept
-	 * visible. In the dialog on the other hand, {@link BlockUser.initTarget} hides the checkbox
+	 * visible. In the dialog on the other hand, {@link BlockUser#initTarget} hides the checkbox
 	 * for non-registered targets, so this method is not needed there.
 	 *
 	 * @param {boolean} locked
@@ -8536,6 +8536,10 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 	constructor(domain, indexLayout) {
 		super(domain, 'presets');
 
+		const layout = new OO.ui.FieldsetLayout({
+			label: Messages.get('ajaxblock-config-label-presetreasons-layout'),
+		});
+
 		/**
 		 * @type {OO.ui.IndexLayout}
 		 * @readonly
@@ -8555,22 +8559,6 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 		this.fieldContainer = new OO.ui.Widget({
 			$element: $('<div>').addClass('ajaxblock-config-fields--constrained'),
 		});
-
-		for (const preset of AjaxBlockServices.getConfig().getPresets(domain).values()) {
-			const json = preset.toJSON();
-			this.addField({
-				presetName: json.name,
-				targets: json.targets,
-				params: json.params,
-				collapsed: true,
-				domain,
-			});
-		}
-
-		const layout = new OO.ui.FieldsetLayout({
-			label: Messages.get('ajaxblock-config-label-presetreasons-layout'),
-		});
-
 		/**
 		 * @type {JQuery<HTMLElement>}
 		 * @readonly
@@ -8597,22 +8585,38 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 			this.overrideGlobalLayout,
 		]);
 
-		this.registerEvents();
+		this.initialize();
 	}
 
 	/**
 	 * @private
 	 */
-	registerEvents() {
+	initialize() {
+		// Add default and saved presets
+		for (const preset of AjaxBlockServices.getConfig().getPresets(this.getDomain()).values()) {
+			const json = preset.toJSON();
+			this.addField({
+				presetName: json.name,
+				targets: json.targets,
+				params: json.params,
+				collapsed: true,
+			});
+		}
+
 		this.addButton.on('click', () => this.addField());
 	}
 
 	/**
-	 * @param {BlockPresetOptionsFieldOptions} [options]
+	 * @param {Omit<BlockPresetOptionsFieldOptions, 'domain' | 'validatePresetNames'>} [partialOptions]
 	 * @private
 	 */
-	addField(options = {}) {
-		options.validatePresetNames = this.validatePresetNames.bind(this);
+	addField(partialOptions) {
+		/** @type {BlockPresetOptionsFieldOptions} */
+		const options = Object.assign({
+			domain: this.getDomain(),
+			validatePresetNames: this.validatePresetNames.bind(this),
+		}, partialOptions);
+
 		const field = new AjaxBlockConfigBlockPresetOptionsField(options);
 		field.onPresetDelete(() => {
 			const index = this.fields.indexOf(field);
@@ -8780,6 +8784,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			presetName = '',
 			targets = typedKeys(BlockPreset.default),
 			validatePresetNames,
+			domain,
 		} = options;
 		const forcedBaseColor = { color: 'var(--color-base, #202122)' };
 
@@ -8790,6 +8795,16 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		 */
 		this.isDefault = BlockPreset.isDefaultName(presetName);
 		/**
+		 * Whether the "hide user" option should be shown. This is set to true if:
+		 * - The domain is global (the user may have the required right on a target project), or
+		 * - The domain is local and the user explicitly has the required right.
+		 *
+		 * @type {boolean}
+		 * @readonly
+		 * @private
+		 */
+		this.hideUserAvailable = domain === 'global' || AjaxBlockServices.getPermissionManager().canHideUser();
+		/**
 		 * @type {OO.ui.TextInputWidget}
 		 * @readonly
 		 * @private
@@ -8798,7 +8813,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			placeholder: Messages.get('ajaxblock-config-placeholder-presetreasons-name'),
 			value: presetName,
 			disabled: this.isDefault,
-			validate: this.isDefault || !validatePresetNames ? undefined: () => !validatePresetNames().includes(this),
+			validate: this.isDefault || !validatePresetNames ? undefined : () => !validatePresetNames().includes(this),
 		});
 		/**
 		 * @type {OO.ui.FieldLayout}
@@ -8892,22 +8907,26 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			})
 			: $.Deferred().resolve().promise();
 
-		this.registerEvents();
+		this.initialize();
 	}
 
 	/**
 	 * @private
 	 */
-	registerEvents() {
+	initialize() {
+		if (!this.hideUserAvailable) {
+			this.cbHideUserContainer.toggle(false);
+		}
+
 		this.presetNameInput.on('change', (value) => {
 			this.collapsibleFieldset.setPresetName(value);
 		});
 
 		this.targetSelector.on('change', (items) => {
 			const targets = items.map(item => /** @type {NonNullable<BlockTargetType>} */ (item.getData()));
-			this.initFieldAccessibility(targets);
+			this.updateFieldAccessibility(targets);
 		});
-		this.initFieldAccessibility(this.getTargets());
+		this.updateFieldAccessibility(this.getTargets());
 
 		this.deleteButton.on('click', () => this.delete());
 
@@ -8924,7 +8943,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 	 * @param {NonNullable<BlockTargetType>[]} targets
 	 * @returns {this}
 	 */
-	initFieldAccessibility(targets) {
+	updateFieldAccessibility(targets) {
 		const targetSet = new Set(targets);
 
 		const includesRegistered = targetSet.has('named') || targetSet.has('temp');
@@ -8938,7 +8957,9 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			this.cbHardblock.setSelected(false);
 		}
 
-		this.setHideUserLocked(!includesRegistered).refreshHideUserAvailability();
+		if (this.hideUserAvailable) {
+			this.setHideUserLocked(!includesRegistered).refreshHideUserAvailability();
+		}
 
 		return this;
 	}
@@ -8968,19 +8989,33 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		return value;
 	}
 
+	/**
+	 * Expands the fieldset and focuses the preset name input.
+	 */
 	focusPresetInput() {
 		this.collapsibleFieldset.setCollapsed(false);
 		requestAnimationFrame(() => this.presetNameInput.focus());
 	}
 
+	/**
+	 * @returns {boolean}
+	 */
 	isDefaultPreset() {
 		return this.isDefault;
 	}
 
+	/**
+	 * @returns {NonNullable<BlockTargetType>[]}
+	 */
 	getTargets() {
 		return /** @type {NonNullable<BlockTargetType>[]} */ (this.targetSelector.getValue());
 	}
 
+	/**
+	 * Triggers preset deletion callbacks.
+	 *
+	 * @returns {void}
+	 */
 	delete() {
 		this.onPresetDeleteCallbacks.forEach(cb => cb());
 	}
@@ -9008,7 +9043,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 				nocreate: this.cbCreateAccount.isSelected(),
 				autoblock: this.cbAutoblock.isSelected(),
 				noemail: this.cbSendEmail.isSelected(),
-				hidden: this.cbHideUser.isSelected(),
+				hidden: this.hideUserAvailable && this.cbHideUser.isSelected(),
 				nousertalk: this.cbUserTalk.isSelected(),
 				partial: this.cbPartialBlock.isSelected(),
 				pagerestrictions: this.getPageRestrictions(),
@@ -10167,12 +10202,12 @@ AjaxBlockLogo.svg =
  */
 /**
  * @typedef {object} BlockPresetOptionsFieldOptions
- * @prop {boolean} [collapsed]
- * @prop {string} [presetName]
- * @prop {NonNullable<BlockTargetType>[]} [targets]
- * @prop {AjaxBlockConfigBlockPresetOptions['validatePresetNames']} [validatePresetNames]
- * @prop {AjaxBlockConfigDomains} [domain]
- * @prop {ParamApplierBlockParams} [params]
+ * @prop {boolean} [collapsed] Whether the preset field should be initialized in a collapsed state (default: `false`)
+ * @prop {string} [presetName] The initial name of the preset.
+ * @prop {NonNullable<BlockTargetType>[]} [targets] The target user types for the preset.
+ * @prop {ParamApplierBlockParams} [params] The block parameters used to initialize the preset.
+ * @prop {AjaxBlockConfigBlockPresetOptions['validatePresetNames']} validatePresetNames A callback that validates preset names.
+ * @prop {AjaxBlockConfigDomains} domain The domain this preset field belongs to.
  */
 
 AjaxBlock.init();
