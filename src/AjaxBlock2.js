@@ -5847,7 +5847,7 @@ class BlockLog {
 
 		return $.when(
 			blockLookup.refreshDataByUsername(username),
-			this.getEntries(username)
+			this.getEntries(username, earliestTimestamp)
 		).then((blocks, logevents) => {
 			if (blocks === null) {
 				return null;
