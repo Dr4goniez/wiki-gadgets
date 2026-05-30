@@ -1,8 +1,9 @@
 /**********************************************************************\
 
 	AjaxBlock
-	Block/unblock users via a dialog without having to visit the
-	special page.
+
+	Allows blocking/unblocking users via a dialog without navigating
+	to the special page.
 
 	@author [[User:Dragoniez]]
 	@version 2.0.0
