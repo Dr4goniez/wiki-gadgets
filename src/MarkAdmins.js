@@ -18,7 +18,7 @@
  * - Does not suppport configurations via user common.js. Instead, it provides
  *   [[Special:MarkAdminsConfig]] for user configurations.
  * - User contribs links are also marked.
- * @version 2.0.3
+ * @version 2.0.4
  *
  * @requires [[MediaWiki:Gadget-MarkAdmins-data.json]]
  * @requires [[MediaWiki:Gadget-MarkAdmins-updater.js]]
@@ -38,7 +38,7 @@ if (
 	return;
 }
 
-const version = '2.0.3';
+const version = '2.0.4';
 const DEVMODE = false;
 const wgNamespaceNumber = mw.config.get('wgNamespaceNumber');
 const wgCanonicalSpecialPageName = mw.config.get('wgCanonicalSpecialPageName') || '';
@@ -1139,6 +1139,13 @@ MarkAdminsConfig.groupMap = new Map([
 		enabled: true,
 		localized: 'オンブズ委員',
 		link: 'https://meta.wikimedia.org/wiki/Ombuds_commission/ja',
+		domain: 'global'
+	}],
+	['u4c-member', {
+		label: 'U4C',
+		enabled: true,
+		localized: 'ユニバーサル行動規範調整委員会',
+		link: 'https://meta.wikimedia.org/wiki/Universal_Code_of_Conduct/Coordinating_Committee/ja',
 		domain: 'global'
 	}],
 	['staff', {
