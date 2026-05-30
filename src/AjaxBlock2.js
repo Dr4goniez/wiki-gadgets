@@ -1372,12 +1372,12 @@ AjaxBlock.linkRestorationTimeoutMap = new Map();
 /**
  * @typedef {object} Services
  * @prop {mw.Api} api
- * @prop {Record<BlockPageNames, readonly string[]>} blockPageAliases
- * @prop {readonly string[]} specialNamespaceAliases
  * @prop {readonly string[]} actionRestrictions
+ * @prop {Record<BlockPageNames, readonly string[]>} blockPageAliases
+ * @prop {AjaxBlockConfigStore} config
  * @prop {Record<AjaxBlockLanguages, string>} languageAutonyms
  * @prop {PermissionManager} permissionManager
- * @prop {AjaxBlockConfigStore} config
+ * @prop {readonly string[]} specialNamespaceAliases
  */
 /**
  * Virtual private storage for {@link AjaxBlockServices}.
@@ -1396,9 +1396,21 @@ const _storageKeys = {
 	actionRestrictions: 'AjaxBlock-actionRestrictions',
 	blockPageAliases: 'AjaxBlock-blockPageAliases',
 	enableMultiblocks: 'AjaxBlock-enableMultiblocks',
-	permissions: 'AjaxBlock-permissions',
 	languageAutonyms: 'AjaxBlock-languageAutonyms',
+	permissions: 'AjaxBlock-permissions',
 };
+/**
+ * @template T
+ * @typedef {T | false | null} NullableFalseable
+ */
+/**
+ * @typedef {object} CashedServiceData
+ * @prop {NullableFalseable<Services['actionRestrictions']>} actionRestrictions
+ * @prop {NullableFalseable<Services['blockPageAliases']>} blockPageAliases
+ * @prop {NullableFalseable<'1' | '0'>} enableMultiblocks
+ * @prop {NullableFalseable<Services['languageAutonyms']>} languageAutonyms
+ * @prop {NullableFalseable<{ rights: readonly string[]; localBlockingGroups: readonly string[]; }>} permissions
+ */
 
 class AjaxBlockServices {
 
@@ -1448,7 +1460,15 @@ class AjaxBlockServices {
 		}
 		this.setService('specialNamespaceAliases', specialNamespaceAliases);
 
+		// Cached action restrictions
+		/** @type {CashedServiceData['actionRestrictions']} */
+		const cachedRestrictions = mw.storage.getObject(_storageKeys.actionRestrictions);
+		if (isStringArray(cachedRestrictions)) {
+			this.setService('actionRestrictions', cachedRestrictions);
+		}
+
 		// Cached block page aliases
+		/** @type {CashedServiceData['blockPageAliases']} */
 		const cachedAliases = mw.storage.getObject(_storageKeys.blockPageAliases);
 		if (
 			cachedAliases &&
@@ -1456,25 +1476,13 @@ class AjaxBlockServices {
 			Array.isArray(cachedAliases.Unblock)
 		) {
 			this.setService('blockPageAliases', cachedAliases);
-		}
-
-		// Cached user rights
-		const cachedPermissions = mw.storage.getObject(_storageKeys.permissions);
-		if ($.isPlainObject(cachedPermissions) && isStringArray(cachedPermissions.rights) && isStringArray(cachedPermissions.localBlockingGroups)) {
-			this.setService(
-				'permissionManager',
-				new PermissionManager(new Set(cachedPermissions.rights), new Set(cachedPermissions.localBlockingGroups))
-			);
-		}
-
-		// Cached action restrictions
-		const cachedRestrictions = mw.storage.getObject(_storageKeys.actionRestrictions);
-		if (isStringArray(cachedRestrictions)) {
-			this.setService('actionRestrictions', cachedRestrictions);
+			this.getBlockPageAliases();
 		}
 
 		// Cached multiblocks configuration
 		let mbEnabledKnown = false;
+		/** @type {CashedServiceData['enableMultiblocks']} */
+		// @ts-expect-error
 		const cachedMbEnabled = mw.storage.get(_storageKeys.enableMultiblocks);
 		if (typeof cachedMbEnabled === 'string') {
 			wgEnableMultiBlocks = cachedMbEnabled === '1';
@@ -1482,9 +1490,20 @@ class AjaxBlockServices {
 		}
 
 		// Cached language information
+		/** @type {CashedServiceData['languageAutonyms']} */
 		const cachedAutonyms = mw.storage.getObject(_storageKeys.languageAutonyms);
-		if ($.isPlainObject(cachedAutonyms) && AjaxBlockConfigLanguageOptions.supported.every(code => typeof cachedAutonyms[code] === 'string')) {
+		if (isObject(cachedAutonyms) && AjaxBlockConfigLanguageOptions.supported.every(code => typeof cachedAutonyms[code] === 'string')) {
 			this.setService('languageAutonyms', cachedAutonyms);
+		}
+
+		// Cached user permissions
+		/** @type {CashedServiceData['permissions']} */
+		const cachedPermissions = mw.storage.getObject(_storageKeys.permissions);
+		if (isObject(cachedPermissions) && isStringArray(cachedPermissions.rights) && isStringArray(cachedPermissions.localBlockingGroups)) {
+			this.setService(
+				'permissionManager',
+				new PermissionManager(new Set(cachedPermissions.rights), new Set(cachedPermissions.localBlockingGroups))
+			);
 		}
 
 		const /** @type {JQuery.Promise<void>[]} */ requests = [];
@@ -1652,6 +1671,10 @@ class AjaxBlockServices {
 		return _storageKeys;
 	}
 
+	static getActionRestrictions() {
+		return this.getService('actionRestrictions');
+	}
+
 	static getApi() {
 		return this.getService('api');
 	}
@@ -1660,12 +1683,8 @@ class AjaxBlockServices {
 		return this.getService('blockPageAliases');
 	}
 
-	static getSpecialNamespaceAliases() {
-		return this.getService('specialNamespaceAliases');
-	}
-
-	static getActionRestrictions() {
-		return this.getService('actionRestrictions');
+	static getConfig() {
+		return this.getService('config');
 	}
 
 	static getLanguageAutonyms() {
@@ -1676,8 +1695,8 @@ class AjaxBlockServices {
 		return this.getService('permissionManager');
 	}
 
-	static getConfig() {
-		return this.getService('config');
+	static getSpecialNamespaceAliases() {
+		return this.getService('specialNamespaceAliases');
 	}
 
 }
@@ -10190,7 +10209,7 @@ function isObject(value) {
 }
 
 /**
- * @param {unknown[]} value
+ * @param {unknown} value
  * @returns {value is string[]}
  */
 function isStringArray(value) {
@@ -10198,7 +10217,7 @@ function isStringArray(value) {
 }
 
 /**
- * @param {unknown[]} value
+ * @param {unknown} value
  * @returns {value is number[]}
  */
 function isNumberArray(value) {
