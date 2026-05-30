@@ -1376,6 +1376,7 @@ AjaxBlock.linkRestorationTimeoutMap = new Map();
  * @prop {Record<BlockPageNames, readonly string[]>} blockPageAliases
  * @prop {AjaxBlockConfigStore} config
  * @prop {Record<AjaxBlockLanguages, string>} languageAutonyms
+ * @prop {Record<'vip' | 'lta', readonly string[]>} ltaNames
  * @prop {PermissionManager} permissionManager
  * @prop {readonly string[]} specialNamespaceAliases
  */
@@ -1397,6 +1398,7 @@ const _storageKeys = {
 	blockPageAliases: 'AjaxBlock-blockPageAliases',
 	enableMultiblocks: 'AjaxBlock-enableMultiblocks',
 	languageAutonyms: 'AjaxBlock-languageAutonyms',
+	ltaNames: 'AjaxBlock-ltaNames',
 	permissions: 'AjaxBlock-permissions',
 };
 /**
@@ -1409,6 +1411,7 @@ const _storageKeys = {
  * @prop {NullableFalseable<Services['blockPageAliases']>} blockPageAliases
  * @prop {NullableFalseable<'1' | '0'>} enableMultiblocks
  * @prop {NullableFalseable<Services['languageAutonyms']>} languageAutonyms
+ * @prop {NullableFalseable<Services['ltaNames']>} ltaNames
  * @prop {NullableFalseable<{ rights: readonly string[]; localBlockingGroups: readonly string[]; }>} permissions
  */
 
@@ -1494,6 +1497,14 @@ class AjaxBlockServices {
 		const cachedAutonyms = mw.storage.getObject(_storageKeys.languageAutonyms);
 		if (isObject(cachedAutonyms) && AjaxBlockConfigLanguageOptions.supported.every(code => typeof cachedAutonyms[code] === 'string')) {
 			this.setService('languageAutonyms', cachedAutonyms);
+		}
+
+		// Cached LTA names (for jawiki)
+		const isJawiki = wgWikiID === 'jawiki';
+		/** @type {CashedServiceData['ltaNames']} */
+		const cachedLtaNames = isJawiki && mw.storage.getObject(_storageKeys.ltaNames);
+		if (isObject(cachedLtaNames) && isStringArray(cachedLtaNames.vip) && isStringArray(cachedLtaNames.lta)) {
+			this.setService('ltaNames', cachedLtaNames);
 		}
 
 		// Cached user permissions
@@ -1659,12 +1670,110 @@ class AjaxBlockServices {
 			);
 		}
 
+		// On jawiki, fetch LTA names if needed
+		if (isJawiki && !this.hasService('ltaNames')) {
+			requests.push(
+				AjaxBlockServices.fetchLTANames().then((ltaNames) => {
+					mw.storage.setObject(_storageKeys.ltaNames, ltaNames, daysInSeconds(3));
+					this.setService('ltaNames', ltaNames);
+				})
+			);
+		}
+
 		// Everything cached
 		if (!requests.length) {
 			return $.Deferred().resolve().promise();
 		}
 
 		return $.when(...requests).then(() => {});
+	}
+
+	/**
+	 * @returns {JQuery.Promise<Exclude<CashedServiceData['ltaNames'], false | null>>}
+	 * @private
+	 */
+	static fetchLTANames() {
+		const api = AjaxBlockServices.getApi();
+
+		/**
+		 * @type {JQuery.Promise<readonly string[]>}
+		 */
+		const vipNamesPromise = api.get({
+			action: 'parse',
+			page: 'Wikipedia:進行中の荒らし行為',
+			prop: 'tocdata',
+		}).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+			const tocdata = res && res.parse && res.parse.tocdata;
+			if (!tocdata || !Array.isArray(tocdata.sections)) {
+				return failAsEmptyResult(res, jqXHR);
+			}
+
+			// Sections that are irrelevant to VIP names
+			const irrelevantSections = new Set([
+				'記述について',
+				'急を要する二段階',
+				'配列',
+				'ブロック等の手段',
+				'このページに利用者名を加える',
+				'注意と選択',
+				'警告の方法',
+				'未登録（匿名・IP）ユーザーの場合',
+				'登録済み（ログイン）ユーザーの場合',
+				'警告中',
+				'関連項目'
+			]);
+
+			const /** @type {Set<string>} */ names = new Set();
+
+			for (const { line, hLevel } of tocdata.sections) {
+				if (hLevel !== 3 || irrelevantSections.has(line)) {
+					continue;
+				}
+				names.add(line);
+			}
+
+			return Array.from(names);
+		});
+
+		/**
+		 * @type {JQuery.Promise<readonly string[]>}
+		 */
+		const ltaNamesPromise = api.get({
+			list: 'allpages',
+			apprefix: 'LTA:',
+			apnamespace: '0',
+			apfilterredir: 'redirects',
+			aplimit: 'max',
+		}).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
+			const allpages = res && res.query && res.query.allpages;
+			if (!Array.isArray(allpages)) {
+				return failAsEmptyResult(res, jqXHR);
+			}
+
+			const abandonedShortcuts = new Set([
+				'SANNET',
+				'HEXAGON',
+				'MOPERA',
+				'AU ONE NET',
+				'ASPE',
+				'Asperger',
+			]);
+
+			const /** @type {Set<string>} */ names = new Set();
+
+			for (const { title } of allpages) {
+				const normalized = title.replace(/^LTA:([^/]*).*$/, '$1');
+				if (normalized && !abandonedShortcuts.has(normalized)) {
+					names.add(normalized);
+				}
+			}
+
+			return Array.from(names);
+		});
+
+		return $.when(vipNamesPromise, ltaNamesPromise).then((vipNames, ltaNames) => {
+			return { vip: vipNames, lta: ltaNames };
+		});
 	}
 
 	static getStorageKeys() {
@@ -1689,6 +1798,10 @@ class AjaxBlockServices {
 
 	static getLanguageAutonyms() {
 		return this.getService('languageAutonyms');
+	}
+
+	static getLTANames() {
+		return wgWikiID !== 'jawiki' ? null : this.getService('ltaNames');
 	}
 
 	static getPermissionManager() {
@@ -4272,12 +4385,15 @@ class BlockField extends WatchUserField {
 		 */
 		this.usingIndefDropdowns = supportsIndefReasonDropdown ? true : null;
 		/**
-		 * @type {OO.ui.TextInputWidget}
+		 * @type {OO.ui.ComboBoxInputWidget}
 		 * @readonly
 		 * @private
 		 */
-		this.reasonCustom = new OO.ui.TextInputWidget({
+		this.reasonCustom = new OO.ui.ComboBoxInputWidget({
 			placeholder: Messages.get('block-reason-other'),
+			menu: {
+				filterFromInput: true,
+			},
 		});
 		/**
 		 * @type {?OO.ui.ComboBoxInputWidget}
@@ -4503,6 +4619,38 @@ class BlockField extends WatchUserField {
 			this.reasonSecondaryLayout.toggle(false);
 			this.reasonSecondaryIndefLayout.toggle(true);
 			DropdownUtil.selectOther(this.reasonSecondaryIndef);
+		}
+
+		// On jawiki, add autocomplete data to the custom reason combobox
+		const ltaNames = AjaxBlockServices.getLTANames();
+		if (ltaNames) {
+			/**
+			 * @param {string} label
+			 * @param {'vip' | 'lta'} type
+			 * @returns {string}
+			 */
+			const getDataFromLabel = (label, type) => {
+				return type === 'lta' ? `[[LTA:${label}]]` : `[[WP:VIP#${label}]]`;
+			};
+
+			const /** @type {OO.ui.MenuOptionWidget[]} */ options = [];
+
+			for (const [type, names] of typedEntries(ltaNames)) {
+				options.push(
+					new OO.ui.MenuSectionOptionWidget({ label: type.toUpperCase() })
+				);
+
+				for (const name of names) {
+					options.push(
+						new OO.ui.MenuOptionWidget({
+							label: name,
+							data: getDataFromLabel(name, type),
+						})
+					);
+				}
+			}
+
+			this.reasonCustom.getMenu().addItems(options);
 		}
 
 		// Hide the partial block option layout on load, as cbPartialBlock is deselected

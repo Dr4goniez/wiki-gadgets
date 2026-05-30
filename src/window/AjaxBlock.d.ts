@@ -14,6 +14,7 @@ export type BlockActions = 'block' | 'unblock';
 export interface ApiResponse {
 	block?: ApiResponseBlock;
 	paraminfo?: ApiResponseParaminfo;
+	parse?: ApiResponseParse;
 	query?: ApiResponseQuery;
 	unblock?: ApiResponseUnblock;
 }
@@ -89,6 +90,7 @@ interface ApiResponseParaminfoModulesParameters extends
 
 interface ApiResponseQuery {
 	allmessages?: ApiResponseQueryMetaAllmessages[];
+	allpages?: ApiResponseQueryListAllpages[];
 	blocks?: ApiResponseQueryListBlocks[];
 	interwiki?: ApiResponseQueryInterwikiTitles[];
 	languageinfo?: {
@@ -99,6 +101,12 @@ interface ApiResponseQuery {
 	usergroups?: ApiResponseQueryMetaSiteinfoUsergroups[];
 	userinfo?: ApiResponseQueryMetaUserinfoRights;
 	pages?: ApiResponseQueryPages[];
+}
+
+interface ApiResponseQueryListAllpages {
+	pageid: number;
+	ns: number;
+	title: string;
 }
 
 /**
@@ -202,6 +210,36 @@ export interface ApiResponseBlock {
 	pagerestrictions: string[] | null;
 	namespacerestrictions: number[] | null;
 	actionrestrictions: string[] | null;
+}
+
+/**
+ * `page=<PAGE>&prop=tocdata`
+ */
+interface ApiResponseParse {
+	title: string;
+	pageid: number;
+	textdeleted?: true;
+	textsuppressed?: true;
+	tocdata: ApiResponseParseTocdata;
+	showtoc: boolean;
+}
+
+interface ApiResponseParseTocdata {
+	sections: ApiResponseParseTocdataSections[];
+	extensionData: unknown[];
+}
+
+interface ApiResponseParseTocdataSections {
+	tocLevel: number;
+	hLevel: number;
+	line: string;
+	number: string;
+	index: string;
+	fromTitle?: string; // Fixed value when `page=` param is used
+	codepointOffset?: number;
+	anchor: string;
+	linkAnchor?: string;
+	extensionData?: unknown[];
 }
 
 export interface ApiResponseUnblock {
