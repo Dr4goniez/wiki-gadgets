@@ -9014,7 +9014,7 @@ class AjaxBlockConfigBlockPresetOptions extends AjaxBlockConfigDomainOptions {
 				invisibleLabel: true,
 			}),
 			new OO.ui.FieldLayout(this.addButton, {
-				$element: $('<div>').css({ marginTop: 0 }),
+				$element: $('<div>').css({ 'margin-top': 0 }),
 			}),
 			this.overrideGlobalLayout,
 		]);
@@ -9311,7 +9311,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 
 		this.optionsFieldset.addItems([
 			new OO.ui.FieldLayout(this.deleteButton, {
-				$element: $('<div>').css({ marginTop: '0.8em' }),
+				$element: $('<div>').css({ 'margin-top': '0.8em' }),
 			}),
 		]);
 
@@ -9508,7 +9508,7 @@ class CollapsibleFieldset {
 		 * @type {JQuery<HTMLElement>}
 		 * @readonly
 		 */
-		this.$content = $('<div>').addClass('mw-collapsible-content').css({ marginTop: '0.5em' });
+		this.$content = $('<div>').addClass('mw-collapsible-content').css({ 'margin-top': '0.5em' });
 		/**
 		 * @type {JQuery<HTMLElement>}
 		 * @readonly
@@ -9556,7 +9556,7 @@ class CollapsibleFieldset {
 				this.fieldset.setIcon(this.fieldset.$element.hasClass('mw-collapsed') ? 'collapse' : 'expand');
 			});
 		this.$legend.children('.oo-ui-labelElement-label')
-			.css({ marginBottom: 0 });
+			.css({ 'margin-bottom': 0 });
 
 		this.fieldset.$element.makeCollapsible();
 	}
@@ -9851,7 +9851,9 @@ class AjaxBlockConfigMisc {
 					help: new OO.ui.HtmlSnippet('<span id="ajaxblock-config-help-deleteglobal"></span>'),
 					helpInline: true
 				}),
-				new OO.ui.FieldLayout(this.deleteButton),
+				new OO.ui.FieldLayout(this.deleteButton, {
+					$element: $('<div>').css({ 'margin-top': '0.8em' }),
+				}),
 			],
 		});
 		/**
