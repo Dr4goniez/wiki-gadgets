@@ -3208,7 +3208,7 @@ Messages.i18n = {
 		'ajaxblock-config-label-deletelocal': 'Delete local config',
 		'ajaxblock-config-help-deletelocal-absent': 'You do not have any local settings configured.',
 		'ajaxblock-config-label-deletelocalall': 'Delete local config on all other projects',
-		'ajaxblock-config-help-deletelocalall-present': 'To perform this action, you need to be logged in on $1.',
+		'ajaxblock-config-help-deletelocalall-present': 'Projects with saved local configuration: $1',
 		'ajaxblock-config-help-deletelocalall-absent': 'You do not have any local settings configured on other projects.',
 		'ajaxblock-config-label-deleteglobal': 'Delete global config',
 		'ajaxblock-config-help-deleteglobal-absent': 'You do not have any global settings configured.',
@@ -3334,7 +3334,7 @@ Messages.i18n = {
 		'ajaxblock-config-label-deletelocal': 'ローカル設定を削除',
 		'ajaxblock-config-help-deletelocal-absent': 'ローカル設定は保存されていません。',
 		'ajaxblock-config-label-deletelocalall': '他のすべてのプロジェクトのローカル設定を削除',
-		'ajaxblock-config-help-deletelocalall-present': 'この操作を行うには、$1でログインしている必要があります。',
+		'ajaxblock-config-help-deletelocalall-present': 'ローカル設定が保存されているプロジェクト: $1',
 		'ajaxblock-config-help-deletelocalall-absent': 'ローカル設定が保存されている他プロジェクトはありません。',
 		'ajaxblock-config-label-deleteglobal': 'グローバル設定を削除',
 		'ajaxblock-config-help-deleteglobal-absent': 'グローバル設定は保存されていません。',
@@ -9942,6 +9942,11 @@ class AjaxBlockConfigMisc {
 	 * @private
 	 */
 	getHelpElement(target) {
+		// IDs used here:
+		// - ajaxblock-config-help-deleteglobal
+		// - ajaxblock-config-help-deletelocal
+		// - ajaxblock-config-help-deletelocalall
+		// - ajaxblock-config-help-deletelocalall-list
 		const id = 'ajaxblock-config-help-' + target;
 		const el = document.getElementById(id);
 		if (!el) {
