@@ -1393,11 +1393,11 @@ AjaxBlock.linkRestorationTimeoutMap = new Map();
  */
 const _services = Object.create(null);
 const _storageKeys = {
-	blockPageAliases: 'mw-AjaxBlock-blockPageAliases',
-	userRights: 'mw-AjaxBlock-userRights',
-	enableMultiblocks: 'mw-AjaxBlock-enableMultiblocks',
-	actionRestrictions: 'mw-AjaxBlock-actionRestrictions',
-	languageAutonyms: 'mw-AjaxBlock-languageAutonyms',
+	actionRestrictions: 'AjaxBlock-actionRestrictions',
+	blockPageAliases: 'AjaxBlock-blockPageAliases',
+	enableMultiblocks: 'AjaxBlock-enableMultiblocks',
+	permissions: 'AjaxBlock-permissions',
+	languageAutonyms: 'AjaxBlock-languageAutonyms',
 };
 
 class AjaxBlockServices {
@@ -1459,9 +1459,12 @@ class AjaxBlockServices {
 		}
 
 		// Cached user rights
-		const cachedRights = mw.storage.getObject(_storageKeys.userRights);
-		if (isStringArray(cachedRights)) {
-			this.setService('permissionManager', new PermissionManager(new Set(cachedRights)));
+		const cachedPermissions = mw.storage.getObject(_storageKeys.permissions);
+		if ($.isPlainObject(cachedPermissions) && isStringArray(cachedPermissions.rights) && isStringArray(cachedPermissions.localBlockingGroups)) {
+			this.setService(
+				'permissionManager',
+				new PermissionManager(new Set(cachedPermissions.rights), new Set(cachedPermissions.localBlockingGroups))
+			);
 		}
 
 		// Cached action restrictions
@@ -1496,13 +1499,14 @@ class AjaxBlockServices {
 		) {
 			const params = Object.create(null);
 			params.meta = [];
+			const /** @type {string[]} */ siprop = [];
 
 			if (!this.hasService('blockPageAliases')) {
-				params.meta.push('siteinfo');
-				params.siprop = 'specialpagealiases';
+				siprop.push('specialpagealiases');
 			}
 
 			if (!this.hasService('permissionManager')) {
+				siprop.push('usergroups');
 				params.meta.push('userinfo');
 				params.uiprop = 'rights';
 			}
@@ -1513,12 +1517,17 @@ class AjaxBlockServices {
 				params.licode = AjaxBlockConfigLanguageOptions.supported.join('|');
 			}
 
+			if (siprop.length) {
+				params.meta.push('siteinfo');
+				params.siprop = siprop.join('|');
+			}
+
 			requests.push(
 				api.get(params).then(/** @param {ApiResponse} res */ (res, jqXHR) => {
 					if (!res || !res.query) {
 						return failAsEmptyResult(res, jqXHR);
 					}
-					const { specialpagealiases, userinfo, languageinfo } = res.query;
+					const { specialpagealiases, usergroups, userinfo, languageinfo } = res.query;
 
 					// Block aliases
 					if (Array.isArray(specialpagealiases)) {
@@ -1540,11 +1549,26 @@ class AjaxBlockServices {
 						}
 					}
 
-					// User rights
-					const rights = userinfo && userinfo.rights;
-					if (Array.isArray(rights)) {
-						mw.storage.setObject(_storageKeys.userRights, rights, daysInSeconds(1));
-						this.setService('permissionManager', new PermissionManager(new Set(rights)));
+					// User groups and rights
+					const userRights = userinfo && userinfo.rights;
+					if (Array.isArray(usergroups) && Array.isArray(userRights)) {
+						const /** @type {string[]} */ localBlockingGroups = [];
+
+						for (const { name, rights } of usergroups) {
+							if (rights.includes('block')) {
+								localBlockingGroups.push(name);
+							}
+						}
+
+						mw.storage.setObject(
+							_storageKeys.permissions,
+							{ rights: userRights, localBlockingGroups },
+							daysInSeconds(3)
+						);
+						this.setService(
+							'permissionManager',
+							new PermissionManager(new Set(userRights), new Set(localBlockingGroups))
+						);
 					}
 
 					if (languageinfo) {
@@ -1796,20 +1820,43 @@ BlockLinkUtil.messageCache = {
 class PermissionManager {
 
 	/**
-	 * @param {Set<string>} permissions
+	 * @param {Set<string>} permissions A list of permissions the user has.
+	 * @param {Set<string>} localBlockingGroups Local user groups with the `block` right.
 	 */
-	constructor(permissions) {
+	constructor(permissions, localBlockingGroups) {
+		const wgUserGroups = mw.config.get('wgUserGroups') || [];
+		const wgGlobalGroups = /** @type {?string[]} */ (mw.config.get('wgGlobalGroups')) || [];
+
 		if (DEBUG_MODE) {
 			permissions.add('block');
 			permissions.add('hideuser');
 		}
+		// wgUserGroups.length = 0;
+		// if (!wgGlobalGroups.includes('global-sysop')) {
+		// 	wgGlobalGroups.push('global-sysop');
+		// }
+
+		const globalBlockingGroups = new Set(Object.keys(DropdownUtil.globalActionGroupMap));
 
 		/**
+		 * A list of permissions the user has.
+		 *
 		 * @type {Set<string>}
 		 * @readonly
 		 * @private
 		 */
 		this.permissions = permissions;
+		/**
+		 * Local and global user groups that the user belongs to and that grant the `block` right.
+		 *
+		 * @type {Record<AjaxBlockConfigDomains, Set<string>>}
+		 * @readonly
+		 * @private
+		 */
+		this.relevantBlockingGroups = {
+			local: new Set(wgUserGroups.filter(group => localBlockingGroups.has(group))),
+			global: new Set(wgGlobalGroups.filter(group => globalBlockingGroups.has(group))),
+		};
 	}
 
 	/**
@@ -1820,14 +1867,46 @@ class PermissionManager {
 		return this.permissions.has(permission);
 	}
 
-	canBlock() {
-		return this.isAllowed('block');
+	/**
+	 * @param {AjaxBlockConfigDomains} [domain]
+	 * @returns {boolean}
+	 */
+	canBlock(domain) {
+		if (!this.isAllowed('block')) {
+			return false;
+		}
+
+		if (!domain) {
+			return (
+				this.relevantBlockingGroups.local.size > 0 ||
+				this.relevantBlockingGroups.global.size > 0
+			);
+		}
+
+		return this.relevantBlockingGroups[domain].size > 0;
 	}
 
+	/**
+	 * Gets user groups in the specified domain that grant the `block` right
+	 * and that the user belongs to.
+	 *
+	 * @param {AjaxBlockConfigDomains} domain
+	 * @returns {Set<string>}
+	 */
+	getRelevantBlockingGroups(domain) {
+		return this.relevantBlockingGroups[domain];
+	}
+
+	/**
+	 * @returns {boolean}
+	 */
 	canHideUser() {
 		return this.isAllowed('hideuser');
 	}
 
+	/**
+	 * @returns {500 | 50}
+	 */
 	getApiLimit() {
 		return this.isAllowed('apihighlimits') ? 500 : 50;
 	}
@@ -2859,6 +2938,23 @@ class Messages {
 		return text;
 	}
 
+	/**
+	 * Replaces wikilinks with their display text.
+	 *
+	 * Examples:
+	 * - [[Page]] -> Page
+	 * - [[Page|Text]] -> Text
+	 *
+	 * @param {string} str
+	 * @returns {string}
+	 */
+	static stripWikilinks(str) {
+		return str.replace(
+			/\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g,
+			(_match, page, displayText) => displayText || page.replace(/^:\s*/, '')
+		);
+	}
+
 }
 /**
  * @type {Record<AjaxBlockLanguages, AjaxBlockMessages>}
@@ -2874,6 +2970,7 @@ Messages.i18n = {
 		'ajaxblock-notify-block-placeholder-preset': 'Loaded preset "$1"',
 		'ajaxblock-dialog-block-label-reason1': 'Reason 1',
 		'ajaxblock-dialog-block-label-reason2': 'Reason 2',
+		'ajaxblock-dialog-block-placeholder-reasonsuffix': 'Reason suffix',
 		'ajaxblock-dialog-block-label-customreasons': 'Custom block reasons',
 		'ajaxblock-dialog-block-label-partial': 'Partial block',
 		'ajaxblock-dialog-block-label-option-autoblock': 'Apply autoblock',
@@ -2999,6 +3096,7 @@ Messages.i18n = {
 		'ajaxblock-notify-block-placeholder-preset': 'プリセット「$1」を読み込みました。',
 		'ajaxblock-dialog-block-label-reason1': '理由1',
 		'ajaxblock-dialog-block-label-reason2': '理由2',
+		'ajaxblock-dialog-block-placeholder-reasonsuffix': '理由接尾辞',
 		'ajaxblock-dialog-block-label-customreasons': 'カスタムブロック理由',
 		'ajaxblock-dialog-block-label-partial': '部分ブロック',
 		'ajaxblock-dialog-block-label-option-autoblock': '自動ブロックを適用',
@@ -3118,7 +3216,7 @@ Messages.i18n = {
 /**
  * Key for `mw.storage` to cache some messages.
  */
-Messages.storageKey = 'mw-AjaxBlock-messages';
+Messages.storageKey = 'AjaxBlock-messages';
 /**
  * @type {CachedMessage}
  */
@@ -3277,7 +3375,55 @@ class DropdownUtil {
 		return (start !== null && end !== null) ? options.slice(start, end) : null;
 	}
 
+	/**
+	 * Creates ComboBox options for global action suffixes such as "(global sysop action)".
+	 *
+	 * @param {Set<string>} relevantGroups
+	 * @returns {OO.ui.ComboBoxInputWidget.Option[]}
+	 */
+	static createGlobalGroupSuffixOptions(relevantGroups) {
+		/** @type {OO.ui.ComboBoxInputWidget.Option[]} */
+		const options = [];
+
+		for (const [group, { page }] of Object.entries(DropdownUtil.globalActionGroupMap)) {
+			if (!relevantGroups.has(group)) {
+				continue;
+			}
+
+			const label = group.replace(/-/g, ' ');
+			const link = `[[m:${page}|${label}]]`;
+			options.push({
+				data: `(${link} action)`,
+			});
+		}
+
+		return options;
+	}
+
 }
+/**
+ * Metadata for global action groups used in block reason suffixes.
+ *
+ * @type {Record<string, { page: string; regex: RegExp }>}
+ */
+DropdownUtil.globalActionGroupMap = {
+	'global-sysop': {
+		page: 'GS',
+		regex: /[gG]lobal[- ][sS]ysop [aA]ction/,
+	},
+	staff: {
+		page: 'Staff_group',
+		regex: /[sS]taff [aA]ction/,
+	},
+	steward: {
+		page: 'S',
+		regex: /[sS]tewards? [aA]ction/,
+	},
+	sysadmin: {
+		page: 'SA',
+		regex: /[sS]ys(?:tems?)?\s?[aA]dmin(?:istrator)?s? [aA]ction/,
+	},
+};
 
 function AjaxBlockDialogFactory() {
 	/**
@@ -3977,13 +4123,25 @@ class BlockField extends WatchUserField {
 	/**
 	 * @param {object} [options]
 	 * @param {OnResize} [options.onResize]
-	 * @param {boolean} [options.omitMainLabel]
+	 * @param {boolean} [options.omitMainLabel] Default: `false`
+	 * @param {boolean} [options.enableReasonSuffix] Default: `false`
 	 */
 	constructor(options = {}) {
-		const { onResize = () => {}, omitMainLabel = false } = options;
+		const { onResize = () => {}, omitMainLabel = false, enableReasonSuffix = false } = options;
 		super(onResize);
 
 		const supportsIndefReasonDropdown = Messages.supportsIndefReasonDropdown();
+		const permissionManager = AjaxBlockServices.getPermissionManager();
+
+		/** @type {OO.ui.ComboBoxInputWidget.Option[]} */
+		let reasonSuffixOptions = [];
+		if (
+			enableReasonSuffix &&
+			!permissionManager.canBlock('local') &&
+			permissionManager.canBlock('global')
+		) {
+			reasonSuffixOptions = DropdownUtil.createGlobalGroupSuffixOptions(permissionManager.getRelevantBlockingGroups('global'));
+		}
 
 		/**
 		 * @type {OO.ui.DropdownWidget}
@@ -4103,6 +4261,18 @@ class BlockField extends WatchUserField {
 			placeholder: Messages.get('block-reason-other'),
 		});
 		/**
+		 * @type {?OO.ui.ComboBoxInputWidget}
+		 * @readonly
+		 * @private
+		 */
+		this.reasonSuffix = reasonSuffixOptions.length
+			? new OO.ui.ComboBoxInputWidget({
+				options: reasonSuffixOptions,
+				placeholder: Messages.get('ajaxblock-dialog-block-placeholder-reasonsuffix'),
+				value: reasonSuffixOptions[0].data,
+			})
+			: null;
+		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 * @readonly
 		 */
@@ -4185,6 +4355,11 @@ class BlockField extends WatchUserField {
 				this.reasonSecondaryLayout,
 				this.reasonSecondaryIndefLayout,
 				new OO.ui.FieldLayout(this.reasonCustom, {
+					classes: ['ajaxblock-horizontalfield'],
+					label: $('<span>'),
+					align: 'left',
+				}),
+				this.reasonSuffix && new OO.ui.FieldLayout(this.reasonSuffix, {
 					classes: ['ajaxblock-horizontalfield'],
 					label: $('<span>'),
 					align: 'left',
@@ -4591,11 +4766,31 @@ class BlockField extends WatchUserField {
 	getReason(type) {
 		const [reasonPrimary, reasonSecondary] = this.getRelevantReasonDropdowns({ type });
 		const sep = Messages.plain('colon-separator');
+
 		const main = [
 			DropdownUtil.getSelectedOptionValue(reasonPrimary),
 			DropdownUtil.getSelectedOptionValue(reasonSecondary),
 		].filter(Boolean).join(sep);
+
 		let other = clean(this.reasonCustom.getValue());
+		if (this.reasonSuffix) {
+			const suffix = clean(this.reasonSuffix.getValue());
+			if (suffix) {
+				if (main || other) {
+					other += ' ' + suffix;
+				} else {
+					other = suffix;
+				}
+			}
+		}
+
+		if (!main) {
+			return other;
+		}
+		if (!other) {
+			return main;
+		}
+
 		/**
 		 * Good patterns:
 		 * - `<!---->`
@@ -4609,18 +4804,43 @@ class BlockField extends WatchUserField {
 		 * - `aa<!--a-->`
 		 * - `<!--a-->aa<!--a-->`
 		 * - `<!--a-->aa-->`
+		 *
+		 * @param {string} content
+		 * @returns {boolean}
 		 */
-		const isOtherCommentOnly = /^(?:<!--(?:(?!-->).)*-->\s*)+$/.test(other);
-		if (main && other && !isOtherCommentOnly) {
-			// Add the separator if the "other" reason is not a comment tag only
-			other = sep + other;
+		const isCommentOnly = (content) => /^(?:<!--(?:(?!-->).)*-->\s*)+$/.test(content);
+
+		// Add the colon separator only when `other` contains substantive content.
+		// Comment-only text and recognized global-action suffixes do not require a separator.
+		let addDelimiter = false;
+		const extractedSuffix = BlockField.extractReasonSuffix(other);
+		if (extractedSuffix) {
+			// Do not add a delimiter for:
+			// - `(global sysop action)`
+			// - `<!--comment--> (global sysop action)`
+			//
+			// Add a delimiter for:
+			// - `Custom reason (global sysop action)`
+			// - `<!--comment--> Custom reason (global sysop action)`
+			const { lead } = extractedSuffix;
+			addDelimiter = !!lead.trim() && !isCommentOnly(lead);
+		} else {
+			// Without a suffix, add a delimiter unless the content is comment-only.
+			addDelimiter = !isCommentOnly(other);
 		}
+
+		if (addDelimiter) {
+			other = sep + other;
+		} else if (!/^\s/.test(other)) {
+			other = ' ' + other;
+		}
+
 		return main + other;
 	}
 
 	/**
 	 * @param {string} reason
-	 * @return {this}
+	 * @returns {this}
 	 */
 	setReason(reason) {
 		const [reasonPrimary, reasonSecondary] = this.getRelevantReasonDropdowns();
@@ -4628,16 +4848,17 @@ class BlockField extends WatchUserField {
 
 		/**
 		 * @param {OO.ui.DropdownWidget} dropdown
+		 * @param {string} text
 		 * @returns {?OO.ui.MenuOptionWidget}
 		 */
-		const findMatchingOption = (dropdown) => {
+		const findMatchingOption = (dropdown, text) => {
 			let /** @type {?OO.ui.MenuOptionWidget} */ item = null;
 			for (const option of DropdownUtil.getOptions(dropdown)) {
 				const data = /** @type {string} */ (option.getData());
 				if (
-					data !== '' && reason.startsWith(data) &&
+					data !== '' && text.startsWith(data) &&
 					// Select the item with the **longest** matching data to avoid partial matches
-					// (e.g., reason === "FooBar", data === "Foo", while another item has "FooBar")
+					// (e.g., text === "FooBar", data === "Foo", while another item has "FooBar")
 					(!item || /** @type {string} */ (item.getData()).length < data.length)
 				) {
 					item = option;
@@ -4645,33 +4866,79 @@ class BlockField extends WatchUserField {
 			}
 			return item;
 		};
+		/**
+		 * @param {string} text
+		 * @returns {void}
+		 */
+		const finalizeReason = (text) => {
+			const suffix = BlockField.extractReasonSuffix(text, true);
+			if (suffix && this.reasonSuffix) {
+				this.reasonCustom.setValue(suffix.lead);
+				this.reasonSuffix.setValue(suffix.suffix);
+			} else {
+				this.reasonCustom.setValue(text);
+			}
+		};
 
-		let item = findMatchingOption(reasonPrimary);
+		let item = findMatchingOption(reasonPrimary, reason);
 		if (!item) {
 			[reasonPrimary, reasonSecondary].forEach((dropdown) => {
 				DropdownUtil.selectOther(dropdown);
 			});
-			this.reasonCustom.setValue(reason);
+			finalizeReason(reason);
 			return this;
 		} else {
 			reasonPrimary.getMenu().selectItem(item);
-			reason = reason
-				.replace(/** @type {string} */ (item.getData()), '')
-				.replace(rSep, '');
+			reason = reason.slice(/** @type {string} */ (item.getData()).length).replace(rSep, '');
 		}
 
-		item = findMatchingOption(reasonSecondary);
+		item = findMatchingOption(reasonSecondary, reason);
 		if (!item) {
 			DropdownUtil.selectOther(reasonSecondary);
 		} else {
 			reasonSecondary.getMenu().selectItem(item);
-			reason = reason
-				.replace(/** @type {string} */ (item.getData()), '')
-				.replace(rSep, '');
+			reason = reason.slice(/** @type {string} */ (item.getData()).length).replace(rSep, '');
 		}
 
-		this.reasonCustom.setValue(reason);
+		finalizeReason(reason);
 		return this;
+	}
+
+	/**
+	 * Extracts a global action suffix (e.g. `(global sysop action)`) from the given block
+	 * reason string.
+	 *
+	 * If `byRelevantBlockingGroups` is true, only suffixes corresponding to global groups
+	 * that the user belongs to are considered valid. Otherwise, any suffix defined in
+	 * {@link DropdownUtil.globalActionGroupMap} is accepted.
+	 *
+	 * @param {string} remainingReason The reason string to inspect.
+	 * @param {boolean} [byRelevantBlockingGroups] Whether to restrict matching to
+	 * global groups that the user belongs to. (Default: `false`)
+	 * @returns {?{ lead: string; suffix: string; }} An object containing the reason text
+	 * without the suffix and the extracted suffix, or `null` if no valid suffix is found.
+	 * @private
+	 */
+	static extractReasonSuffix(remainingReason, byRelevantBlockingGroups = false) {
+		// Match against a trailing wikilink / parenthesized expression
+		const mTrailingSuffix = remainingReason.match(/(?:\[\[[^\]]+\]\]|\([^()]+\))$/);
+		if (!mTrailingSuffix) {
+			return null;
+		}
+
+		const relevantGroups = AjaxBlockServices.getPermissionManager().getRelevantBlockingGroups('global');
+		const normalizedSuffix = Messages.stripWikilinks(mTrailingSuffix[0].replace(/^\((.*)\)$/, '$1'));
+		const matchFound = Object.entries(DropdownUtil.globalActionGroupMap).some(([group, { regex }]) => {
+			return (!byRelevantBlockingGroups || relevantGroups.has(group)) && regex.test(normalizedSuffix);
+		});
+		if (!matchFound) {
+			return null;
+		}
+
+		return {
+			lead: remainingReason.slice(0, mTrailingSuffix.index).replace(/\s$/, ''),
+			suffix: mTrailingSuffix[0],
+		};
 	}
 
 	getPartialBlockParams() {
@@ -4785,7 +5052,7 @@ class BlockUser extends BlockField {
 	 */
 	constructor(dialog, presetType) {
 		const onResize = () => dialog.updateSize();
-		super({ onResize });
+		super({ onResize, enableReasonSuffix: true });
 
 		/**
 		 * @type {InstanceType<ReturnType<typeof AjaxBlockDialogFactory>>}

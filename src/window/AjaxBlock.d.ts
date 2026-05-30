@@ -96,6 +96,7 @@ interface ApiResponseQuery {
 	};
 	logevents?: ApiResponseQueryListLogevents[];
 	specialpagealiases?: ApiResponseQueryMetaSiteinfoSpecialpagealiases[];
+	usergroups?: ApiResponseQueryMetaSiteinfoUsergroups[];
 	userinfo?: ApiResponseQueryMetaUserinfoRights;
 	pages?: ApiResponseQueryPages[];
 }
@@ -149,6 +150,11 @@ interface ApiResponseQueryMetaLanguageinfo {
 interface ApiResponseQueryMetaSiteinfoSpecialpagealiases {
 	realname: string;
 	aliases: string[];
+}
+
+interface ApiResponseQueryMetaSiteinfoUsergroups {
+	name: string;
+	rights: string[];
 }
 
 interface ApiResponseQueryMetaUserinfoRights {
@@ -229,6 +235,7 @@ export interface AjaxBlockMessages {
 	'ajaxblock-notify-block-placeholder-preset': string;
 	'ajaxblock-dialog-block-label-reason1': string;
 	'ajaxblock-dialog-block-label-reason2': string;
+	'ajaxblock-dialog-block-placeholder-reasonsuffix': string;
 	'ajaxblock-dialog-block-label-customreasons': string;
 	'ajaxblock-dialog-block-label-partial': string;
 	'ajaxblock-dialog-block-label-option-autoblock': string;
