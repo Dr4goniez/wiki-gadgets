@@ -6,7 +6,7 @@
 	to the special page.
 
 	@author [[User:Dragoniez]]
-	@version 2.0.0
+	@version 2.0.1
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock
 
 \**********************************************************************/
@@ -16,7 +16,7 @@
 (() => {
 //**********************************************************************
 
-const VERSION = '2.0.0';
+const VERSION = '2.0.1';
 const SCRIPT_NAME = 'AjaxBlock';
 const DEBUG_MODE = false;
 
@@ -556,6 +556,13 @@ class AjaxBlock {
 				left: 0;
 				z-index: 1000;
 			}
+			${/* Allow OOUI widgets to span the full width of the dialog */''}
+			.ajaxblock-dialog .oo-ui-fieldsetLayout-group,
+			.ajaxblock-dialog .oo-ui-textInputWidget,
+			.ajaxblock-dialog .oo-ui-dropdownWidget,
+			.ajaxblock-dialog .oo-ui-tagMultiselectWidget {
+				max-width: initial;
+			}
 			${/* Reduce padding for MessageWidget */''}
 			.ajaxblock-dialog .ajaxblock-message-container,
 			.ajaxblock-config-content .ajaxblock-message-container {
@@ -592,7 +599,7 @@ class AjaxBlock {
 			${/* Increase the default width (60%) of fields with a horizontally aligned label */''}
 			.ajaxblock-dialog .ajaxblock-horizontalfield .oo-ui-fieldLayout-field,
 			.ajaxblock-config-content .ajaxblock-horizontalfield .oo-ui-fieldLayout-field {
-				width: 80% !important;
+				width: 82% !important;
 			}
 			.ajaxblock-horizontalfield .oo-ui-fieldLayout-messages {
 				margin-left: 20%;
@@ -702,7 +709,7 @@ class AjaxBlock {
 		this.dialog = new AjaxBlockDialog(this, {
 			$element: $('<div>').css({ 'font-size': '90%' }),
 			classes: ['ajaxblock-dialog'],
-			size: 'large',
+			size: 'larger',
 		});
 		AjaxBlockDialog.windowManager.addWindows([this.dialog]);
 	}
