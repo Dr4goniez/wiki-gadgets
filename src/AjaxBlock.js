@@ -6,7 +6,7 @@
 	to the special page.
 
 	@author [[User:Dragoniez]]
-	@version 2.0.1
+	@version 2.0.2
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock
 
 \**********************************************************************/
@@ -16,9 +16,10 @@
 (() => {
 //**********************************************************************
 
-const VERSION = '2.0.1';
+const VERSION = '2.0.2';
 const SCRIPT_NAME = 'AjaxBlock';
 const DEBUG_MODE = false;
+const VERBOSE = mw.config.get('wgUserName') === 'Dragoniez';
 
 // Disallow duplicate runs
 if (window.ajaxBlockLoaded) {
@@ -910,7 +911,9 @@ class AjaxBlock {
 		}
 
 		const { params, warnings } = paramObj;
-		console.log(params, warnings);
+		if (VERBOSE) {
+			console.log(params, warnings);
+		}
 		if (warnings.length && !suppressWarnings) {
 			const confirmed = await AjaxBlock.confirmWarnings(warnings, data, warningContext);
 			if (!confirmed) {
@@ -4966,45 +4969,7 @@ class BlockField extends WatchUserField {
 			return main;
 		}
 
-		/**
-		 * Good patterns:
-		 * - `<!---->`
-		 * - `<!--a-->`
-		 * - `<!--a--><!--a-->`
-		 * - `<!--a--> <!--a-->`
-		 *
-		 * Bad patterns:
-		 * - `<!-->`
-		 * - `<!--a-->aa`
-		 * - `aa<!--a-->`
-		 * - `<!--a-->aa<!--a-->`
-		 * - `<!--a-->aa-->`
-		 *
-		 * @param {string} content
-		 * @returns {boolean}
-		 */
-		const isCommentOnly = (content) => /^(?:<!--(?:(?!-->).)*-->\s*)+$/.test(content);
-
-		// Add the colon separator only when `other` contains substantive content.
-		// Comment-only text and recognized global-action suffixes do not require a separator.
-		let addDelimiter = false;
-		const extractedSuffix = BlockField.extractReasonSuffix(other);
-		if (extractedSuffix) {
-			// Do not add a delimiter for:
-			// - `(global sysop action)`
-			// - `<!--comment--> (global sysop action)`
-			//
-			// Add a delimiter for:
-			// - `Custom reason (global sysop action)`
-			// - `<!--comment--> Custom reason (global sysop action)`
-			const { lead } = extractedSuffix;
-			addDelimiter = !!lead.trim() && !isCommentOnly(lead);
-		} else {
-			// Without a suffix, add a delimiter unless the content is comment-only.
-			addDelimiter = !isCommentOnly(other);
-		}
-
-		if (addDelimiter) {
+		if (BlockField.needsColonSeparator(other)) {
 			other = sep + other;
 		} else if (!/^\s/.test(other)) {
 			other = ' ' + other;
@@ -5018,94 +4983,205 @@ class BlockField extends WatchUserField {
 	 * @returns {this}
 	 */
 	setReason(reason) {
-		const [reasonPrimary, reasonSecondary] = this.getRelevantReasonDropdowns();
-		const rSep = new RegExp('^' + mw.util.escapeRegExp(Messages.plain('colon-separator')));
+		const dropdowns = this.getRelevantReasonDropdowns();
+		const separator = Messages.plain('colon-separator');
+		let currentReason = reason;
 
-		/**
-		 * @param {OO.ui.DropdownWidget} dropdown
-		 * @param {string} text
-		 * @returns {?OO.ui.MenuOptionWidget}
-		 */
-		const findMatchingOption = (dropdown, text) => {
-			let /** @type {?OO.ui.MenuOptionWidget} */ item = null;
-			for (const option of DropdownUtil.getOptions(dropdown)) {
-				const data = /** @type {string} */ (option.getData());
-				if (
-					data !== '' && text.startsWith(data) &&
-					// Select the item with the **longest** matching data to avoid partial matches
-					// (e.g., text === "FooBar", data === "Foo", while another item has "FooBar")
-					(!item || /** @type {string} */ (item.getData()).length < data.length)
-				) {
-					item = option;
-				}
-			}
-			return item;
-		};
-		/**
-		 * @param {string} text
-		 * @returns {void}
-		 */
-		const finalizeReason = (text) => {
-			const suffix = BlockField.extractReasonSuffix(text, true);
-			if (suffix && this.reasonSuffix) {
-				this.reasonCustom.setValue(suffix.lead);
-				this.reasonSuffix.setValue(suffix.suffix);
-			} else {
-				this.reasonCustom.setValue(text);
-			}
-		};
-
-		let item = findMatchingOption(reasonPrimary, reason);
-		if (!item) {
-			[reasonPrimary, reasonSecondary].forEach((dropdown) => {
-				DropdownUtil.selectOther(dropdown);
-			});
-			finalizeReason(reason);
+		const item1 = BlockField.findMatchingOption(dropdowns[0], currentReason, separator);
+		if (!item1) {
+			DropdownUtil.selectOther(dropdowns[0]);
+			DropdownUtil.selectOther(dropdowns[1]);
+			this.applyCustomReason(currentReason);
 			return this;
+		}
+		currentReason = BlockField.selectOptionAndTrimReason(dropdowns[0], item1, currentReason, separator);
+
+		const item2 = BlockField.findMatchingOption(dropdowns[1], currentReason, separator);
+		if (!item2) {
+			DropdownUtil.selectOther(dropdowns[1]);
 		} else {
-			reasonPrimary.getMenu().selectItem(item);
-			reason = reason.slice(/** @type {string} */ (item.getData()).length).replace(rSep, '');
+			currentReason = BlockField.selectOptionAndTrimReason(dropdowns[1], item2, currentReason, separator);
 		}
 
-		item = findMatchingOption(reasonSecondary, reason);
-		if (!item) {
-			DropdownUtil.selectOther(reasonSecondary);
-		} else {
-			reasonSecondary.getMenu().selectItem(item);
-			reason = reason.slice(/** @type {string} */ (item.getData()).length).replace(rSep, '');
-		}
-
-		finalizeReason(reason);
+		this.applyCustomReason(currentReason);
 		return this;
 	}
 
 	/**
-	 * Extracts a global action suffix (e.g. `(global sysop action)`) from the given block
-	 * reason string.
+	 * Determines whether the given reason fragment represents substantive
+	 * content that normally requires a colon separator when appended to a
+	 * dropdown-generated reason.
 	 *
-	 * If `byRelevantBlockingGroups` is true, only suffixes corresponding to global groups
-	 * that the user belongs to are considered valid. Otherwise, any suffix defined in
-	 * {@link DropdownUtil.globalActionGroupMap} is accepted.
+	 * Comment-only content and recognized global-action suffixes are treated
+	 * as non-substantive and therefore do not require a separator.
 	 *
-	 * @param {string} remainingReason The reason string to inspect.
-	 * @param {boolean} [byRelevantBlockingGroups] Whether to restrict matching to
-	 * global groups that the user belongs to. (Default: `false`)
-	 * @returns {?{ lead: string; suffix: string; }} An object containing the reason text
-	 * without the suffix and the extracted suffix, or `null` if no valid suffix is found.
+	 * @param {string} remainingReason
+	 * @returns {boolean}
 	 * @private
 	 */
-	static extractReasonSuffix(remainingReason, byRelevantBlockingGroups = false) {
-		// Match against a trailing wikilink / parenthesized expression
+	static needsColonSeparator(remainingReason) {
+		const extractedSuffix = BlockField.extractReasonSuffix(remainingReason);
+		if (extractedSuffix) {
+			// Do not add a separator for:
+			// - `(global sysop action)`
+			// - `<!--comment--> (global sysop action)`
+			//
+			// Add a separator for:
+			// - `Custom reason (global sysop action)`
+			// - `<!--comment--> Custom reason (global sysop action)`
+			const { lead } = extractedSuffix;
+			return !!lead.trim() && !BlockField.isCommentOnly(lead);
+		} else {
+			// Without a suffix, add a separator unless the content is comment-only.
+			return !BlockField.isCommentOnly(remainingReason);
+		}
+	}
+
+	/**
+	 * Evaluates whether the given text consists only of comment tags.
+	 *
+	 * Good patterns:
+	 * - `<!---->`
+	 * - `<!--a-->`
+	 * - `<!--a--><!--a-->`
+	 * - `<!--a--> <!--a-->`
+	 *
+	 * Bad patterns:
+	 * - `<!-->`
+	 * - `<!--a-->aa`
+	 * - `aa<!--a-->`
+	 * - `<!--a-->aa<!--a-->`
+	 * - `<!--a-->aa-->`
+	 *
+	 * @param {string} text
+	 * @returns {boolean}
+	 * @private
+	 */
+	static isCommentOnly(text) {
+		return /^(?:<!--(?:(?!-->).)*-->\s*)+$/.test(text);
+	}
+
+	/**
+	 * @param {OO.ui.DropdownWidget} dropdown
+	 * @param {string} text
+	 * @param {string} separator
+	 * @returns {?OO.ui.MenuOptionWidget}
+	 * @private
+	 */
+	static findMatchingOption(dropdown, text, separator) {
+		let /** @type {?OO.ui.MenuOptionWidget} */ bestItem = null;
+		let maxLength = -1;
+
+		for (const option of DropdownUtil.getOptions(dropdown)) {
+			const data = /** @type {string} */ (option.getData());
+			if (data === '' || !text.startsWith(data)) {
+				continue;
+			}
+
+			// Require the matched option to end at a valid reason boundary.
+			// The remainder must be either:
+			//
+			// - empty (exact match)
+			// - prefixed by the reason separator
+			// - content that BlockField.needsColonSeparator() considers
+			//   non-substantive (e.g. comments and global-action suffixes)
+			//
+			// This prevents partial matches such as:
+			//
+			// - "Open proxy" matching "Open proxy: Vpngate VPN" when the latter is
+			//   itself a dropdown option.
+			// - "[[WP:SOCK|sockpuppet]]" matching
+			//   "[[WP:SOCK|sockpuppet]]使用帯域: ..." where the option text is only
+			//   a prefix of a larger reason fragment.
+			//
+			// Also prefer the longest matching option to avoid shorter prefix matches.
+			const remainder = text.slice(data.length);
+			const isReasonBoundary =
+				remainder === '' ||
+				remainder.startsWith(separator) ||
+				!BlockField.needsColonSeparator(remainder);
+			const isLongestMatch = data.length > maxLength;
+
+			if (isReasonBoundary && isLongestMatch) {
+				bestItem = option;
+				maxLength = data.length;
+			}
+		}
+		return bestItem;
+	}
+
+	/**
+	 * Selects the given item in the dropdown and removes the matched option
+	 * text and any immediately following separator from the beginning of `text`.
+	 *
+	 * @param {OO.ui.DropdownWidget} dropdown
+	 * @param {OO.ui.MenuOptionWidget} item
+	 * @param {string} text
+	 * @param {string} separator
+	 * @returns {string} The remaining reason text.
+	 * @private
+	 */
+	static selectOptionAndTrimReason(dropdown, item, text, separator) {
+		dropdown.getMenu().selectItem(item);
+
+		const matchedLength = /** @type {string} */ (item.getData()).length;
+		let trimmedText = text.slice(matchedLength);
+
+		if (trimmedText.startsWith(separator)) {
+			trimmedText = trimmedText.slice(separator.length);
+		}
+
+		return trimmedText;
+	}
+
+	/**
+	 * Applies the given custom-reason text to the UI controls.
+	 *
+	 * If the text ends with a recognized global-action suffix and a suffix
+	 * widget is available, the suffix is extracted into that widget.
+	 * Otherwise the entire text is stored in the custom-reason field.
+	 *
+	 * @param {string} text
+	 * @returns {void}
+	 * @private
+	 */
+	applyCustomReason(text) {
+		const extractedSuffix = BlockField.extractReasonSuffix(text);
+		const lead = extractedSuffix ? extractedSuffix.lead : text;
+		const suffix = extractedSuffix ? extractedSuffix.suffix : '';
+
+		if (this.reasonSuffix) {
+			this.reasonCustom.setValue(lead);
+			this.reasonSuffix.setValue(suffix);
+		} else {
+			const delimiter = suffix && lead && !/\s$/.test(lead) ? ' ' : '';
+			this.reasonCustom.setValue(lead + delimiter + suffix);
+		}
+
+		if (VERBOSE) {
+			console.log(this.getReason());
+		}
+	}
+
+	/**
+	 * Extracts a global action suffix (e.g. `(global sysop action)`) from the
+	 * given block reason string.
+	 *
+	 * @param {string} remainingReason The reason string to inspect.
+	 * @returns {?{ lead: string; suffix: string; }} An object containing the
+	 * reason text without the suffix and the extracted suffix, or `null` if no
+	 * valid suffix is found.
+	 * @private
+	 */
+	static extractReasonSuffix(remainingReason) {
+		// Match a trailing wikilink or parenthesized expression.
 		const mTrailingSuffix = remainingReason.match(/(?:\[\[[^\]]+\]\]|\([^()]+\))$/);
 		if (!mTrailingSuffix) {
 			return null;
 		}
 
-		const relevantGroups = AjaxBlockServices.getPermissionManager().getRelevantBlockingGroups('global');
 		const normalizedSuffix = Messages.stripWikilinks(mTrailingSuffix[0].replace(/^\((.*)\)$/, '$1'));
-		const matchFound = Object.entries(DropdownUtil.globalActionGroupMap).some(([group, { regex }]) => {
-			return (!byRelevantBlockingGroups || relevantGroups.has(group)) && regex.test(normalizedSuffix);
-		});
+		const matchFound = Object.values(DropdownUtil.globalActionGroupMap).some(({ regex }) => regex.test(normalizedSuffix));
 		if (!matchFound) {
 			return null;
 		}
@@ -6425,7 +6501,9 @@ class ParamApplier {
 		applier.addEventListener('click', (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			console.log(params);
+			if (VERBOSE) {
+				console.log(params);
+			}
 			if (field instanceof BlockUser && 'expiry' in params) {
 				this.applyBlockParams(params, field, {
 					hooks: field.getParamApplierOptions(field.getPresetType()),
@@ -8127,7 +8205,9 @@ class AjaxBlockConfig {
 		}
 
 		const { data, emptyPresets } = this.build();
-		console.log('Built configuration', data);
+		if (VERBOSE) {
+			console.log('Built configuration', data);
+		}
 
 		// Remove empty presets if present
 		if (emptyPresets.local.size || emptyPresets.global.size) {
@@ -8248,21 +8328,22 @@ class AjaxBlockConfig {
 			change.global[legacyOptionKeys.global] = null;
 		}
 
-		// For debugging
-		console.log(
-			'Configuration changes',
-			typedEntries(change).reduce((acc, [domain, obj]) => {
-				acc[domain] = Object.entries(obj).reduce((acc2, [key, option]) => {
-					if (option === null) {
-						acc2[key] = null;
-					} else {
-						acc2[key] = JSON.parse(option);
-					}
-					return acc2;
-				}, Object.create(null));
-				return acc;
-			}, Object.create(null))
-		);
+		if (VERBOSE) {
+			console.log(
+				'Configuration changes',
+				typedEntries(change).reduce((acc, [domain, obj]) => {
+					acc[domain] = Object.entries(obj).reduce((acc2, [key, option]) => {
+						if (option === null) {
+							acc2[key] = null;
+						} else {
+							acc2[key] = JSON.parse(option);
+						}
+						return acc2;
+					}, Object.create(null));
+					return acc;
+				}, Object.create(null))
+			);
+		}
 
 		return change;
 	}
@@ -8403,7 +8484,9 @@ class AjaxBlockConfig {
 		}
 
 		const cfg = AjaxBlockServices.getConfig().getSchema();
-		console.log('Built configuration', cfg);
+		if (VERBOSE) {
+			console.log('Built configuration', cfg);
+		}
 		const change = AjaxBlockConfig.mapChanges(cfg);
 
 		const hasLocal = !$.isEmptyObject(change.local);
