@@ -364,6 +364,7 @@ export interface AjaxBlockMessages {
 	'ajaxblock-config-label-presetreasons-target-ip': string;
 	'ajaxblock-config-placeholder-presetreasons-target': string;
 	'ajaxblock-config-notice-presetreasons-additionaloptions': string;
+	'ajaxblock-config-title-presetreasons-hideuser-pseudodisabled': string;
 	'ajaxblock-config-label-presetreasons-add': string;
 	'ajaxblock-config-label-presetreasons-delete': string;
 	'ajaxblock-config-confirm-presetreasons-empty': string;

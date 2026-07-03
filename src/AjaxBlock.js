@@ -6,7 +6,7 @@
 	to the special page.
 
 	@author [[User:Dragoniez]]
-	@version 2.0.2
+	@version 2.0.3
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock
 
 \**********************************************************************/
@@ -16,7 +16,7 @@
 (() => {
 //**********************************************************************
 
-const VERSION = '2.0.2';
+const VERSION = '2.0.3';
 const SCRIPT_NAME = 'AjaxBlock';
 const DEBUG_MODE = false;
 const VERBOSE = mw.config.get('wgUserName') === 'Dragoniez';
@@ -660,6 +660,20 @@ class AjaxBlock {
 				vertical-align: middle;
 				border: 0;
 				margin-right: 0.2em;
+			}
+			${/** For {@link AjaxBlockConfigBlockPresetOptionsField.initialize} */''}
+			.ajaxblock-config-hideuser-pseudodisabled {
+				display: inline-block;
+				height: 1.4em;
+				vertical-align: middle;
+				border: 0;
+				line-height: 2;
+				opacity: 0.8;
+				padding-bottom: 0.1em;
+				margin-right: 0.2em;
+			}
+			.oo-ui-fieldLayout-disabled .ajaxblock-config-hideuser-pseudodisabled {
+				display: none;
 			}
 		`.replace(/[\t\n\r]+/g, '');
 		document.head.appendChild(style);
@@ -3204,6 +3218,7 @@ Messages.i18n = {
 		'ajaxblock-config-label-presetreasons-target-ip': 'IP users',
 		'ajaxblock-config-placeholder-presetreasons-target': 'Add user types',
 		'ajaxblock-config-notice-presetreasons-additionaloptions': 'In the dialog, some of the options below may be hidden depending on the target and user permissions.',
+		'ajaxblock-config-title-presetreasons-hideuser-pseudodisabled': 'You cannot hide users on this project. If you have permission on another project, you can change this setting from this interface.',
 		'ajaxblock-config-label-presetreasons-add': 'Add preset',
 		'ajaxblock-config-label-presetreasons-delete': 'Delete preset',
 		'ajaxblock-config-confirm-presetreasons-empty': 'The following empty presets will be removed before saving the options. Do you want to continue?',
@@ -3330,6 +3345,7 @@ Messages.i18n = {
 		'ajaxblock-config-label-presetreasons-target-ip': 'IP利用者',
 		'ajaxblock-config-placeholder-presetreasons-target': '利用者種別を追加',
 		'ajaxblock-config-notice-presetreasons-additionaloptions': 'ダイアログ上では、対象と利用者権限に応じて以下のオプションのいくつかは非表示になる場合があります。',
+		'ajaxblock-config-title-presetreasons-hideuser-pseudodisabled': 'あなたはこのプロジェクトで利用者を秘匿できません。別プロジェクトで権限を有している場合、このインターフェースから設定を変更できます。',
 		'ajaxblock-config-label-presetreasons-add': 'プリセットを追加',
 		'ajaxblock-config-label-presetreasons-delete': 'プリセットを削除',
 		'ajaxblock-config-confirm-presetreasons-empty': '以下の空のプリセットは、設定の保存前に除去されます。続行しますか？',
@@ -9320,15 +9336,25 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 		 */
 		this.isDefault = BlockPreset.isDefaultName(presetName);
 		/**
-		 * Whether the "hide user" option should be shown. This is set to true if:
-		 * - The domain is global (the user may have the required right on a target project), or
-		 * - The domain is local and the user explicitly has the required right.
+		 * The state of the "hide user" option:
+		 * - `'enabled'`: The option should be enabled because the user has the required permission.
+		 * - `'disabled'`: The option should be disabled because the user lacks the required permission.
+		 * - `'conditional'`: The option should be "pseudo-disabled" because the user lacks the required
+		 *     permission on the current wiki but may have it on another wiki.
 		 *
-		 * @type {boolean}
+		 * @type {'enabled' | 'disabled' | 'conditional'}
 		 * @readonly
 		 * @private
 		 */
-		this.hideUserAvailable = domain === 'global' || AjaxBlockServices.getPermissionManager().canHideUser();
+		this.hideUserState = (() => {
+			if (AjaxBlockServices.getPermissionManager().canHideUser()) {
+				return 'enabled';
+			} else if (domain === 'global') {
+				return 'conditional';
+			} else {
+				return 'disabled';
+			}
+		})();
 		/**
 		 * @type {OO.ui.TextInputWidget}
 		 * @readonly
@@ -9439,8 +9465,18 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 	 * @private
 	 */
 	initialize() {
-		if (!this.hideUserAvailable) {
-			this.cbHideUserContainer.toggle(false);
+		if (this.hideUserState === 'disabled') {
+			this.cbHideUser.setSelected(false).setDisabled(true);
+		} else if (this.hideUserState === 'conditional') {
+			const $icon = $('<img>')
+				.addClass('ajaxblock-config-hideuser-pseudodisabled')
+				.prop({
+					src: '//upload.wikimedia.org/wikipedia/commons/thumb/4/4e/OOjs_UI_icon_error-destructive.svg/40px-OOjs_UI_icon_error-destructive.svg.png',
+					title: Messages.get('ajaxblock-config-title-presetreasons-hideuser-pseudodisabled'),
+				});
+			this.cbHideUserContainer.$label
+				.prepend($icon)
+				.css({ color: 'var(--color-disabled, #a2a9b1)' });
 		}
 
 		this.presetNameInput.on('change', (value) => {
@@ -9482,9 +9518,8 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 			this.cbHardblock.setSelected(false);
 		}
 
-		if (this.hideUserAvailable) {
-			this.setHideUserLocked(!includesRegistered).refreshHideUserAvailability();
-		}
+		this.setHideUserLocked(this.hideUserState === 'disabled' || !includesRegistered)
+			.refreshHideUserAvailability();
 
 		return this;
 	}
@@ -9568,7 +9603,7 @@ class AjaxBlockConfigBlockPresetOptionsField extends BlockField {
 				nocreate: this.cbCreateAccount.isSelected(),
 				autoblock: this.cbAutoblock.isSelected(),
 				noemail: this.cbSendEmail.isSelected(),
-				hidden: this.hideUserAvailable && this.cbHideUser.isSelected(),
+				hidden: this.hideUserState !== 'disabled' && this.cbHideUser.isSelected(),
 				nousertalk: this.cbUserTalk.isSelected(),
 				partial: this.cbPartialBlock.isSelected(),
 				pagerestrictions: this.getPageRestrictions(),
