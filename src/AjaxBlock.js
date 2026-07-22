@@ -6,7 +6,7 @@
 	to the special page.
 
 	@author [[User:Dragoniez]]
-	@version 2.0.4
+	@version 2.0.3
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock
 
 \**********************************************************************/
@@ -16,7 +16,7 @@
 (() => {
 //**********************************************************************
 
-const VERSION = '2.0.4';
+const VERSION = '2.0.3';
 const SCRIPT_NAME = 'AjaxBlock';
 const DEBUG_MODE = false;
 const VERBOSE = mw.config.get('wgUserName') === 'Dragoniez';
@@ -1609,14 +1609,9 @@ class AjaxBlockServices {
 					if (Array.isArray(usergroups) && Array.isArray(userRights)) {
 						const /** @type {string[]} */ localBlockingGroups = [];
 
-						for (const obj of usergroups) {
-							let rights = obj.rights;
-							if ($.isPlainObject(rights)) {
-								console.error('Found a non-array in "usergroups[i].rights": %o', obj);
-								rights = Object.values(rights);
-							}
+						for (const { name, rights } of usergroups) {
 							if (rights.includes('block')) {
-								localBlockingGroups.push(obj.name);
+								localBlockingGroups.push(name);
 							}
 						}
 
