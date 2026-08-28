@@ -1,7 +1,7 @@
 /******************************************************************************************************************\
 	ToollinkTweaks
 	Extend toollinks attached to user links to the script user's liking.
-	@version 1.3.7
+	@version 1.3.8
 	@author [[User:Dragoniez]]
 \******************************************************************************************************************/
 
@@ -167,6 +167,7 @@ function init() {
 			}
 
 			// Add toollinks when hook is triggered
+			/** @type {NodeJS.Timeout} */
 			var hookTimeout;
 			mw.hook('wikipage.content').add(function() {
 				clearTimeout(hookTimeout); // Prevent `addLinks` from being called multiple times (hook can be fired several times in an instant)
@@ -1309,6 +1310,12 @@ function addLinks(cfg) {
 			return;
 		}
 
+		// For compatibility with UserInfoCard
+		var $userInfoCardWrapper = $userLink.parent('.ext-checkuser-userinfocard-button-wrapper');
+		if ($userInfoCardWrapper.length) {
+			$userLink = $userInfoCardWrapper;
+		}
+
 		// User links might be wrapped in another element
 		if (
 			// Ensure subsequent siblings don't contain toollinks
@@ -1424,6 +1431,7 @@ function extractCidr(text) {
  */
 function createLinks(cfg, username, targetElement, appendType) {
 
+	/** @type {UserType} */
 	var userType;
 	if (mw.util.isIPAddress(username)) {
 		userType = 'IP';
