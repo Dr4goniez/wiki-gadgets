@@ -3,7 +3,7 @@
 	Selective Rollback
 
 	@author [[User:Dragoniez]]
-	@version 5.1.4
+	@version 5.1.5
 	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
 
 	Some functionality in this script is adapted from:
@@ -20,7 +20,7 @@
 (() => {
 //**************************************************************************************************
 
-const version = '5.1.4';
+const version = '5.1.5';
 
 // Run this script only when on /wiki/$1 or /w/index.php
 if (
@@ -37,6 +37,7 @@ if (wgUserName === null || mw.config.get('wgUserIsTemp')) {
 	return;
 }
 const wgWikiID = mw.config.get('wgWikiID');
+const wgTitle = mw.config.get('wgTitle');
 
 /**
  * @type {mw.Api}
@@ -61,7 +62,7 @@ const isOnRCW = ['Recentchanges', 'Recentchangeslinked', 'Watchlist'].includes(m
 /**
  * Whether the user is on Special:SelectiveRollbackConfig.
  */
-const isOnConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(SelectiveRollbackConfig|SRC)$/i.test(mw.config.get('wgTitle'));
+const isOnConfig = mw.config.get('wgNamespaceNumber') === -1 && /^(SelectiveRollbackConfig|SRC)$/i.test(wgTitle);
 
 class SelectiveRollback {
 
@@ -170,7 +171,8 @@ class SelectiveRollback {
 			parentNode = null;
 		} else if (
 			mw.config.get('wgAction') === 'history' ||
-			(spName && ['Contributions', 'IPContributions', 'GlobalContributions'].includes(spName))
+			(spName && ['Contributions', 'IPContributions', 'GlobalContributions'].includes(spName)) ||
+			(spName === 'SuggestedInvestigations' && wgTitle.split('/')[1] === 'detail')
 		) {
 			parentNode = 'li';
 		} else if (typeof mw.config.get('wgDiffNewId') === 'number') {
