@@ -10,18 +10,24 @@
  */
 /* global mw, OO */
 //<nowiki>
-(function() {
+$(function () {
 
-	// 編集またはプレビュー時にスクリプトを実行
-	var wgAction = mw.config.get('wgAction');
-	if (['edit', 'submit'].indexOf(wgAction) === -1) return;
+	const wgAction = mw.config.get('wgAction');
+	if (wgAction !== 'edit' && wgAction !== 'submit') {
+		return;
+	}
 
-	// すべてのノート名前空間と、Wikipedia名前空間、プロジェクト名前空間の一部を対象とする
+	const ns = mw.config.get('wgNamespaceNumber');
+	if (ns < 0) {
+		return;
+	}
+
 	/**
-	 * 条件付き名前空間でスクリプトを走らせるページ名の文字列型正規表現
+	 * ノート以外でスクリプトを走らせるページの正規表現
 	 * @type {Record<number, string[]>}
 	 */
-	var rTitles = {
+	const titleMap = {
+		// Wikipedia
 		4: [
 			'^井戸端($|/subj/)',
 			'^削除依頼/(?!ログ/)',
@@ -32,120 +38,124 @@
 			'^(ガジェット|編集フィルター)/提案$',
 			'^管理者伝言板/(投稿ブロック|3RR|拡張承認の申請|保護ページ編集|各種初期化依頼|その他の伝言)($|/)'
 		],
+		// プロジェクト
 		102: [
 			'^カテゴリ関連/議論/'
-		]
+		],
 	};
-	var ns = mw.config.get('wgNamespaceNumber');
+	const rTitle = ns in titleMap && new RegExp(titleMap[ns].join('|'));
+
 	if (
-		ns < 0 ||
-		ns % 2 === 0 && !rTitles[ns] || // 2で割り切れる、かつrTitlesのキーのどれとも合致しない
-		rTitles[ns] && !new RegExp(rTitles[ns].join('|')).test(mw.config.get('wgTitle')) // rTitlesのキーと合致するがページ名が合致しない
+		(ns % 2 === 0 && !rTitle) ||
+		(rTitle && !rTitle.test(mw.config.get('wgTitle')))
 	) {
 		return;
 	}
 
-	// 依存モジュールとDOMをロード
-	$.when(mw.loader.using(['oojs-ui-core', 'oojs-ui-windows']), $.ready).then(function() {
+	const $textbox = $('#wpTextbox1');
+	const $saveButton = $('#wpSave');
+	if (!$textbox.length || !$saveButton.length) {
+		return;
+	}
 
-		// DOM要素を取得
-		var $textbox = $('#wpTextbox1');
-		var $saveButton = $('#wpSave');
-		var $form = $('#editform');
-		if (!$textbox.length || !$saveButton.length || !$form.length) return;
+	const originalText = /** @type {string} */ ($textbox.val());
+	const rSig = /(^|[^~])~~~~(?!~)/;
+	const rTag = {
+		comment: { // 以下、C
+			start: /^<!--/,
+			end: /^-->/,
+		},
+		nowiki: { // 以下、N
+			start: /^<nowiki[^>\n]*>/,
+			end: /^<\/nowiki[^>\n]*>/,
+		},
+	};
 
-		// 初期テキストを保存
-		var originalText = $textbox.val();
-		if (typeof originalText !== 'string') return;
+	let userConfirmed = false;
+	/**
+	 * @this {HTMLElement}
+	 * @param {JQuery.ClickEvent<HTMLElement, undefined, HTMLElement, HTMLElement>} e
+	 */
+	const saveButtonClickCallback = async function (e) {
 
-		var userConfirmed = false;
+		// 確認済みの場合はそのままクリック処理を続行
+		if (userConfirmed) {
+			return;
+		}
 
-		// 「変更を公開」が押された時
-		$saveButton.off('click').on('click', function(e) {
+		// 細部の編集がチェックされ、かつ確認抑制ガジェットが有効であればクリック処理を続行
+		const isMinorEdit = $('#wpMinoredit').prop('checked');
+		const suppressWhenMinor = mw.loader.getState('ext.gadget.checkSignature-suppressWhenMinor') === 'ready';
+		if (isMinorEdit && suppressWhenMinor) {
+			return;
+		}
 
-			// 確認済みの場合は、そのまま通常のクリック処理を続行
-			if (userConfirmed) {
-				return;
-			}
+		// テキストを取得、action=editで変更がない場合はクリック処理を続行
+		const text = /** @type {string} */ ($textbox.val());
+		if (wgAction === 'edit' && text === originalText) {
+			return;
+		}
 
-			// 細部の編集のチェック状態を取得
-			var isMinorEdit = $('#wpMinoredit').prop('checked');
+		// 署名がある場合
+		if (rSig.test(text)) {
 
-			// 「細部の編集にチェックを入れたときは署名がなくてもポップアップを表示しない」ガジェットが有効か
-			var suppressWhenMinor = mw.loader.getState('ext.gadget.checkSignature-suppressWhenMinor') === 'ready';
+			// 署名がコメントまたはnowiki内にないことを保障
+			/** @type {?RegExp} */
+			let rClose = null;
 
-			// 細部の編集がチェックされ、かつ確認抑制ガジェットが有効であれば終了
-			if (isMinorEdit && suppressWhenMinor) return;
+			for (let i = 0; i < text.length; i++) {
+				const substr = text.slice(i);
 
-			// テキストを取得（action=editで変更がない場合は終了）
-			var text = $textbox.val();
-			if (typeof text !== 'string' || wgAction === 'edit' && text === originalText) return;
+				if (!rClose) {
+					// C内でもN内でもない
 
-			// 署名がある場合
-			var rSig = /[^~]~~~~(?!~)/; // チルダ4つ（それ以外の個数はNG）
-			if (/^\s*~~~~(?!~)/.test(text)) { // 本文先頭に署名がある場合は上の正規表現がカバーできないので念のため
-				return;
-			} else if (rSig.test(text)) {
-
-				// 署名がコメントまたはnowiki内にないことを保障
-				var rTag = {
-					comment: { // 以下、C
-						start: /^<!--/,
-						end: /^-->/
-					},
-					nowiki: { // 以下、N
-						start: /^<nowiki[^>\n]*>/,
-						end: /^<\/nowiki[^>\n]*>/
-					}
-				};
-				var rClose, m;
-				for (var i = 0; i < text.length; i++) { // 本文の1文字目から順番にチェック
-
-					// i文字目から最後までのウィキテキスト
-					var substr = text.slice(i);
-
-					// C内でもN内でもない時に署名を見つけたら終了
-					if (!rClose && substr.search(rSig) === 0) {
+					if (substr.search(rSig) === 0) {
+						// 署名を見つけたら終了
 						return;
-
-					// C内でもN内でもない時にCかNの開始タグを見つけたら、探す終了タグの正規表現を登録
-					} else if (!rClose) {
-						if ((m = rTag.comment.start.exec(substr))) {
-							rClose = rTag.comment.end;
-							i += m[0].length - 1;
-						} else if ((m = rTag.nowiki.start.exec(substr))) {
-							rClose = rTag.nowiki.end;
-							i += m[0].length - 1;
-						}
-
-					// C内かN内で対応する閉じタグをを見つけたら、探す終了タグの正規表現をリセット
-					} else if (rClose && (m = rClose.exec(substr))) {
-						rClose = void 0;
-						i += m[0].length - 1;
 					}
 
+					// CかNの開始タグを見つけたら、探す終了タグの正規表現を登録
+					const mComment = rTag.comment.start.exec(substr);
+					if (mComment) {
+						rClose = rTag.comment.end;
+					}
+
+					const mNowiki = mComment ? null : rTag.nowiki.start.exec(substr);
+					if (mNowiki) {
+						rClose = rTag.nowiki.end;
+					}
+
+					const match = mComment || mNowiki;
+					if (match) {
+						i += match[0].length - 1;
+					}
+					continue;
 				}
 
+				// C内かN内で対応する閉じタグを見つけたら、探す終了タグの正規表現をリセット
+				const mClose = rClose.exec(substr);
+				if (mClose) {
+					rClose = null;
+					i += mClose[0].length - 1;
+				}
 			}
-			// コードがここまでたどり着いた場合署名がない
+		}
+		// コードがここまでたどり着いた場合署名がない
 
-			// OO.ui.confirmが非同期処理のため先に保存処理をキャンセル
-			e.preventDefault();
-			e.stopPropagation();
+		// 非同期処理を行うため先に保存処理をキャンセル
+		e.preventDefault();
+		e.stopPropagation();
 
-			OO.ui.confirm('署名が入力されていません。このまま投稿しますか？').then(function(confirmed) {
+		await mw.loader.using('oojs-ui-windows');
+		const confirmed = await OO.ui.confirm('署名が入力されていません。このまま投稿しますか？');
 
-				// OKが押されたら確認済みにして保存ボタンを再度クリック
-				if (confirmed) {
-					userConfirmed = true;
-					$saveButton.trigger('click');
-				}
+		// OKが押されたら確認済みにして保存ボタンを再度クリック
+		if (confirmed) {
+			userConfirmed = true;
+			$saveButton.trigger('click');
+		}
+	};
 
-			});
-
-		});
-
-	});
-
-})();
+	$saveButton.off('click').on('click', saveButtonClickCallback);
+});
 //</nowiki>
