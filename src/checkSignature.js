@@ -58,8 +58,15 @@
 		var originalText = $textbox.val();
 		if (typeof originalText !== 'string') return;
 
+		var userConfirmed = false;
+
 		// 「変更を公開」が押された時
 		$saveButton.off('click').on('click', function(e) {
+
+			// 確認済みの場合は、そのまま通常のクリック処理を続行
+			if (userConfirmed) {
+				return;
+			}
 
 			// 細部の編集のチェック状態を取得
 			var isMinorEdit = $('#wpMinoredit').prop('checked');
@@ -120,13 +127,19 @@
 				}
 
 			}
-
 			// コードがここまでたどり着いた場合署名がない
-			e.preventDefault(); // OO.ui.confirmが非同期処理のため先に保存処理をキャンセル
+
+			// OO.ui.confirmが非同期処理のため先に保存処理をキャンセル
+			e.preventDefault();
+			e.stopPropagation();
+
 			OO.ui.confirm('署名が入力されていません。このまま投稿しますか？').then(function(confirmed) {
 
-				// OKが押されたらフォームをsubmit
-				if (confirmed) $form.trigger('submit');
+				// OKが押されたら確認済みにして保存ボタンを再度クリック
+				if (confirmed) {
+					userConfirmed = true;
+					$saveButton.trigger('click');
+				}
 
 			});
 
