@@ -429,7 +429,7 @@ class Config {
 		const $backgroundColorDemo = $('#anrc-backgroundcolor-demo').css('background-color', cfg.backgroundColor);
 
 		// Event listeners
-		let headerColorTimeout: NodeJS.Timeout;
+		let headerColorTimeout: ReturnType<typeof setTimeout>;
 		this.headerColor.$input.off('input').on('input', function(this: HTMLInputElement) {
 			// Change the background color of span that demonstrates the color of the dialog header
 			clearTimeout(headerColorTimeout);
@@ -438,7 +438,7 @@ class Config {
 			}, 500);
 		});
 
-		let backgroundColorTimeout: NodeJS.Timeout;
+		let backgroundColorTimeout: ReturnType<typeof setTimeout>;
 		this.backgroundColor.$input.off('input').on('input', function(this: HTMLInputElement) {
 			// Change the background color of span that demonstrates the color of the dialog body
 			clearTimeout(backgroundColorTimeout);
@@ -3215,7 +3215,7 @@ class User {
 
 		// Append a username input
 		this.$input = $('<input>');
-		let inputTimeout: NodeJS.Timeout;
+		let inputTimeout: ReturnType<typeof setTimeout>;
 		this.$input
 			.addClass('anr-option-username') // Currently not used for anything
 			.prop({

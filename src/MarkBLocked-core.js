@@ -107,7 +107,7 @@ class MarkBLocked {
 				 * Timeout ID used to defer a `markup` call when needed.
 				 * Cleared or reset depending on the DOM connection state of `$content`.
 				 *
-				 * @type {NodeJS.Timeout=}
+				 * @type {ReturnType<typeof setTimeout>=}
 				 */
 				let hookTimeout;
 
@@ -424,7 +424,7 @@ class MarkBLocked {
 
 		// Handle the IP reveal hook
 		/**
-		 * @type {NodeJS.Timeout=}
+		 * @type {ReturnType<typeof setTimeout>=}
 		 */
 		let revealHookTimeout;
 		/**

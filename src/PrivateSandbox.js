@@ -1186,7 +1186,7 @@ class PrivateSandbox {
 		});
 
 		// Fire the "pvtsand.content" hook when the content is edited
-		let /** @type {NodeJS.Timeout} */ editorTimeout;
+		let /** @type {ReturnType<typeof setTimeout>} */ editorTimeout;
 		const onEditorContentChange = () => {
 			clearTimeout(editorTimeout);
 			editorTimeout = setTimeout(() => {
@@ -1199,7 +1199,7 @@ class PrivateSandbox {
 		}
 
 		// Event handler for when the editor content is changed
-		/** @type {NodeJS.Timeout} */
+		/** @type {ReturnType<typeof setTimeout>} */
 		let previewTimeout;
 		mw.hook('pvtsand.content').add(/** @param {string} value */ (value) => {
 

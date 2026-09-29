@@ -1390,7 +1390,7 @@ AjaxBlock.unprocessableLinkTitleAttr = null;
  */
 AjaxBlock.confirmWindowManager = null;
 /**
- * @type {Map<string | number, NodeJS.Timeout>}
+ * @type {Map<string | number, ReturnType<typeof setTimeout>>}
  */
 AjaxBlock.linkRestorationTimeoutMap = new Map();
 

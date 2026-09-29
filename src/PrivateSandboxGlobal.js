@@ -250,7 +250,7 @@ var PrivateSandbox = /** @class */ (function() {
 		$content.empty().append($psBody);
 
 		// Save button event
-		var /** @type {NodeJS.Timeout} */ psSaveTimeout;
+		var /** @type {ReturnType<typeof setTimeout>} */ psSaveTimeout;
 		var _this = this;
 		$psSave.off('click').on('click', function() {
 
@@ -362,7 +362,7 @@ var PrivateSandbox = /** @class */ (function() {
 		});
 
 		// Textarea input event handler
-		var /** @type {NodeJS.Timeout} */ previewTimeout;
+		var /** @type {ReturnType<typeof setTimeout>} */ previewTimeout;
 		$psTextarea.off('input').on('input', function() {
 			var textarea = this;
 			clearTimeout(previewTimeout);

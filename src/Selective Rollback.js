@@ -136,7 +136,7 @@ class SelectiveRollback {
 
 		// Set up a hook for page content updates
 		const hook = mw.hook('wikipage.content');
-		let /** @type {NodeJS.Timeout} */ hookTimeout;
+		let /** @type {ReturnType<typeof setTimeout>} */ hookTimeout;
 		const hookCallback = () => {
 			clearTimeout(hookTimeout);
 			hookTimeout = setTimeout(() => {
@@ -2291,7 +2291,7 @@ class SelectiveRollbackConfig {
 		});
 
 		const labelColorPreviewId = 'sr-config-labelcolor-preview-' + domain;
-		let /** @type {NodeJS.Timeout} */ labelColorTimeout;
+		let /** @type {ReturnType<typeof setTimeout>} */ labelColorTimeout;
 		this.checkboxLabelColor.on('change', (value) => {
 			clearTimeout(labelColorTimeout);
 			labelColorTimeout = setTimeout(() => {
@@ -3681,7 +3681,7 @@ function PendingButtonWidgetFactory() {
  */
 function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 	const previewApi = new mw.Api(SelectiveRollback.apiOptions(true));
-	let /** @type {NodeJS.Timeout} */ previewTimeout;
+	let /** @type {ReturnType<typeof setTimeout>} */ previewTimeout;
 
 	const dirMismatch = document.dir !== dir;
 	const uiStart = dir === 'rtl' ? 'right' : 'left';
@@ -3852,7 +3852,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 				placeholder: msg['dialog-label-summaryinput']
 			});
 
-			let /** @type {NodeJS.Timeout} */ summaryTimeout;
+			let /** @type {ReturnType<typeof setTimeout>} */ summaryTimeout;
 			this.summary.on('change', (value) => {
 				this.previewSummary();
 				clearTimeout(summaryTimeout);

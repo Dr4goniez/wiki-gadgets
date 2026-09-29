@@ -789,7 +789,7 @@ class MarkAdminsConfig {
 		};
 		/**
 		 * Used to prevent recursive calls of setDisabledOnResetCondsButton()
-		 * @type {NodeJS.Timeout}
+		 * @type {ReturnType<typeof setTimeout>}
 		 */
 		let resetCondsTimeout;
 		this.namespaces.on('change', () => {

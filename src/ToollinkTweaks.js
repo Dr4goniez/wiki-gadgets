@@ -167,7 +167,7 @@ function init() {
 			}
 
 			// Add toollinks when hook is triggered
-			/** @type {NodeJS.Timeout} */
+			/** @type {ReturnType<typeof setTimeout>} */
 			var hookTimeout;
 			mw.hook('wikipage.content').add(function() {
 				clearTimeout(hookTimeout); // Prevent `addLinks` from being called multiple times (hook can be fired several times in an instant)
