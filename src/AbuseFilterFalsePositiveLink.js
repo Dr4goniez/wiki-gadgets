@@ -4,13 +4,13 @@
  * Adds a link to [[WP:EF/FP]] in the navigation toolbar
  * on [[Special:AbuseFilter]] and [[Special:AbuseLog]].
  *
- * @version 1.0.0
+ * @version 1.0.1
  * @author [[User:Dragoniez]]
  */
 // @ts-check
 /* global mw */
 // <nowiki>
-$.when(mw.loader.using('mediawiki.util'), $.ready).then(function() {
+$.when(mw.loader.using('mediawiki.util'), $.ready).then(function () {
 
 	const spName = mw.config.get('wgCanonicalSpecialPageName');
 	if (!(spName === 'AbuseFilter' || spName === 'AbuseLog')) {
