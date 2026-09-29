@@ -18,7 +18,7 @@
  * - Does not suppport configurations via user common.js. Instead, it provides
  *   [[Special:MarkAdminsConfig]] for user configurations.
  * - User contribs links are also marked.
- * @version 2.0.4
+ * @version 2.0.5
  *
  * @requires [[MediaWiki:Gadget-MarkAdmins-data.json]]
  * @requires [[MediaWiki:Gadget-MarkAdmins-updater.js]]
@@ -38,7 +38,7 @@ if (
 	return;
 }
 
-const version = '2.0.4';
+const version = '2.0.5';
 const DEVMODE = false;
 const wgNamespaceNumber = mw.config.get('wgNamespaceNumber');
 const wgCanonicalSpecialPageName = mw.config.get('wgCanonicalSpecialPageName') || '';
@@ -1209,6 +1209,13 @@ MarkAdminsConfig.groupMap = new Map([
 		enabled: true,
 		localized: 'グローバル巻き戻し者',
 		link: 'https://meta.wikimedia.org/wiki/Global_rollback/ja',
+		domain: 'global'
+	}],
+	['global-temporary-account-viewer', {
+		label: 'GTAIV',
+		enabled: false,
+		localized: 'グローバル仮アカウントIP閲覧者',
+		link: 'https://meta.wikimedia.org/wiki/Global_temporary_account_IP_viewers/ja',
 		domain: 'global'
 	}],
 	['vrt-permissions', {
