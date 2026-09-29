@@ -7,7 +7,7 @@
  *
  * Shows a confirmation (warning) popup when a temporary user attempts to log out.
  *
- * @version 1.1.1
+ * @version 1.1.2
  * @author [[User:Dragoniez]]
  */
 (() => {
@@ -37,7 +37,7 @@
 		const rawLinks = {
 			scrutiny: `<a href="${mw.util.getUrl('WP:SCRUTINY')}" target="_blank">投稿記録の分断</a>`,
 			sock: `<a href="${mw.util.getUrl('WP:SOCK')}" target="_blank">多重アカウントの不正使用</a>`,
-			block: `<a href="${mw.util.getUrl('WP:BLOCK')}" target="_blank">投稿ブロック</a>`
+			block: `<a href="${mw.util.getUrl('WP:BLOCK')}" target="_blank">投稿ブロック</a>`,
 		};
 		const $warning = $('<div>').html(
 			'<h3 style="text-align:center;">警告</h3>' +
@@ -55,7 +55,7 @@
 			'</div>'
 		);
 
-		$logout.on('click', function(event) {
+		$logout.on('click', function (event) {
 			event.preventDefault(); // Cancel default anchor navigation
 
 			OO.ui.confirm($warning, { size: 'larger' }).then((confirmed) => {
