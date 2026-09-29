@@ -83,7 +83,6 @@ export type IsOfType = <T extends 'string' | 'number' | 'bigint' | 'boolean' | '
 	T extends 'symbol' ? symbol :
 	T extends 'undefined' ? undefined :
 	T extends 'object' ? object :
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	T extends 'function' ? (...args: any[]) => any :
 	T extends 'null' ? null : never
 );
@@ -92,7 +91,7 @@ export type Languages = 'ja' | 'en' | 'zh' | 'es' | 'ro' | 'vi' | 'ar';
 
 export interface Messages {
 	/** Optional translation for "Selective Rollback". */
-	'scriptname': string;
+	scriptname: string;
 	/** Tooltip for the portlet link used to open the SR dialog. */
 	'portlet-tooltip-dialog': string;
 	/** Label (and tooltip) for the portlet link used to purge cache for Selective Rollback. */
@@ -278,7 +277,7 @@ export interface SRBox {
 
 export interface RollbackLink {
 	rbspan: HTMLSpanElement;
-	box: SRBox?;
+	box: SRBox | null;
 }
 
 export interface RollbackLinkMap {

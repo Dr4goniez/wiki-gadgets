@@ -30,7 +30,7 @@ export interface UserInfo extends UserInfoBase {
 	/**
 	 * IP addresses associated with the username, if any.
 	 */
-	ips: (Omit<IpInfo, 'ip' | 'users'> & { ip : string })[];
+	ips: (Omit<IpInfo, 'ip' | 'users'> & { ip: string })[];
 
 }
 
@@ -74,7 +74,6 @@ export interface CollectedUsernames {
  * Picks method names whose return type extends string.
  */
 export type StringMethodKeys<T> = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [K in keyof T]: T[K] extends (...args: any[]) => string ? K : never
 }[keyof T];
 
@@ -182,7 +181,7 @@ export interface LoadedMessages extends OriginalMessages {
 	/** `'talk'` */
 	'sp-contributions-talk': string;
 	/** `'contribs'` */
-	'contribslink': string;
+	contribslink: string;
 	/** `'logs'` */
 	'sp-contributions-logs': string;
 	/** `'block log'` */
@@ -210,7 +209,7 @@ export interface LoadedMessages extends OriginalMessages {
 	/** `'Table'` */
 	'wikieditor-toolbar-tool-table': string;
 	/** `'Block user'` */
-	'block': string;
+	block: string;
 	/** `'Usernames and IP addresses'` */
 	'checkuser-investigateblock-target': string;
 	/** `'Add more...'` */
@@ -222,9 +221,9 @@ export interface LoadedMessages extends OriginalMessages {
 	/** `'Expiration'` */
 	'block-expiry': string;
 	/** `'2 hours:2 hours,1 day:1 day,...'` */
-	'ipboptions': string;
+	ipboptions: string;
 	/** `'Other time:'` */
-	'ipbother': string;
+	ipbother: string;
 	/** `'Reason'` */
 	'checkuser-investigateblock-reason': string;
 	/** `'*Common block reasons\n...'` */
@@ -234,9 +233,9 @@ export interface LoadedMessages extends OriginalMessages {
 	/** `'Block details'` */
 	'block-details': string;
 	/** `'Account creation'` */
-	'ipbcreateaccount': string;
+	ipbcreateaccount: string;
 	/** `'Sending email'` */
-	'ipbemailban': string;
+	ipbemailban: string;
 	/** `'Editing own talk page'` */
 	'ipb-disableusertalk': string;
 	/** `'Additional options'` */
@@ -244,15 +243,15 @@ export interface LoadedMessages extends OriginalMessages {
 	/** `'(optional)'` */
 	'htmlform-optional-flag': string;
 	/** `'Block the last IP address used by this account,...'` */
-	'ipbenableautoblock': string;
+	ipbenableautoblock: string;
 	/** `'{{PLURAL:$1|$1 day|$1 days}}'` */
-	'days': string;
+	days: string;
 	/** `'Hide username from edits and lists'` */
-	'ipbhidename': string;
+	ipbhidename: string;
 	/** `'Apply block to logged-in users from this IP address'` */
 	'ipb-hardblock': string;
 	/** `'block'` */
-	'blocklink': string;
+	blocklink: string;
 
 	/** `'Error ($1)'` */
 	'api-feed-error-title': string;
@@ -261,7 +260,7 @@ export interface LoadedMessages extends OriginalMessages {
 	/** `'Type a reason'` */
 	'block-removal-reason-placeholder': string;
 	/** `'empty'` */
-	'historyempty': string;
+	historyempty: string;
 	/** `'Add block'` */
 	'block-create': string;
 	/** `'Override existing blocks'` */
@@ -289,11 +288,11 @@ export interface LoadedMessages extends OriginalMessages {
 	'block-log-flags-nocreate': string;
 	'block-log-flags-noemail': string;
 	'block-log-flags-nousertalk': string;
-	'parentheses': string;
+	parentheses: string;
 	'comma-separator': string;
-	'and': string;
+	and: string;
 	'word-separator': string;
-	'blanknamespace': string;
+	blanknamespace: string;
 	'ipb-action-create': string;
 	'ipb-action-move': string;
 	'ipb-action-thanks': string;

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // Adds type definitions for mw.widgets.TitlesMultiselectWidget
 // See https://gerrit.wikimedia.org/r/plugins/gitiles/mediawiki/core/+/refs/heads/master/resources/src/mediawiki.widgets/mw.widgets.TitlesMultiselectWidget.js
 declare namespace mw {
@@ -20,8 +19,7 @@ declare namespace mw {
 		class TitlesMultiselectWidget extends OO.ui.MenuTagMultiselectWidget implements
 			OO.ui.mixin.RequestManager,
 			OO.ui.mixin.PendingElement,
-			TitleWidget
-		{
+			TitleWidget {
 
 			constructor(config?: TitlesMultiselectWidgetConfig);
 

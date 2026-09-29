@@ -12,6 +12,7 @@ declare namespace mw {
 		}
 
 		class NamespacesMultiselectWidget extends OO.ui.MenuTagMultiselectWidget {
+
 			constructor(config?: NamespacesMultiselectWidgetConfig);
 		}
 	}

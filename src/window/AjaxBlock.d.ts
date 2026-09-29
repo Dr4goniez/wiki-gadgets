@@ -256,7 +256,6 @@ export interface ApiResponseUnblock {
  * Picks method names whose return type extends string.
  */
 export type StringMethodKeys<T> = {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	[K in keyof T]: T[K] extends (...args: any[]) => string ? K : never
 }[keyof T];
 
@@ -398,14 +397,14 @@ export interface MediaWikiMessages {
 	'colon-separator': string;
 	'parentheses-start': string;
 	'parentheses-end': string;
-	'internalerror_info': string;
+	internalerror_info: string;
 
-	'block': string;
+	block: string;
 	'block-target': string;
 	'block-expiry': string;
-	'infiniteblock': string;
-	'ipboptions': string;
-	'ipbother': string;
+	infiniteblock: string;
+	ipboptions: string;
+	ipbother: string;
 	'ipbreason-dropdown': string;
 	'ipbreason-indef-dropdown': string;
 	'htmlform-selectorother-other': string;
@@ -417,28 +416,28 @@ export interface MediaWikiMessages {
 	'block-namespaces-placeholder': string;
 
 	'block-details': string;
-	'ipbcreateaccount': string;
-	'ipbemailban': string;
+	ipbcreateaccount: string;
+	ipbemailban: string;
 	'ipb-disableusertalk': string;
 
 	'block-options': string;
 	'ipb-hardblock': string;
-	'ipbhidename': string;
-	'ipbwatchuser': string;
+	ipbhidename: string;
+	ipbwatchuser: string;
 	'watchlist-expiry-options': string;
 	'block-create': string;
 
-	'unblock': string;
+	unblock: string;
 	'block-reason': string;
 	'block-removal-reason-placeholder': string;
 
 	// Used in setTarget()
 	'apierror-modify-autoblock': string;
-	'autoblockid': string;
+	autoblockid: string;
 
-	'confirm': string;
-	'cancel': string;
-	'saveprefs': string;
+	confirm: string;
+	cancel: string;
+	saveprefs: string;
 
 	// Copied from InvestigateHelper
 	'logentry-block-block': string;
@@ -457,11 +456,11 @@ export interface MediaWikiMessages {
 	'block-log-flags-nocreate': string;
 	'block-log-flags-noemail': string;
 	'block-log-flags-nousertalk': string;
-	'parentheses': string;
+	parentheses: string;
 	'comma-separator': string;
-	'and': string;
+	and: string;
 	'word-separator': string;
-	'blanknamespace': string;
+	blanknamespace: string;
 	'logentry-partialblock-block-page': string;
 	'logentry-partialblock-block-ns': string;
 	'logentry-partialblock-block-action': string;
@@ -483,7 +482,7 @@ export interface LoadedMessages extends AjaxBlockMessages, MediaWikiMessages {}
 export interface CachedMessage {
 	'ipbreason-dropdown': Record<string, string | Record<string, string>>;
 	'ipbreason-indef-dropdown': Record<string, string | Record<string, string>>;
-	'ipboptions': Map<string, string>;
+	ipboptions: Map<string, string>;
 	'watchlist-expiry-options': Map<string, string>;
 }
 
@@ -524,14 +523,14 @@ export interface WatchUserParams {
 }
 
 type UserParams = XOR<
-	{ id: number; },
-	{ user: string; }
+	{ id: number },
+	{ user: string }
 >;
 
 export type BaseParams =
 	UserParams &
 	WatchUserParams &
-	{ action: BlockActions; };
+	{ action: BlockActions };
 
 export type BlockParams =
 	BaseParams &
@@ -574,9 +573,9 @@ export type WarningContext =
 export type BlockLogGenerator = () => JQuery.Promise<OO.ui.RadioOptionWidget[] | JQuery<HTMLElement> | null>;
 
 export type TargetHandler =
-	| { type: 'message'; message: () => string; }
-	| { type: 'log'; log: BlockLogGenerator; }
-	| { type: 'none'; };
+	| { type: 'message'; message: () => string }
+	| { type: 'log'; log: BlockLogGenerator }
+	| { type: 'none' };
 
 interface ParamApplierWatchParams {
 	watchuser: boolean | null;
@@ -604,7 +603,6 @@ export interface ParamApplierUnblockParams extends ParamApplierWatchParams {
 
 interface ParamApplierHandler<SetterValue, GetterValue = SetterValue> {
 	getter?: (value: GetterValue) => SetterValue | JQuery.Promise<SetterValue>;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	setter: (value: SetterValue) => any;
 }
 
@@ -702,7 +700,7 @@ export interface BlockPresetJson {
 	params: ParamApplierBlockParams;
 }
 
-export type PartialBlockPresetJson = Omit<BlockPresetJson, 'params'> & { params: Partial<ParamApplierBlockParams>; };
+export type PartialBlockPresetJson = Omit<BlockPresetJson, 'params'> & { params: Partial<ParamApplierBlockParams> };
 
 export type AjaxBlockLanguages = 'en' | 'ja';
 

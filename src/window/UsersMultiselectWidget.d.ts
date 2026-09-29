@@ -41,6 +41,7 @@ declare namespace mw {
 		}
 
 		class UsersMultiselectWidget extends OO.ui.MenuTagMultiselectWidget implements OO.ui.mixin.PendingElement {
+
 			constructor(config?: UsersMultiselectWidgetConfig);
 			/**
 			 * Get currently selected usernames.
