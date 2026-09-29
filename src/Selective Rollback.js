@@ -1,26 +1,24 @@
-/***************************************************************************************************\
-
-	Selective Rollback
-
-	@author [[User:Dragoniez]]
-	@version 5.1.5
-	@see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
-
-	Some functionality in this script is adapted from:
-	@link https://meta.wikimedia.org/wiki/User:Hoo_man/smart_rollback.js
-	@link https://en.wikipedia.org/wiki/User:DannyS712/AjaxRollback.js
-
-	See also the type definitions at:
-	@link https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/Selective%20Rollback.d.ts
-
-\***************************************************************************************************/
+/**
+ * Selective Rollback
+ *
+ * @author [[User:Dragoniez]]
+ * @version 5.1.6
+ * @see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
+ *
+ * Some functionality in this script is adapted from:
+ * @link https://meta.wikimedia.org/wiki/User:Hoo_man/smart_rollback.js
+ * @link https://en.wikipedia.org/wiki/User:DannyS712/AjaxRollback.js
+ *
+ * See also the type definitions at:
+ * @link https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/Selective%20Rollback.d.ts
+ */
 // @ts-check
 /* global mw, OO */
-//<nowiki>
+// <nowiki>
 (() => {
-//**************************************************************************************************
+// **************************************************************************************************
 
-const version = '5.1.5';
+const version = '5.1.6';
 
 // Run this script only when on /wiki/$1 or /w/index.php
 if (
@@ -71,7 +69,7 @@ class SelectiveRollback {
 			'mediawiki.api',
 			'mediawiki.user',
 			'mediawiki.util',
-			'oojs-ui'
+			'oojs-ui',
 		];
 		if (isOnConfig) {
 			modules.push('mediawiki.ForeignApi');
@@ -128,7 +126,7 @@ class SelectiveRollback {
 		const dialog = new SelectiveRollbackDialog({
 			$element: $('<div>').attr({ dir }),
 			classes: ['sr-dialog'],
-			size: 'large'
+			size: 'large',
 		}, autocompleteSources);
 		SelectiveRollbackDialog.windowManager.addWindows([dialog]);
 		const sr = new this(dialog, cfg, parentNode);
@@ -192,11 +190,11 @@ class SelectiveRollback {
 									action: 'edit',
 									section: 'new',
 									preloadtitle: `Error report (${date})`,
-									preload: 'User:Dragoniez/preload'
+									preload: 'User:Dragoniez/preload',
 								}) +
 								'&preloadparams%5B%5D=a%20parentNode%20error' +
 								'&preloadparams%5B%5D=' + encodeURIComponent(location.href),
-							target: '_blank'
+							target: '_blank',
 						})
 						.text('Report the error'),
 					')'
@@ -219,18 +217,18 @@ class SelectiveRollback {
 		const options = {
 			ajax: {
 				headers: {
-					'Api-User-Agent': `Selective_Rollback/${version} (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)`
-				}
+					'Api-User-Agent': `Selective_Rollback/${version} (https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback.js)`,
+				},
 			},
 			parameters: {
 				action: 'query',
 				format: 'json',
-				formatversion: '2'
-			}
+				formatversion: '2',
+			},
 		};
 		if (readOnlyPost) {
-			// @ts-expect-error
-			options.ajax.headers['Promise-Non-Write-API-Action'] = true;
+			// @ts-expect-error mw.Api.Options.ajax is inferred as possibly undefined
+			options.ajax.headers['Promise-Non-Write-API-Action'] = '1';
 		}
 		return options;
 	}
@@ -360,13 +358,13 @@ class SelectiveRollback {
 			params.meta.push('allmessages');
 			Object.assign(params, {
 				ammessages: 'revertpage',
-				amlang: mw.config.get('wgContentLanguage') // the language of the wiki
+				amlang: mw.config.get('wgContentLanguage'), // the language of the wiki
 			});
 		}
 
 		/** @type {string[] | null | false} */
 		let rights = mw.storage.getObject(this.storageKeys.rights);
-		if (!Array.isArray(rights) || !rights.every(v => typeof v === 'string')) {
+		if (!Array.isArray(rights) || !rights.every((v) => typeof v === 'string')) {
 			params.meta.push('userinfo');
 			params.uiprop = 'rights';
 		}
@@ -394,7 +392,7 @@ class SelectiveRollback {
 				summary,
 				parsedsummary: parsePluralOther(summary),
 				fetched: true,
-				rights: new Set(rights)
+				rights: new Set(rights),
 			};
 		}
 
@@ -424,7 +422,7 @@ class SelectiveRollback {
 			summary,
 			parsedsummary: parsePluralOther(summary),
 			fetched,
-			rights: rights ? new Set(rights) : new Set()
+			rights: rights ? new Set(rights) : new Set(),
 		};
 	}
 
@@ -434,7 +432,7 @@ class SelectiveRollback {
 	 * @private
 	 */
 	static createCachePurger() {
-		if (!Object.values(this.storageKeys).some(key => mw.storage.get(key))) {
+		if (!Object.values(this.storageKeys).some((key) => mw.storage.get(key))) {
 			// Don't generate the portlet link if no cache exists
 			return;
 		}
@@ -475,7 +473,7 @@ class SelectiveRollback {
 
 		/** @type {string[] | false | null} */
 		const cache = mw.storage.getObject(this.storageKeys.autocomplete);
-		if (Array.isArray(cache) && cache.every(el => typeof el === 'string')) {
+		if (Array.isArray(cache) && cache.every((el) => typeof el === 'string')) {
 			return $.Deferred().resolve(cache).promise();
 		}
 
@@ -513,7 +511,7 @@ class SelectiveRollback {
 		 * @readonly
 		 * @private
 		 */
-		this.confirmation = SelectiveRollback.regex.mobile.test(navigator && navigator.userAgent || '')
+		this.confirmation = SelectiveRollback.regex.mobile.test((navigator && navigator.userAgent) || '')
 			? cfg.mobileConfirm
 			: cfg.desktopConfirm;
 		/**
@@ -631,8 +629,8 @@ class SelectiveRollback {
 			// Confirm rollback per config
 			!e.shiftKey && (
 				this.confirmation === 'always' ||
-				isOnRCW && this.confirmation === 'RCW' ||
-				!isOnRCW && this.confirmation === 'nonRCW'
+				(isOnRCW && this.confirmation === 'RCW') ||
+				(!isOnRCW && this.confirmation === 'nonRCW')
 			)
 		) {
 			// Visualize which rollback link has been clicked
@@ -678,22 +676,22 @@ class SelectiveRollback {
 		if (!rblink) {
 			error = [
 				'[SR] Error: Anchor tag is missing in the rollback link for some reason.',
-				'linkmissing'
+				'linkmissing',
 			];
 		} else if (!href) {
 			error = [
 				'[SR] Error: The rollback link lacks an href attribute.',
-				'hrefmissing'
+				'hrefmissing',
 			];
 		} else if (!title) {
 			error = [
 				'[SR] Error: The rollback link does not have a "title" query parameter.',
-				'titlemissing'
+				'titlemissing',
 			];
 		} else if (!user) {
 			error = [
 				'[SR] Error: The rollback link does not have a "from" query parameter.',
-				'usermissing'
+				'usermissing',
 			];
 		}
 		if (error) {
@@ -741,7 +739,7 @@ class SelectiveRollback {
 						.css({
 							'vertical-align': 'middle',
 							height: '1em',
-							border: 0
+							border: 0,
 						})
 				);
 		} else {
@@ -801,6 +799,7 @@ class SelectiveRollback {
 		const results = await Promise.all(batches);
 		let success = 0, fail = 0;
 		for (const bool of results) {
+			// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 			bool ? success++ : fail++;
 		}
 		mw.notify(
@@ -827,8 +826,8 @@ class SelectiveRollback {
 			return acc;
 		}, /** @type {RollbackLink[]} */ ([]));
 	}
-
 }
+/* eslint-disable @stylistic/quote-props */
 /** @type {Record<Languages, Messages>} */
 SelectiveRollback.i18n = {
 	ja: {
@@ -1565,8 +1564,9 @@ SelectiveRollback.i18n = {
 		'config-confirm-deletedata': 'هل أنت متأكد أنك تريد حذف بيانات الإعداد؟ لا يمكن التراجع عن هذا الإجراء.',
 		'config-notify-deletedata-success': 'تم حذف بيانات الإعداد المحددة.',
 		'config-notify-deletedata-failure': 'فشل حذف بعض بيانات الإعداد المحددة.',
-	}
+	},
 };
+/* eslint-enable @stylistic/quote-props */
 SelectiveRollback.regex = {
 	/** Adapted from {@link https://github.com/wikimedia/mediawiki-extensions-MobileDetect/blob/master/src/Hooks.php}. */
 	mobile: new RegExp(
@@ -1592,7 +1592,7 @@ SelectiveRollback.regex = {
 	 * * `$0` - `'/wiki/<title>'`
 	 * * `$1` - `'<title>'`
 	 */
-	article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)'))
+	article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
 };
 /**
  * Index assigned to each rollback link.
@@ -1604,7 +1604,7 @@ SelectiveRollback.index = -1;
 SelectiveRollback.storageKeys = {
 	autocomplete: 'mw-SelectiveRollback-autocomplete',
 	summary: 'mw-SelectiveRollback-summary',
-	rights: 'mw-SelectiveRollback-rights'
+	rights: 'mw-SelectiveRollback-rights',
 };
 
 /**
@@ -1655,7 +1655,7 @@ class SelectiveRollbackConfig {
 			checkboxLabelColor: 'orange',
 			markBot: true,
 			configLink: false,
-			purgerLink: false
+			purgerLink: false,
 		};
 	}
 
@@ -1679,7 +1679,7 @@ class SelectiveRollbackConfig {
 			checkboxLabelColor: null,
 			markBot: true,
 			configLink: false,
-			purgerLink: false
+			purgerLink: false,
 		};
 	}
 
@@ -1714,10 +1714,10 @@ class SelectiveRollbackConfig {
 					continue;
 				}
 				if (isObject(value) && shouldMergeObject(key)) {
-					// @ts-expect-error
+					// @ts-expect-error `cfg[key]` is inferred to be of type `any`
 					Object.assign(cfg[key], value);
 				} else {
-					// @ts-expect-error
+					// @ts-expect-error `cfg[key]` is inferred to be of type `any`
 					cfg[key] = value;
 				}
 			}
@@ -1733,13 +1733,13 @@ class SelectiveRollbackConfig {
 		/** @type {?string} */
 		let rawCfg = mw.user.options.get(this.keys[domain]);
 		if (!rawCfg) {
-			// @ts-expect-error
+			// @ts-expect-error `ConfigRetriever` has a complicated return type
 			return null;
 		}
 		try {
 			return JSON.parse(rawCfg);
 		} catch (_) {
-			// @ts-expect-error
+			// @ts-expect-error `ConfigRetriever` has a complicated return type
 			return null;
 		}
 	}
@@ -1780,10 +1780,10 @@ class SelectiveRollbackConfig {
 			console.error(`[SR] Invalid config value for "${key}"`, value);
 		};
 		const keyConvertMap = {
-			specialExpressions:	'replacementExpressions',
+			specialExpressions: 'replacementExpressions',
 			watchPage: 'watchlist',
 			watchExpiry: 'watchlistExpiry',
-			confirm: 'desktopConfirm'
+			confirm: 'desktopConfirm',
 		};
 
 		/** @type {SelectiveRollbackConfigObjectLegacy} */
@@ -1844,9 +1844,9 @@ class SelectiveRollbackConfig {
 				val = v;
 			}
 
-			// @ts-expect-error
+			// @ts-expect-error XXX
 			key = keyConvertMap[key] || key;
-			// @ts-expect-error
+			// @ts-expect-error XXX
 			cfg[key] = val;
 		}
 
@@ -1872,21 +1872,21 @@ class SelectiveRollbackConfig {
 		const globalTabPanel = new OO.ui.TabPanelLayout('Global', {
 			expanded: false,
 			label: msg['config-tab-global'],
-			scrollable: false
+			scrollable: false,
 		});
 		const localTabPanel = new OO.ui.TabPanelLayout('Local', {
 			expanded: false,
 			label: msg['config-tab-local'],
-			scrollable: false
+			scrollable: false,
 		});
 		const miscTabPanel = new OO.ui.TabPanelLayout('Misc', {
 			expanded: false,
 			label: msg['config-label-miscellaneous'],
-			scrollable: false
+			scrollable: false,
 		});
 		const index = new OO.ui.IndexLayout({
 			expanded: false,
-			framed: false
+			framed: false,
 		}).addTabPanels([globalTabPanel, localTabPanel, miscTabPanel], 0);
 
 		const $overlay = $('<div>').addClass('sr-config-overlay').hide();
@@ -1903,7 +1903,7 @@ class SelectiveRollbackConfig {
 			new OO.ui.MessageWidget({
 				classes: ['sr-config-notice'],
 				type: 'notice',
-				label: msg['config-notice-global']
+				label: msg['config-notice-global'],
 			}).$element,
 			globalTab.$element
 		);
@@ -1911,7 +1911,7 @@ class SelectiveRollbackConfig {
 			new OO.ui.MessageWidget({
 				classes: ['sr-config-notice'],
 				type: 'notice',
-				label: msg['config-notice-local']
+				label: msg['config-notice-local'],
 			}).$element,
 			localTab.$element
 		);
@@ -1926,7 +1926,7 @@ class SelectiveRollbackConfig {
 
 		const beforeunloadMap = {
 			local: localTab,
-			global: globalTab
+			global: globalTab,
 		};
 		window.onbeforeunload = (e) => {
 			const unsaved = Object.entries(beforeunloadMap).some(([k, field]) => {
@@ -2019,7 +2019,7 @@ class SelectiveRollbackConfig {
 		const defaultDropdownOption = () => {
 			return new OO.ui.MenuOptionWidget({
 				data: null,
-				label: `(${msg['config-default']})`
+				label: `(${msg['config-default']})`,
 			});
 		};
 
@@ -2060,8 +2060,8 @@ class SelectiveRollbackConfig {
 					defaultDropdownOption(),
 					...Object.keys(SelectiveRollback.i18n).map((key) => {
 						return new OO.ui.MenuOptionWidget({ data: key, label: key });
-					})
-				]
+					}),
+				],
 			},
 		});
 		this.lang.getMenu().selectItemByData(cfg.lang || null);
@@ -2070,7 +2070,7 @@ class SelectiveRollbackConfig {
 				align: 'top',
 				label: $headingLabel().text(msg['config-label-lang']),
 				help: helpTextForDefaultValueByKey('config-help-lang'),
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2091,14 +2091,14 @@ class SelectiveRollbackConfig {
 				align: 'top',
 				help: new OO.ui.HtmlSnippet(
 					'<ul>' +
-					// @ts-expect-error
+					// @ts-expect-error `msg` is strongly typed
 					[...Array(8)].map((_, i) => '<li>' + msg[`config-help-summary-$${i}`] + '</li>').join('') +
 					'</ul>'
 				),
-				label: $headingLabel().text(msg['config-label-summary'])
+				label: $headingLabel().text(msg['config-label-summary']),
 			}),
 			new OO.ui.FieldLayout(this.editSummaries.buttons, {
-				classes: ['sr-config-propertyfield-buttoncontainer']
+				classes: ['sr-config-propertyfield-buttoncontainer'],
 			})
 		);
 
@@ -2108,14 +2108,14 @@ class SelectiveRollbackConfig {
 		 * @private
 		 */
 		this.showKeys = new OO.ui.CheckboxInputWidget({
-			selected: cfg.showKeys
+			selected: cfg.showKeys,
 		});
 		items.push(
 			new OO.ui.FieldLayout(this.showKeys, {
 				align: 'inline',
 				label: msg['config-label-showkeys'],
 				help: helpTextForDefaultValueByKey('config-default-disabled'),
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2125,7 +2125,7 @@ class SelectiveRollbackConfig {
 		 * @private
 		 */
 		this.mergeSummaries = new OO.ui.CheckboxInputWidget({
-			selected: cfg.mergeSummaries
+			selected: cfg.mergeSummaries,
 		});
 		if (isLocal) {
 			items.push(
@@ -2133,7 +2133,7 @@ class SelectiveRollbackConfig {
 					align: 'inline',
 					label: msg['config-label-mergesummaries'],
 					help: helpTextForDefaultValueByKey('config-default-disabled'),
-					helpInline: true
+					helpInline: true,
 				})
 			);
 		}
@@ -2154,10 +2154,10 @@ class SelectiveRollbackConfig {
 			new OO.ui.FieldLayout(this.replacementExpressions.widget, {
 				align: 'top',
 				label: $headingLabel().text(msg['config-label-replacer']),
-				help: new OO.ui.HtmlSnippet(msg['config-help-replacer'])
+				help: new OO.ui.HtmlSnippet(msg['config-help-replacer']),
 			}),
 			new OO.ui.FieldLayout(this.replacementExpressions.buttons, {
-				classes: ['sr-config-propertyfield-buttoncontainer']
+				classes: ['sr-config-propertyfield-buttoncontainer'],
 			})
 		);
 
@@ -2167,7 +2167,7 @@ class SelectiveRollbackConfig {
 		 * @private
 		 */
 		this.mergeReplacers = new OO.ui.CheckboxInputWidget({
-			selected: cfg.mergeReplacers
+			selected: cfg.mergeReplacers,
 		});
 		if (isLocal) {
 			items.push(
@@ -2175,7 +2175,7 @@ class SelectiveRollbackConfig {
 					align: 'inline',
 					label: msg['config-label-mergereplacers'],
 					help: helpTextForDefaultValueByKey('config-default-disabled'),
-					helpInline: true
+					helpInline: true,
 				})
 			);
 		}
@@ -2186,19 +2186,19 @@ class SelectiveRollbackConfig {
 		 * @private
 		 */
 		this.watchlist = new OO.ui.CheckboxInputWidget({
-			selected: cfg.watchlist
+			selected: cfg.watchlist,
 		});
 		items.push(
 			new OO.ui.FieldLayout(
 				new OO.ui.LabelWidget({
-					label: $headingLabel().text(msg['config-label-watchlist'])
+					label: $headingLabel().text(msg['config-label-watchlist']),
 				})
 			),
 			new OO.ui.FieldLayout(this.watchlist, {
 				align: 'inline',
 				label: msg['dialog-label-watchlist'],
 				help: helpTextForDefaultValueByKey('config-default-disabled'),
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2211,8 +2211,8 @@ class SelectiveRollbackConfig {
 			menu: {
 				items: [
 					defaultDropdownOption(),
-					...getWatchlistExpiryOptions()
-				]
+					...getWatchlistExpiryOptions(),
+				],
 			},
 		});
 		this.watchlistExpiry.getMenu().selectItemByData(cfg.watchlistExpiry || null);
@@ -2221,7 +2221,7 @@ class SelectiveRollbackConfig {
 				align: 'top',
 				label: msg['config-label-watchlistexpiry'],
 				help: helpTextForDefaultValueByKey('dialog-label-watchlistexpiry-indefinite'),
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2231,7 +2231,7 @@ class SelectiveRollbackConfig {
 			const options = values.map((val) => {
 				return new OO.ui.MenuOptionWidget({
 					data: val,
-					label: msg[`config-label-confirmation-${val}`]
+					label: msg[`config-label-confirmation-${val}`],
 				});
 			});
 			return [defaultDropdownOption()].concat(options);
@@ -2244,8 +2244,8 @@ class SelectiveRollbackConfig {
 		 */
 		this.desktopConfirm = new OO.ui.DropdownWidget({
 			menu: {
-				items: generateConfirmationOptions()
-			}
+				items: generateConfirmationOptions(),
+			},
 		});
 		this.desktopConfirm.getMenu().selectItemByData(cfg.desktopConfirm || null);
 
@@ -2256,28 +2256,28 @@ class SelectiveRollbackConfig {
 		 */
 		this.mobileConfirm = new OO.ui.DropdownWidget({
 			menu: {
-				items: generateConfirmationOptions()
-			}
+				items: generateConfirmationOptions(),
+			},
 		});
 		this.mobileConfirm.getMenu().selectItemByData(cfg.mobileConfirm || null);
 
 		items.push(
 			new OO.ui.FieldLayout(
 				new OO.ui.LabelWidget({
-					label: $headingLabel().text(msg['config-label-confirmation'])
+					label: $headingLabel().text(msg['config-label-confirmation']),
 				})
 			),
 			new OO.ui.FieldLayout(this.desktopConfirm, {
 				align: 'top',
 				label: msg['config-label-confirmation-desktop'],
 				help: helpTextForDefaultValueByKey('config-label-confirmation-never'),
-				helpInline: true
+				helpInline: true,
 			}),
 			new OO.ui.FieldLayout(this.mobileConfirm, {
 				align: 'top',
 				label: msg['config-label-confirmation-mobile'],
 				help: helpTextForDefaultValueByKey('config-label-confirmation-always'),
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2287,7 +2287,7 @@ class SelectiveRollbackConfig {
 		 * @private
 		 */
 		this.checkboxLabelColor = new OO.ui.TextInputWidget({
-			value: cfg.checkboxLabelColor
+			value: cfg.checkboxLabelColor,
 		});
 
 		const labelColorPreviewId = 'sr-config-labelcolor-preview-' + domain;
@@ -2308,7 +2308,7 @@ class SelectiveRollbackConfig {
 					'(' + helpTextForDefaultValueByValue('orange') + ') ' +
 					msg['config-help-checkboxlabelcolor'] + ` <b id="${labelColorPreviewId}">SR</b>`
 				),
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2318,12 +2318,12 @@ class SelectiveRollbackConfig {
 		 * @private
 		 */
 		this.markBot = new OO.ui.CheckboxInputWidget({
-			selected: typeof cfg.markBot === 'boolean' ? cfg.markBot : true
+			selected: typeof cfg.markBot === 'boolean' ? cfg.markBot : true,
 		});
 		items.push(
 			new OO.ui.FieldLayout(
 				new OO.ui.LabelWidget({
-					label: $headingLabel().text(msg['config-label-miscellaneous'])
+					label: $headingLabel().text(msg['config-label-miscellaneous']),
 				})
 			),
 			new OO.ui.FieldLayout(this.markBot, {
@@ -2331,7 +2331,7 @@ class SelectiveRollbackConfig {
 				label: msg['dialog-label-markbot'],
 				help: '(' + helpTextForDefaultValueByKey('config-default-enabled') + ') ' +
 					msg['config-help-markbot'],
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2341,14 +2341,14 @@ class SelectiveRollbackConfig {
 		 * @private
 		 */
 		this.configLink = new OO.ui.CheckboxInputWidget({
-			selected: cfg.configLink
+			selected: cfg.configLink,
 		});
 		items.push(
 			new OO.ui.FieldLayout(this.configLink, {
 				align: 'inline',
 				label: msg['config-label-configlink'],
 				help: helpTextForDefaultValueByKey('config-default-disabled'),
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2358,14 +2358,14 @@ class SelectiveRollbackConfig {
 		 * @private
 		 */
 		this.purgerLink = new OO.ui.CheckboxInputWidget({
-			selected: cfg.purgerLink
+			selected: cfg.purgerLink,
 		});
 		items.push(
 			new OO.ui.FieldLayout(this.purgerLink, {
 				align: 'inline',
 				label: msg['config-label-purger'],
 				help: helpTextForDefaultValueByKey('config-default-disabled'),
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2376,7 +2376,7 @@ class SelectiveRollbackConfig {
 		 */
 		this.saveButton = new (PendingButtonWidgetFactory())({
 			flags: ['primary', 'progressive'],
-			label: msg['config-button-save']
+			label: msg['config-button-save'],
 		});
 		this.saveButton.on('click', () => this.save());
 
@@ -2386,7 +2386,7 @@ class SelectiveRollbackConfig {
 		 * @private
 		 */
 		this.resetButton = new OO.ui.ButtonWidget({
-			label: msg['config-button-reset']
+			label: msg['config-button-reset'],
 		});
 		this.resetButton.on('click', async () => {
 			const confirmed = await OO.ui.confirm(
@@ -2403,8 +2403,8 @@ class SelectiveRollbackConfig {
 			$element: $('<div>').addClass('sr-config-buttoncontainer'),
 			content: [
 				this.saveButton,
-				this.resetButton
-			]
+				this.resetButton,
+			],
 		});
 		items.push(
 			new OO.ui.FieldLayout(buttonContainer)
@@ -2467,7 +2467,7 @@ class SelectiveRollbackConfig {
 			checkboxLabelColor: clean(this.checkboxLabelColor.getValue()) || null,
 			markBot: this.markBot.isSelected(),
 			configLink: this.configLink.isSelected(),
-			purgerLink: this.purgerLink.isSelected()
+			purgerLink: this.purgerLink.isSelected(),
 		};
 
 		// Return an empty object when all the field values are defaults, so that save()
@@ -2540,7 +2540,7 @@ class SelectiveRollbackConfig {
 		if (codes.length) {
 			mw.notify(mw.format(msg['config-notify-save-failure'], codes.join(', ')), {
 				type: 'error',
-				autoHideSeconds: 'long'
+				autoHideSeconds: 'long',
 			});
 		} else {
 			mw.notify(msg['config-notify-save-success'], { type: 'success' });
@@ -2562,7 +2562,7 @@ class SelectiveRollbackConfig {
 	 * @returns {Record<string, ?string>} An object in the form of:
 	 * ```json
 	 * {
-	 * 	"userjs-selectiverollback-localexists": "Stringified `localexists` options or null"
+	 *   "userjs-selectiverollback-localexists": "Stringified `localexists` options or null"
 	 * }
 	 * ```
 	 * where a `null` value means that the user option should be reset.
@@ -2620,7 +2620,7 @@ class SelectiveRollbackConfig {
 				}
 				return acc;
 			}, ''),
-			assertuser: wgUserName
+			assertuser: wgUserName,
 		}).then(() => {
 			mw.user.options.set(change);
 			return null;
@@ -2656,12 +2656,11 @@ class SelectiveRollbackConfig {
 			}
 		}
 	}
-
 }
 SelectiveRollbackConfig.keys = {
 	local: 'userjs-selectiverollback-local',
 	global: 'userjs-selectiverollback-global',
-	localexists: 'userjs-selectiverollback-localexists'
+	localexists: 'userjs-selectiverollback-localexists',
 };
 SelectiveRollbackConfig.deprecatedConfigWarned = false;
 
@@ -2703,7 +2702,7 @@ function objectsEqual(obj1, obj2) {
 		return false;
 	}
 
-	return keys1.every(key => {
+	return keys1.every((key) => {
 		if (!(key in obj2)) {
 			return false;
 		}
@@ -2770,7 +2769,7 @@ class SelectiveRollbackConfigMisc {
 
 		items.push(
 			new OO.ui.FieldLayout(new OO.ui.LabelWidget({
-				label: $headingLabel().text(msg['config-label-deletedata'])
+				label: $headingLabel().text(msg['config-label-deletedata']),
 			}))
 		);
 
@@ -2783,7 +2782,7 @@ class SelectiveRollbackConfigMisc {
 		items.push(
 			new OO.ui.FieldLayout(this.purgeCache, {
 				align: 'inline',
-				label: msg['portlet-label-uncacher']
+				label: msg['portlet-label-uncacher'],
 			})
 		);
 
@@ -2798,7 +2797,7 @@ class SelectiveRollbackConfigMisc {
 				align: 'inline',
 				label: msg['config-label-deleteglobal'],
 				help: new OO.ui.HtmlSnippet('<span id="sr-config-help-deleteglobal"></span>'),
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2813,7 +2812,7 @@ class SelectiveRollbackConfigMisc {
 				align: 'inline',
 				label: msg['config-label-deletelocal'],
 				help: new OO.ui.HtmlSnippet('<span id="sr-config-help-deletelocal"></span>'),
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2828,7 +2827,7 @@ class SelectiveRollbackConfigMisc {
 				align: 'inline',
 				label: msg['config-label-deletelocalall'],
 				help: new OO.ui.HtmlSnippet('<span id="sr-config-help-deletelocalall"></span>'),
-				helpInline: true
+				helpInline: true,
 			})
 		);
 
@@ -2839,7 +2838,7 @@ class SelectiveRollbackConfigMisc {
 		 */
 		this.deleteButton = new (PendingButtonWidgetFactory())({
 			flags: ['primary', 'destructive'],
-			label: msg['config-button-deletedata']
+			label: msg['config-button-deletedata'],
 		});
 		this.deleteButton.on('click', async () => {
 			const confirmed = await OO.ui.confirm(
@@ -2858,7 +2857,7 @@ class SelectiveRollbackConfigMisc {
 			this.purgeCache,
 			this.deleteGlobal,
 			this.deleteLocal,
-			this.deleteLocalAll
+			this.deleteLocalAll,
 		]
 		.forEach((checkbox) => {
 			checkbox.on('change', () => this.updateDeleteButtonAccessibility());
@@ -2907,7 +2906,7 @@ class SelectiveRollbackConfigMisc {
 			purgeCache: falseFallback(this.purgeCache),
 			deleteGlobal: falseFallback(this.deleteGlobal),
 			deleteLocal: falseFallback(this.deleteLocal),
-			deleteLocalAll: falseFallback(this.deleteLocalAll)
+			deleteLocalAll: falseFallback(this.deleteLocalAll),
 		};
 	}
 
@@ -3000,7 +2999,7 @@ class SelectiveRollbackConfigMisc {
 		return /** @type {JQuery<HTMLAnchorElement>} */ ($('<a>'))
 			.prop({
 				target: '_blank',
-				href: baseUrl
+				href: baseUrl,
 			})
 			.text(wikiID);
 	}
@@ -3181,11 +3180,10 @@ class SelectiveRollbackConfigMisc {
 
 		return container;
 	}
-
 }
 SelectiveRollbackConfigMisc.iconMap = {
 	tick: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/Antu_mail-mark-notjunk.svg/30px-Antu_mail-mark-notjunk.svg.png',
-	cross: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Cross_reject.svg/30px-Cross_reject.svg.png'
+	cross: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Cross_reject.svg/30px-Cross_reject.svg.png',
 };
 
 /**
@@ -3193,7 +3191,7 @@ SelectiveRollbackConfigMisc.iconMap = {
  * @returns {Promise<void>}
  */
 function sleep(milliSeconds) {
-	return new Promise(resolve => setTimeout(resolve, milliSeconds));
+	return new Promise((resolve) => setTimeout(resolve, milliSeconds));
 }
 
 class KeyValueCollection {
@@ -3227,7 +3225,7 @@ class KeyValueCollection {
 		 */
 		this.addButton = new OO.ui.ButtonWidget({
 			flags: ['primary', 'progressive'],
-			label: msg['config-button-add']
+			label: msg['config-button-add'],
 		});
 		this.addButton.on('click', () => this.add());
 
@@ -3239,7 +3237,7 @@ class KeyValueCollection {
 		this.removeButton = new OO.ui.ButtonWidget({
 			disabled: true,
 			flags: ['primary', 'destructive'],
-			label: msg['config-button-remove']
+			label: msg['config-button-remove'],
 		});
 		this.removeButton.on('click', () => {
 			for (let i = this.rows.length - 1; i >= 0; i--) {
@@ -3258,7 +3256,7 @@ class KeyValueCollection {
 		this.selectAllButton = new OO.ui.ButtonWidget({
 			disabled: true,
 			flags: ['progressive'],
-			label: msg['dialog-button-selectall']
+			label: msg['dialog-button-selectall'],
 		});
 		this.selectAllButton.on('click', () => {
 			this.rows.forEach(({ checkbox }) => checkbox.setSelected(true));
@@ -3272,7 +3270,7 @@ class KeyValueCollection {
 		this.deselectAllButton = new OO.ui.ButtonWidget({
 			disabled: true,
 			flags: ['destructive'],
-			label: msg['config-button-deselectall']
+			label: msg['config-button-deselectall'],
 		});
 		this.deselectAllButton.on('click', () => {
 			this.rows.forEach(({ checkbox }) => checkbox.setSelected(false));
@@ -3289,8 +3287,8 @@ class KeyValueCollection {
 				this.addButton,
 				this.removeButton,
 				this.selectAllButton,
-				this.deselectAllButton
-			]
+				this.deselectAllButton,
+			],
 		});
 	}
 
@@ -3309,7 +3307,7 @@ class KeyValueCollection {
 				val = clean(val);
 				return val !== '' && !this.badKeys.has(val);
 			},
-			value: initialKey
+			value: initialKey,
 		});
 		const keyLayout = new OO.ui.FieldLayout(keyInput, {
 			$element: $('<div>').css({ 'margin-top': '4px' }),
@@ -3318,7 +3316,7 @@ class KeyValueCollection {
 		const valueInput = new OO.ui.TextInputWidget({
 			label: msg['config-label-propertyinput-value'],
 			validate: (val) => !!clean(val),
-			value: initialValue
+			value: initialValue,
 		});
 		const valueLayout = new OO.ui.FieldLayout(valueInput, {
 			$element: $('<div>').css({ 'margin-top': '4px' }),
@@ -3330,9 +3328,9 @@ class KeyValueCollection {
 				checkbox,
 				new OO.ui.Widget({
 					$element: $('<div>').css({ 'flex-grow': '1' }),
-					content: [keyLayout, valueLayout]
-				})
-			]
+					content: [keyLayout, valueLayout],
+				}),
+			],
 		});
 		this.widget.$element.append(layout.$element);
 
@@ -3441,11 +3439,11 @@ class KeyValueCollection {
 					input: keyInput,
 					msgKey: 'config-error-propertyinput-key-empty',
 					invalidValue: '',
-					validator: function() {
+					validator: function () {
 						return clean(this.input.getValue()) === this.invalidValue
 							? null
 							: [{ layout: this.layout, input: this.input }];
-					}
+					},
 				});
 				focusTarget = focusTarget || keyInput;
 				continue;
@@ -3456,11 +3454,11 @@ class KeyValueCollection {
 					input: valueInput,
 					msgKey: 'config-error-propertyinput-value-empty',
 					invalidValue: '',
-					validator: function() {
+					validator: function () {
 						return clean(this.input.getValue()) === this.invalidValue
 							? null
 							: [{ layout: this.layout, input: this.input }];
-					}
+					},
 				});
 				focusTarget = focusTarget || valueInput;
 				if (!this.badKeys.has(key)) {
@@ -3478,11 +3476,11 @@ class KeyValueCollection {
 					input: keyInput,
 					msgKey: 'config-error-propertyinput-key-reserved',
 					invalidValue: key,
-					validator: function() {
+					validator: function () {
 						return clean(this.input.getValue()) === this.invalidValue
 							? null
 							: [{ layout: this.layout, input: this.input }];
-					}
+					},
 				});
 				focusTarget = focusTarget || keyInput;
 				continue;
@@ -3513,7 +3511,7 @@ class KeyValueCollection {
 					input: keyField.input,
 					msgKey: 'config-error-propertyinput-key-duplicate',
 					invalidValue: key,
-					validator: function(descs) {
+					validator: function (descs) {
 						// Recompute whether this key is still duplicated in the current DOM
 						const currentKey = clean(this.input.getValue());
 						if (!currentKey) {
@@ -3548,7 +3546,7 @@ class KeyValueCollection {
 						}
 
 						return clearTargets.length ? clearTargets : null;
-					}
+					},
 				});
 				focusTarget = focusTarget || keyField.input;
 			}
@@ -3612,14 +3610,14 @@ class KeyValueCollection {
 	 */
 	static clearErrorsHandler(desc, allDescs) {
 		const associatedDescs = desc.msgKey === 'config-error-propertyinput-key-duplicate'
-			? allDescs.filter(d => d.msgKey === desc.msgKey && d.invalidValue === desc.invalidValue)
+			? allDescs.filter((d) => d.msgKey === desc.msgKey && d.invalidValue === desc.invalidValue)
 			: [desc];
 
 		// @ts-expect-error Accessing private property
-		const activeDescs = associatedDescs.filter(e => e.layout.errors.length);
+		const activeDescs = associatedDescs.filter((e) => e.layout.errors.length);
 		if (!activeDescs.length) {
 			// @ts-expect-error Arguments omitted
-			allDescs.forEach(d => d.input.off('change', KeyValueCollection.clearErrorsHandler));
+			allDescs.forEach((d) => d.input.off('change', KeyValueCollection.clearErrorsHandler));
 			return;
 		}
 
@@ -3633,7 +3631,6 @@ class KeyValueCollection {
 			}
 		}
 	}
-
 }
 
 /**
@@ -3646,7 +3643,7 @@ function getWatchlistExpiryOptions() {
 		{ data: '1 month', label: msg['dialog-label-watchlistexpiry-1month'] },
 		{ data: '3 months', label: msg['dialog-label-watchlistexpiry-3months'] },
 		{ data: '6 months', label: msg['dialog-label-watchlistexpiry-6months'] },
-		{ data: '1 year', label: msg['dialog-label-watchlistexpiry-1year'] }
+		{ data: '1 year', label: msg['dialog-label-watchlistexpiry-1year'] },
 	]
 	.map((obj) => new OO.ui.MenuOptionWidget(obj));
 }
@@ -3668,7 +3665,6 @@ function PendingButtonWidgetFactory() {
 					.removeClass(classPending);
 			return this;
 		}
-
 	};
 }
 
@@ -3718,7 +3714,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 	 * @param {OO.ui.ProcessDialog.ConfigOptions} [config]
 	 */
 	function ProcessDialog(config) {
-		// @ts-expect-error
+		// @ts-expect-error "super does not exist"
 		ProcessDialog.super.call(this, config);
 	}
 	OO.inheritClass(ProcessDialog, OO.ui.ProcessDialog);
@@ -3787,7 +3783,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 			if (parentNode) {
 				const selectAll = new OO.ui.ButtonWidget({
 					flags: ['progressive'],
-					label: msg['dialog-button-selectall']
+					label: msg['dialog-button-selectall'],
 				});
 				selectAll.on('click', () => {
 					const count = this.sr.selectAll();
@@ -3823,8 +3819,8 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 							return new OO.ui.MenuOptionWidget({ data: value, label: cfg.showKeys ? key : value });
 						}),
 						new OO.ui.MenuOptionWidget({ data: 'other', label: msg['dialog-label-summary-custom'] }),
-					]
-				}
+					],
+				},
 			});
 
 			this.summaryList.on('labelChange', () => this.previewSummary());
@@ -3832,7 +3828,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 			items.push(
 				new OO.ui.FieldLayout(this.summaryList, {
 					align: 'top',
-					label: $('<b>').text(msg['dialog-label-summary'])
+					label: $('<b>').text(msg['dialog-label-summary']),
 				})
 			);
 
@@ -3847,9 +3843,9 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 					filterFromInput: true,
 					items: Object.keys(cfg.replacementExpressions).concat(autocompleteSources).map((source) => {
 						return new OO.ui.MenuOptionWidget({ data: source, label: source });
-					})
+					}),
 				},
-				placeholder: msg['dialog-label-summaryinput']
+				placeholder: msg['dialog-label-summaryinput'],
 			});
 
 			let /** @type {ReturnType<typeof setTimeout>} */ summaryTimeout;
@@ -3868,7 +3864,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 					align: 'top',
 					help: new OO.ui.HtmlSnippet(msg[meta.fetched ? 'dialog-help-summaryinput-$0' : 'dialog-help-summaryinput-$0-error']),
 					helpInline: true,
-					invisibleLabel: true
+					invisibleLabel: true,
 				})
 			);
 
@@ -3879,19 +3875,19 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 			 */
 			this.summaryPreview = new OO.ui.Element({
 				$element: $('<div>'),
-				id: 'sr-summarypreview'
+				id: 'sr-summarypreview',
 			});
 
 			items.push(
 				new OO.ui.LabelWidget({
 					$element: $('<div>').css({ 'margin-top': '12px', 'margin-bottom': '4px' }),
-					label: $('<b>').text(msg['dialog-label-summarypreview'])
+					label: $('<b>').text(msg['dialog-label-summarypreview']),
 				}),
 				this.summaryPreview,
 				new OO.ui.LabelWidget({
 					$element: $('<div>').css({ 'margin-top': '4px' }),
 					classes: ['oo-ui-inline-help'],
-					label: new OO.ui.HtmlSnippet(msg['dialog-help-summarypreview'])
+					label: new OO.ui.HtmlSnippet(msg['dialog-help-summarypreview']),
 				})
 			);
 
@@ -3905,7 +3901,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 				items.push(
 					new OO.ui.FieldLayout(this.markBot, {
 						label: msg['dialog-label-markbot'],
-						align: 'inline'
+						align: 'inline',
 					})
 				);
 				this.markBot.setSelected(cfg.markBot);
@@ -3916,14 +3912,14 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 			 * @readonly
 			 */
 			this.watchlist = new OO.ui.CheckboxInputWidget({
-				selected: cfg.watchlist
+				selected: cfg.watchlist,
 			});
 
 			items.push(
 				new OO.ui.FieldLayout(this.watchlist, {
 					label: msg['dialog-label-watchlist'],
-					align: 'inline'
-				}),
+					align: 'inline',
+				})
 			);
 
 			/**
@@ -3933,8 +3929,8 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 			this.watchlistExpiry = new OO.ui.DropdownWidget({
 				$overlay: this.$overlay,
 				menu: {
-					items: getWatchlistExpiryOptions()
-				}
+					items: getWatchlistExpiryOptions(),
+				},
 			});
 			this.watchlistExpiry.getMenu().selectItemByData(cfg.watchlistExpiry);
 
@@ -3961,7 +3957,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 		 * @override
 		 */
 		initialize() {
-			// @ts-expect-error
+			// @ts-expect-error IArguments used for []
 			super.initialize.apply(this, arguments);
 
 			if (langSwitch === 'ar') {
@@ -3970,10 +3966,10 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 
 			this.content = new OO.ui.PanelLayout({
 				padded: true,
-				expanded: false
+				expanded: false,
 			});
 			this.content.$element.append(this.fieldset.$element);
-			// @ts-expect-error
+			// @ts-expect-error "$body does not exist"
 			this.$body.append(this.content.$element);
 
 			if (!dirMismatch) {
@@ -4038,7 +4034,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 				if (dirMismatch) {
 					this.$element.find('.oo-ui-processDialog-actions-other .oo-ui-actionWidget > .oo-ui-buttonElement-button').css({
 						[`border-${uiStart}-color`]: 'transparent',
-						[`border-${uiEnd}-color`]: 'var(--border-color-subtle,#c8ccd1)'
+						[`border-${uiEnd}-color`]: 'var(--border-color-subtle,#c8ccd1)',
 					});
 				}
 			});
@@ -4160,7 +4156,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 		 * @returns {string | undefined} `undefined` if the watch-page box isn't checked.
 		 */
 		getWatchlistExpiry() {
-			return this.watchlist.isSelected() && getDropdownValue(this.watchlistExpiry) || void 0;
+			return (this.watchlist.isSelected() && getDropdownValue(this.watchlistExpiry)) || void 0;
 		}
 
 		/**
@@ -4172,7 +4168,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 				summary: this.getSummary(),
 				markbot: this.getMarkBot(),
 				watchlist: this.getWatchlist(),
-				watchlistexpiry: this.getWatchlistExpiry()
+				watchlistexpiry: this.getWatchlistExpiry(),
 			};
 		}
 
@@ -4188,7 +4184,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 				previewApi.post({
 					action: 'parse',
 					summary,
-					prop: ''
+					prop: '',
 				}).then(/** @param {ApiResponse} res */ ({ parse }) => {
 					return parse ? parse.parsedsummary : null;
 				}).catch(/** @param {Record<string, any>} err */ (_, err) => {
@@ -4203,7 +4199,6 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 				});
 			}, 500);
 		}
-
 	}
 
 	SelectiveRollbackDialog.static.name = 'Selective Rollback';
@@ -4212,7 +4207,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 		$('<a>')
 			.prop({
 				target: '_blank',
-				href: 'https://meta.wikimedia.org/w/index.php?title=User:Dragoniez/Selective_Rollback.js&action=history'
+				href: 'https://meta.wikimedia.org/w/index.php?title=User:Dragoniez/Selective_Rollback.js&action=history',
 			})
 			.text(`v${version}`),
 		')'
@@ -4222,28 +4217,28 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 			action: 'execute',
 			label: msg['dialog-button-rollback'],
 			flags: ['primary', 'progressive'],
-			modes: ['nonRCW']
+			modes: ['nonRCW'],
 		},
 		{
 			action: 'documentation',
 			label: msg['dialog-button-documentation'],
-			modes: ['RCW', 'nonRCW']
+			modes: ['RCW', 'nonRCW'],
 		},
 		{
 			action: 'config',
 			label: msg['dialog-button-config'],
-			modes: ['RCW', 'nonRCW']
+			modes: ['RCW', 'nonRCW'],
 		},
 		{
 			action: 'selectall',
 			label: msg['dialog-button-selectall'],
 			flags: ['progressive'],
-			modes: ['nonRCW']
+			modes: ['nonRCW'],
 		},
 		{
 			flags: ['safe', 'close'],
-			modes: ['RCW', 'nonRCW']
-		}
+			modes: ['RCW', 'nonRCW'],
+		},
 	];
 	SelectiveRollbackDialog.windowManager = (() => {
 		const windowManager = new OO.ui.WindowManager();
@@ -4254,7 +4249,7 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 	return SelectiveRollbackDialog;
 }
 
-//**************************************************************************************************
+// **************************************************************************************************
 
 /**
  * @typedef {import('./window/Selective Rollback.d.ts').ParentNode} ParentNode
@@ -4282,6 +4277,6 @@ function SelectiveRollbackDialogFactory(cfg, meta, parentNode) {
 
 SelectiveRollback.init();
 
-//**************************************************************************************************
+// **************************************************************************************************
 })();
-//</nowiki>
+// </nowiki>
