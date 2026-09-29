@@ -2,7 +2,7 @@
 /*********************************************************************************\
     AN Reporter
     @author [[User:Dragoniez]]
-    @version 8.2.2
+    @version 8.2.3
     @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
 \*********************************************************************************/
 //<nowiki>
@@ -1914,7 +1914,7 @@
                         const $body = $('<div>').prop('id', 'anr-dialog-preview-body');
                         $body.append($(content), $('<div>')
                             .css('margin-top', '0.8em')
-                            .append($(comment)));
+                            .html(comment));
                         $previewContent
                             .empty()
                             .append($header, $('<hr>'), $body)
