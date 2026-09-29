@@ -1,27 +1,25 @@
-/*****************************************************************************************\
-
-	ConfirmLogout
-
-	Displays a confirmation popup when a logged-in user attempts to log out.
-
-	This gadget:
-	- Supports all skins.
-	- Supports all languages supported by MediaWiki.
-	- Involves no DOM alterations or hardcoded logout logic (uses the built-in
-	  `skin.logout` hook).
-	- Can be loaded as a global script using:
-	```
-	mw.loader.load('https://ja.wikipedia.org/w/load.php?modules=ext.gadget.ConfirmLogout');
-	```
-
-	@version 1.2.0
-	@author [[User:Dragoniez]]
-
-\*****************************************************************************************/
+/**
+ * ConfirmLogout
+ *
+ * Displays a confirmation popup when a logged-in user attempts to log out.
+ *
+ * This gadget:
+ * - Supports all skins.
+ * - Supports all languages supported by MediaWiki.
+ * - Involves no DOM alterations or hardcoded logout logic (uses the built-in
+ *   `skin.logout` hook).
+ * - Can be loaded as a global script using:
+ * ```
+ * mw.loader.load('https://ja.wikipedia.org/w/load.php?modules=ext.gadget.ConfirmLogout');
+ * ```
+ *
+ * @version 1.2.1
+ * @author [[User:Dragoniez]]
+ */
 // @ts-check
 /* global mw, OO */
-//<nowiki>
-$(function() {
+// <nowiki>
+$(function () {
 	if (!(mw.config.get('wgUserGroups') || []).includes('user')) {
 		return;
 	}
@@ -58,7 +56,7 @@ $(function() {
 		const userLang = mw.config.get('wgUserLanguage');
 		const key = {
 			message: 'userlogout-continue',
-			storage: 'mw-ConfirmLogout-' + userLang
+			storage: 'mw-ConfirmLogout-' + userLang,
 		};
 		/**
 		 * @param {string} msg
@@ -103,13 +101,13 @@ $(function() {
 	mw.loader.using([
 		'mediawiki.storage',
 		'mediawiki.api',
-		'mediawiki.page.ready'
+		'mediawiki.page.ready',
 	])
 	.then(() => getMessage())
 	.then((logoutMessage) => {
 
 		// Remove MediaWiki's default click handler with .off()
-		$logout.off('click').on('click', function(event) {
+		$logout.off('click').on('click', function (event) {
 			event.preventDefault();
 			event.stopPropagation();
 
@@ -125,4 +123,4 @@ $(function() {
 
 	});
 });
-//</nowiki>
+// </nowiki>
