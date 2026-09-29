@@ -1,11 +1,11 @@
 "use strict";
-/*********************************************************************************\
-    AN Reporter
-    @author [[User:Dragoniez]]
-    @version 8.2.3
-    @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
-\*********************************************************************************/
-//<nowiki>
+/**
+ * AN Reporter
+ * @author [[User:Dragoniez]]
+ * @version 8.2.4
+ * @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
+ */
+// <nowiki>
 /* global mw, $, OO */
 (() => {
     // ******************************************************************************************
@@ -187,7 +187,7 @@
                 watchExpiry: 'infinity',
                 headerColor: '#FEC493',
                 backgroundColor: '#FFF0E4',
-                portletlinkPosition: ''
+                portletlinkPosition: '',
             };
             if (getDefault) {
                 return cfg;
@@ -222,26 +222,26 @@
             // Fieldset that stores config options
             this.fieldset = new OO.ui.FieldsetLayout({
                 label: 'ダイアログ設定',
-                id: 'anrc-options'
+                id: 'anrc-options',
             });
             // Create config options
             this.reasons = new OO.ui.MultilineTextInputWidget({
                 id: 'anrc-reasons',
                 placeholder: '理由ごとに改行',
                 rows: 8,
-                value: cfg.reasons.join('\n')
+                value: cfg.reasons.join('\n'),
             });
             this.blockCheck = new OO.ui.CheckboxInputWidget({
                 id: 'anrc-blockcheck',
-                selected: cfg.blockCheck
+                selected: cfg.blockCheck,
             });
             this.duplicateCheck = new OO.ui.CheckboxInputWidget({
                 id: 'anrc-duplicatecheck',
-                selected: cfg.duplicateCheck
+                selected: cfg.duplicateCheck,
             });
             this.watchUser = new OO.ui.CheckboxInputWidget({
                 id: 'anrc-watchuser',
-                selected: cfg.watchUser
+                selected: cfg.watchUser,
             });
             this.watchExpiry = new OO.ui.DropdownWidget({
                 id: 'anrc-watchexpiry',
@@ -249,73 +249,73 @@
                     items: [
                         new OO.ui.MenuOptionWidget({
                             data: 'infinity',
-                            label: '無期限'
+                            label: '無期限',
                         }),
                         new OO.ui.MenuOptionWidget({
                             data: '1 week',
-                            label: '1週間'
+                            label: '1週間',
                         }),
                         new OO.ui.MenuOptionWidget({
                             data: '2 weeks',
-                            label: '2週間'
+                            label: '2週間',
                         }),
                         new OO.ui.MenuOptionWidget({
                             data: '1 month',
-                            label: '1か月'
+                            label: '1か月',
                         }),
                         new OO.ui.MenuOptionWidget({
                             data: '3 months',
-                            label: '3か月'
+                            label: '3か月',
                         }),
                         new OO.ui.MenuOptionWidget({
                             data: '6 months',
-                            label: '6か月'
+                            label: '6か月',
                         }),
                         new OO.ui.MenuOptionWidget({
                             data: '1 year',
-                            label: '1年'
+                            label: '1年',
                         }),
-                    ]
-                }
+                    ],
+                },
             });
             this.watchExpiry.getMenu().selectItemByData(cfg.watchExpiry);
             this.headerColor = new OO.ui.TextInputWidget({
                 id: 'anrc-headercolor',
                 value: cfg.headerColor,
-                placeholder: 'カラー名またはHEXコードを入力'
+                placeholder: 'カラー名またはHEXコードを入力',
             });
             this.backgroundColor = new OO.ui.TextInputWidget({
                 id: 'anrc-backgroundcolor',
                 value: cfg.backgroundColor,
-                placeholder: 'カラー名またはHEXコードを入力'
+                placeholder: 'カラー名またはHEXコードを入力',
             });
             this.portletlinkPosition = new OO.ui.TextInputWidget({
                 id: 'anrc-portletlinkposition',
                 value: cfg.portletlinkPosition,
-                placeholder: '「報告」リンクの生成位置を随意入力'
+                placeholder: '「報告」リンクの生成位置を随意入力',
             });
             // Add the config options to the fieldset
             this.fieldset.addItems([
                 new OO.ui.FieldLayout(this.reasons, {
                     label: '定型理由',
                     align: 'top',
-                    help: '登録した定型理由はドロップダウンからコピーできます。'
+                    help: '登録した定型理由はドロップダウンからコピーできます。',
                 }),
                 new OO.ui.FieldLayout(this.blockCheck, {
                     label: '報告前にブロック状態をチェック',
-                    align: 'inline'
+                    align: 'inline',
                 }),
                 new OO.ui.FieldLayout(this.duplicateCheck, {
                     label: '報告前に重複報告をチェック',
-                    align: 'inline'
+                    align: 'inline',
                 }),
                 new OO.ui.FieldLayout(this.watchUser, {
                     label: '報告対象者をウォッチ',
-                    align: 'inline'
+                    align: 'inline',
                 }),
                 new OO.ui.FieldLayout(this.watchExpiry, {
                     label: 'ウォッチ期間',
-                    align: 'top'
+                    align: 'top',
                 }),
                 new OO.ui.FieldLayout(this.headerColor, {
                     label: 'ヘッダー色',
@@ -323,7 +323,7 @@
                     help: new OO.ui.HtmlSnippet('ダイアログのヘッダー色を指定 (見本: ' +
                         '<span id="anrc-headercolor-demo" class="anrc-colordemo">ヘッダー色</span>' +
                         ')'),
-                    helpInline: true
+                    helpInline: true,
                 }),
                 new OO.ui.FieldLayout(this.backgroundColor, {
                     label: '背景色',
@@ -331,13 +331,13 @@
                     help: new OO.ui.HtmlSnippet('ダイアログの背景色を指定 (見本: ' +
                         '<span id="anrc-backgroundcolor-demo" class="anrc-colordemo">背景色</span>' +
                         ')'),
-                    helpInline: true
+                    helpInline: true,
                 }),
                 new OO.ui.FieldLayout(this.portletlinkPosition, {
                     label: 'ポートレットID (上級)',
                     align: 'top',
                     help: new OO.ui.HtmlSnippet('<a href="https://doc.wikimedia.org/mediawiki-core/REL1_41/js/#!/api/mw.util-method-addPortletLink" target="_blank">mw.util.addPortletLink</a>の' +
-                        '<code style="font-family: inherit;">portletId</code>を指定します。未指定または値が無効の場合、使用中のスキンに応じて自動的にリンクの生成位置が決定されます。')
+                        '<code style="font-family: inherit;">portletId</code>を指定します。未指定または値が無効の場合、使用中のスキンに応じて自動的にリンクの生成位置が決定されます。'),
                 }),
             ]);
             // Append the fieldset to the container (do this here and get DOM elements in it)
@@ -367,7 +367,7 @@
                 label: 'リセット',
                 id: 'anrc-reset',
                 icon: 'undo',
-                flags: 'destructive'
+                flags: 'destructive',
             });
             resetButton.$element.off('click').on('click', () => {
                 this.reset();
@@ -378,7 +378,7 @@
                 label: '設定を保存',
                 id: 'anrc-save',
                 icon: 'bookmarkOutline',
-                flags: ['primary', 'progressive']
+                flags: ['primary', 'progressive'],
             });
             this.saveButton.$element.off('click').on('click', () => {
                 this.save();
@@ -444,7 +444,7 @@
                 watchExpiry: this.watchExpiry.getMenu().findSelectedItem().getData(),
                 headerColor: this.headerColor.getValue(),
                 backgroundColor: this.backgroundColor.getValue(),
-                portletlinkPosition: this.portletlinkPosition.getValue()
+                portletlinkPosition: this.portletlinkPosition.getValue(),
             };
             const strCfg = JSON.stringify(cfg);
             // Save config
@@ -779,7 +779,7 @@
                 uclimit: 1,
                 ucuser: username,
                 ucprop: 'ids',
-                formatversion: '2'
+                formatversion: '2',
             }).then((res) => {
                 let resLgev, resUc;
                 const logid = res && res.query && (resLgev = res.query.logevents) && resLgev[0] && resLgev[0].logid;
@@ -878,7 +878,7 @@
                 action: 'query',
                 prop: 'revisions',
                 revids: diffid,
-                formatversion: '2'
+                formatversion: '2',
             }).then((res) => {
                 const resPg = res && res.query && res.query.pages;
                 if (!resPg || !resPg.length)
@@ -917,7 +917,7 @@
                 close: function () {
                     // Destory the dialog and its contents when closed by any means
                     $(this).empty().dialog('destroy');
-                }
+                },
             });
             // Create button that redirects the user to the config page
             const $config = $('<div>');
@@ -945,7 +945,7 @@
             this.$fieldset = $('<fieldset>');
             this.$fieldset.prop({
                 id: 'anr-dialog-optionfield',
-                innerHTML: '<legend>利用者を報告</legend>'
+                innerHTML: '<legend>利用者を報告</legend>',
             });
             this.$content.append(this.$fieldset);
             // Create target page option
@@ -981,7 +981,7 @@
             this.$section
                 .prop({
                 innerHTML: '<option selected disabled hidden value="">選択してください</option>',
-                disabled: true
+                disabled: true,
             })
                 .off('change').on('change', () => {
                 this.setPageLink();
@@ -1018,7 +1018,7 @@
             this.$fieldset.append(document.createElement('hr'));
             // Create a user pane
             this.Users = [
-                new User($addButtonWrapper, { removable: false })
+                new User($addButtonWrapper, { removable: false }),
             ];
             this.$addButton.off('click').on('click', () => {
                 // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -1038,7 +1038,7 @@
                             U.$wrapper.remove();
                             _this.Users.splice(idx, 1);
                         }
-                    }
+                    },
                 });
             });
             const dialogWith = this.$fieldset.outerWidth(true);
@@ -1097,7 +1097,7 @@
             this.$reason.prop({
                 id: 'anr-option-reason',
                 rows: 5,
-                placeholder: '署名不要'
+                placeholder: '署名不要',
             });
             $reasonWrapper.append(this.$reason);
             this.$fieldset.append($reasonWrapper);
@@ -1108,7 +1108,7 @@
             this.$comment = $('<textarea>');
             this.$comment.prop({
                 id: 'anr-option-comment',
-                rows: 2
+                rows: 2,
             });
             addCommentElements.$wrapper.append(this.$comment);
             this.$addComment.off('change').on('change', () => {
@@ -1139,7 +1139,7 @@
                     '<option value="1 month">1か月</option>' +
                     '<option value="3 months">3か月</option>' +
                     '<option value="6 months">6か月</option>' +
-                    '<option value="1 year">1年</option>'
+                    '<option value="1 year">1年</option>',
             })
                 .val(this.cfg.watchExpiry);
             const $watchExpiryWrapper = $('<div>');
@@ -1147,7 +1147,7 @@
                 .prop({ id: 'anr-option-watchexpiry-wrapper' })
                 .css({
                 marginLeft: this.$watchUser.outerWidth(true) + 'px',
-                marginTop: '0.3em'
+                marginTop: '0.3em',
             })
                 .append(document.createTextNode('期間: '), this.$watchExpiry);
             watchUserElements.$wrapper.append($watchExpiryWrapper);
@@ -1171,7 +1171,6 @@
          * @returns The width.
          */
         static setWidestWidth($elements) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const optionsWidths = Array.prototype.map.call($elements, (el) => el.offsetWidth // Collect the widths of all the elements
             );
             const optionWidth = Math.max(...optionsWidths); // Get the max value
@@ -1243,10 +1242,10 @@
          * Wrap a (non-block) element (next to a row label) with a div. This is for the element to fill the remaining space.
          * ```html
          * <div class="anr-option-row">
-         * 	<div class="anr-option-label"></div> <!-- float: left; -->
-         * 	<div class="anr-option-wrapper"> <!-- overflow: hidden; -->
-         * 		<element class="anr-juxtaposed">...</element> <!-- width: 100%; -->
-         * 	</div>
+         *   <div class="anr-option-label"></div> <!-- float: left; -->
+         *   <div class="anr-option-wrapper"> <!-- overflow: hidden; -->
+         *     <element class="anr-juxtaposed">...</element> <!-- width: 100%; -->
+         *   </div>
          * </div>
          * ```
          * @param $appendTo The element to which to append the wrapper div.
@@ -1268,7 +1267,7 @@
         static select2($dropdown) {
             $dropdown.select2({
                 width: '100%', // Without this, the right end of the dropdown overflows
-                dropdownCssClass: 'anr-select2' // This needs select2.full.js
+                dropdownCssClass: 'anr-select2', // This needs select2.full.js
             });
         }
         /**
@@ -1281,8 +1280,8 @@
                 position: {
                     my: absoluteCenter ? 'center' : 'top',
                     at: absoluteCenter ? 'center' : 'top+5%',
-                    of: window
-                }
+                    of: window,
+                },
             });
         }
         /**
@@ -1300,7 +1299,8 @@
                 document.querySelector('.firstHeading') ||
                 document.querySelector('#firstHeading');
             const relevantUser = mw.config.get('wgRelevantUserName') ||
-                mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' && heading && heading.textContent && extractCidr(heading.textContent);
+                (mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' &&
+                    heading && heading.textContent && extractCidr(heading.textContent));
             const U = R.Users[0];
             U.$input.val(relevantUser || '');
             const def = U.processInputChange();
@@ -1331,7 +1331,7 @@
                         'N. 未分類',
                         'サブページなし',
                         '休止中N',
-                        '関連項目'
+                        '関連項目',
                     ]);
                     const optgroup = document.createElement('optgroup');
                     optgroup.label = 'LTA';
@@ -1367,7 +1367,7 @@
                 }
                 // Initialize the LTA copier dropdown
                 const abandoned = new Set([
-                    'SANNET', 'HEXAGON', 'MOPERA', 'AU ONE NET', 'ASPE', 'Asperger'
+                    'SANNET', 'HEXAGON', 'MOPERA', 'AU ONE NET', 'ASPE', 'Asperger',
                 ]);
                 ltaList = ltaList.filter((el) => !abandoned.has(el));
                 if (ltaList.length) {
@@ -1398,17 +1398,17 @@
                 buttons: [
                     {
                         text: '報告',
-                        click: () => this.report()
+                        click: () => this.report(),
                     },
                     {
                         text: 'プレビュー',
-                        click: () => this.preview()
+                        click: () => this.preview(),
                     },
                     {
                         text: '閉じる',
-                        click: () => this.close()
-                    }
-                ]
+                        click: () => this.close(),
+                    },
+                ],
             });
         }
         /**
@@ -1521,7 +1521,7 @@
                             { text: '不適切な利用者名' },
                             { text: '公開アカウント' },
                             { text: '公開プロキシ・ゾンビマシン・ボット・不特定多数' },
-                            { text: '犯罪行為またはその疑いのある投稿' }
+                            { text: '犯罪行為またはその疑いのある投稿' },
                         ]);
                         Reporter.toggle(this.$sectionWrapper, true);
                         Reporter.toggle(this.$sectionAnsWrapper, false);
@@ -1535,7 +1535,7 @@
                     case AN3RR:
                         this.$section.prop({
                             disabled: false,
-                            innerHTML: '<option>3RR</option>'
+                            innerHTML: '<option>3RR</option>',
                         });
                         Reporter.toggle(this.$sectionWrapper, true);
                         Reporter.toggle(this.$sectionAnsWrapper, false);
@@ -1545,7 +1545,7 @@
             else {
                 this.$section.prop({
                     disabled: true,
-                    innerHTML: '<option disabled selected hidden value="">選択してください</option>'
+                    innerHTML: '<option disabled selected hidden value="">選択してください</option>',
                 });
                 Reporter.toggle(this.$sectionWrapper, true);
                 Reporter.toggle(this.$sectionAnsWrapper, false);
@@ -1562,10 +1562,10 @@
             username = User.formatName(username);
             const isIp = mw.util.isIPAddress(username, true);
             const bkpara = {};
-            if (!username || !isIp && User.containsInvalidCharacter(username)) { // Blank or invalid
+            if (!username || (!isIp && User.containsInvalidCharacter(username))) { // Blank or invalid
                 return $.Deferred().resolve({
                     usertype: 'other',
-                    blocked: null
+                    blocked: null,
                 });
             }
             else if (Reporter.blockStatus[username]) {
@@ -1581,7 +1581,7 @@
                 action: 'query',
                 list: 'users|blocks',
                 ususers: username,
-                formatversion: '2'
+                formatversion: '2',
             }, bkpara);
             return new mw.Api().get(params)
                 .then((res) => {
@@ -1590,7 +1590,7 @@
                 if (resUs && resBl) {
                     const ret = {
                         usertype: isIp ? 'ip' : resUs[0].userid !== void 0 ? 'user' : 'other',
-                        blocked: !!resBl.length
+                        blocked: !!resBl.length,
                     };
                     Reporter.blockStatus[username] = Object.assign({}, ret);
                     return ret;
@@ -1604,7 +1604,7 @@
                 mw.notify('ユーザー情報の取得に失敗しました。', { type: 'error' });
                 return {
                     usertype: 'other',
-                    blocked: null
+                    blocked: null,
                 };
             });
         }
@@ -1632,7 +1632,7 @@
                 else { // Valid
                     acc.push({
                         user: inputVal,
-                        type: selectedType
+                        type: selectedType,
                     });
                 }
                 return acc;
@@ -1681,7 +1681,7 @@
                 summary,
                 blockCheck,
                 duplicateCheck,
-                watch
+                watch,
             };
         }
         /**
@@ -1726,7 +1726,9 @@
                     if (!checkedIndexes.includes(i)) {
                         const ret = [];
                         for (let j = i; j < arr.length; j++) { // Check array elements from the current index
-                            if (j === i && j !== arr.lastIndexOf(username) || j !== i && arr[j] === username) { // Found a duplicate username
+                            if ((j === i && j !== arr.lastIndexOf(username)) ||
+                                (j !== i && arr[j] === username)) {
+                                // Found a duplicate username
                                 checkedIndexes.push(j);
                                 const { user, type } = data.users[j];
                                 const dup = type === 'logid' ? 'Logid/' + user : // If the username is displayed as an ID on the dialog,
@@ -1774,13 +1776,13 @@
                 const Temp = new lib.Template('UserAN').addArgs([
                     {
                         name: 't',
-                        value: obj.type
+                        value: obj.type,
                     },
                     {
                         name: '1',
                         value: obj.user,
-                        forceUnnamed: true
-                    }
+                        forceUnnamed: true,
+                    },
                 ]);
                 templates.push(Temp);
                 switch (obj.type) {
@@ -1820,7 +1822,7 @@
             let summary = '';
             const fixed = [
                 `/*${data.section}*/+`,
-                ad
+                ad,
             ];
             const fixedLen = fixed.join('').length; // The length of the fixed summary
             const summaryComment = data.summary ? ' - ' + data.summary : '';
@@ -1861,7 +1863,7 @@
             const $preview = $('<div>')
                 .css({
                 maxHeight: '70vh',
-                maxWidth: '80vw'
+                maxWidth: '80vw',
             })
                 .dialog({
                 dialogClass: 'anr-dialog anr-dialog-preview',
@@ -1872,7 +1874,7 @@
                 close: function () {
                     // Destory the dialog and its contents when closed by any means
                     $(this).empty().dialog('destroy');
-                }
+                },
             });
             const $previewContent = $('<div>')
                 .prop('id', 'anr-dialog-preview-content')
@@ -1892,7 +1894,7 @@
                     disableeditsection: true,
                     disabletoc: true,
                     contentmodel: 'wikitext',
-                    formatversion: '2'
+                    formatversion: '2',
                 }).then((res) => {
                     const resParse = res && res.parse;
                     const content = resParse.text;
@@ -1925,9 +1927,9 @@
                                     text: '閉じる',
                                     click: () => {
                                         $preview.dialog('close');
-                                    }
-                                }
-                            ]
+                                    },
+                                },
+                            ],
                         });
                         Reporter.centerDialog($preview, true);
                     }
@@ -1946,9 +1948,9 @@
                                 text: '閉じる',
                                 click: () => {
                                     $preview.dialog('close');
-                                }
-                            }
-                        ]
+                                },
+                            },
+                        ],
                     });
                 });
             });
@@ -2018,13 +2020,13 @@
             $errorReportText.prop({
                 id: 'anr-dialog-progress-error-text',
                 rows: 5,
-                disabled: true
+                disabled: true,
             });
             const $errorReportSummary = $('<textarea>');
             $errorReportSummary.prop({
                 id: 'anr-dialog-progress-error-summary',
                 rows: 3,
-                disabled: true
+                disabled: true,
             });
             $errorWrapper.append($('<hr>'), $errorMessage, $('<label>').text('手動編集用'), $errorReportText, $errorReportSummary);
             Reporter.toggle($errorWrapper, false);
@@ -2052,7 +2054,7 @@
                                         Reporter.toggle($dupUsersListRow, false);
                                         this.$dialog.dialog({ buttons: [] });
                                         def.resolve(true);
-                                    }
+                                    },
                                 },
                                 {
                                     text: '戻る',
@@ -2061,16 +2063,16 @@
                                         Reporter.toggle(this.$content, true);
                                         this.setMainButtons();
                                         def.resolve(false);
-                                    }
+                                    },
                                 },
                                 {
                                     text: '閉じる',
                                     click: () => {
                                         this.close();
                                         def.resolve(false);
-                                    }
-                                }
-                            ]
+                                    },
+                                },
+                            ],
                         });
                         mw.notify('利用者名の重複を検出しました。', { type: 'warn' });
                     }
@@ -2111,7 +2113,7 @@
                                         $blockedUsersList.append($('<li>').append($('<a>')
                                             .prop({
                                             href: mw.util.getUrl('特別:投稿記録/' + user),
-                                            target: '_blank'
+                                            target: '_blank',
                                         })
                                             .text(user)));
                                     });
@@ -2157,7 +2159,7 @@
                                                 Reporter.toggle($dupReportsButtonRow, false);
                                                 this.$dialog.dialog({ buttons: [] });
                                                 def.resolve(void 0);
-                                            }
+                                            },
                                         },
                                         {
                                             text: '戻る',
@@ -2166,16 +2168,16 @@
                                                 Reporter.toggle(this.$content, true);
                                                 this.setMainButtons();
                                                 def.reject(); // Reject
-                                            }
+                                            },
                                         },
                                         {
                                             text: '閉じる',
                                             click: () => {
                                                 this.close();
                                                 def.reject(); // Reject
-                                            }
-                                        }
-                                    ]
+                                            },
+                                        },
+                                    ],
                                 });
                             }
                             return def.promise();
@@ -2207,13 +2209,13 @@
                                     buttons: [
                                         {
                                             text: '再試行',
-                                            click: () => this.report()
+                                            click: () => this.report(),
                                         },
                                         {
                                             text: '報告先',
                                             click: () => {
                                                 window.open(this.$pageLink.prop('href'), '_blank');
-                                            }
+                                            },
                                         },
                                         {
                                             text: '戻る',
@@ -2221,20 +2223,20 @@
                                                 Reporter.toggle(this.$progress, false);
                                                 Reporter.toggle(this.$content, true);
                                                 this.setMainButtons();
-                                            }
+                                            },
                                         },
                                         {
                                             text: '閉じる',
                                             click: () => {
                                                 this.close();
-                                            }
-                                        }
-                                    ]
+                                            },
+                                        },
+                                    ],
                                 });
                             };
                             // Create a Wikitext instance for the report
-                            const $when = inheritedWkt ?
-                                $.when($.Deferred().resolve(inheritedWkt)) :
+                            const $when = inheritedWkt
+                                ? $.when($.Deferred().resolve(inheritedWkt)) :
                                 $.when(lib.Wikitext.newFromTitle(data.page));
                             $when.then((Wkt) => {
                                 // Validate the Wikitext instance
@@ -2269,7 +2271,7 @@
                                     // Get the report text to submit
                                     const sockInfoArr = new lib.Wikitext(sectionContent).parseTemplates({
                                         namePredicate: (name) => name === 'SockInfo/M',
-                                        recursivePredicate: (Temp) => !Temp || Temp.getName('clean') !== 'SockInfo/M'
+                                        recursivePredicate: (Temp) => !Temp || Temp.getName('clean') !== 'SockInfo/M',
                                     });
                                     if (!sockInfoArr.length) {
                                         throw new Error(`節「${data.section}」内にテンプレート「SockInfo/M」が存在しないため報告場所を特定できませんでした。`);
@@ -2279,7 +2281,7 @@
                                     }
                                     const sockInfo = sockInfoArr[0];
                                     sectionContent = sockInfo.replaceIn(sectionContent, {
-                                        with: sockInfo.renderOriginal().replace(/\s*?\}{2}$/, '') + '\n\n' + reportText + '\n\n}}'
+                                        with: sockInfo.renderOriginal().replace(/\s*?\}{2}$/, '') + '\n\n' + reportText + '\n\n}}',
                                     });
                                 }
                                 else { // ANI or AN3RR
@@ -2297,7 +2299,7 @@
                                     summary,
                                     basetimestamp,
                                     curtimestamp,
-                                    formatversion: '2'
+                                    formatversion: '2',
                                 }).then((res) => {
                                     if (res && res.edit && res.edit.result === 'Success') {
                                         $reportLabel.empty().append(getImage('check'));
@@ -2308,15 +2310,15 @@
                                                     text: '報告先',
                                                     click: () => {
                                                         window.open(this.$pageLink.prop('href'), '_blank');
-                                                    }
+                                                    },
                                                 },
                                                 {
                                                     text: '閉じる',
                                                     click: () => {
                                                         this.close();
-                                                    }
-                                                }
-                                            ]
+                                                    },
+                                                },
+                                            ],
                                         });
                                     }
                                     else {
@@ -2365,7 +2367,7 @@
                     list: 'blocks',
                     bkusers: usersArr,
                     bklimit: 'max',
-                    formatversion: '2'
+                    formatversion: '2',
                 }, 'bkusers')
                     .then((response) => {
                     return response.reduce((acc, res) => {
@@ -2388,7 +2390,7 @@
                     list: 'blocks',
                     bkip: ipsArr,
                     bklimit: 1,
-                    formatversion: '2'
+                    formatversion: '2',
                 }, 'bkip', 1)
                     .then((response) => {
                     return response.reduce((acc, res, i) => {
@@ -2433,7 +2435,7 @@
                     hierarchy: [
                         ['1', 'user', 'User'],
                         ['t', 'type', 'Type'],
-                        ['状態', 's', 'status', 'Status']
+                        ['状態', 's', 'status', 'Status'],
                     ],
                     templatePredicate: (Temp) => {
                         // Get 1= and t= parameter values of this UserAN
@@ -2490,14 +2492,14 @@
                                 case 'User2':
                                 case 'IP2':
                                 case 'none':
-                                    return user === param1 && /^(UNL|User2|IP2|none)$/.test(type) || info.includes(param1);
+                                    return (user === param1 && /^(UNL|User2|IP2|none)$/.test(type)) || info.includes(param1);
                                 case 'logid':
                                 case 'diffid':
-                                    return user === param1 && type === paramT || converted && info.includes(converted);
+                                    return (user === param1 && type === paramT) || (converted && info.includes(converted));
                             }
                         });
                         return isDuplicate;
-                    }
+                    },
                 });
                 if (!UserANs.length)
                     return Wkt;
@@ -2517,15 +2519,15 @@
                         '不適切な利用者名',
                         '公開アカウント',
                         '公開プロキシ・ゾンビマシン・ボット・不特定多数',
-                        '犯罪行為またはその疑いのある投稿'
+                        '犯罪行為またはその疑いのある投稿',
                     ],
                     [ANS]: [
                         '著作権侵害・犯罪予告',
                         '名誉毀損・なりすまし・個人情報',
                         '妨害編集・いたずら',
-                        'その他'
+                        'その他',
                     ],
-                    [AN3RR]: ['3RR']
+                    [AN3RR]: ['3RR'],
                 };
                 const testKey = formatANTEST(true);
                 const tarSections = tarSectionsAll[(testKey || data.page)];
@@ -2560,7 +2562,7 @@
             const $preview = $('<div>')
                 .css({
                 maxHeight: '70vh',
-                maxWidth: '80vw'
+                maxWidth: '80vw',
             })
                 .dialog({
                 dialogClass: 'anr-dialog anr-dialog-drpreview',
@@ -2571,7 +2573,7 @@
                 close: function () {
                     // Destory the dialog and its contents when closed by any means
                     $(this).empty().dialog('destroy');
-                }
+                },
             });
             const $previewContent = $('<div>')
                 .prop('id', 'anr-dialog-drpreview-content')
@@ -2587,7 +2589,7 @@
                 disablelimitreport: true,
                 disableeditsection: true,
                 disabletoc: true,
-                formatversion: '2'
+                formatversion: '2',
             }).then((res) => {
                 const content = res && res.parse && res.parse.text;
                 if (content) {
@@ -2604,9 +2606,9 @@
                                 text: '閉じる',
                                 click: () => {
                                     $preview.dialog('close');
-                                }
-                            }
-                        ]
+                                },
+                            },
+                        ],
                     });
                     // Center the preview dialog and scroll to the first duplicate report
                     Reporter.centerDialog($preview, true);
@@ -2628,9 +2630,9 @@
                             text: '閉じる',
                             click: () => {
                                 $preview.dialog('close');
-                            }
-                        }
-                    ]
+                            },
+                        },
+                    ],
                 });
             });
         }
@@ -2676,35 +2678,35 @@
          * Create a user pane of the Reporter dialog with the following structure.
          * ```html
          * <div class="anr-option-row anr-option-userpane-wrapper">
-         * 	<div class="anr-option-label">利用者</div> <!-- float: left; -->
-         * 	<div class="anr-option-usertype"> <!-- float: right; -->
-         * 		<select>...</select>
-         * 	</div>
-         * 	<div class="anr-option-wrapper"> <!-- overflow: hidden; -->
-         * 		<input class="anr-option-username anr-juxtaposed"> <!-- width: 100%; -->
-         * 	</div>
-         * 	<!-- row boundary -->
-         * 	<div class="anr-option-row-inner anr-option-hideuser-wrapper">
-         * 		<div class="anr-option-label">&nbsp;</div> <!-- float: left; -->
-         * 		<div class="anr-option-hideuser">
-         * 			<label>
-         * 				<input class="anr-checkbox">
-         * 				<span class="anr-checkbox-label">利用者名を隠す</span>
-         * 			</label>
-         * 		</div>
-         * 	</div>
-         * 	<div class="anr-option-row-inner anr-option-idlink-wrapper">
-         * 		<div class="anr-option-label">&nbsp;</div>
-         * 		<div class="anr-option-idlink">
-         * 			<a></a>
-         * 		</div>
-         * 	</div>
-         * 	<div class="anr-option-row-inner anr-option-blockstatus-wrapper">
-         * 		<div class="anr-option-label">&nbsp;</div>
-         * 		<div class="anr-option-blockstatus">
-         * 			<a>ブロックあり</a>
-         * 		</div>
-         * 	</div>
+         *   <div class="anr-option-label">利用者</div> <!-- float: left; -->
+         *   <div class="anr-option-usertype"> <!-- float: right; -->
+         *     <select>...</select>
+         *   </div>
+         *   <div class="anr-option-wrapper"> <!-- overflow: hidden; -->
+         *     <input class="anr-option-username anr-juxtaposed"> <!-- width: 100%; -->
+         *   </div>
+         *   <!-- row boundary -->
+         *   <div class="anr-option-row-inner anr-option-hideuser-wrapper">
+         *     <div class="anr-option-label">&nbsp;</div> <!-- float: left; -->
+         *     <div class="anr-option-hideuser">
+         *       <label>
+         *         <input class="anr-checkbox">
+         *         <span class="anr-checkbox-label">利用者名を隠す</span>
+         *       </label>
+         *     </div>
+         *   </div>
+         *   <div class="anr-option-row-inner anr-option-idlink-wrapper">
+         *     <div class="anr-option-label">&nbsp;</div>
+         *     <div class="anr-option-idlink">
+         *       <a></a>
+         *     </div>
+         *   </div>
+         *   <div class="anr-option-row-inner anr-option-blockstatus-wrapper">
+         *     <div class="anr-option-label">&nbsp;</div>
+         *     <div class="anr-option-blockstatus">
+         *       <a>ブロックあり</a>
+         *     </div>
+         *   </div>
          * </div>
          * <!-- ADD BUTTON HERE -->
          * ```
@@ -2754,7 +2756,7 @@
                 .addClass('anr-option-username') // Currently not used for anything
                 .prop({
                 type: 'text',
-                placeholder: '入力してください'
+                placeholder: '入力してください',
             })
                 .off('input').on('input', () => {
                 clearTimeout(inputTimeout);
@@ -2919,7 +2921,7 @@
                 this.$input.toggleClass(clss, isNotNumber);
                 this.$hideUser.prop({
                     disabled: isNotNumber,
-                    checked: true
+                    checked: true,
                 });
                 const idTitle = (selectedType === 'logid' ? '特別:転送/logid/' : '特別:差分/') + inputVal;
                 this.$idLink
@@ -2941,7 +2943,7 @@
                 this.$input.toggleClass(clss, false);
                 this.$hideUser.prop({
                     disabled: false,
-                    checked: false
+                    checked: false,
                 });
                 this.$idLink.toggleClass('anr-disabledanchor', false);
                 this.processBlockStatus(inputVal);
@@ -2989,7 +2991,7 @@
             const typeMap = {
                 ip: ['IP2', 'none'],
                 user: ['UNL', 'User2', 'none'],
-                other: ['none', 'logid', 'diffid']
+                other: ['none', 'logid', 'diffid'],
             };
             const username = this.getName();
             if (!username) { // Blank
@@ -3163,10 +3165,10 @@
      * Create a labelled checkbox.
      * ```html
      * <div class="anr-option-row">
-     * 	<label>
-     * 		<input class="anr-checkbox">
-     * 		<span class="anr-checkbox-label">labelText</span>
-     * 	</label>
+     *   <label>
+     *     <input class="anr-checkbox">
+     *     <span class="anr-checkbox-label">labelText</span>
+     *   </label>
      * </div>
      * ```
      * @param labelText The label text.
@@ -3183,7 +3185,7 @@
         $checkbox
             .prop({
             id,
-            type: 'checkbox'
+            type: 'checkbox',
         })
             .addClass('anr-checkbox');
         const $label = $('<span>');
@@ -3211,7 +3213,7 @@
         let m;
         if ((m = text.match(v4_regex)) ||
             (m = text.match(v6_regex)) ||
-            (m = text.match(v6_regex2)) && /::/.test(m[0]) && !/::.*::/.test(m[0])) {
+            ((m = text.match(v6_regex2)) && /::/.test(m[0]) && !/::.*::/.test(m[0]))) {
             return m[0];
         }
         else {
@@ -3223,4 +3225,4 @@
     init();
     // ******************************************************************************************
 })();
-//</nowiki>
+// </nowiki>

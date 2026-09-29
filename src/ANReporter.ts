@@ -1,10 +1,10 @@
-/*********************************************************************************\
-	AN Reporter
-	@author [[User:Dragoniez]]
-	@version 8.2.3
-	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
-\*********************************************************************************/
-//<nowiki>
+/**
+ * AN Reporter
+ * @author [[User:Dragoniez]]
+ * @version 8.2.4
+ * @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/ANReporter.ts
+ */
+// <nowiki>
 /* global mw, $, OO */
 
 (() => {
@@ -22,13 +22,13 @@ const AN3RR = 'Wikipedia:管理者伝言板/3RR';
 /**
  * This variable being a string means that we're in a debugging mode. (cf. {@link Reporter.collectData})
  */
-const ANTEST: 'ANI'|'ANS'|'AN3RR'|false = false;
+const ANTEST: 'ANI' | 'ANS' | 'AN3RR' | false = false;
 /**
  * Format the `ANTEST` variable to a processable page name.
  * @param toWikipedia Whether to format to a page name in the Wikipedia namespace, defaulted to `false`.
  * @returns Always `false` if `ANTEST` is set to `false`, otherwise a formatted page name.
  */
-const formatANTEST = (toWikipedia = false): string|false => {
+const formatANTEST = (toWikipedia = false): string | false => {
 	if (typeof ANTEST === 'string') {
 		return toWikipedia ? eval(ANTEST) : '利用者:DragoTest/test/WP' + ANTEST;
 	} else {
@@ -55,7 +55,7 @@ function init() {
 
 	// Is the user autoconfirmed?
 	if ((mw.config.get('wgUserGroups') || []).indexOf('autoconfirmed') === -1) {
-		mw.notify('あなたは自動承認されていません。AN Reporterを終了します。', {type: 'warn'});
+		mw.notify('あなたは自動承認されていません。AN Reporterを終了します。', { type: 'warn' });
 		return;
 	}
 
@@ -114,7 +114,7 @@ function init() {
 				portlet.addEventListener('click', Reporter.new);
 			}).catch((...err) => {
 				console.warn(err);
-				mw.notify(ANR + ': モジュールの読み込みに失敗しました。', {type: 'error'});
+				mw.notify(ANR + ': モジュールの読み込みに失敗しました。', { type: 'error' });
 			});
 		}
 
@@ -128,7 +128,7 @@ function init() {
  * @returns
  */
 function loadLibrary(dev = false): JQueryPromise<boolean> {
-	const libName = 'ext.gadget.WpLibExtra' + (dev ? 'Dev': '');
+	const libName = 'ext.gadget.WpLibExtra' + (dev ? 'Dev' : '');
 	const loadLocal = (): JQueryPromise<boolean> => {
 		return mw.loader.using(libName)
 			.then((require) => { // Load the library
@@ -159,18 +159,18 @@ function loadLibrary(dev = false): JQueryPromise<boolean> {
  * @returns
  */
 function loadConfigInterface(): {
-	$heading: JQuery<HTMLHeadingElement>|null;
-	$content: JQuery<HTMLDivElement>|null;
+	$heading: JQuery<HTMLHeadingElement> | null;
+	$content: JQuery<HTMLDivElement> | null;
 } {
 
 	// Change the document's title
 	document.title = 'ANReporterConfig' + ' - ' + mw.config.get('wgSiteName');
 
 	// Get the first heading and content body
-	const $heading: JQuery<HTMLHeadingElement>= $('.mw-first-heading');
+	const $heading: JQuery<HTMLHeadingElement> = $('.mw-first-heading');
 	const $content: JQuery<HTMLDivElement> = $('.mw-body-content');
 	if (!$heading.length || !$content.length) {
-		return {$heading: null, $content: null};
+		return { $heading: null, $content: null };
 	}
 
 	// Set up the elements
@@ -180,7 +180,7 @@ function loadConfigInterface(): {
 		getImage('load', 'margin-left: 0.5em;')
 	);
 
-	return {$heading, $content};
+	return { $heading, $content };
 
 }
 
@@ -190,9 +190,9 @@ function loadConfigInterface(): {
  */
 function createConfigInterface(): void {
 
-	const {$heading, $content} = loadConfigInterface();
+	const { $heading, $content } = loadConfigInterface();
 	if (!$heading || !$content) {
-		mw.notify('インターフェースの読み込みに失敗しました。', {type: 'error', autoHide: false});
+		mw.notify('インターフェースの読み込みに失敗しました。', { type: 'error', autoHide: false });
 		return;
 	}
 
@@ -254,19 +254,18 @@ class Config {
 			watchExpiry: 'infinity',
 			headerColor: '#FEC493',
 			backgroundColor: '#FFF0E4',
-			portletlinkPosition: ''
+			portletlinkPosition: '',
 		};
 		if (getDefault) {
 			return cfg;
 		}
 
 		// Objectify the user config
-		const strCfg = <string|null>mw.user.options.get(this.key) || '{}';
+		const strCfg = <string | null>mw.user.options.get(this.key) || '{}';
 		let userCfg: ANReporterConfig;
 		try {
 			userCfg = JSON.parse(strCfg);
-		}
-		catch (err) {
+		} catch (err) {
 			console.warn(err);
 			return cfg;
 		}
@@ -296,7 +295,7 @@ class Config {
 		// Fieldset that stores config options
 		this.fieldset = new OO.ui.FieldsetLayout({
 			label: 'ダイアログ設定',
-			id: 'anrc-options'
+			id: 'anrc-options',
 		});
 
 		// Create config options
@@ -304,19 +303,19 @@ class Config {
 			id: 'anrc-reasons',
 			placeholder: '理由ごとに改行',
 			rows: 8,
-			value: cfg.reasons.join('\n')
+			value: cfg.reasons.join('\n'),
 		});
 		this.blockCheck = new OO.ui.CheckboxInputWidget({
 			id: 'anrc-blockcheck',
-			selected: cfg.blockCheck
+			selected: cfg.blockCheck,
 		});
 		this.duplicateCheck = new OO.ui.CheckboxInputWidget({
 			id: 'anrc-duplicatecheck',
-			selected: cfg.duplicateCheck
+			selected: cfg.duplicateCheck,
 		});
 		this.watchUser = new OO.ui.CheckboxInputWidget({
 			id: 'anrc-watchuser',
-			selected: cfg.watchUser
+			selected: cfg.watchUser,
 		});
 		this.watchExpiry = new OO.ui.DropdownWidget({
 			id: 'anrc-watchexpiry',
@@ -324,50 +323,50 @@ class Config {
 				items: [
 					new OO.ui.MenuOptionWidget({
 						data: 'infinity',
-						label: '無期限'
+						label: '無期限',
 					}),
 					new OO.ui.MenuOptionWidget({
 						data: '1 week',
-						label: '1週間'
+						label: '1週間',
 					}),
 					new OO.ui.MenuOptionWidget({
 						data: '2 weeks',
-						label: '2週間'
+						label: '2週間',
 					}),
 					new OO.ui.MenuOptionWidget({
 						data: '1 month',
-						label: '1か月'
+						label: '1か月',
 					}),
 					new OO.ui.MenuOptionWidget({
 						data: '3 months',
-						label: '3か月'
+						label: '3か月',
 					}),
 					new OO.ui.MenuOptionWidget({
 						data: '6 months',
-						label: '6か月'
+						label: '6か月',
 					}),
 					new OO.ui.MenuOptionWidget({
 						data: '1 year',
-						label: '1年'
+						label: '1年',
 					}),
-				]
-			}
+				],
+			},
 		});
 		this.watchExpiry.getMenu().selectItemByData(cfg.watchExpiry);
 		this.headerColor = new OO.ui.TextInputWidget({
 			id: 'anrc-headercolor',
 			value: cfg.headerColor,
-			placeholder: 'カラー名またはHEXコードを入力'
+			placeholder: 'カラー名またはHEXコードを入力',
 		});
 		this.backgroundColor = new OO.ui.TextInputWidget({
 			id: 'anrc-backgroundcolor',
 			value: cfg.backgroundColor,
-			placeholder: 'カラー名またはHEXコードを入力'
+			placeholder: 'カラー名またはHEXコードを入力',
 		});
 		this.portletlinkPosition = new OO.ui.TextInputWidget({
 			id: 'anrc-portletlinkposition',
 			value: cfg.portletlinkPosition,
-			placeholder: '「報告」リンクの生成位置を随意入力'
+			placeholder: '「報告」リンクの生成位置を随意入力',
 		});
 
 		// Add the config options to the fieldset
@@ -375,23 +374,23 @@ class Config {
 			new OO.ui.FieldLayout(this.reasons, {
 				label: '定型理由',
 				align: 'top',
-				help: '登録した定型理由はドロップダウンからコピーできます。'
+				help: '登録した定型理由はドロップダウンからコピーできます。',
 			}),
 			new OO.ui.FieldLayout(this.blockCheck, {
 				label: '報告前にブロック状態をチェック',
-				align: 'inline'
+				align: 'inline',
 			}),
 			new OO.ui.FieldLayout(this.duplicateCheck, {
 				label: '報告前に重複報告をチェック',
-				align: 'inline'
+				align: 'inline',
 			}),
 			new OO.ui.FieldLayout(this.watchUser, {
 				label: '報告対象者をウォッチ',
-				align: 'inline'
+				align: 'inline',
 			}),
 			new OO.ui.FieldLayout(this.watchExpiry, {
 				label: 'ウォッチ期間',
-				align: 'top'
+				align: 'top',
 			}),
 			new OO.ui.FieldLayout(this.headerColor, {
 				label: 'ヘッダー色',
@@ -401,7 +400,7 @@ class Config {
 					'<span id="anrc-headercolor-demo" class="anrc-colordemo">ヘッダー色</span>' +
 					')'
 				),
-				helpInline: true
+				helpInline: true,
 			}),
 			new OO.ui.FieldLayout(this.backgroundColor, {
 				label: '背景色',
@@ -411,7 +410,7 @@ class Config {
 					'<span id="anrc-backgroundcolor-demo" class="anrc-colordemo">背景色</span>' +
 					')'
 				),
-				helpInline: true
+				helpInline: true,
 			}),
 			new OO.ui.FieldLayout(this.portletlinkPosition, {
 				label: 'ポートレットID (上級)',
@@ -419,7 +418,7 @@ class Config {
 				help: new OO.ui.HtmlSnippet(
 					'<a href="https://doc.wikimedia.org/mediawiki-core/REL1_41/js/#!/api/mw.util-method-addPortletLink" target="_blank">mw.util.addPortletLink</a>の' +
 					'<code style="font-family: inherit;">portletId</code>を指定します。未指定または値が無効の場合、使用中のスキンに応じて自動的にリンクの生成位置が決定されます。'
-				)
+				),
 			}),
 		]);
 
@@ -430,7 +429,7 @@ class Config {
 
 		// Event listeners
 		let headerColorTimeout: ReturnType<typeof setTimeout>;
-		this.headerColor.$input.off('input').on('input', function(this: HTMLInputElement) {
+		this.headerColor.$input.off('input').on('input', function (this: HTMLInputElement) {
 			// Change the background color of span that demonstrates the color of the dialog header
 			clearTimeout(headerColorTimeout);
 			headerColorTimeout = setTimeout(() => {
@@ -439,7 +438,7 @@ class Config {
 		});
 
 		let backgroundColorTimeout: ReturnType<typeof setTimeout>;
-		this.backgroundColor.$input.off('input').on('input', function(this: HTMLInputElement) {
+		this.backgroundColor.$input.off('input').on('input', function (this: HTMLInputElement) {
 			// Change the background color of span that demonstrates the color of the dialog body
 			clearTimeout(backgroundColorTimeout);
 			backgroundColorTimeout = setTimeout(() => {
@@ -453,7 +452,7 @@ class Config {
 			label: 'リセット',
 			id: 'anrc-reset',
 			icon: 'undo',
-			flags: 'destructive'
+			flags: 'destructive',
 		});
 		resetButton.$element.off('click').on('click', () => {
 			this.reset();
@@ -465,7 +464,7 @@ class Config {
 			label: '設定を保存',
 			id: 'anrc-save',
 			icon: 'bookmarkOutline',
-			flags: ['primary', 'progressive']
+			flags: ['primary', 'progressive'],
 		});
 		this.saveButton.$element.off('click').on('click', () => {
 			this.save();
@@ -501,7 +500,7 @@ class Config {
 			this.backgroundColor.setValue(defaultCfg.backgroundColor).$input.trigger('input');
 			this.portletlinkPosition.setValue('');
 
-			mw.notify('設定をリセットしました。', {type: 'success'});
+			mw.notify('設定をリセットしました。', { type: 'success' });
 
 		});
 	}
@@ -546,7 +545,7 @@ class Config {
 			watchExpiry: (this.watchExpiry.getMenu().findSelectedItem() as OO.ui.OptionWidget).getData() as string,
 			headerColor: this.headerColor.getValue(),
 			backgroundColor: this.backgroundColor.getValue(),
-			portletlinkPosition: this.portletlinkPosition.getValue()
+			portletlinkPosition: this.portletlinkPosition.getValue(),
 		};
 		const strCfg = JSON.stringify(cfg);
 
@@ -562,23 +561,22 @@ class Config {
 			})
 			.then((err) => {
 				if (err) {
-					mw.notify(`保存に失敗しました。(${err})`, {type: 'error'});
+					mw.notify(`保存に失敗しました。(${err})`, { type: 'error' });
 				} else {
-					mw.notify('保存しました。', {type: 'success'});
+					mw.notify('保存しました。', { type: 'success' });
 				}
 				this.saveButton.setIcon('bookmarkOutline').setLabel('設定を保存');
 				this.setOverlay(false);
 			});
 
 	}
-
 }
 
 /**
  * Create a Reporter portlet link.
  * @returns The Reporter portlet link.
  */
-function createPortletLink(): HTMLLIElement|null {
+function createPortletLink(): HTMLLIElement | null {
 
 	const cfg = Config.merge();
 
@@ -587,7 +585,7 @@ function createPortletLink(): HTMLLIElement|null {
 		if (document.getElementById(cfg.portletlinkPosition)) {
 			portletlinkPosition = cfg.portletlinkPosition;
 		} else {
-			mw.notify(`AN Reporter: "${cfg.portletlinkPosition}" はポートレットリンクの生成位置として不正なIDです。`, {type: 'error'});
+			mw.notify(`AN Reporter: "${cfg.portletlinkPosition}" はポートレットリンクの生成位置として不正なIDです。`, { type: 'error' });
 		}
 	}
 	if (!portletlinkPosition) {
@@ -860,7 +858,7 @@ class IdList {
 	 *
 	 * The usernames are formatted by `lib.clean` and underscores in it are represented by spaces.
 	 */
-	list: {[username: string]: EventIds;} = {};
+	list: { [username: string]: EventIds } = {};
 
 	/**
 	 * Get event IDs of a user.
@@ -871,9 +869,9 @@ class IdList {
 		username = User.formatName(username);
 		for (const user in this.list) {
 			if (user === username) {
-				const {logid, diffid} = this.list[user];
+				const { logid, diffid } = this.list[user];
 				if (typeof logid === 'number' || typeof diffid === 'number') {
-					return $.Deferred().resolve({...this.list[user]});
+					return $.Deferred().resolve({ ...this.list[user] });
 				}
 			}
 		}
@@ -898,7 +896,7 @@ class IdList {
 			uclimit: 1,
 			ucuser: username,
 			ucprop: 'ids',
-			formatversion: '2'
+			formatversion: '2',
 		}).then((res) => {
 			let resLgev, resUc;
 			const logid = res && res.query && (resLgev = res.query.logevents) && resLgev[0] && resLgev[0].logid;
@@ -910,7 +908,7 @@ class IdList {
 				ret.diffid = diffid;
 			}
 			if (logid || diffid) {
-				this.list[username] = {...ret};
+				this.list[username] = { ...ret };
 			}
 			return ret;
 		}).catch((_, err) => {
@@ -925,7 +923,7 @@ class IdList {
 	 * @param type
 	 * @returns
 	 */
-	getUsername(id: number, type: 'logid'|'diffid'): JQueryPromise<string|null> {
+	getUsername(id: number, type: 'logid' | 'diffid'): JQueryPromise<string | null> {
 
 		// Attempt to convert the ID without making an HTTP request
 		const registeredUsername = this.getRegisteredUsername(id, type);
@@ -954,7 +952,7 @@ class IdList {
 	 * @param type
 	 * @returns
 	 */
-	getRegisteredUsername(id: number, type: 'logid'|'diffid'): string|null {
+	getRegisteredUsername(id: number, type: 'logid' | 'diffid'): string | null {
 		for (const user in this.list) {
 			const relId = this.list[user][type];
 			if (relId === id) {
@@ -969,8 +967,8 @@ class IdList {
 	 * @param logid
 	 * @returns
 	 */
-	private scrapeUsername(logid: number): JQueryPromise<string|null> {
-		const url = mw.util.getUrl('特別:ログ', {logid: logid.toString()});
+	private scrapeUsername(logid: number): JQueryPromise<string | null> {
+		const url = mw.util.getUrl('特別:ログ', { logid: logid.toString() });
 		return $.get(url)
 			.then((html) => {
 				const $newusers = $(html).find('.mw-logline-newusers').last();
@@ -999,32 +997,31 @@ class IdList {
 	 * @param diffid
 	 * @returns
 	 */
-	private fetchEditorName(diffid: number): JQueryPromise<string|null> {
+	private fetchEditorName(diffid: number): JQueryPromise<string | null> {
 		return new mw.Api().get({
 			action: 'query',
 			prop: 'revisions',
 			revids: diffid,
-			formatversion: '2'
+			formatversion: '2',
 		}).then((res) => {
 			const resPg = res && res.query && res.query.pages;
 			if (!resPg || !resPg.length) return null;
 			const resRev = resPg[0].revisions;
-			const user = Array.isArray(resRev) && !!resRev.length && <string|undefined>resRev[0].user;
+			const user = Array.isArray(resRev) && !!resRev.length && <string | undefined>resRev[0].user;
 			return user || null;
 		}).catch((_, err) => {
 			console.log(err);
 			return null;
 		});
 	}
-
 }
 
 /**
  * The object returned by {@link Reporter.getBlockStatus}.
  */
 interface BlockStatus {
-	usertype: 'ip'|'user'|'other';
-	blocked: boolean|null;
+	usertype: 'ip' | 'user' | 'other';
+	blocked: boolean | null;
 }
 /** The object that stores data created out of the field values on the dialog. */
 interface ReportData {
@@ -1043,7 +1040,7 @@ interface ReportData {
 	/** The checked state of the duplicate report check option. */
 	duplicateCheck: boolean;
 	/** The value of the watchuser option. If turned on, the property has an expiration time, otherwise `null`. */
-	watch: string|null;
+	watch: string | null;
 }
 /** The object that stores the username and type in a user pane. */
 interface UserInfo {
@@ -1062,7 +1059,7 @@ interface ProcessedIds {
 	 * into real usernames. For `t=none` values and `t=logid` or `t=diffid` IDs that failed to be converted, the value
 	 * is `null`.
 	 */
-	info: (string|null)[];
+	info: (string | null)[];
 }
 
 /**
@@ -1141,10 +1138,10 @@ class Reporter {
 				height: 'auto',
 				width: 'auto',
 				modal: true,
-				close: function() {
+				close: function () {
 					// Destory the dialog and its contents when closed by any means
 					$(this).empty().dialog('destroy');
-				}
+				},
 			});
 
 		// Create button that redirects the user to the config page
@@ -1182,7 +1179,7 @@ class Reporter {
 		this.$fieldset = $('<fieldset>');
 		this.$fieldset.prop({
 			id: 'anr-dialog-optionfield',
-			innerHTML: '<legend>利用者を報告</legend>'
+			innerHTML: '<legend>利用者を報告</legend>',
 		});
 		this.$content.append(this.$fieldset);
 
@@ -1223,7 +1220,7 @@ class Reporter {
 		this.$section
 			.prop({
 				innerHTML: '<option selected disabled hidden value="">選択してください</option>',
-				disabled: true
+				disabled: true,
 			})
 			.off('change').on('change', () => {
 				this.setPageLink();
@@ -1265,7 +1262,7 @@ class Reporter {
 
 		// Create a user pane
 		this.Users = [
-			new User($addButtonWrapper, {removable: false})
+			new User($addButtonWrapper, { removable: false }),
 		];
 		this.$addButton.off('click').on('click', () => {
 			// eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -1285,7 +1282,7 @@ class Reporter {
 						U.$wrapper.remove();
 						_this.Users.splice(idx, 1);
 					}
-				}
+				},
 			});
 		});
 		const dialogWith = this.$fieldset.outerWidth(true)!;
@@ -1298,7 +1295,7 @@ class Reporter {
 		 *
 		 * Copy the selected value to the clipboard and reset the selection.
 		 */
-		const copyThenResetSelection = function(this: HTMLSelectElement) {
+		const copyThenResetSelection = function (this: HTMLSelectElement) {
 			lib.copyToClipboard(this.value, 'ja');
 			this.selectedIndex = 0;
 		};
@@ -1350,19 +1347,19 @@ class Reporter {
 		this.$reason.prop({
 			id: 'anr-option-reason',
 			rows: 5,
-			placeholder: '署名不要'
+			placeholder: '署名不要',
 		});
 		$reasonWrapper.append(this.$reason);
 		this.$fieldset.append($reasonWrapper);
 
 		// Create "add comment" option
-		const addCommentElements = createLabelledCheckbox('要約にコメントを追加', {checkboxId: 'anr-option-addcomment'});
+		const addCommentElements = createLabelledCheckbox('要約にコメントを追加', { checkboxId: 'anr-option-addcomment' });
 		this.$addComment = addCommentElements.$checkbox;
 		this.$fieldset.append(addCommentElements.$wrapper);
 		this.$comment = $('<textarea>');
 		this.$comment.prop({
 			id: 'anr-option-comment',
-			rows: 2
+			rows: 2,
 		});
 		addCommentElements.$wrapper.append(this.$comment);
 		this.$addComment.off('change').on('change', () => {
@@ -1370,19 +1367,19 @@ class Reporter {
 		}).trigger('change');
 
 		// Create "block check" option
-		const checkBlockElements = createLabelledCheckbox('報告前にブロック状態をチェック', {checkboxId: 'anr-option-checkblock'});
+		const checkBlockElements = createLabelledCheckbox('報告前にブロック状態をチェック', { checkboxId: 'anr-option-checkblock' });
 		this.$checkBlock = checkBlockElements.$checkbox;
 		this.$checkBlock.prop('checked', this.cfg.blockCheck);
 		this.$fieldset.append(checkBlockElements.$wrapper);
 
 		// Create "duplicate check" option
-		const checkDuplicatesElements = createLabelledCheckbox('報告前に重複報告をチェック', {checkboxId: 'anr-option-checkduplicates'});
+		const checkDuplicatesElements = createLabelledCheckbox('報告前に重複報告をチェック', { checkboxId: 'anr-option-checkduplicates' });
 		this.$checkDuplicates = checkDuplicatesElements.$checkbox;
 		this.$checkDuplicates.prop('checked', this.cfg.duplicateCheck);
 		this.$fieldset.append(checkDuplicatesElements.$wrapper);
 
 		// Create "watch user" option
-		const watchUserElements = createLabelledCheckbox('報告対象者をウォッチ', {checkboxId: 'anr-option-watchuser'});
+		const watchUserElements = createLabelledCheckbox('報告対象者をウォッチ', { checkboxId: 'anr-option-watchuser' });
 		this.$watchUser = watchUserElements.$checkbox;
 		this.$watchUser.prop('checked', this.cfg.watchUser);
 		this.$fieldset.append(watchUserElements.$wrapper);
@@ -1390,21 +1387,21 @@ class Reporter {
 		this.$watchExpiry
 			.prop({
 				id: 'anr-option-watchexpiry',
-				innerHTML:	'<option value="infinity">無期限</option>' +
+				innerHTML: '<option value="infinity">無期限</option>' +
 							'<option value="1 week">1週間</option>' +
 							'<option value="2 weeks">2週間</option>' +
 							'<option value="1 month">1か月</option>' +
 							'<option value="3 months">3か月</option>' +
 							'<option value="6 months">6か月</option>' +
-							'<option value="1 year">1年</option>'
+							'<option value="1 year">1年</option>',
 			})
 			.val(this.cfg.watchExpiry);
 		const $watchExpiryWrapper = $('<div>');
 		$watchExpiryWrapper
-			.prop({id: 'anr-option-watchexpiry-wrapper'})
+			.prop({ id: 'anr-option-watchexpiry-wrapper' })
 			.css({
 				marginLeft: this.$watchUser.outerWidth(true)! + 'px',
-				marginTop: '0.3em'
+				marginTop: '0.3em',
 			})
 			.append(
 				document.createTextNode('期間: '),
@@ -1435,7 +1432,7 @@ class Reporter {
 	 * @returns The width.
 	 */
 	static setWidestWidth($elements: JQuery<HTMLElement>): number {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 		const optionsWidths = Array.prototype.map.call<JQuery<HTMLElement>, any[], number[]>(
 			$elements,
 			(el: HTMLElement) => el.offsetWidth // Collect the widths of all the elements
@@ -1481,7 +1478,7 @@ class Reporter {
 	 * @param labelText The text of the label (technically, the innerHTML). If an empty string is passed, `&nbsp;` is used.
 	 * @returns The created label.
 	 */
-	static createRowLabel($appendTo: JQuery<HTMLElement>, labelText: string|HTMLElement): JQuery<HTMLDivElement> {
+	static createRowLabel($appendTo: JQuery<HTMLElement>, labelText: string | HTMLElement): JQuery<HTMLDivElement> {
 		const $label: JQuery<HTMLDivElement> = $('<div>');
 		$label.addClass('anr-option-label');
 		if (typeof labelText === 'string') {
@@ -1513,10 +1510,10 @@ class Reporter {
 	 * Wrap a (non-block) element (next to a row label) with a div. This is for the element to fill the remaining space.
 	 * ```html
 	 * <div class="anr-option-row">
-	 * 	<div class="anr-option-label"></div> <!-- float: left; -->
-	 * 	<div class="anr-option-wrapper"> <!-- overflow: hidden; -->
-	 * 		<element class="anr-juxtaposed">...</element> <!-- width: 100%; -->
-	 * 	</div>
+	 *   <div class="anr-option-label"></div> <!-- float: left; -->
+	 *   <div class="anr-option-wrapper"> <!-- overflow: hidden; -->
+	 *     <element class="anr-juxtaposed">...</element> <!-- width: 100%; -->
+	 *   </div>
 	 * </div>
 	 * ```
 	 * @param $appendTo The element to which to append the wrapper div.
@@ -1539,7 +1536,7 @@ class Reporter {
 	static select2($dropdown: JQuery<HTMLSelectElement>): void {
 		$dropdown.select2({
 			width: '100%', // Without this, the right end of the dropdown overflows
-			dropdownCssClass: 'anr-select2' // This needs select2.full.js
+			dropdownCssClass: 'anr-select2', // This needs select2.full.js
 		});
 	}
 
@@ -1553,8 +1550,8 @@ class Reporter {
 			position: {
 				my: absoluteCenter ? 'center' : 'top',
 				at: absoluteCenter ? 'center' : 'top+5%',
-				of: window
-			}
+				of: window,
+			},
 		});
 	}
 
@@ -1572,13 +1569,16 @@ class Reporter {
 		const R = new Reporter();
 
 		// Get a username associated with the current page if any
-		const heading: HTMLHeadingElement|null =
+		const heading: HTMLHeadingElement | null =
 			document.querySelector('.mw-first-heading') ||
 			document.querySelector('.firstHeading') ||
 			document.querySelector('#firstHeading');
 		const relevantUser =
-			<string|null>mw.config.get('wgRelevantUserName') ||
-			mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' && heading && heading.textContent && extractCidr(heading.textContent);
+			<string | null>mw.config.get('wgRelevantUserName') ||
+			(
+				mw.config.get('wgCanonicalSpecialPageName') === 'Contributions' &&
+				heading && heading.textContent && extractCidr(heading.textContent)
+			);
 		const U = R.Users[0];
 		U.$input.val(relevantUser || '');
 		const def = U.processInputChange();
@@ -1615,11 +1615,11 @@ class Reporter {
 					'N. 未分類',
 					'サブページなし',
 					'休止中N',
-					'関連項目'
+					'関連項目',
 				]);
 				const optgroup = document.createElement('optgroup');
 				optgroup.label = 'LTA';
-				Wkt.parseSections().forEach(({title}) => {
+				Wkt.parseSections().forEach(({ title }) => {
 					if (!exclude.has(title)) {
 						const option = document.createElement('option');
 						option.textContent = title;
@@ -1629,10 +1629,10 @@ class Reporter {
 				if (optgroup.querySelector('option')) {
 					R.$sectionAns[0].add(optgroup);
 				} else {
-					mw.notify('WP:AN/Sのセクション情報の取得に失敗しました。節構成が変更された、またはスクリプトのバグの可能性があります。', {type: 'error'});
+					mw.notify('WP:AN/Sのセクション情報の取得に失敗しました。節構成が変更された、またはスクリプトのバグの可能性があります。', { type: 'error' });
 				}
 			} else {
-				mw.notify('WP:AN/Sのセクション情報の取得に失敗しました。ダイアログを開き直すと改善する場合があります。', {type: 'error'});
+				mw.notify('WP:AN/Sのセクション情報の取得に失敗しました。ダイアログを開き直すと改善する場合があります。', { type: 'error' });
 			}
 
 			// Initialize the VIP copier dropdown
@@ -1651,7 +1651,7 @@ class Reporter {
 
 			// Initialize the LTA copier dropdown
 			const abandoned = new Set([
-				'SANNET', 'HEXAGON', 'MOPERA', 'AU ONE NET', 'ASPE', 'Asperger'
+				'SANNET', 'HEXAGON', 'MOPERA', 'AU ONE NET', 'ASPE', 'Asperger',
 			]);
 			ltaList = ltaList.filter((el) => !abandoned.has(el));
 			if (ltaList.length) {
@@ -1686,17 +1686,17 @@ class Reporter {
 			buttons: [
 				{
 					text: '報告',
-					click: () => this.report()
+					click: () => this.report(),
 				},
 				{
 					text: 'プレビュー',
-					click: () => this.preview()
+					click: () => this.preview(),
 				},
 				{
 					text: '閉じる',
-					click: () => this.close()
-				}
-			]
+					click: () => this.close(),
+				},
+			],
 		});
 	}
 
@@ -1754,8 +1754,8 @@ class Reporter {
 	 * Get the page to which to forward the report.
 	 * @returns
 	 */
-	getPage(): string|null {
-		return <string>this.$page.val() || null;
+	getPage(): string | null {
+		return <string> this.$page.val() || null;
 	}
 
 	/**
@@ -1781,14 +1781,14 @@ class Reporter {
 	 * @param addHash Add '#' to the beginning when there's a value to return. (Default: `false`)
 	 * @returns
 	 */
-	getSection(addHash = false): string|null {
-		let ret: string|null = null;
+	getSection(addHash = false): string | null {
+		let ret: string | null = null;
 		switch (this.getPage()) {
 			case ANI:
-				ret = <string>this.$section.val() || null;
+				ret = this.$section.val() as string || null;
 				break;
 			case ANS:
-				ret = <string>this.$sectionAns.val() || null;
+				ret = this.$sectionAns.val() as string || null;
 				break;
 			case AN3RR:
 				ret = '3RR';
@@ -1810,12 +1810,12 @@ class Reporter {
 				case ANI:
 					this.$section.prop('disabled', false).empty();
 					addOptions(this.$section, [
-						{text: '選択してください', value: '', disabled: true, selected: true, hidden: true},
-						{text: Reporter.getCurrentAniSection()},
-						{text: '不適切な利用者名'},
-						{text: '公開アカウント'},
-						{text: '公開プロキシ・ゾンビマシン・ボット・不特定多数'},
-						{text: '犯罪行為またはその疑いのある投稿'}
+						{ text: '選択してください', value: '', disabled: true, selected: true, hidden: true },
+						{ text: Reporter.getCurrentAniSection() },
+						{ text: '不適切な利用者名' },
+						{ text: '公開アカウント' },
+						{ text: '公開プロキシ・ゾンビマシン・ボット・不特定多数' },
+						{ text: '犯罪行為またはその疑いのある投稿' },
 					]);
 					Reporter.toggle(this.$sectionWrapper, true);
 					Reporter.toggle(this.$sectionAnsWrapper, false);
@@ -1829,7 +1829,7 @@ class Reporter {
 				case AN3RR:
 					this.$section.prop({
 						disabled: false,
-						innerHTML: '<option>3RR</option>'
+						innerHTML: '<option>3RR</option>',
 					});
 					Reporter.toggle(this.$sectionWrapper, true);
 					Reporter.toggle(this.$sectionAnsWrapper, false);
@@ -1838,7 +1838,7 @@ class Reporter {
 		} else {
 			this.$section.prop({
 				disabled: true,
-				innerHTML: '<option disabled selected hidden value="">選択してください</option>'
+				innerHTML: '<option disabled selected hidden value="">選択してください</option>',
 			});
 			Reporter.toggle(this.$sectionWrapper, true);
 			Reporter.toggle(this.$sectionAnsWrapper, false);
@@ -1853,7 +1853,7 @@ class Reporter {
 	 * This property is initialized every time when the constructor is called. This per se would tempt one to make the method non-static,
 	 * but this isn't an option because the property is accessed by {@link getBlockStatus}, which is a static method.
 	 */
-	static blockStatus: {[username: string]: BlockStatus;} = {};
+	static blockStatus: { [username: string]: BlockStatus } = {};
 
 	/**
 	 * Evaluate a username, classify it into a type, and check the block status of the relevant user.
@@ -1864,14 +1864,14 @@ class Reporter {
 
 		username = User.formatName(username);
 		const isIp = mw.util.isIPAddress(username, true);
-		const bkpara: {bkusers?: string; bkip?: string;} = {};
-		if (!username || !isIp && User.containsInvalidCharacter(username)) { // Blank or invalid
+		const bkpara: { bkusers?: string; bkip?: string } = {};
+		if (!username || (!isIp && User.containsInvalidCharacter(username))) { // Blank or invalid
 			return $.Deferred().resolve({
 				usertype: 'other',
-				blocked: null
+				blocked: null,
 			});
 		} else if (Reporter.blockStatus[username]) {
-			return $.Deferred().resolve({...Reporter.blockStatus[username]});
+			return $.Deferred().resolve({ ...Reporter.blockStatus[username] });
 		} else if (isIp) {
 			bkpara.bkip = username;
 		} else {
@@ -1882,7 +1882,7 @@ class Reporter {
 			action: 'query',
 			list: 'users|blocks',
 			ususers: username,
-			formatversion: '2'
+			formatversion: '2',
 		}, bkpara);
 		return new mw.Api().get(params)
 			.then((res) => {
@@ -1891,9 +1891,9 @@ class Reporter {
 				if (resUs && resBl) {
 					const ret: BlockStatus = {
 						usertype: isIp ? 'ip' : resUs[0].userid !== void 0 ? 'user' : 'other',
-						blocked: !!resBl.length
+						blocked: !!resBl.length,
 					};
-					Reporter.blockStatus[username] = {...ret};
+					Reporter.blockStatus[username] = { ...ret };
 					return ret;
 				} else {
 					throw new Error('APIリクエストにおける不明なエラー');
@@ -1901,10 +1901,10 @@ class Reporter {
 			})
 			.catch((_, err) => {
 				console.error(err);
-				mw.notify('ユーザー情報の取得に失敗しました。', {type: 'error'});
+				mw.notify('ユーザー情報の取得に失敗しました。', { type: 'error' });
 				return {
 					usertype: 'other',
-					blocked: null
+					blocked: null,
 				};
 			});
 
@@ -1916,7 +1916,7 @@ class Reporter {
 	 * Collect option values.
 	 * @returns `null` if there's some error.
 	 */
-	private collectData(): ReportData|null {
+	private collectData(): ReportData | null {
 
 		// -- Check first for required fields --
 
@@ -1936,13 +1936,13 @@ class Reporter {
 			} else { // Valid
 				acc.push({
 					user: inputVal,
-					type: selectedType
+					type: selectedType,
 				});
 			}
 			return acc;
 		}, []).reverse();
 
-		let reason = <string>this.$reason.val();
+		let reason = this.$reason.val() as string;
 		reason = lib.clean(reason.replace(/[\s-~]*$/, '')); // Remove signature (if any)
 		this.$reason.val(reason);
 
@@ -1968,18 +1968,18 @@ class Reporter {
 			const $err = $('<div>')
 				.text('以下のエラーを修正してください。')
 				.append($errList);
-			mw.notify($err, {type: 'error', autoHideSeconds: errLen > 2 ? 'long' : 'short'});
+			mw.notify($err, { type: 'error', autoHideSeconds: errLen > 2 ? 'long' : 'short' });
 			return null;
 		}
 
 		// -- Collect secondary data --
 
 		reason += '--~~~~'; // Add signature to reason
-		const summary = this.$addComment.prop('checked') ? lib.clean(<string>this.$comment.val()) : '';
+		const summary = this.$addComment.prop('checked') ? lib.clean(this.$comment.val() as string) : '';
 		const blockCheck = this.$checkBlock.prop('checked');
 		const duplicateCheck = this.$checkDuplicates.prop('checked');
 		const watchUser = this.$watchUser.prop('checked');
-		const watch = watchUser ? <string>this.$watchExpiry.val() : null;
+		const watch = watchUser ? this.$watchExpiry.val() as string : null;
 
 		// Return
 		return {
@@ -1990,7 +1990,7 @@ class Reporter {
 			summary,
 			blockCheck,
 			duplicateCheck,
-			watch
+			watch,
 		};
 
 	}
@@ -2008,7 +2008,7 @@ class Reporter {
 
 		// Loop through all the input values for sanitization
 		const registeredUsers: string[] = [];
-		const promisifiedInfo: JQueryPromise<string|null>[] = data.users.map((obj) => {
+		const promisifiedInfo: JQueryPromise<string | null>[] = data.users.map((obj) => {
 			switch (obj.type) {
 				case 'UNL':
 				case 'User2':
@@ -2041,11 +2041,15 @@ class Reporter {
 				if (!checkedIndexes.includes(i)) {
 					const ret: string[] = [];
 					for (let j = i; j < arr.length; j++) { // Check array elements from the current index
-						if (j === i && j !== arr.lastIndexOf(username) || j !== i && arr[j] === username) { // Found a duplicate username
+						if (
+							(j === i && j !== arr.lastIndexOf(username)) ||
+							(j !== i && arr[j] === username)
+						) {
+							// Found a duplicate username
 							checkedIndexes.push(j);
-							const {user, type} = data.users[j];
+							const { user, type } = data.users[j];
 							const dup = type === 'logid' ? 'Logid/' + user : // If the username is displayed as an ID on the dialog,
-										type === 'diffid' ? '差分/' + user :	 // list the user with the ID as a duplicate
+										type === 'diffid' ? '差分/' + user : // list the user with the ID as a duplicate
 										user;
 							if (!ret.includes(dup)) ret.push(dup);
 						}
@@ -2067,9 +2071,9 @@ class Reporter {
 					}
 					return acc;
 				}, []);
-				return $.when(...deferreds).then(() => ({users, info})); // Resolve ProcessedIds when username -> ID conversions are done
+				return $.when(...deferreds).then(() => ({ users, info })); // Resolve ProcessedIds when username -> ID conversions are done
 			} else {
-				return {users, info};
+				return { users, info };
 			}
 
 		});
@@ -2082,7 +2086,7 @@ class Reporter {
 	 * @param info The partial return value of {@link processIds}.
 	 * @returns The report text and summary.
 	 */
-	private createReport(data: ReportData, info: ProcessedIds['info']): {text: string; summary: string;} {
+	private createReport(data: ReportData, info: ProcessedIds['info']): { text: string; summary: string } {
 
 		// Create UserANs and summary links
 		const templates: Template[] = [];
@@ -2093,13 +2097,13 @@ class Reporter {
 			const Temp = new lib.Template('UserAN').addArgs([
 				{
 					name: 't',
-					value: obj.type
+					value: obj.type,
 				},
 				{
 					name: '1',
 					value: obj.user,
-					forceUnnamed: true
-				}
+					forceUnnamed: true,
+				},
 			]);
 			templates.push(Temp);
 
@@ -2143,7 +2147,7 @@ class Reporter {
 		let summary = '';
 		const fixed = [ // The fixed, always existing parts of the summary
 			`/*${data.section}*/+`,
-			ad
+			ad,
 		];
 		const fixedLen = fixed.join('').length; // The length of the fixed summary
 		const summaryComment = data.summary ? ' - ' + data.summary : '';
@@ -2170,7 +2174,7 @@ class Reporter {
 			}
 		}
 
-		return {text, summary};
+		return { text, summary };
 
 	}
 
@@ -2188,7 +2192,7 @@ class Reporter {
 		const $preview = $('<div>')
 			.css({
 				maxHeight: '70vh',
-				maxWidth: '80vw'
+				maxWidth: '80vw',
 			})
 			.dialog({
 				dialogClass: 'anr-dialog anr-dialog-preview',
@@ -2196,10 +2200,10 @@ class Reporter {
 				height: 'auto',
 				width: 'auto',
 				modal: true,
-				close: function() {
+				close: function () {
 					// Destory the dialog and its contents when closed by any means
 					$(this).empty().dialog('destroy');
-				}
+				},
 			});
 		const $previewContent = $('<div>')
 			.prop('id', 'anr-dialog-preview-content')
@@ -2207,8 +2211,8 @@ class Reporter {
 			.append(getImage('load', 'margin-left: 0.5em;'));
 		$preview.append($previewContent);
 
-		this.processIds(data).then(({info}) => {
-			const {text, summary} = this.createReport(data, info);
+		this.processIds(data).then(({ info }) => {
+			const { text, summary } = this.createReport(data, info);
 			new mw.Api().post({
 				action: 'parse',
 				title: data.page,
@@ -2220,7 +2224,7 @@ class Reporter {
 				disableeditsection: true,
 				disabletoc: true,
 				contentmodel: 'wikitext',
-				formatversion: '2'
+				formatversion: '2',
 			}).then((res) => {
 				const resParse = res && res.parse;
 				const content = resParse.text;
@@ -2262,9 +2266,9 @@ class Reporter {
 								text: '閉じる',
 								click: () => {
 									$preview.dialog('close');
-								}
-							}
-						]
+								},
+							},
+						],
 					});
 					Reporter.centerDialog($preview, true);
 
@@ -2283,9 +2287,9 @@ class Reporter {
 							text: '閉じる',
 							click: () => {
 								$preview.dialog('close');
-							}
-						}
-					]
+							},
+						},
+					],
 				});
 			});
 		});
@@ -2306,7 +2310,7 @@ class Reporter {
 		this.$progress.empty();
 		Reporter.toggle(this.$content, false);
 		Reporter.toggle(this.$progress, true);
-		this.$dialog.dialog({buttons: []});
+		this.$dialog.dialog({ buttons: [] });
 
 		const $progressField = $('<fieldset>').prop('id', 'anr-dialog-progress-field');
 		this.$progress.append($progressField);
@@ -2345,7 +2349,7 @@ class Reporter {
 
 		const $blockedUsersRow = $('<tr>');
 		$progressTable.append($blockedUsersRow);
-		const $blockedUsersLabel = $('<td>').append(getImage(data.blockCheck ? 'clock': 'bar'));
+		const $blockedUsersLabel = $('<td>').append(getImage(data.blockCheck ? 'clock' : 'bar'));
 		const $blockedUsersText = $('<td>').text('既存ブロック');
 		$blockedUsersRow.append($blockedUsersLabel, $blockedUsersText);
 
@@ -2355,11 +2359,11 @@ class Reporter {
 		$blockedUsersListRow.append($('<td>'), $blockedUsersListText);
 		const $blockedUsersList = $('<ul>');
 		$blockedUsersListText.append($blockedUsersList);
-		Reporter.toggle($blockedUsersListRow , false);
+		Reporter.toggle($blockedUsersListRow, false);
 
 		const $dupReportsRow = $('<tr>');
 		$progressTable.append($dupReportsRow);
-		const $dupReportsLabel = $('<td>').append(getImage(data.duplicateCheck ? 'clock': 'bar'));
+		const $dupReportsLabel = $('<td>').append(getImage(data.duplicateCheck ? 'clock' : 'bar'));
 		const $dupReportsText = $('<td>').text('重複報告');
 		$dupReportsRow.append($dupReportsLabel, $dupReportsText);
 
@@ -2367,7 +2371,7 @@ class Reporter {
 		$progressTable.append($dupReportsButtonRow);
 		const $dupReportsButtonCell = $('<td>');
 		$dupReportsButtonRow.append($('<td>'), $dupReportsButtonCell);
-		Reporter.toggle($dupReportsButtonRow , false);
+		Reporter.toggle($dupReportsButtonRow, false);
 
 		const $reportRow = $('<tr>');
 		$progressTable.append($reportRow);
@@ -2382,13 +2386,13 @@ class Reporter {
 		$errorReportText.prop({
 			id: 'anr-dialog-progress-error-text',
 			rows: 5,
-			disabled: true
+			disabled: true,
 		});
 		const $errorReportSummary = $('<textarea>');
 		$errorReportSummary.prop({
 			id: 'anr-dialog-progress-error-summary',
 			rows: 3,
-			disabled: true
+			disabled: true,
 		});
 		$errorWrapper.append(
 			$('<hr>'),
@@ -2400,7 +2404,7 @@ class Reporter {
 		Reporter.toggle($errorWrapper, false);
 
 		// Process IDs that need to be converted to usernames
-		this.processIds(data).then(({users, info}) => {
+		this.processIds(data).then(({ users, info }) => {
 
 			// Post-procedure of username-ID conversions and duplicate username check
 			((): JQueryPromise<boolean> => {
@@ -2422,9 +2426,9 @@ class Reporter {
 								text: '続行',
 								click: () => {
 									Reporter.toggle($dupUsersListRow, false);
-									this.$dialog.dialog({buttons: []});
+									this.$dialog.dialog({ buttons: [] });
 									def.resolve(true);
-								}
+								},
 							},
 							{
 								text: '戻る',
@@ -2433,18 +2437,18 @@ class Reporter {
 									Reporter.toggle(this.$content, true);
 									this.setMainButtons();
 									def.resolve(false);
-								}
+								},
 							},
 							{
 								text: '閉じる',
 								click: () => {
 									this.close();
 									def.resolve(false);
-								}
-							}
-						]
+								},
+							},
+						],
 					});
-					mw.notify('利用者名の重複を検出しました。', {type: 'warn'});
+					mw.notify('利用者名の重複を検出しました。', { type: 'warn' });
 				}
 				return def.promise();
 
@@ -2468,9 +2472,9 @@ class Reporter {
 					deferreds.push($.Deferred().resolve(void 0), $.Deferred().resolve(void 0));
 				}
 
-				$.when(...deferreds).then((blocked?: string[], dup?: string|Wikitext|false|null) => {
+				$.when(...deferreds).then((blocked?: string[], dup?: string | Wikitext | false | null) => {
 
-					((): JQueryPromise<Wikitext|void> => {
+					((): JQueryPromise<Wikitext | void> => {
 
 						const def = $.Deferred();
 						let stop = false;
@@ -2487,14 +2491,14 @@ class Reporter {
 											$('<a>')
 												.prop({
 													href: mw.util.getUrl('特別:投稿記録/' + user),
-													target: '_blank'
+													target: '_blank',
 												})
 												.text(user)
 										)
 									);
 								});
 								Reporter.toggle($blockedUsersListRow, true);
-								mw.notify('ブロック済みの利用者を検出しました。', {type: 'warn'});
+								mw.notify('ブロック済みの利用者を検出しました。', { type: 'warn' });
 								stop = true;
 							}
 						}
@@ -2513,11 +2517,11 @@ class Reporter {
 									})
 							);
 							Reporter.toggle($dupReportsButtonRow, true);
-							mw.notify('重複報告を検出しました。', {type: 'warn'});
+							mw.notify('重複報告を検出しました。', { type: 'warn' });
 							stop = true;
 						} else if (dup === false || dup === null) {
 							$dupReportsLabel.empty().append(getImage('cross'));
-							mw.notify(`重複報告チェックに失敗しました。(${dup === null ? '通信エラー' : 'ページ非存在'})`, {type: 'error'});
+							mw.notify(`重複報告チェックに失敗しました。(${dup === null ? '通信エラー' : 'ページ非存在'})`, { type: 'error' });
 							stop = true;
 						}
 
@@ -2533,9 +2537,9 @@ class Reporter {
 										click: () => {
 											Reporter.toggle($blockedUsersListRow, false);
 											Reporter.toggle($dupReportsButtonRow, false);
-											this.$dialog.dialog({buttons: []});
+											this.$dialog.dialog({ buttons: [] });
 											def.resolve(void 0);
-										}
+										},
 									},
 									{
 										text: '戻る',
@@ -2544,16 +2548,16 @@ class Reporter {
 											Reporter.toggle(this.$content, true);
 											this.setMainButtons();
 											def.reject(); // Reject
-										}
+										},
 									},
 									{
 										text: '閉じる',
 										click: () => {
 											this.close();
 											def.reject(); // Reject
-										}
-									}
-								]
+										},
+									},
+								],
 							});
 						}
 
@@ -2587,19 +2591,19 @@ class Reporter {
 							$errorReportText.val(reportText);
 							$errorReportSummary.val(summary.replace(new RegExp(mw.util.escapeRegExp(ad) + '$'), ''));
 							Reporter.toggle($errorWrapper, true);
-							mw.notify('報告に失敗しました。', {type: 'error'});
+							mw.notify('報告に失敗しました。', { type: 'error' });
 
 							this.$dialog.dialog({
 								buttons: [
 									{
 										text: '再試行',
-										click: () => this.report()
+										click: () => this.report(),
 									},
 									{
 										text: '報告先',
 										click: () => {
 											window.open(this.$pageLink.prop('href'), '_blank');
-										}
+										},
 									},
 									{
 										text: '戻る',
@@ -2607,23 +2611,23 @@ class Reporter {
 											Reporter.toggle(this.$progress, false);
 											Reporter.toggle(this.$content, true);
 											this.setMainButtons();
-										}
+										},
 									},
 									{
 										text: '閉じる',
 										click: () => {
 											this.close();
-										}
-									}
-								]
+										},
+									},
+								],
 							});
 
 						};
 
 						// Create a Wikitext instance for the report
-						const $when: JQueryPromise<Wikitext|false|null> =
-							inheritedWkt ?
-							$.when($.Deferred().resolve(inheritedWkt)) :
+						const $when: JQueryPromise<Wikitext | false | null> =
+							inheritedWkt
+							? $.when($.Deferred().resolve(inheritedWkt)) :
 							$.when(lib.Wikitext.newFromTitle(data.page));
 						$when.then((Wkt) => { // Note: errors thrown in this block will be redirected to the catch block below
 
@@ -2637,7 +2641,7 @@ class Reporter {
 							// Get the index of the section to edit
 							let sectionIdx = -1;
 							let sectionContent = '';
-							for (const {title, index, content} of Wkt.parseSections()) {
+							for (const { title, index, content } of Wkt.parseSections()) {
 								if (title === data.section) {
 									sectionIdx = index;
 									sectionContent = content;
@@ -2662,7 +2666,7 @@ class Reporter {
 								// Get the report text to submit
 								const sockInfoArr = new lib.Wikitext(sectionContent).parseTemplates({
 									namePredicate: (name) => name === 'SockInfo/M',
-									recursivePredicate: (Temp) => !Temp || Temp.getName('clean') !== 'SockInfo/M'
+									recursivePredicate: (Temp) => !Temp || Temp.getName('clean') !== 'SockInfo/M',
 								});
 								if (!sockInfoArr.length) {
 									throw new Error(`節「${data.section}」内にテンプレート「SockInfo/M」が存在しないため報告場所を特定できませんでした。`);
@@ -2671,7 +2675,7 @@ class Reporter {
 								}
 								const sockInfo = sockInfoArr[0];
 								sectionContent = sockInfo.replaceIn(sectionContent, {
-									with: sockInfo.renderOriginal().replace(/\s*?\}{2}$/, '') + '\n\n' + reportText + '\n\n}}'
+									with: sockInfo.renderOriginal().replace(/\s*?\}{2}$/, '') + '\n\n' + reportText + '\n\n}}',
 								});
 
 							} else { // ANI or AN3RR
@@ -2682,7 +2686,7 @@ class Reporter {
 							this.watchUsers(data, info);
 
 							// Edit page
-							const {basetimestamp, curtimestamp} = Wkt.getRevision()!;
+							const { basetimestamp, curtimestamp } = Wkt.getRevision()!;
 							new mw.Api().postWithEditToken({
 								action: 'edit',
 								title: data.page,
@@ -2691,26 +2695,26 @@ class Reporter {
 								summary,
 								basetimestamp,
 								curtimestamp,
-								formatversion: '2'
+								formatversion: '2',
 							}).then((res) => {
 								if (res && res.edit && res.edit.result === 'Success') {
 									$reportLabel.empty().append(getImage('check'));
-									mw.notify('報告が完了しました。', {type: 'success'});
+									mw.notify('報告が完了しました。', { type: 'success' });
 									this.$dialog.dialog({
 										buttons: [
 											{
 												text: '報告先',
 												click: () => {
 													window.open(this.$pageLink.prop('href'), '_blank');
-												}
+												},
 											},
 											{
 												text: '閉じる',
 												click: () => {
 													this.close();
-												}
-											}
-										]
+												},
+											},
+										],
 									});
 								} else {
 									errorHandler(new Error('報告に失敗しました。(不明なエラー)'));
@@ -2762,12 +2766,12 @@ class Reporter {
 				list: 'blocks',
 				bkusers: usersArr,
 				bklimit: 'max',
-				formatversion: '2'
+				formatversion: '2',
 			}, 'bkusers')
 			.then((response) => {
 				return response.reduce((acc: string[], res) => {
 					const resBk = res && res.query && res.query.blocks;
-					(resBk || []).forEach(({user}: {user?: string;}) => {
+					(resBk || []).forEach(({ user }: { user?: string }) => {
 						if (user) {
 							acc.push(user);
 						}
@@ -2786,7 +2790,7 @@ class Reporter {
 				list: 'blocks',
 				bkip: ipsArr,
 				bklimit: 1,
-				formatversion: '2'
+				formatversion: '2',
 			}, 'bkip', 1)
 			.then((response) => {
 				return response.reduce((acc: string[], res, i) => {
@@ -2826,7 +2830,7 @@ class Reporter {
 	 * @returns `string` if duplicate reports are found, a `Wikitext` instance if no duplicate reports are found,
 	 * `false` if the page isn't found, and `null` if there's an issue with the connection.
 	 */
-	private checkDuplicateReports(data: ReportData, info: ProcessedIds['info']): JQueryPromise<string|Wikitext|false|null> {
+	private checkDuplicateReports(data: ReportData, info: ProcessedIds['info']): JQueryPromise<string | Wikitext | false | null> {
 		return lib.Wikitext.newFromTitle(data.page).then((Wkt) => {
 
 			// Wikitext instance failed to be initialized
@@ -2839,15 +2843,15 @@ class Reporter {
 				hierarchy: [
 					['1', 'user', 'User'],
 					['t', 'type', 'Type'],
-					['状態', 's', 'status', 'Status']
+					['状態', 's', 'status', 'Status'],
 				],
 				templatePredicate: (Temp) => {
 
 					// Get 1= and t= parameter values of this UserAN
 					let param1 = '';
 					let paramT: antype = 'User2';
-					let converted: string|null = null;
-					for (const {name, value} of Temp.args) {
+					let converted: string | null = null;
+					for (const { name, value } of Temp.args) {
 						if (value) {
 							if (name === '2') {
 								return false; // Ignore closed ones
@@ -2879,26 +2883,26 @@ class Reporter {
 							return false;
 						} else {
 							// If the script user has ever converted the ID to an username, get the username
-							converted = idList.getRegisteredUsername(parseInt(param1), <'logid'|'diffid'>paramT);
+							converted = idList.getRegisteredUsername(parseInt(param1), <'logid' | 'diffid'>paramT);
 						}
 					}
 
 					// Evaluation
-					const isDuplicate = data.users.some(({user, type}) => { // Loop through values in user panes on the dialog
+					const isDuplicate = data.users.some(({ user, type }) => { // Loop through values in user panes on the dialog
 						switch (paramT) {
 							case 'UNL':
 							case 'User2':
 							case 'IP2':
 							case 'none':
-								return user === param1 && /^(UNL|User2|IP2|none)$/.test(type) || info.includes(param1);
+								return (user === param1 && /^(UNL|User2|IP2|none)$/.test(type)) || info.includes(param1);
 							case 'logid':
 							case 'diffid':
-								return user === param1 && type === paramT || converted && info.includes(converted);
+								return (user === param1 && type === paramT) || (converted && info.includes(converted));
 						}
 					});
 					return isDuplicate;
 
-				}
+				},
 			});
 			if (!UserANs.length) return Wkt;
 
@@ -2906,7 +2910,7 @@ class Reporter {
 			let wikitext = Wkt.wikitext;
 			const spanStart = '<span class="anr-preview-duplicate">';
 			UserANs.reverse().forEach((Temp) => {
-				wikitext = Temp.replaceIn(wikitext, {with: spanStart + Temp.renderOriginal() + '</span>'});
+				wikitext = Temp.replaceIn(wikitext, { with: spanStart + Temp.renderOriginal() + '</span>' });
 			});
 			if (wikitext === Wkt.wikitext) return Wkt;
 
@@ -2918,15 +2922,15 @@ class Reporter {
 					'不適切な利用者名',
 					'公開アカウント',
 					'公開プロキシ・ゾンビマシン・ボット・不特定多数',
-					'犯罪行為またはその疑いのある投稿'
+					'犯罪行為またはその疑いのある投稿',
 				],
 				[ANS]: [
 					'著作権侵害・犯罪予告',
 					'名誉毀損・なりすまし・個人情報',
 					'妨害編集・いたずら',
-					'その他'
+					'その他',
 				],
-				[AN3RR]: ['3RR']
+				[AN3RR]: ['3RR'],
 			};
 			const testKey = formatANTEST(true);
 			const tarSections = tarSectionsAll[(testKey || data.page) as keyof typeof tarSectionsAll];
@@ -2937,7 +2941,7 @@ class Reporter {
 			}
 
 			// Filter out the content of the relevant sections
-			const ret = new lib.Wikitext(wikitext).parseSections().reduce((acc: string[], {title, content}) => {
+			const ret = new lib.Wikitext(wikitext).parseSections().reduce((acc: string[], { title, content }) => {
 				if (tarSections.includes(title) && content.includes(spanStart)) {
 					acc.push(content.trim());
 				}
@@ -2963,7 +2967,7 @@ class Reporter {
 		const $preview = $('<div>')
 			.css({
 				maxHeight: '70vh',
-				maxWidth: '80vw'
+				maxWidth: '80vw',
 			})
 			.dialog({
 				dialogClass: 'anr-dialog anr-dialog-drpreview',
@@ -2971,10 +2975,10 @@ class Reporter {
 				height: 'auto',
 				width: 'auto',
 				modal: true,
-				close: function() {
+				close: function () {
 					// Destory the dialog and its contents when closed by any means
 					$(this).empty().dialog('destroy');
-				}
+				},
 			});
 		const $previewContent = $('<div>')
 			.prop('id', 'anr-dialog-drpreview-content')
@@ -2991,7 +2995,7 @@ class Reporter {
 			disablelimitreport: true,
 			disableeditsection: true,
 			disabletoc: true,
-			formatversion: '2'
+			formatversion: '2',
 		}).then((res) => {
 			const content = res && res.parse && res.parse.text;
 			if (content) {
@@ -3009,9 +3013,9 @@ class Reporter {
 							text: '閉じる',
 							click: () => {
 								$preview.dialog('close');
-							}
-						}
-					]
+							},
+						},
+					],
 				});
 
 				// Center the preview dialog and scroll to the first duplicate report
@@ -3034,9 +3038,9 @@ class Reporter {
 						text: '閉じる',
 						click: () => {
 							$preview.dialog('close');
-						}
-					}
-				]
+						},
+					},
+				],
 			});
 		});
 
@@ -3067,7 +3071,6 @@ class Reporter {
 		}
 		new mw.Api().watch(users, data.watch);
 	}
-
 }
 
 /** The options for {@link User.constructor}. */
@@ -3093,7 +3096,7 @@ interface UserOptions {
 /**
  * UserAN type argument values.
  */
-type antype = 'UNL'|'User2'|'IP2'|'logid'|'diffid'|'none';
+type antype = 'UNL' | 'User2' | 'IP2' | 'logid' | 'diffid' | 'none';
 
 let userPaneCnt = 0;
 /**
@@ -3132,35 +3135,35 @@ class User {
 	 * Create a user pane of the Reporter dialog with the following structure.
 	 * ```html
 	 * <div class="anr-option-row anr-option-userpane-wrapper">
-	 * 	<div class="anr-option-label">利用者</div> <!-- float: left; -->
-	 * 	<div class="anr-option-usertype"> <!-- float: right; -->
-	 * 		<select>...</select>
-	 * 	</div>
-	 * 	<div class="anr-option-wrapper"> <!-- overflow: hidden; -->
-	 * 		<input class="anr-option-username anr-juxtaposed"> <!-- width: 100%; -->
-	 * 	</div>
-	 * 	<!-- row boundary -->
-	 * 	<div class="anr-option-row-inner anr-option-hideuser-wrapper">
-	 * 		<div class="anr-option-label">&nbsp;</div> <!-- float: left; -->
-	 * 		<div class="anr-option-hideuser">
-	 * 			<label>
-	 * 				<input class="anr-checkbox">
-	 * 				<span class="anr-checkbox-label">利用者名を隠す</span>
-	 * 			</label>
-	 * 		</div>
-	 * 	</div>
-	 * 	<div class="anr-option-row-inner anr-option-idlink-wrapper">
-	 * 		<div class="anr-option-label">&nbsp;</div>
-	 * 		<div class="anr-option-idlink">
-	 * 			<a></a>
-	 * 		</div>
-	 * 	</div>
-	 * 	<div class="anr-option-row-inner anr-option-blockstatus-wrapper">
-	 * 		<div class="anr-option-label">&nbsp;</div>
-	 * 		<div class="anr-option-blockstatus">
-	 * 			<a>ブロックあり</a>
-	 * 		</div>
-	 * 	</div>
+	 *   <div class="anr-option-label">利用者</div> <!-- float: left; -->
+	 *   <div class="anr-option-usertype"> <!-- float: right; -->
+	 *     <select>...</select>
+	 *   </div>
+	 *   <div class="anr-option-wrapper"> <!-- overflow: hidden; -->
+	 *     <input class="anr-option-username anr-juxtaposed"> <!-- width: 100%; -->
+	 *   </div>
+	 *   <!-- row boundary -->
+	 *   <div class="anr-option-row-inner anr-option-hideuser-wrapper">
+	 *     <div class="anr-option-label">&nbsp;</div> <!-- float: left; -->
+	 *     <div class="anr-option-hideuser">
+	 *       <label>
+	 *         <input class="anr-checkbox">
+	 *         <span class="anr-checkbox-label">利用者名を隠す</span>
+	 *       </label>
+	 *     </div>
+	 *   </div>
+	 *   <div class="anr-option-row-inner anr-option-idlink-wrapper">
+	 *     <div class="anr-option-label">&nbsp;</div>
+	 *     <div class="anr-option-idlink">
+	 *       <a></a>
+	 *     </div>
+	 *   </div>
+	 *   <div class="anr-option-row-inner anr-option-blockstatus-wrapper">
+	 *     <div class="anr-option-label">&nbsp;</div>
+	 *     <div class="anr-option-blockstatus">
+	 *       <a>ブロックあり</a>
+	 *     </div>
+	 *   </div>
 	 * </div>
 	 * <!-- ADD BUTTON HERE -->
 	 * ```
@@ -3170,7 +3173,7 @@ class User {
 	constructor($next: JQuery<HTMLElement>, options?: UserOptions) {
 
 		options = Object.assign(
-			{removable: true},
+			{ removable: true },
 			options || {}
 		);
 
@@ -3202,7 +3205,7 @@ class User {
 		// Append a type dropdown
 		const $typeWrapper = $('<div>').addClass('anr-option-usertype');
 		this.$type = addOptions($('<select>'),
-			['UNL', 'User2', 'IP2', 'logid', 'diffid', 'none'].map((el) => ({text: el}))
+			['UNL', 'User2', 'IP2', 'logid', 'diffid', 'none'].map((el) => ({ text: el }))
 		);
 		this.$type // Initialize
 			.prop('disabled', true) // Disable
@@ -3220,7 +3223,7 @@ class User {
 			.addClass('anr-option-username') // Currently not used for anything
 			.prop({
 				type: 'text',
-				placeholder: '入力してください'
+				placeholder: '入力してください',
 			})
 			.off('input').on('input', () => {
 				clearTimeout(inputTimeout);
@@ -3240,7 +3243,7 @@ class User {
 		this.$hideUserWrapper = Reporter.createRow();
 		this.$hideUserWrapper.removeAttr('class').addClass('anr-option-row-inner anr-option-hideuser-wrapper');
 		Reporter.createRowLabel(this.$hideUserWrapper, '');
-		const hideUserElements = createLabelledCheckbox('利用者名を隠す', {alterClasses: ['anr-option-hideuser']});
+		const hideUserElements = createLabelledCheckbox('利用者名を隠す', { alterClasses: ['anr-option-hideuser'] });
 		this.$hideUser = hideUserElements.$checkbox;
 		this.$hideUser.off('change').on('change', () => {
 			this.processHideUserChange();
@@ -3300,8 +3303,8 @@ class User {
 	 * Get the username in the textbox (underscores are replaced by spaces).
 	 * @returns
 	 */
-	getName(): string|null {
-		return User.formatName(<string>this.$input.val()) || null;
+	getName(): string | null {
+		return User.formatName(<string> this.$input.val()) || null;
 	}
 
 	/**
@@ -3319,7 +3322,7 @@ class User {
 	 * @returns
 	 */
 	getType(): antype {
-		return <antype>this.$type.val();
+		return this.$type.val() as antype;
 	}
 
 	/**
@@ -3404,7 +3407,7 @@ class User {
 			this.$input.toggleClass(clss, isNotNumber);
 			this.$hideUser.prop({
 				disabled: isNotNumber,
-				checked: true
+				checked: true,
 			});
 			const idTitle = (selectedType === 'logid' ? '特別:転送/logid/' : '特別:差分/') + inputVal;
 			this.$idLink
@@ -3414,7 +3417,7 @@ class User {
 
 			// Set up $blockStatus
 			if (!isNotNumber) {
-				const username = idList.getRegisteredUsername(parseInt(inputVal), <'logid'|'diffid'>selectedType);
+				const username = idList.getRegisteredUsername(parseInt(inputVal), <'logid' | 'diffid'>selectedType);
 				if (username) {
 					this.processBlockStatus(username);
 				} else {
@@ -3426,7 +3429,7 @@ class User {
 			this.$input.toggleClass(clss, false);
 			this.$hideUser.prop({
 				disabled: false,
-				checked: false
+				checked: false,
 			});
 			this.$idLink.toggleClass('anr-disabledanchor', false);
 			this.processBlockStatus(inputVal);
@@ -3475,10 +3478,10 @@ class User {
 
 		const def = $.Deferred();
 
-		const typeMap: Record<'ip'|'user'|'other', antype[]> = {
+		const typeMap: Record<'ip' | 'user' | 'other', antype[]> = {
 			ip: ['IP2', 'none'],
 			user: ['UNL', 'User2', 'none'],
-			other: ['none', 'logid', 'diffid']
+			other: ['none', 'logid', 'diffid'],
 		};
 		const username = this.getName();
 		if (!username) { // Blank
@@ -3521,7 +3524,7 @@ class User {
 		 * by an unexpected value.
 		 */
 		const inputVal = this.getName();
-		const selectedType = <'logid'|'diffid'>this.getType();
+		const selectedType = <'logid' | 'diffid'> this.getType();
 		const checked = this.$hideUser.prop('checked');
 		try {
 			if (typeof inputVal !== 'string') {
@@ -3534,10 +3537,9 @@ class User {
 				// The username input should only be of numbers when the box can be unchecked
 				throw new Error('User.getName returned a non-number.');
 			}
-		}
-		catch (err) {
+		} catch (err) {
 			console.error(err);
-			mw.notify('変換試行時にエラーが発生しました。スクリプトのバグの可能性があります。', {type: 'error'});
+			mw.notify('変換試行時にエラーが発生しました。スクリプトのバグの可能性があります。', { type: 'error' });
 			this.$hideUser.prop('checked', !checked);
 			$processing.remove();
 			this.setOverlay(false);
@@ -3545,16 +3547,16 @@ class User {
 		}
 
 		if (checked) { // username to ID
-			return idList.getIds(inputVal).then(({logid, diffid}) => {
+			return idList.getIds(inputVal).then(({ logid, diffid }) => {
 				if (typeof logid === 'number') {
 					this.setName(logid.toString()).setTypeOptions(['logid', 'diffid', 'none']).processTypeChange();
-					mw.notify(`利用者名「${inputVal}」をログIDに変換しました。`, {type: 'success'});
+					mw.notify(`利用者名「${inputVal}」をログIDに変換しました。`, { type: 'success' });
 				} else if (typeof diffid === 'number') {
 					this.setName(diffid.toString()).setTypeOptions(['diffid', 'logid', 'none']).processTypeChange();
-					mw.notify(`利用者名「${inputVal}」を差分IDに変換しました。`, {type: 'success'});
+					mw.notify(`利用者名「${inputVal}」を差分IDに変換しました。`, { type: 'success' });
 				} else {
 					this.$hideUser.prop('checked', !checked);
-					mw.notify(`利用者名「${inputVal}」をIDに変換できませんでした。`, {type: 'warn'});
+					mw.notify(`利用者名「${inputVal}」をIDに変換できませんでした。`, { type: 'warn' });
 				}
 				$processing.remove();
 				return this.setOverlay(false);
@@ -3564,13 +3566,13 @@ class User {
 			return idList.getUsername(parseInt(inputVal), selectedType).then((username) => {
 				if (username) {
 					return this.setName(username).processInputChange().then(() => {
-						mw.notify(`${idTypeJa}ID「${inputVal}」を利用者名に変換しました。`, {type: 'success'});
+						mw.notify(`${idTypeJa}ID「${inputVal}」を利用者名に変換しました。`, { type: 'success' });
 						$processing.remove();
 						return this.setOverlay(false);
 					});
 				} else {
 					this.$hideUser.prop('checked', !checked);
-					mw.notify(`${idTypeJa}ID「${inputVal}」を利用者名に変換できませんでした。`, {type: 'warn'});
+					mw.notify(`${idTypeJa}ID「${inputVal}」を利用者名に変換できませんでした。`, { type: 'warn' });
 					$processing.remove();
 					return this.setOverlay(false);
 				}
@@ -3599,7 +3601,6 @@ class User {
 	static containsInvalidCharacter(username: string): boolean {
 		return /[@/#<>[\]|{}:]/.test(username);
 	}
-
 }
 
 /**
@@ -3608,7 +3609,7 @@ class User {
  * @param cssText Additional styles to apply (Default styles: `vertical-align: middle; height: 1em; border: 0;`)
  * @returns
  */
-function getImage(iconType: 'load'|'check'|'cross'|'cancel'|'gear'|'exclamation'|'bar'|'clock', cssText = '') {
+function getImage(iconType: 'load' | 'check' | 'cross' | 'cancel' | 'gear' | 'exclamation' | 'bar' | 'clock', cssText = '') {
 	const img = (() => {
 		if (iconType === 'load' || iconType === 'check' || iconType === 'cross' || iconType === 'cancel') {
 			return lib.getIcon(iconType);
@@ -3649,7 +3650,7 @@ interface OptionElementData {
  * @returns The passed dropdown.
  */
 function addOptions($dropdown: JQuery<HTMLSelectElement>, data: OptionElementData[]): JQuery<HTMLSelectElement> {
-	data.forEach(({text, value, disabled, selected, hidden}) => {
+	data.forEach(({ text, value, disabled, selected, hidden }) => {
 		const option = document.createElement('option');
 		option.textContent = text;
 		if (value !== undefined) {
@@ -3674,10 +3675,10 @@ let checkboxCnt = 0;
  * Create a labelled checkbox.
  * ```html
  * <div class="anr-option-row">
- * 	<label>
- * 		<input class="anr-checkbox">
- * 		<span class="anr-checkbox-label">labelText</span>
- * 	</label>
+ *   <label>
+ *     <input class="anr-checkbox">
+ *     <span class="anr-checkbox-label">labelText</span>
+ *   </label>
  * </div>
  * ```
  * @param labelText The label text.
@@ -3698,13 +3699,13 @@ function createLabelledCheckbox(labelText: string, options: LabelledCheckboxOpti
 	$checkbox
 		.prop({
 			id,
-			type: 'checkbox'
+			type: 'checkbox',
 		})
 		.addClass('anr-checkbox');
 	const $label = $('<span>');
 	$label.addClass('anr-checkbox-label').text(labelText);
 	$outerLabel.append($checkbox, $label);
-	return {$wrapper, $checkbox, $label};
+	return { $wrapper, $checkbox, $label };
 }
 
 /**
@@ -3717,7 +3718,7 @@ function createLabelledCheckbox(labelText: string, options: LabelledCheckboxOpti
  * @param text
  * @returns The extracted CIDR, or `null` if there's no match.
  */
-function extractCidr(text: string): string|null {
+function extractCidr(text: string): string | null {
 
 	const v4_byte = '(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|0?[0-9]?[0-9])';
 	const v4_regex = new RegExp('(?:' + v4_byte + '\\.){3}' + v4_byte + '\\/(?:3[0-2]|[12]?\\d)');
@@ -3729,9 +3730,10 @@ function extractCidr(text: string): string|null {
 	const v6_regex2 = new RegExp('[0-9A-Fa-f]{1,4}(?:::?[0-9A-Fa-f]{1,4}){1,6}' + v6_block);
 
 	let m;
-	if ((m = text.match(v4_regex)) ||
+	if (
+		(m = text.match(v4_regex)) ||
 		(m = text.match(v6_regex)) ||
-		(m = text.match(v6_regex2)) && /::/.test(m[0]) && !/::.*::/.test(m[0])
+		((m = text.match(v6_regex2)) && /::/.test(m[0]) && !/::.*::/.test(m[0]))
 	) {
 		return m[0];
 	} else {
@@ -3747,4 +3749,4 @@ init();
 
 // ******************************************************************************************
 })();
-//</nowiki>
+// </nowiki>
