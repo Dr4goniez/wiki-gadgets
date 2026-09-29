@@ -1,6 +1,5 @@
 node_modules/
 src/test.js
-src/test.ts
 src/test.css
 src/Reverter.js
 
