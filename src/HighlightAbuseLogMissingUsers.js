@@ -1,17 +1,17 @@
-/*****************************************************************************
-	HighlightAbuseLogMissingUsers
-
-	Searches for `action=createaccount` and `action=autocreateaccount` logs
-	on [[Special:AbuseLog]], and marks up non-existing users' links in red
-	with a dotted underline to make it easier to distinguish account creation
-	attempts that succeeded from those that did not.
-
-	@version 1.1.0
-	@author [[User:Dragoniez]]
- *****************************************************************************/
+/**
+ * HighlightAbuseLogMissingUsers
+ *
+ * Searches for `action=createaccount` and `action=autocreateaccount` logs
+ * on [[Special:AbuseLog]], and marks up non-existing users' links in red
+ * with a dotted underline to make it easier to distinguish account creation
+ * attempts that succeeded from those that did not.
+ *
+ * @version 1.1.1
+ * @author [[User:Dragoniez]]
+ */
 // @ts-check
 /* global mw */
-//<nowiki>
+// <nowiki>
 $.when(
 	mw.loader.using('mediawiki.api'),
 	$.ready
@@ -32,7 +32,7 @@ $.when(
 		article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
 		script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)'),
 		user: /^利用者:(.+)$/,
-		contribs: /^特別:投稿記録\/(.+)$/
+		contribs: /^特別:投稿記録\/(.+)$/,
 	};
 
 	$('*[data-afl-log-id]').each((_, el) => {
@@ -86,15 +86,16 @@ $.when(
 
 	/**
 	 * @param {number} offset
+	 * @returns {JQueryPromise<void>}
 	 */
-	(function execute(offset) {
+	const execute = function (offset) {
 		const users = allUsers.slice(offset, offset + apilimit);
 		return api.post({
 			action: 'query',
 			list: 'users',
 			usprop: '',
 			ususers: users,
-			formatversion: '2'
+			formatversion: '2',
 		}).then(({ query }) => {
 			/** @type {{ userid?: number; name: string; missing?: true; }[]=} */
 			const resUsers = query.users;
@@ -124,7 +125,8 @@ $.when(
 				return execute(offset);
 			}
 		});
-	})(0);
+	};
 
+	execute(0);
 });
-//</nowiki>
+// </nowiki>
