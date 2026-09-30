@@ -9,7 +9,7 @@
 	Modified in December 2023 by [[User:Dragoniez]]
  */
 /* global mw, OO */
-//<nowiki>
+// <nowiki>
 $(function () {
 
 	const wgAction = mw.config.get('wgAction');
@@ -36,11 +36,11 @@ $(function () {
 			'^(保護(解除)?|移動|利用者ページの削除|著作権問題調査|Bot作業)依頼$',
 			'^(改名|統合|分割)提案$',
 			'^(ガジェット|編集フィルター)/提案$',
-			'^管理者伝言板/(投稿ブロック|3RR|拡張承認の申請|保護ページ編集|各種初期化依頼|その他の伝言)($|/)'
+			'^管理者伝言板/(投稿ブロック|3RR|拡張承認の申請|保護ページ編集|各種初期化依頼|その他の伝言)($|/)',
 		],
 		// プロジェクト
 		102: [
-			'^カテゴリ関連/議論/'
+			'^カテゴリ関連/議論/',
 		],
 	};
 	const rTitle = ns in titleMap && new RegExp(titleMap[ns].join('|'));
@@ -158,4 +158,4 @@ $(function () {
 
 	$saveButton.off('click').on('click', saveButtonClickCallback);
 });
-//</nowiki>
+// </nowiki>
