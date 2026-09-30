@@ -1,7 +1,7 @@
 /**
  * MarkBLocked-core
  * @author [[User:Dragoniez]]
- * @version 3.3.3
+ * @version 3.3.4
  *
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.css – Style sheet
  * @see https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked.js – Loader module
@@ -21,7 +21,7 @@
  */
 // @ts-check
 /* global mw, OO */
-//<nowiki>
+// <nowiki>
 // const MarkBLocked = (() => {
 module.exports = (() => {
 
@@ -48,7 +48,7 @@ class MarkBLocked {
 			'mediawiki.ForeignApi',
 			'mediawiki.storage',
 			'mediawiki.util',
-			'jquery.ui'
+			'jquery.ui',
 		];
 		const isConfigPage = mw.config.get('wgNamespaceNumber') === -1 && /^(markblockedconfig|mblc)$/i.test(mw.config.get('wgTitle'));
 		const isRCW = ['Recentchanges', 'Recentchangeslinked', 'Watchlist'].includes(mw.config.get('wgCanonicalSpecialPageName') || '');
@@ -78,7 +78,7 @@ class MarkBLocked {
 				) {
 					const options = {
 						[oldOptionKey]: null,
-						[this.defaultOptionKey]: oldCfgStr
+						[this.defaultOptionKey]: oldCfgStr,
 					};
 					return this.api.saveOptions(options).then(() => {
 						mw.user.options.set(options);
@@ -169,9 +169,9 @@ class MarkBLocked {
 	 * This method adds an `Api-User-Agent` header and sets the default query parameters of:
 	 * ```
 	 * {
-	 * 	action: 'query',
-	 * 	format: 'json',
-	 * 	formatversion: '2'
+	 *   action: 'query',
+	 *   format: 'json',
+	 *   formatversion: '2'
 	 * }
 	 * ```
 	 *
@@ -182,7 +182,7 @@ class MarkBLocked {
 		return {
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MarkBLocked-core/3.3.3 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)',
+					'Api-User-Agent': 'MarkBLocked-core/3.3.4 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkBLocked-core.js)',
 				},
 			},
 			parameters: {
@@ -218,7 +218,7 @@ class MarkBLocked {
 			'Contributions',
 			'IPContributions',
 			'GlobalContributions',
-			'CentralAuth'
+			'CentralAuth',
 		]);
 
 		/**
@@ -406,7 +406,7 @@ class MarkBLocked {
 		// Override $.fn.replaceWith to intercept IP reveals
 		const ipRevealHook = mw.hook('userjs.markblocked.ipreveal');
 		const originalReplaceWith = $.fn.replaceWith;
-		$.fn.replaceWith = function() {
+		$.fn.replaceWith = function () {
 			if (this.hasClass('ext-checkuser-tempaccount-reveal-ip-button')) {
 				/** @type {JQuery<HTMLElement>} */
 				const $arg0 = arguments[0];
@@ -418,7 +418,7 @@ class MarkBLocked {
 					ipRevealHook.fire($arg0);
 				}
 			}
-			// @ts-expect-error
+			// @ts-expect-error The use of `arguments` is fine here
 			return originalReplaceWith.apply(this, arguments);
 		};
 
@@ -506,7 +506,7 @@ class MarkBLocked {
 				rangeblocks: false,
 				g_locks: false,
 				g_blocks: false,
-				g_rangeblocks: false
+				g_rangeblocks: false,
 			}, cfg.defaultOptions);
 			/** @type {string} */
 			const optionsStr = mw.user.options.get(this.optionKey) || '{}';
@@ -621,7 +621,7 @@ class MarkBLocked {
 				),
 				script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)'),
 				special: new RegExp(`^${rSpecialNoTarget}($|/)`, 'i'),
-				user: new RegExp(`^(?:${rSpecial}/|${rUser})([^/#]+|[a-f\\d:\\.]+/\\d\\d)$`, 'i')
+				user: new RegExp(`^(?:${rSpecial}/|${rUser})([^/#]+|[a-f\\d:\\.]+/\\d\\d)$`, 'i'),
 			};
 		})();
 
@@ -665,14 +665,14 @@ class MarkBLocked {
 
 		// General options
 		const genportlet = new OO.ui.CheckboxInputWidget({
-			selected: this.options.genportlet
+			selected: this.options.genportlet,
 		});
 		const fsGeneral = new OO.ui.FieldsetLayout({
 			label: this.getMessage('config-label-fsgeneral'),
 			items: [
 				new OO.ui.FieldLayout(genportlet, {
 					label: this.getMessage('config-label-genportlet'),
-					align: 'inline'
+					align: 'inline',
 				}),
 			],
 		});
@@ -756,7 +756,7 @@ class MarkBLocked {
 								verticalAlign: 'middle',
 								height: '1em',
 								border: '0',
-								marginRight: '1em'
+								marginRight: '1em',
 							}),
 							document.createTextNode(this.getMessage('config-label-saving'))
 					)
@@ -776,7 +776,7 @@ class MarkBLocked {
 			MarkBLocked.api.postWithToken('csrf', {
 				action: this.globalize ? 'globalpreferences' : 'options',
 				optionname: this.optionKey,
-				optionvalue: cfgStr
+				optionvalue: cfgStr,
 			}).then(() => {
 				mw.user.options.set(this.optionKey, cfgStr);
 				return null;
@@ -901,13 +901,13 @@ class MarkBLocked {
 				title = this.getMessage('toggle-title-disabled');
 				hookToggle = mw.hook('wikipage.content').remove;
 				msg = this.getMessage('toggle-notify-disabled');
-				$('.mbl-userlink').each(function() {
+				$('.mbl-userlink').each(function () {
 					const $el = $(this);
 
 					// Remove all classes starting with 'mbl-'
 					const mblClasses = this.className.match(/(^|\s)mbl-\S+/g);
 					if (mblClasses) {
-						$el.removeClass(mblClasses.map(el => el.trim()).join(' '));
+						$el.removeClass(mblClasses.map((el) => el.trim()).join(' '));
 					}
 
 					// Destroy tooltip if present
@@ -1009,7 +1009,7 @@ class MarkBLocked {
 						},
 						callback: (res) => {
 							// An IP may have multiple blocks
-							const resBlk = res && res.query && res.query.blocks || [];
+							const resBlk = (res && res.query && res.query.blocks) || [];
 							const resObj = resBlk.reduce(/** @param {?ApiResponseQueryListBlocks} acc */ (acc, obj, i) => {
 								if (i === 0) {
 									acc = obj; // Just save the object in the first loop
@@ -1054,7 +1054,7 @@ class MarkBLocked {
 							bgprop: 'target|by|expiry|reason',
 						},
 						callback: (res) => {
-							const resGblk = res && res.query && res.query.globalblocks || [];
+							const resGblk = (res && res.query && res.query.globalblocks) || [];
 							const resObj = resGblk.reduce(/** @param {?ApiResponseQueryListGlobalblocks} acc */ (acc, obj, i) => {
 								if (i === 0) {
 									acc = obj;
@@ -1269,7 +1269,7 @@ class MarkBLocked {
 			bkprop: 'user|by|expiry|reason|flags',
 			errorformat: 'raw',
 		}, nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
-			const resBlk = res && res.query && res.query.blocks || [];
+			const resBlk = (res && res.query && res.query.blocks) || [];
 			const /** @type {Set<string>} */ ret = new Set();
 			for (const { user, by, expiry, reason, partial } of resBlk) {
 				let clss;
@@ -1306,7 +1306,7 @@ class MarkBLocked {
 					const { code, params } = errors[i];
 					if (code === 'baduser') {
 						// Each error contains at most one actual bad username
-						const baduser = params.find(p => p.plaintext !== 'bkusers');
+						const baduser = params.find((p) => p.plaintext !== 'bkusers');
 						if (baduser && baduser.plaintext) {
 							badusers.add(baduser.plaintext);
 						}
@@ -1316,7 +1316,7 @@ class MarkBLocked {
 				// Remove the unparsable usernames and retry, or fall through
 				// TODO: Cache the unparsable usernames?
 				if (badusers.size) {
-					const filtered = users.filter(u => !badusers.has(u));
+					const filtered = users.filter((u) => !badusers.has(u));
 					if (filtered.length) {
 						console.warn('Retrying query without unparsable username(s):', [...badusers]);
 						return this.bulkMarkupBlocksLocal(userLinks, filtered, true);
@@ -1342,7 +1342,7 @@ class MarkBLocked {
 			bgprop: 'target|by|expiry|reason',
 			bglimit: 'max',
 		}, nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
-			const resGblk = res && res.query && res.query.globalblocks || [];
+			const resGblk = (res && res.query && res.query.globalblocks) || [];
 			const /** @type {Set<string>} */ ret = new Set();
 			for (const { target, by, expiry, reason } of resGblk) {
 				let clss;
@@ -1397,7 +1397,7 @@ class MarkBLocked {
 				gususers: users.join('|'),
 				gusprop: 'locked',
 			}, nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
-				const globalusers = res && res.query && res.query.globalusers || [];
+				const globalusers = (res && res.query && res.query.globalusers) || [];
 				const /** @type {Record<number, string>} */ ret = Object.create(null);
 
 				for (const obj of globalusers) {
@@ -1440,7 +1440,7 @@ class MarkBLocked {
 				leprop: 'ids|user|timestamp|comment|details',
 				lelimit: 'max',
 			}, nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
-				const logevents = res && res.query && res.query.logevents || [];
+				const logevents = (res && res.query && res.query.logevents) || [];
 
 				for (const log of logevents) {
 					const target = logidMap[log.logid];
@@ -1470,7 +1470,7 @@ class MarkBLocked {
 					 *
 					 * @type {[string, string, string]}
 					 */
-					const titleVars = ['??', '??','??'];
+					const titleVars = ['??', '??', '??'];
 
 					if (log.user) {
 						titleVars[0] = log.user;
@@ -1598,7 +1598,7 @@ class MarkBLocked {
 				.tooltip({
 					tooltipClass: 'mbl-tooltip',
 					items: '[data-mbl-tooltip]',
-					content: /** @this {HTMLAnchorElement} */ function() {
+					content: /** @this {HTMLAnchorElement} */ function () {
 						const tt = this.dataset.mblTooltip;
 						if (tt) {
 							return $('<ul>').append(
@@ -1608,7 +1608,7 @@ class MarkBLocked {
 					},
 					position: {
 						my: 'left bottom',
-						at: 'left top'
+						at: 'left top',
 					},
 				});
 		}
@@ -1700,7 +1700,6 @@ class MarkBLocked {
 			}
 		)(0);
 	}
-
 }
 /**
  * @type {mw.Api}
@@ -1742,7 +1741,7 @@ MarkBLocked.i18n = {
 		'title-expiry-temporary': 'until $1',
 		'title-blocked': '$1 blocked $2 by $3: $4',
 		'title-rangeblocked': '$1 range-blocked in /$2 $3 by $4: $5',
-		'title-locked': 'Globally locked by $1 since $2: $3'
+		'title-locked': 'Globally locked by $1 since $2: $3',
 	},
 	ja: {
 		'config-label-heading': 'MarkBLockedの設定',
@@ -1772,8 +1771,8 @@ MarkBLocked.i18n = {
 		'title-expiry-temporary': '$1まで',
 		'title-blocked': '$3により$2$1ブロック中: $4',
 		'title-rangeblocked': '$4により/$2で$3$1レンジブロック中: $5',
-		'title-locked': '$1により$2からグローバルロック中: $3'
-	}
+		'title-locked': '$1により$2からグローバルロック中: $3',
+	},
 };
 
 MarkBLocked.defaultOptionKey = 'userjs-markblocked-config';
@@ -1805,7 +1804,7 @@ function typedKeys(obj) {
  * @returns {value is string[]}
  */
 function isStringArray(value) {
-	return Array.isArray(value) && value.every(el => typeof el === 'string');
+	return Array.isArray(value) && value.every((el) => typeof el === 'string');
 }
 
 /**
@@ -1852,4 +1851,4 @@ function filterSet(set, predicate) {
 
 return MarkBLocked;
 })();
-//</nowiki>
+// </nowiki>

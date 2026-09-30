@@ -20,5 +20,5 @@
  */
 const MarkBLocked = require('./MarkBLocked-core.js');
 MarkBLocked.init({
-	lang: 'ja'
+	lang: 'ja',
 });
