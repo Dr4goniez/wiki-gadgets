@@ -1,12 +1,10 @@
-/*************************************************************\
-
-	MassRollback
-
-	@see https://ja.wikipedia.org/wiki/Help:MassRollback
-	@author [[User:Dragoniez]]
-	@version 2.0.4
-
-\*************************************************************/
+/**
+ * MassRollback
+ *
+ * @author [[User:Dragoniez]]
+ * @version 2.0.5
+ * @see https://ja.wikipedia.org/wiki/Help:MassRollback
+ */
 // @ts-check
 /* global mw, OO */
 // <nowiki>
@@ -32,7 +30,7 @@ class MassRollback {
 			const $rbspans = $('.mw-rollback-link:visible');
 			if (!$rbspans.length) return;
 
-			const portlet = mw.util.addPortletLink('p-tb', '#', '一括巻き戻し' , 't-mr', '投稿記録の一括巻き戻し');
+			const portlet = mw.util.addPortletLink('p-tb', '#', '一括巻き戻し', 't-mr', '投稿記録の一括巻き戻し');
 			if (!portlet) return;
 
 			this.createStyleTag().preloadIcons();
@@ -185,7 +183,6 @@ class MassRollback {
 		}, 800 + rand * 1000);
 		return def.promise();
 	}
-
 }
 MassRollback.loadingIconUrl = 'https://upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif';
 
@@ -211,7 +208,7 @@ function MassRollbackDialogFactory() {
 	 * @param {OO.ui.ProcessDialog.ConfigOptions} [config]
 	 */
 	function ProcessDialog(config) {
-		// @ts-expect-error
+		// @ts-expect-error "super does not exist"
 		ProcessDialog.super.call(this, config);
 	}
 	OO.inheritClass(ProcessDialog, OO.ui.ProcessDialog);
@@ -273,16 +270,16 @@ function MassRollbackDialogFactory() {
 						new OO.ui.MenuOptionWidget({ data: '1 month', label: '1か月' }),
 						new OO.ui.MenuOptionWidget({ data: '3 months', label: '3か月' }),
 						new OO.ui.MenuOptionWidget({ data: '6 months', label: '6か月' }),
-						new OO.ui.MenuOptionWidget({ data: '1 year', label: '1年' })
-					]
-				}
+						new OO.ui.MenuOptionWidget({ data: '1 year', label: '1年' }),
+					],
+				},
 			});
 			this.watchExpiry.getMenu().selectItemByData('infinity');
 
 			/** @type {OO.ui.Element[]} */
 			const items = [];
 
-			// @ts-expect-error
+			// @ts-expect-error wgGlobalGroups is not recognized
 			const userGroups = (mw.config.get('wgUserGroups') || []).concat(mw.config.get('wgGlobalGroups') || []);
 			const groupsMarkbot = new Set(['sysop', 'global-rollbacker', 'steward']);
 			if (userGroups.some((group) => groupsMarkbot.has(group))) {
@@ -290,7 +287,7 @@ function MassRollbackDialogFactory() {
 				items.push(
 					new OO.ui.FieldLayout(this.markBot, {
 						label: '巻き戻しをボットの編集として扱う',
-						align: 'inline'
+						align: 'inline',
 					})
 				);
 			}
@@ -299,17 +296,17 @@ function MassRollbackDialogFactory() {
 			items.push(
 				new OO.ui.FieldLayout(this.hideName, {
 					label: '利用者名を隠す',
-					align: 'inline'
+					align: 'inline',
 				}),
 				new OO.ui.FieldLayout(this.watch, {
 					label: '対象ページをウォッチ',
-					align: 'inline'
+					align: 'inline',
 				}),
 				(watchExpiryLayout = new OO.ui.FieldLayout(this.watchExpiry))
 			);
 			watchExpiryLayout.$element.css({
 				'margin-left': '1.8em',
-				'margin-top': '12px'
+				'margin-top': '12px',
 			});
 			watchExpiryLayout.toggle(false);
 
@@ -326,15 +323,15 @@ function MassRollbackDialogFactory() {
 		 * @override
 		 */
 		initialize() {
-			// @ts-expect-error
+			// @ts-expect-error The use of `arguments` is fine here
 			super.initialize.apply(this, arguments);
 
 			this.content = new OO.ui.PanelLayout({
 				padded: true,
-				expanded: false
+				expanded: false,
 			});
 			this.content.$element.append(this.fieldset.$element);
-			// @ts-expect-error
+			// @ts-expect-error $body is defined here
 			this.$body.append(this.content.$element);
 
 			return this;
@@ -373,9 +370,9 @@ function MassRollbackDialogFactory() {
 				const api = new mw.Api({
 					ajax: {
 						headers: {
-							'Api-User-Agent': 'MassRollback/2.0.4 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRollback.js)'
-						}
-					}
+							'Api-User-Agent': 'MassRollback/2.0.5 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRollback.js)',
+						},
+					},
 				});
 				const rArticle = new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)'));
 
@@ -425,6 +422,7 @@ function MassRollbackDialogFactory() {
 				return $.when(...batch).then((...results) => {
 					let success = 0, failed = 0;
 					for (const ok of results) {
+						// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 						ok ? success++ : failed++;
 					}
 					mw.notify(
@@ -447,7 +445,7 @@ function MassRollbackDialogFactory() {
 				watchlist: watch ? 'watch' : 'nochange',
 				watchlistexpiry: watch &&
 					/** @type {string} */ (/** @type {OO.ui.MenuOptionWidget} */ (this.watchExpiry.getMenu().findSelectedItem()).getData()),
-				tags: mw.config.get('wgWikiID') === 'jawiki' && 'MassRollback'
+				tags: mw.config.get('wgWikiID') === 'jawiki' && 'MassRollback',
 			};
 		}
 	}
@@ -458,11 +456,11 @@ function MassRollbackDialogFactory() {
 		{
 			action: 'execute',
 			label: '実行',
-			flags: ['primary', 'progressive']
+			flags: ['primary', 'progressive'],
 		},
 		{
-			flags: ['safe', 'close']
-		}
+			flags: ['safe', 'close'],
+		},
 	];
 	MassRollbackDialog.windowManager = (() => {
 		const windowManager = new OO.ui.WindowManager();
