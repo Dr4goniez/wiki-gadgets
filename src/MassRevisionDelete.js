@@ -1,20 +1,16 @@
-/******************************************************************************************************\
-
-	MassRevisionDelete
-
-	Adds functionality to delete multiple revisions in one fell swoop on a user's contributions.
-
-	@author [[User:Dragoniez]]
-	@version 3.0.13
-	@see https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
-	@see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/MassRevisionDelete.d.ts
-
-\******************************************************************************************************/
+/**
+ * MassRevisionDelete
+ *
+ * @author [[User:Dragoniez]]
+ * @version 3.0.14
+ * @see https://ja.wikipedia.org/wiki/Help:MassRevisionDelete
+ * @see https://github.com/Dr4goniez/wiki-gadgets/blob/main/src/window/MassRevisionDelete.d.ts
+ */
 // @ts-check
 /* global mw, OO */
-//<nowiki>
+// <nowiki>
 (() => {
-//*********************************************************************************************
+// *********************************************************************************************
 
 /**
  * If `true`, no actual API requests will be sent.
@@ -43,7 +39,7 @@ switch (mw.config.get('wgCanonicalSpecialPageName')) {
 
 // Run the script only when the current user has the 'deleterevision' user right
 const rights = (() => {
-	// @ts-expect-error
+	// @ts-expect-error wgGlobalGroups isn't recognized
 	const userGroups = (mw.config.get('wgUserGroups') || []).concat(mw.config.get('wgGlobalGroups', []));
 	const revdel = userGroups.some((group) => ['sysop', 'eliminator', 'suppress'].indexOf(group) !== -1);
 	const suppress = userGroups.indexOf('suppress') !== -1;
@@ -58,7 +54,7 @@ if (feignSuppressor) {
 }
 const apilimit = rights.AHL ? 500 : 50;
 
-//*********************************************************************************************
+// *********************************************************************************************
 
 /** @type {mw.Api} */
 let api;
@@ -68,7 +64,7 @@ function init() {
 	const deferreds = mw.loader.using([
 		'jquery.makeCollapsible',
 		'oojs-ui',
-		'oojs-ui.styles.icons-movement'
+		'oojs-ui.styles.icons-movement',
 	]);
 
 	// Load mediawiki.api and the DOM
@@ -85,14 +81,14 @@ function init() {
 		api = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': 'MassRevisionDelete/3.0.13 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)'
-				}
+					'Api-User-Agent': 'MassRevisionDelete/3.0.14 (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MassRevisionDelete.js)',
+				},
 			},
 			parameters: {
 				action: 'query',
 				format: 'json',
-				formatversion: '2'
-			}
+				formatversion: '2',
+			},
 		});
 
 		// Finish loading other modules and also fetch interface messages
@@ -109,7 +105,7 @@ function init() {
 				'revdelete-hide-restricted',
 				'rev-deleted-comment',
 				'changeslist-nocomment',
-				'empty-username'
+				'empty-username',
 			])
 		).then(() => {
 
@@ -177,13 +173,13 @@ function createFieldset($contribsList) {
 		classes: ['mrd-wrapper'],
 		expanded: false,
 		framed: true,
-		padded: true
+		padded: true,
 	});
 
 	const fieldset = new OO.ui.FieldsetLayout({
 		classes: ['mw-collapsibleFieldsetLayout', 'mw-collapsible', 'mw-collapsed'],
 		label: '一括版指定削除',
-		icon: 'expand'
+		icon: 'expand',
 	});
 	fieldset.$element
 		.appendTo(wrapper.$element)
@@ -226,30 +222,30 @@ class VisibilityLevel {
 		/** @type {OO.ui.RadioOptionWidget} */
 		this.optNochange = new OO.ui.RadioOptionWidget({
 			data: 'nochange',
-			label: '変更なし'
+			label: '変更なし',
 		});
 		/** @type {OO.ui.RadioOptionWidget} */
 		this.optShow = new OO.ui.RadioOptionWidget({
 			data: 'show',
-			label: options.show || '閲覧可'
+			label: options.show || '閲覧可',
 		});
 		/** @type {OO.ui.RadioOptionWidget} */
 		this.optHide = new OO.ui.RadioOptionWidget({
 			data: 'hide',
-			label: options.hide || '閲覧不可'
+			label: options.hide || '閲覧不可',
 		});
 
 		/** @type {OO.ui.RadioSelectWidget} */
 		this.radioSelect = new OO.ui.RadioSelectWidget({
 			classes: ['mrd-horizontal-radios'],
-			items: [this.optNochange, this.optShow, this.optHide]
+			items: [this.optNochange, this.optShow, this.optHide],
 		});
 		this.radioSelect.selectItem(this.optNochange);
 
 		const fieldLayout = new OO.ui.FieldLayout(this.radioSelect, {
 			classes: ['mrd-fieldLayout-boldheader'],
 			label: labelText,
-			align: 'top'
+			align: 'top',
 		});
 		if (!options.visible) {
 			fieldLayout.toggle(false);
@@ -267,7 +263,6 @@ class VisibilityLevel {
 		const selectedRadio = /** @type {OO.ui.OptionWidget} */ (this.radioSelect.findSelectedItem());
 		return /** @type {RevdelLevel} */ (selectedRadio.getData());
 	}
-
 }
 
 class MassRevisionDelete {
@@ -313,7 +308,7 @@ class MassRevisionDelete {
 		this.vlSuppress = new VisibilityLevel(fieldset, getMessage('revdelete-hide-restricted'), {
 			show: '適用しない',
 			hide: '適用する',
-			visible: rights.suppress
+			visible: rights.suppress,
 		});
 		/**
 		 * @type {OO.ui.DropdownInputWidget}
@@ -327,7 +322,7 @@ class MassRevisionDelete {
 		 * @type {OO.ui.TextInputWidget}
 		 */
 		this.reasonC = new OO.ui.TextInputWidget({
-			placeholder: (getMessage('revdelete-otherreason')).replace(/[:：]$/, '')
+			placeholder: (getMessage('revdelete-otherreason')).replace(/[:：]$/, ''),
 		});
 		/**
 		 * Whether to accept a new click on the Execute button.
@@ -339,7 +334,7 @@ class MassRevisionDelete {
 		 */
 		this.btnExecute = new OO.ui.ButtonWidget({
 			label: '実行',
-			flags: ['primary', 'progressive']
+			flags: ['primary', 'progressive'],
 		}).off('click').on('click', () => {
 			if (this.acceptExecution) {
 				this.setExecutionAcceptability(false).execute();
@@ -353,11 +348,11 @@ class MassRevisionDelete {
 			new OO.ui.FieldLayout(this.reason1, {
 				classes: ['mrd-fieldLayout-boldheader'],
 				label: '理由',
-				align: 'top'
+				align: 'top',
 			}),
 			new OO.ui.FieldLayout(this.reason2).toggle(false), // Disabled ATM
 			new OO.ui.FieldLayout(this.reasonC),
-			new OO.ui.FieldLayout(this.btnExecute)
+			new OO.ui.FieldLayout(this.btnExecute),
 		]);
 
 		// Set up options for the revdel reason dropdowns
@@ -372,6 +367,7 @@ class MassRevisionDelete {
 		this.$btnContainer = $wrapper;
 
 		// Dynamically count selected revisions when the checkboxes are (un)checked
+		/** @type {ReturnType<typeof setTimeout>} */
 		let checkboxChangeTimeout;
 		$checkbox.off('change').on('change', () => {
 			clearTimeout(checkboxChangeTimeout);
@@ -396,7 +392,7 @@ class MassRevisionDelete {
 			return acc;
 		}, []);
 		if (!revids.length) {
-			this.initPromise = /** @type {JQueryDeferred} */ (this.initPromise).resolve();
+			this.initPromise = /** @type {JQueryDeferred<void>} */ (this.initPromise).resolve();
 			return;
 		}
 
@@ -411,20 +407,19 @@ class MassRevisionDelete {
 				isDeletedContribs ? {
 					revids: revids.join('|'),
 					prop: 'deletedrevisions',
-					drvprop: 'ids|parsedcomment'
+					drvprop: 'ids|parsedcomment',
 				} : {
 					revids: revids.join('|'),
 					prop: 'revisions',
-					rvprop: 'ids|parsedcomment'
+					rvprop: 'ids|parsedcomment',
 				};
 			return api.post(params, {
 				headers: {
-					// @ts-expect-error
-					'Promise-Non-Write-API-Action': true
+					'Promise-Non-Write-API-Action': '1',
 				},
-				timeout: 0
+				timeout: 0,
 			}).then(/** @param {ApiResponse} res */ (res) => {
-				const resPages = res && res.query && res.query.pages || [];
+				const resPages = (res && res.query && res.query.pages) || [];
 				resPages.forEach(({ revisions, deletedrevisions }) => {
 					const arr = revisions || deletedrevisions;
 					if (!arr) {
@@ -462,7 +457,7 @@ class MassRevisionDelete {
 		/** @type {{ optgroup?:string; data?: string; label?: string; }[]} */
 		const options = [{
 			data: '',
-			label: getMessage('revdelete-reasonotherlist')
+			label: getMessage('revdelete-reasonotherlist'),
 		}];
 
 		if (typeof reasons === 'string') {
@@ -472,12 +467,12 @@ class MassRevisionDelete {
 				const content = m[2].trim();
 				if (m[1].length === 1) { // * <optgroup text>
 					options.push({
-						optgroup: content
+						optgroup: content,
 					});
 				} else { // ** <option text>
 					options.push({
 						data: content,
-						label: content
+						label: content,
 					});
 				}
 			}
@@ -522,7 +517,11 @@ class MassRevisionDelete {
 			}
 			const target = /** @type {''|'deleted'|'undeleted'} */ ($dropdown.val());
 			list.forEach((rev) => {
-				if (!target || target === 'deleted' && rev.hasDeletedItem() || target === 'undeleted' && !rev.hasDeletedItem()) {
+				if (
+					!target ||
+					(target === 'deleted' && rev.hasDeletedItem()) ||
+					(target === 'undeleted' && !rev.hasDeletedItem())
+				) {
 					const selection =
 						type === 'select' ? true :
 						type === 'unselect' ? false :
@@ -683,19 +682,20 @@ class MassRevisionDelete {
 		const vis = {
 			hide: [],
 			show: [],
-			suppress: 'nochange'
+			suppress: 'nochange',
 		};
 		/**
 		 * An object valued by jQuery Objects, later used for the revdel confirmation popup.
 		 * @type {Record<RevdelTarget | 'suppress', JQuery<HTMLElement>>}
 		 */
 		const conf = Object.create(null);
-		/** @type {(RevdelTarget | 'suppress')[]} */(['suppress'].concat(Revision.targets)).forEach((target) => {
+		/** @type {(RevdelTarget | 'suppress')[]} */
+		(['suppress'].concat(Revision.targets)).forEach((target) => {
 			const widget = this.getVisibilityLevelWidget(target);
 			conf[target] = widgetToConfirmationMessage(widget); // Will be used later to confirm the revision deletion
 			const level = widget.getData();
-			if (vis[level] && target !== 'suppress') {
-				// "level=nochange" is ignored because the "vis" object doesn't have that key
+			if (level in vis && target !== 'suppress') {
+				// @ts-expect-error "level=nochange" is ignored because the "vis" object doesn't have that key
 				vis[level].push(target);
 			} else if (target === 'suppress' && level !== 'nochange') {
 				vis.suppress = level === 'show' ? 'no' : 'yes';
@@ -774,7 +774,7 @@ class MassRevisionDelete {
 				hide: vis.hide.join('|'),
 				show: vis.show.join('|'),
 				suppress: vis.suppress,
-				tags
+				tags,
 			});
 
 		});
@@ -912,22 +912,22 @@ class MassRevisionDelete {
 					// Error navigation buttons (prev/next)
 					const btnPrev = new OO.ui.ButtonWidget({
 						icon: 'arrowUp',
-						title: '前のエラーへ'
+						title: '前のエラーへ',
 					});
 					const btnNext = new OO.ui.ButtonWidget({
 						icon: 'arrowDown',
-						title: '次のエラーへ'
+						title: '次のエラーへ',
 					});
 					const buttons = new OO.ui.ButtonGroupWidget({
-						items: [btnPrev, btnNext]
+						items: [btnPrev, btnNext],
 					});
 					buttons.$element.css('display', 'inline-flex');
 
 					// Error index dropdown
 					const indexDropdown = new OO.ui.DropdownWidget({
 						menu: {
-							items: failedRevs.map((_, i) => new OO.ui.MenuOptionWidget({ data: i, label: String(i + 1) }))
-						}
+							items: failedRevs.map((_, i) => new OO.ui.MenuOptionWidget({ data: i, label: String(i + 1) })),
+						},
 					});
 					indexDropdown.getMenu().on('select', (selectedItem) => {
 						if (!selectedItem || Array.isArray(selectedItem)) {
@@ -976,7 +976,7 @@ class MassRevisionDelete {
 									)
 									.css({
 										display: 'flex',
-										marginTop: '0.8em'
+										marginTop: '0.8em',
 									})
 							)
 							.css('text-align', 'justify'),
@@ -1020,13 +1020,13 @@ class MassRevisionDelete {
 						return codeArr;
 					}, []);
 					acc[obj.id] = {
-						code: err.join(', ')
+						code: err.join(', '),
 					};
 				} else {
 					acc[obj.id] = {
 						content: !obj.texthidden,
 						comment: !obj.commenthidden,
-						user: !obj.userhidden
+						user: !obj.userhidden,
 					};
 				}
 				return acc;
@@ -1093,7 +1093,7 @@ class MassRevisionDelete {
 				}
 			} else {
 				acc[revid] = {
-					code: 'fabricated error'
+					code: 'fabricated error',
 				};
 			}
 			return acc;
@@ -1101,17 +1101,16 @@ class MassRevisionDelete {
 		setTimeout(() => def.resolve(ret), 1000);
 		return def.promise();
 	}
-
 }
 
 // Custom event for when mw.notification is closed
 $.event.special['mrd-notif-close'] = {
 	remove: (o) => {
 		if (o.handler) {
-			// @ts-expect-error
+			// @ts-expect-error The first argument is not required
 			o.handler();
 		}
-	}
+	},
 };
 
 class Revision {
@@ -1214,7 +1213,7 @@ class Revision {
 		this.currentVisibility = {
 			content: true,
 			comment: true,
-			user: true
+			user: true,
 		};
 
 		/**
@@ -1303,7 +1302,7 @@ class Revision {
 		this.$li[0].scrollIntoView();
 		this.$li.css('background-color', 'var(background-color-error-subtle--active,#ffc8bd)');
 		setTimeout(() => {
-			this.$li.animate({ backgroundColor: '' }, 500, function() {
+			this.$li.animate({ backgroundColor: '' }, 500, function () {
 				$(this).css('background-color', '');
 			});
 		}, 500);
@@ -1429,7 +1428,8 @@ class Revision {
 	 * @returns {boolean}
 	 */
 	hasDeletedItem() {
-		return Object.keys(this.currentVisibility).some((target) => !this.currentVisibility[target]);
+		return /** @type {RevdelTarget[]} */ (Object.keys(this.currentVisibility))
+			.some((target) => !this.currentVisibility[target]);
 	}
 
 	/**
@@ -1467,14 +1467,14 @@ class Revision {
 	 * ```html
 	 * <!-- Normal date link -->
 	 * <bdi>
-	 * 	<a class="mw-changeslist-date">2023-01-01T00:00:00</a>
+	 *   <a class="mw-changeslist-date">2023-01-01T00:00:00</a>
 	 * </bdi>
 	 * <!-- Deleted date link -->
 	 * <span class="history-deleted mw-changeslist-date"><!-- Has an additional class if suppressed -->
-	 * 	<!-- Empty on a non-suppressor's view if suppressed -->
-	 * 	<bdi>
-	 * 		<a class="mw-changeslist-date">2023-01-01T00:00:00</a>
-	 * 	</bdi>
+	 *   <!-- Empty on a non-suppressor's view if suppressed -->
+	 *   <bdi>
+	 *     <a class="mw-changeslist-date">2023-01-01T00:00:00</a>
+	 *   </bdi>
 	 * </span>
 	 * ```
 	 * `[[Special:DeletedContributions]]`
@@ -1485,8 +1485,8 @@ class Revision {
 	 * <a class="mw-changeslist-date">2023-01-01T00:00:00</a>
 	 * <!-- Deleted date link -->
 	 * <span class="history-deleted"><!-- Has an additional class if suppressed -->
-	 * 	<!-- Empty on a non-suppressor's view if suppressed -->
-	 * 	<a class="mw-changeslist-date">2023-01-01T00:00:00</a>
+	 *   <!-- Empty on a non-suppressor's view if suppressed -->
+	 *   <a class="mw-changeslist-date">2023-01-01T00:00:00</a>
 	 * </span>
 	 * ```
 	 * @param {boolean?} oldVis
@@ -1532,7 +1532,7 @@ class Revision {
 	 * <span class="comment mw-comment-none">No edit summary</span><!-- Has text but invisible -->
 	 * <!-- Deleted comment -->
 	 * <span class="history-deleted comment"><!-- Has an additional class if suppressed -->
-	 * 	<span class="comment">(edit summary removed)</span>
+	 *   <span class="comment">(edit summary removed)</span>
 	 * </span>
 	 * ```
 	 * `[[Special:DeletedContributions]]`
@@ -1543,13 +1543,13 @@ class Revision {
 	 * <span class="comment mw-comment-none">No edit summary</span><!-- Has text but invisible -->
 	 * <!-- Deleted comment -->
 	 * <span class="history-deleted comment"><!-- Has an additional class if suppressed -->
-	 * 	<!-- Empty if there's no edit summary -->
-	 * 	<span class="comment comment--without-parentheses">COMMENT</span>
+	 *   <!-- Empty if there's no edit summary -->
+	 *   <span class="comment comment--without-parentheses">COMMENT</span>
 	 * </span>
 	 * <!-- Suppressed comment on a non-supressor's view (empty, non-empty) -->
 	 * <!-- This pattern is irrelevant to this method because the user can't change visibility -->
 	 * <span class="history-deleted mw-history-suppressed comment">
-	 * 	<span class="comment">(edit summary removed)</span>
+	 *   <span class="comment">(edit summary removed)</span>
 	 * </span>
 	 * ```
 	 * @param {boolean?} oldVis
@@ -1564,9 +1564,9 @@ class Revision {
 		if (newVis) { // false/null -> true
 
 			const $inner =
-				this.$comment.children().length ? // The inner tag can be missing on DC
-				this.$comment.children().eq(0) : // On C, just get the inner tag
-				$('<span>').addClass('comment'); // On DC, create one
+				this.$comment.children().length // The inner tag can be missing on DC
+				? this.$comment.children().eq(0) // On C, just get the inner tag
+				: $('<span>').addClass('comment'); // On DC, create one
 			this.$comment.before($inner).remove(); // Move the inner tag before the wrapper and remove the wrapper
 			this.$comment = $inner;
 			if (this.parsedComment) {
@@ -1640,17 +1640,16 @@ class Revision {
 
 		return this;
 	}
-
 }
 
 Revision.regex = {
 	article: new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^#?]+)')),
-	script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)')
+	script: new RegExp(mw.config.get('wgScript') + '\\?title=([^#&]+)'),
 };
 
 Revision.class = {
 	deleted: 'history-deleted',
-	suppressed: 'mw-history-suppressed'
+	suppressed: 'mw-history-suppressed',
 };
 
 /**
@@ -1699,7 +1698,7 @@ function getMessage(name) {
 			'revdelete-hide-restricted': '一般利用者に加え管理者からもデータを隠す',
 			'rev-deleted-comment': '(要約は除去されています)',
 			'changeslist-nocomment': '編集の要約なし',
-			'empty-username': ''
+			'empty-username': '',
 		}[name];
 	}
 	if (ret === void 0) {
@@ -1720,10 +1719,10 @@ function getMessage(name) {
  * @typedef {import('./window/MassRevisionDelete').IconType} IconType
  */
 
-//*********************************************************************************************
+// *********************************************************************************************
 
 init();
 
-//*********************************************************************************************
+// *********************************************************************************************
 })();
-//</nowiki>
+// </nowiki>
