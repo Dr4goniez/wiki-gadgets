@@ -12,6 +12,7 @@
 
 	@link https://ja.wikipedia.org/wiki/Help:MassProtect
 	@author [[User:Dragoniez]]
+	@version 2.0.4
 
 \********************************************************************************************************/
 
