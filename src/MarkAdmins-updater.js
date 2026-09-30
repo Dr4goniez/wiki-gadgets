@@ -75,7 +75,7 @@ class MarkAdminsUpdater {
 			this.fetchData(api, 'global'),
 			this.fetchData(metaApi, 'meta'),
 		]);
-		if (responses.some(v => v === null)) {
+		if (responses.some((v) => v === null)) {
 			mw.notify('JSONデータの取得に失敗しました', { type: 'error' });
 			return;
 		}
@@ -131,16 +131,16 @@ class MarkAdminsUpdater {
 							{
 								action: 'accept',
 								label: 'はい',
-								flags: ['primary', 'progressive']
+								flags: ['primary', 'progressive'],
 							},
 							{
 								action: 'reject',
 								label: 'いいえ',
-								flags: 'safe'
-							}
+								flags: 'safe',
+							},
 						],
 						title: 'MarkAdmins-updater',
-						size: 'medium'
+						size: 'medium',
 					}
 				);
 			} else {
@@ -175,7 +175,7 @@ class MarkAdminsUpdater {
 				baserevid: rev.baserevid,
 				basetimestamp: rev.basetimestamp,
 				starttimestamp: rev.starttimestamp,
-				formatversion: '2'
+				formatversion: '2',
 			}).then((res) => {
 				if (res && res.edit && res.edit.result === 'Success') {
 					mw.notify('データを更新しました', { type: 'success' });
@@ -210,23 +210,23 @@ class MarkAdminsUpdater {
 				$('<h5>').text('自動編集'),
 				$('<p>').text('MarkAdminsのJSONデータを取得し、ガジェットデータを自動的に編集・更新します。'),
 				$('<h5>').text('コンソール出力'),
-				$('<p>').text('自動編集は行わず、取得したJSONデータをブラウザコンソールに出力します。'),
+				$('<p>').text('自動編集は行わず、取得したJSONデータをブラウザコンソールに出力します。')
 			),
 			{
 				actions: [
 					{
 						action: 'accept',
 						label: '自動編集',
-						flags: ['primary', 'progressive']
+						flags: ['primary', 'progressive'],
 					},
 					{
 						action: 'reject',
 						label: 'コンソール出力',
-						flags: 'safe'
-					}
+						flags: 'safe',
+					},
 				],
 				title: 'MarkAdmins-updater',
-				size: 'medium'
+				size: 'medium',
 			}
 		);
 	}
@@ -255,7 +255,7 @@ class MarkAdminsUpdater {
 			[`${prefix}limit`]: 'max',
 			[`${prefix}group`]: groupMap[domain].join('|'),
 			[`${prefix}prop`]: 'groups',
-			formatversion: '2'
+			formatversion: '2',
 		}).then((res) => {
 			/**
 			 * @type {{ id: number; name: string; groups: string[]; }[]=}
@@ -271,8 +271,8 @@ class MarkAdminsUpdater {
 			const orderMap = new Map(groupMap[domain].map((group, i) => [group, i]));
 			for (const { name, groups } of dataArray) {
 				const filtered = groups
-					.filter(g => orderMap.has(g))
-					// @ts-expect-error
+					.filter((g) => orderMap.has(g))
+					// @ts-expect-error Map.prototype.get never returns undefined
 					.sort((a, b) => orderMap.get(a) - orderMap.get(b));
 				if (filtered.length) {
 					map.set(name, filtered);
@@ -307,7 +307,7 @@ class MarkAdminsUpdater {
 			rvslots: 'main',
 			rvlimit: 1,
 			curtimestamp: 1,
-			formatversion: '2'
+			formatversion: '2',
 		}).then((res) => {
 			const pages = res && res.query && res.query.pages;
 			if (!Array.isArray(pages) || !pages[0]) {
@@ -331,7 +331,7 @@ class MarkAdminsUpdater {
 					baserevid: revid,
 					basetimestamp: timestamp,
 					starttimestamp: res.curtimestamp,
-					content
+					content,
 				};
 			}
 		}).catch((_, err) => {
@@ -339,7 +339,6 @@ class MarkAdminsUpdater {
 			return null;
 		});
 	}
-
 }
 
 MarkAdminsUpdater.running = false;

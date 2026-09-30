@@ -18,13 +18,12 @@
  * - Does not suppport configurations via user common.js. Instead, it provides
  *   [[Special:MarkAdminsConfig]] for user configurations.
  * - User contribs links are also marked.
- * @version 2.0.5
+ * @version 2.0.6
  *
  * @requires [[MediaWiki:Gadget-MarkAdmins-data.json]]
  * @requires [[MediaWiki:Gadget-MarkAdmins-updater.js]]
  */
 // @ts-check
-/* eslint-disable @typescript-eslint/no-var-requires */
 /* global mw, OO */
 // <nowiki>
 (() => {
@@ -38,7 +37,7 @@ if (
 	return;
 }
 
-const version = '2.0.5';
+const version = '2.0.6';
 const DEVMODE = false;
 const wgNamespaceNumber = mw.config.get('wgNamespaceNumber');
 const wgCanonicalSpecialPageName = mw.config.get('wgCanonicalSpecialPageName') || '';
@@ -150,7 +149,7 @@ class MarkAdmins {
 		/** @type {Record<string, string[]>} */
 		const json = DEVMODE
 			? await $.get(mw.util.getUrl('MediaWiki:Gadget-MarkAdmins-data.json', { action: 'raw', ctype: 'application/json' }))
-			// @ts-expect-error
+			// @ts-expect-error Cannot find module locally
 			: require('./MarkAdmins-data.json');
 		return new Map(Object.entries(json));
 	}
@@ -213,7 +212,10 @@ class MarkAdmins {
 
 			// Extract prefixed title from the href
 			let match, prefixedTitle;
-			if ((match = this.regex.article.exec(href)) || a.classList.contains('new') && (match = this.regex.script.exec(href))) {
+			if (
+				(match = this.regex.article.exec(href)) ||
+				(a.classList.contains('new') && (match = this.regex.script.exec(href)))
+			) {
 				// Look only for red links for index.php links. This is because special pages contain so many user links
 				// with the index.php path, such as history links and undo links, which are mere distractors for the script.
 				// Including them would over-mark, so we simply ignore them.
@@ -286,7 +288,6 @@ class MarkAdmins {
 			tracker[index] = { user, pagetype };
 		});
 	}
-
 }
 
 MarkAdmins.regex = (() => {
@@ -307,7 +308,7 @@ MarkAdmins.regex = (() => {
 		script: new RegExp(mw.config.get('wgScript') + '\\?title=([^&]+)'), // ^/w/index.php?title=PAGENAME
 		user: new RegExp('^(?:' + aliases[2].join('|') + '):(.+)', 'i'),
 		usertalk: new RegExp('^(?:' + aliases[3].join('|') + '):(.+)', 'i'),
-		contribs: new RegExp('^(?:' + aliases[-1].join('|') + '):(?:投稿記録|contrib(?:ution)?s)/(.+)', 'i')
+		contribs: new RegExp('^(?:' + aliases[-1].join('|') + '):(?:投稿記録|contrib(?:ution)?s)/(.+)', 'i'),
 	};
 })();
 
@@ -360,7 +361,7 @@ class MarkAdminsConfig {
 		}
 
 		const /** @type {number[]} */ namespaces = [];
-		const runOn = new Set(legacy.runOn.map(val => val.toLowerCase()));
+		const runOn = new Set(legacy.runOn.map((val) => val.toLowerCase()));
 		for (const [alias, ns] of Object.entries(mw.config.get('wgNamespaceIds'))) {
 			if (runOn.has(alias)) {
 				namespaces.push(ns);
@@ -377,7 +378,7 @@ class MarkAdminsConfig {
 			runOnDiff: 'diff',
 			markSubpages: 'subpages',
 			markMyself: 'self',
-			markContribs: 'contribs'
+			markContribs: 'contribs',
 		};
 		for (const [legecyKey, key] of Object.entries(boolPropMap)) {
 			const legacyKeySafe = /** @type {keyof typeof boolPropMap} */ (legecyKey);
@@ -390,7 +391,7 @@ class MarkAdminsConfig {
 		await this.save(
 			{
 				[legacyKey]: null,
-				[this.key]: $.isEmptyObject(ret) ? null : JSON.stringify(ret)
+				[this.key]: $.isEmptyObject(ret) ? null : JSON.stringify(ret),
 			},
 			true // Always call `mw.user.options.set` for getLatest() to work properly
 		);
@@ -432,7 +433,7 @@ class MarkAdminsConfig {
 	 * @returns {number[]}
 	 */
 	static decodeNamespaces(namespaces) {
-		return namespaces.split('|').map(n => +n);
+		return namespaces.split('|').map((n) => +n);
 	}
 
 	/**
@@ -447,14 +448,14 @@ class MarkAdminsConfig {
 				this._api = new mw.Api({
 					ajax: {
 						headers: {
-							'Api-User-Agent': `MarkAdmins/${version} (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkAdmins.js)`
-						}
+							'Api-User-Agent': `MarkAdmins/${version} (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-MarkAdmins.js)`,
+						},
 					},
 					parameters: {
 						action: 'query',
 						format: 'json',
-						formatversion: '2'
-					}
+						formatversion: '2',
+					},
 				});
 				resolve(this._api);
 			});
@@ -562,14 +563,14 @@ class MarkAdminsConfig {
 			const labelInput = new OO.ui.TextInputWidget({
 				$element: $('<div>').css({ 'min-width': '25em' }),
 				label: 'ラベル',
-				value: cfg.groups[group].label
+				value: cfg.groups[group].label,
 			});
 			const enableCheckbox = new OO.ui.CheckboxInputWidget({
-				selected: cfg.groups[group].enabled
+				selected: cfg.groups[group].enabled,
 			});
 			const resetButton = new OO.ui.ButtonWidget({
 				flags: ['destructive'],
-				label: 'リセット'
+				label: 'リセット',
 			});
 
 			const setDisabledOnResetButton = () => {
@@ -593,12 +594,12 @@ class MarkAdminsConfig {
 					align: 'top',
 					help: `既定値: ${defaultCfg.label} (${defaultCfg.enabled ? '有効' : '無効'})`,
 					helpInline: true,
-					invisibleLabel: true
+					invisibleLabel: true,
 				})),
 				new OO.ui.FieldLayout(enableCheckbox, {
 					align: 'inline',
 					label: '有効化',
-				})
+				}),
 			]);
 			labelInput.setValidation((val) => {
 				const value = clean(val);
@@ -617,7 +618,7 @@ class MarkAdminsConfig {
 						$('<a>')
 							.prop({
 								href: defaultCfg.link,
-								target: '_blank'
+								target: '_blank',
 							})
 							.text(defaultCfg.localized),
 						$('<br>'),
@@ -636,7 +637,7 @@ class MarkAdminsConfig {
 		// XXX: Hoisting exploited: btnResetAllLabels, btnResetAllConds, resetAllLabels, resetAllConds
 		const resetAllButton = new OO.ui.ButtonWidget({
 			flags: ['destructive'],
-			label: '全リセット'
+			label: '全リセット',
 		});
 		const setDisabledOnResetAllButton = () => {
 			const canReset = !btnResetAllLabels.isDisabled() || !btnResetAllConds.isDisabled();
@@ -655,16 +656,16 @@ class MarkAdminsConfig {
 			label: '全てのラベル設定をリセット',
 		});
 		const labelRows = Object.values(this.groups);
-		const resetAllLabels = () => labelRows.forEach(row => row.reset());
+		const resetAllLabels = () => labelRows.forEach((row) => row.reset());
 		btnResetAllLabels.on('click', () => MarkAdminsConfig.resetIfConfirmed(resetAllLabels));
 
 		// Dynamically enable/disable `btnResetAllLabels`
 		const setDisabledOnResetAllLabelsButton = () => {
-			const disabled = labelRows.every(obj => obj.resetButton.isDisabled());
+			const disabled = labelRows.every((obj) => obj.resetButton.isDisabled());
 			btnResetAllLabels.setDisabled(disabled);
 			setDisabledOnResetAllButton();
 		};
-		labelRows.forEach(row => row.resetButton.on('disable', setDisabledOnResetAllLabelsButton));
+		labelRows.forEach((row) => row.resetButton.on('disable', setDisabledOnResetAllLabelsButton));
 		onReadyCallbacks.push(() => labelRows[0].resetButton.emit('disable', true)); // Initialize state
 
 		// Create a section for conds settings
@@ -675,7 +676,7 @@ class MarkAdminsConfig {
 		this.namespaces = new OO.ui.MenuTagMultiselectWidget({
 			inputPosition: 'outline',
 			options: nsWidgetInitializer.options,
-			allowedValues: nsWidgetInitializer.options.map(obj => obj.data)
+			allowedValues: nsWidgetInitializer.options.map((obj) => obj.data),
 		});
 		this.namespaces.setValue(
 			// Don't use the `selected` option in the constructor call. The specified tags will otherwise
@@ -686,37 +687,37 @@ class MarkAdminsConfig {
 		 * @type {OO.ui.CheckboxInputWidget}
 		 */
 		this.talk = new OO.ui.CheckboxInputWidget({
-			selected: cfg.conds.talk
+			selected: cfg.conds.talk,
 		});
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 */
 		this.history = new OO.ui.CheckboxInputWidget({
-			selected: cfg.conds.history
+			selected: cfg.conds.history,
 		});
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 */
 		this.diff = new OO.ui.CheckboxInputWidget({
-			selected: cfg.conds.diff
+			selected: cfg.conds.diff,
 		});
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 */
 		this.subpages = new OO.ui.CheckboxInputWidget({
-			selected: cfg.conds.subpages
+			selected: cfg.conds.subpages,
 		});
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 */
 		this.self = new OO.ui.CheckboxInputWidget({
-			selected: cfg.conds.self
+			selected: cfg.conds.self,
 		});
 		/**
 		 * @type {OO.ui.CheckboxInputWidget}
 		 */
 		this.contribs = new OO.ui.CheckboxInputWidget({
-			selected: cfg.conds.contribs
+			selected: cfg.conds.contribs,
 		});
 
 		const fieldset = new OO.ui.FieldsetLayout();
@@ -725,44 +726,44 @@ class MarkAdminsConfig {
 				align: 'top',
 				help: '「ノートページ上で有効化」が無効の場合でも、ここで指定された名前空間が優先されます。',
 				helpInline: true,
-				label: '有効化する名前空間'
+				label: '有効化する名前空間',
 			}),
 			new OO.ui.FieldLayout(this.talk, {
 				align: 'inline',
 				help: '既定値: 有効',
 				helpInline: true,
-				label: 'ノートページ上で有効化'
+				label: 'ノートページ上で有効化',
 			}),
 			new OO.ui.FieldLayout(this.history, {
 				align: 'inline',
 				help: '既定値: 有効',
 				helpInline: true,
-				label: '編集履歴ページ上で有効化'
+				label: '編集履歴ページ上で有効化',
 			}),
 			new OO.ui.FieldLayout(this.diff, {
 				align: 'inline',
 				help: '既定値: 有効',
 				helpInline: true,
-				label: '差分ページ上で有効化'
+				label: '差分ページ上で有効化',
 			}),
 			new OO.ui.FieldLayout(this.subpages, {
 				align: 'inline',
 				help: '既定値: 無効',
 				helpInline: true,
-				label: 'サブページリンクをマークアップ'
+				label: 'サブページリンクをマークアップ',
 			}),
 			new OO.ui.FieldLayout(this.self, {
 				align: 'inline',
 				help: '既定値: 有効',
 				helpInline: true,
-				label: '自身の利用者リンクをマークアップ'
+				label: '自身の利用者リンクをマークアップ',
 			}),
 			new OO.ui.FieldLayout(this.contribs, {
 				align: 'inline',
 				help: '既定値: 有効',
 				helpInline: true,
-				label: '投稿記録リンクをマークアップ'
-			})
+				label: '投稿記録リンクをマークアップ',
+			}),
 		]);
 
 		// Create a "Reset all conds" button
@@ -772,17 +773,17 @@ class MarkAdminsConfig {
 			label: 'マークアップ設定をリセット',
 		});
 		this.checkboxKeys = /** @type {(keyof Omit<DefaultConfigSchema['conds'], 'namespaces'>)[]} */ (
-			Object.keys(cfg.conds).filter(v => v !== 'namespaces')
+			Object.keys(cfg.conds).filter((v) => v !== 'namespaces')
 		);
 		const resetAllConds = () => {
 			this.namespaces.setValue(nsWidgetInitializer.defaultLabels);
-			this.checkboxKeys.forEach(key => this[key].setSelected(defaults.conds[key]));
+			this.checkboxKeys.forEach((key) => this[key].setSelected(defaults.conds[key]));
 		};
 		btnResetAllConds.on('click', () => MarkAdminsConfig.resetIfConfirmed(resetAllConds));
 
 		// Dynamically enable/disable `btnResetAllConds`
 		const setDisabledOnResetCondsButton = () => {
-			const canReset = this.checkboxKeys.some(key => this[key].isSelected() !== defaults.conds[key]) ||
+			const canReset = this.checkboxKeys.some((key) => this[key].isSelected() !== defaults.conds[key]) ||
 				MarkAdminsConfig.encodeNamespaces(this.getNamespaces()) !== defaults.conds.namespaces;
 			btnResetAllConds.setDisabled(!canReset);
 			setDisabledOnResetAllButton();
@@ -812,7 +813,7 @@ class MarkAdminsConfig {
 		 */
 		this.saveButton = new PendingButtonWidget({
 			flags: ['primary', 'progressive'],
-			label: '保存'
+			label: '保存',
 		});
 		this.saveButton.on('click', async () => {
 			this.$overlay.show();
@@ -836,7 +837,7 @@ class MarkAdminsConfig {
 			this.$overlay
 		);
 
-		onReadyCallbacks.forEach(callback => callback());
+		onReadyCallbacks.forEach((callback) => callback());
 	}
 
 	/**
@@ -848,7 +849,7 @@ class MarkAdminsConfig {
 		const confirmed = await OO.ui.confirm('値を既定値にリセットしますか？', {
 			actions: MarkAdminsConfig.getYesNoActions(),
 			title: '確認',
-			size: 'medium'
+			size: 'medium',
 		});
 		if (confirmed) {
 			await callback();
@@ -866,13 +867,13 @@ class MarkAdminsConfig {
 			{
 				action: 'accept',
 				label: 'はい',
-				flags: ['primary', 'progressive']
+				flags: ['primary', 'progressive'],
 			},
 			{
 				action: 'reject',
 				label: 'いいえ',
-				flags: 'safe'
-			}
+				flags: 'safe',
+			},
 		];
 	}
 
@@ -957,19 +958,19 @@ class MarkAdminsConfig {
 		}
 
 		if (duplicateLabels.size) {
-			const labels = Array.from(duplicateLabels).map(label => `「${label}」`);
+			const labels = Array.from(duplicateLabels).map((label) => `「${label}」`);
 			const confirmed = await OO.ui.confirm(
 				$('<div>').append(
 					new OO.ui.MessageWidget({
 						label: `ラベル${labels.join('')}が複数回使用されています。`,
-						type: 'warning'
+						type: 'warning',
 					}).$element,
 					'このまま保存しますか？'
 				),
 				{
 					actions: MarkAdminsConfig.getYesNoActions(),
 					title: '警告',
-					size: 'medium'
+					size: 'medium',
 				}
 			);
 			if (!confirmed) {
@@ -993,7 +994,6 @@ class MarkAdminsConfig {
 		}
 		this.saveButton.unsetPending();
 	}
-
 }
 /**
  * @type {mw.Api}
@@ -1048,204 +1048,204 @@ MarkAdminsConfig.groupMap = new Map([
 		enabled: true,
 		localized: '管理者',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:管理者',
-		domain: 'local'
+		domain: 'local',
 	}],
 	['suppress', {
 		label: 'OS',
 		enabled: true,
 		localized: 'オーバーサイト',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:オーバーサイトの方針',
-		domain: 'local'
+		domain: 'local',
 	}],
 	['checkuser', {
 		label: 'CU',
 		enabled: true,
 		localized: 'チェックユーザー',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:チェックユーザーの方針',
-		domain: 'local'
+		domain: 'local',
 	}],
 	['bureaucrat', {
 		label: 'B',
 		enabled: true,
 		localized: 'ビューロクラット',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:ビューロクラット',
-		domain: 'local'
+		domain: 'local',
 	}],
 	['interface-admin', {
 		label: 'IA',
 		enabled: true,
 		localized: 'インターフェース管理者',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:インターフェース管理者',
-		domain: 'local'
+		domain: 'local',
 	}],
 	['accountcreator', {
 		label: 'AC',
 		enabled: true,
 		localized: 'アカウント作成者',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:アカウント作成者',
-		domain: 'local'
+		domain: 'local',
 	}],
 	['eliminator', {
 		label: 'E',
 		enabled: true,
 		localized: '削除者',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:削除者',
-		domain: 'local'
+		domain: 'local',
 	}],
 	['rollbacker', {
 		label: 'RB',
 		enabled: true,
 		localized: '巻き戻し者',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:巻き戻し者',
-		domain: 'local'
+		domain: 'local',
 	}],
 	['abusefilter', {
 		label: 'FE',
 		enabled: true,
 		localized: '編集フィルター編集者',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:編集フィルター編集者',
-		domain: 'local'
+		domain: 'local',
 	}],
 	['bot', {
 		label: 'Bot',
 		enabled: true,
 		localized: 'ボット',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:Bot',
-		domain: 'local'
+		domain: 'local',
 	}],
 	['temporary-account-viewer', {
 		label: 'TAIV',
 		enabled: true,
 		localized: '仮アカウントIP閲覧者',
 		link: 'https://ja.wikipedia.org/wiki/Wikipedia:仮アカウントIP閲覧者',
-		domain: 'local'
+		domain: 'local',
 	}],
 	['founder', {
 		label: 'F',
 		enabled: true,
 		localized: '創設者',
 		link: 'https://meta.wikimedia.org/wiki/Founder/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['steward', {
 		label: 'S',
 		enabled: true,
 		localized: 'スチュワード',
 		link: 'https://meta.wikimedia.org/wiki/Stewards/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['ombuds', {
 		label: 'Omb',
 		enabled: true,
 		localized: 'オンブズ委員',
 		link: 'https://meta.wikimedia.org/wiki/Ombuds_commission/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['u4c-member', {
 		label: 'U4C',
 		enabled: true,
 		localized: 'ユニバーサル行動規範調整委員会',
 		link: 'https://meta.wikimedia.org/wiki/Universal_Code_of_Conduct/Coordinating_Committee/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['staff', {
 		label: 'Staff',
 		enabled: true,
 		localized: 'スタッフ',
 		link: 'https://wikimediafoundation.org/role/staff-contractors/',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['sysadmin', {
 		label: 'SA',
 		enabled: true,
 		localized: 'システム管理者',
 		link: 'https://meta.wikimedia.org/wiki/System_administrators/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['global-sysop', {
 		label: 'GS',
 		enabled: true,
 		localized: 'グローバル管理者',
 		link: 'https://meta.wikimedia.org/wiki/Global_sysops/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['abusefilter-maintainer', {
 		label: 'GFE',
 		enabled: true,
 		localized: '編集フィルター保守員',
 		link: 'https://meta.wikimedia.org/wiki/Abuse_filter_maintainer/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['abusefilter-helper', {
 		label: 'GFH',
 		enabled: true,
 		localized: '編集フィルター閲覧者',
 		link: 'https://meta.wikimedia.org/wiki/Abuse_filter_helpers/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['global-interface-editor', {
 		label: 'GIE',
 		enabled: true,
 		localized: 'グローバルインターフェース編集者',
 		link: 'https://meta.wikimedia.org/wiki/Interface_editors/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['global-bot', {
 		label: 'GBot',
 		enabled: true,
 		localized: 'グローバルボット',
 		link: 'https://meta.wikimedia.org/wiki/Bot_policy/ja#global',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['global-deleter', {
 		label: 'GE',
 		enabled: true,
 		localized: 'グローバル削除者',
 		link: 'https://meta.wikimedia.org/wiki/Global_deleters/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['global-rollbacker', {
 		label: 'GRB',
 		enabled: true,
 		localized: 'グローバル巻き戻し者',
 		link: 'https://meta.wikimedia.org/wiki/Global_rollback/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['global-temporary-account-viewer', {
 		label: 'GTAIV',
 		enabled: false,
 		localized: 'グローバル仮アカウントIP閲覧者',
 		link: 'https://meta.wikimedia.org/wiki/Global_temporary_account_IP_viewers/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['vrt-permissions', {
 		label: 'VRT',
 		enabled: true,
 		localized: '問い合わせ対応ボランティアチーム',
 		link: 'https://meta.wikimedia.org/wiki/Volunteer_Response_Team/ja',
-		domain: 'global'
+		domain: 'global',
 	}],
 	['global-renamer', {
 		label: 'GRN',
 		enabled: true,
 		localized: 'グローバル利用者名変更者',
 		link: 'https://meta.wikimedia.org/wiki/Global_renamers/ja',
-		domain: 'meta'
+		domain: 'meta',
 	}],
 	['wmf-officeit', {
 		label: 'WMF OIT',
 		enabled: true,
 		localized: 'WMFオフィスIT',
 		link: 'https://meta.wikimedia.org/wiki/Meta:WMF_Office_IT/ja',
-		domain: 'meta'
+		domain: 'meta',
 	}],
 	['wmf-supportsafety', {
 		label: 'WMF T&S',
 		enabled: true,
 		localized: 'WMF信頼と安全班',
 		link: 'https://meta.wikimedia.org/wiki/Meta:WMF_Trust_and_Safety/ja',
-		domain: 'meta'
-	}]
+		domain: 'meta',
+	}],
 ]);
 /**
  * @type {import('ts-essentials').DeepReadonly<DefaultConfigSchema>}
@@ -1259,15 +1259,15 @@ MarkAdminsConfig.defaults = {
 	conds: {
 		namespaces: [
 			/* Special */ -1, /* (Main) */ 0, /* User */ 2, /* User_talk */ 3, /* Project */ 4,
-			/* File */ 6, /* Help */ 12, /* Portal */ 100, /* プロジェクト */ 102
+			/* File */ 6, /* Help */ 12, /* Portal */ 100, /* プロジェクト */ 102,
 		].join('|'),
 		talk: true,
 		history: true,
 		diff: true,
 		subpages: false,
 		self: true,
-		contribs: true
-	}
+		contribs: true,
+	},
 };
 
 /**
@@ -1283,20 +1283,20 @@ MarkAdminsConfig.defaults = {
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function setProp(obj, ...keys) {
-	if ( Object( obj ) !== obj || arguments.length < 2 ) {
+	if (Object(obj) !== obj || arguments.length < 2) {
 		return;
 	}
 	var prop = obj;
-	for ( var i = 1; i < arguments.length - 2; i++ ) {
-		if ( prop[ arguments[ i ] ] === undefined ) {
-			prop[ arguments[ i ] ] = {};
+	for (var i = 1; i < arguments.length - 2; i++) {
+		if (prop[arguments[i]] === undefined) {
+			prop[arguments[i]] = {};
 		}
-		if ( Object( prop[ arguments[ i ] ] ) !== prop[ arguments[ i ] ] ) {
+		if (Object(prop[arguments[i]]) !== prop[arguments[i]]) {
 			return;
 		}
-		prop = prop[ arguments[ i ] ];
+		prop = prop[arguments[i]];
 	}
-	prop[ arguments[ arguments.length - 2 ] ] = arguments[ arguments.length - 1 ];
+	prop[arguments[arguments.length - 2]] = arguments[arguments.length - 1];
 }
 
 function PendingButtonWidgetFactory() {
@@ -1316,7 +1316,6 @@ function PendingButtonWidgetFactory() {
 					.removeClass(classPending);
 			return this;
 		}
-
 	};
 }
 
