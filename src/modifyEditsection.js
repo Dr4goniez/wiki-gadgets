@@ -12,7 +12,7 @@
  * @author Dragoniez ([[ja:User:Dragoniez]])
  * - Rewritten completely in Feb 2026; added AJAX watchlist and purge updates
  *
- * @version 2.0.5
+ * @version 2.0.6
  */
 // @ts-check
 /* global mw, OO */
@@ -20,7 +20,7 @@
 (() => {
 // *******************************************************************************************
 
-const VERSION = '2.0.5';
+const VERSION = '2.0.6';
 
 class ModifyEditSection {
 
@@ -68,7 +68,7 @@ class ModifyEditSection {
 			'confirmable-yes',
 			'confirmable-no',
 		];
-		const missing = new Set(required.filter(msg => !mw.message(msg).exists()));
+		const missing = new Set(required.filter((msg) => !mw.message(msg).exists()));
 		if (!missing.size) {
 			return;
 		}
@@ -146,14 +146,14 @@ class ModifyEditSection {
 		this.api = new mw.Api({
 			ajax: {
 				headers: {
-					'Api-User-Agent': `modifyEditsection/${VERSION} (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-modifyEditsection.js)`
-				}
+					'Api-User-Agent': `modifyEditsection/${VERSION} (https://ja.wikipedia.org/wiki/MediaWiki:Gadget-modifyEditsection.js)`,
+				},
 			},
 			parameters: {
 				action: 'query',
 				format: 'json',
-				formatversion: '2'
-			}
+				formatversion: '2',
+			},
 		});
 		/**
 		 * Object keyed by link titles and valued by watchlist expiry dropdowns
@@ -298,11 +298,11 @@ class ModifyEditSection {
 		// Get the user's API limit
 		const groupsWithApiHighLimits = new Set([
 			'sysop', 'bot', 'apihighlimits-requestor', 'global-bot',
-			'staff', 'steward', 'sysadmin', 'wmf-researcher'
+			'staff', 'steward', 'sysadmin', 'wmf-researcher',
 		]);
-		// @ts-expect-error
+		// @ts-expect-error wgGlobalGroups is not recognized
 		const groups = (mw.config.get('wgUserGroups') || []).concat(mw.config.get('wgGlobalGroups') || []);
-		const apiLimit = groups.some(g => groupsWithApiHighLimits.has(g)) ? 500 : 50;
+		const apiLimit = groups.some((g) => groupsWithApiHighLimits.has(g)) ? 500 : 50;
 
 		// Unflatten the titles array respecting the API limit
 		const titleBatch = [...this.expanded.keys()].reduce((acc, title) => {
@@ -323,9 +323,9 @@ class ModifyEditSection {
 				options = {
 					ajax: {
 						headers: {
-							'Promise-Non-Write-API-Action': 1
-						}
-					}
+							'Promise-Non-Write-API-Action': 1,
+						},
+					},
 				};
 			} else {
 				request = this.api.get.bind(this.api);
@@ -379,7 +379,7 @@ class ModifyEditSection {
 	async handleWatchLinkClick(unwatch, obj, title, expiryObj) {
 		let [$msg] = await Promise.all([
 			this.watchPage(unwatch, title, expiryObj && expiryObj.data),
-			mw.loader.using(['oojs-ui', 'mediawiki.jqueryMsg'])
+			mw.loader.using(['oojs-ui', 'mediawiki.jqueryMsg']),
 		]);
 
 		if ($msg) {
@@ -520,8 +520,8 @@ class ModifyEditSection {
 
 		return new OO.ui.DropdownWidget({
 			menu: {
-				items: expiryOptions.map(cfg => new OO.ui.MenuOptionWidget(cfg))
-			}
+				items: expiryOptions.map((cfg) => new OO.ui.MenuOptionWidget(cfg)),
+			},
 		});
 	}
 
@@ -578,10 +578,10 @@ class ModifyEditSection {
 				new OO.ui.MessageWidget({
 					label: $('<a>').text(title).prop({
 						href: mw.util.getUrl(title),
-						target: '_blank'
+						target: '_blank',
 					}),
-					type: 'notice'
-				}).$element.css({ 'margin': '0.5em 0' }),
+					type: 'notice',
+				}).$element.css({ margin: '0.5em 0' }),
 				mw.msg('confirm-purge-top')
 			),
 			{
@@ -589,16 +589,16 @@ class ModifyEditSection {
 					{
 						action: 'accept',
 						label: mw.msg('confirmable-yes'),
-						flags: ['primary', 'progressive']
+						flags: ['primary', 'progressive'],
 					},
 					{
 						action: 'reject',
 						label: mw.msg('confirmable-no'),
-						flags: 'safe'
-					}
+						flags: 'safe',
+					},
 				],
 				size: 'medium',
-				title: mw.msg('purge')
+				title: mw.msg('purge'),
 			}
 		);
 		if (!confirmed) {
@@ -630,7 +630,6 @@ class ModifyEditSection {
 		}
 		location.reload();
 	}
-
 }
 /**
  * @type {OO.ui.MenuOptionWidget.ConfigOptions[]|false|null}
@@ -674,7 +673,6 @@ class WrappedLink {
 		spinner.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
 		return $(spinner);
 	}
-
 }
 
 /**
