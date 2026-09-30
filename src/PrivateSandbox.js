@@ -1,29 +1,27 @@
-/**************************************************************************************************\
-
-	PrivateSandbox
-
-	Create a private sandbox, accessible at [[Special:PrivateSandbox]]. Unlike other authors'
-	versions, this version:
-	- comes with WikiEditor
-	- handles multiple profiles
-	- can save large texts, of the byte size of more than 65,530
-
-	Note that this script (including all other versions) exports the saved data on every page
-	load, which can adversely affect the user's browser	experience. The "Wikitext" extension of
-	Visual Studio Code may be a	good alternative.
-	@link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
-
-	@author [[User:Dragoniez]]
-	@version 1.2.5
-
-\**************************************************************************************************/
+/**
+ * PrivateSandbox
+ *
+ * Create a private sandbox, accessible at [[Special:PrivateSandbox]]. Unlike other authors'
+ * versions, this version:
+ * - comes with WikiEditor
+ * - handles multiple profiles
+ * - can save large texts, of the byte size of more than 65,530
+ *
+ * Note that this script (including all other versions) exports the saved data on every page
+ * load, which can adversely affect the user's browser experience. The "Wikitext" extension of
+ * Visual Studio Code may be a good alternative.
+ * @link https://marketplace.visualstudio.com/items?itemName=RoweWilsonFrederiskHolme.wikitext
+ *
+ * @author [[User:Dragoniez]]
+ * @version 1.2.6
+ */
 // @ts-check
 /* global mw, OO */
-//<nowiki>
+// <nowiki>
 (() => {
-//*************************************************************************************************
+// *************************************************************************************************
 
-const version = '1.2.5';
+const version = '1.2.6';
 
 // Initialize configs
 /** @type {PrivateSandboxConfig} */
@@ -32,7 +30,7 @@ const cfg = Object.assign({
 	lang: '',
 	expandPreview: false,
 	showDeleter: false,
-	generatePortletLink: false
+	generatePortletLink: false,
 }, window.privateSandboxConfig);
 
 // Exit on certain conditions
@@ -251,7 +249,6 @@ class ScreenOverlay {
 			return this.$text.text();
 		}
 	}
-
 }
 
 /**
@@ -311,7 +308,7 @@ const i18n = {
 		'message-preview-failed': 'Failed to fetch preview.',
 		'title-preview-expand': 'Expand the preview tab',
 		'title-preview-collapse': 'Collapse the preview tab',
-		'title-preview-disabled': 'Create a profile to use the preview tab.'
+		'title-preview-disabled': 'Create a profile to use the preview tab.',
 	},
 	ja: {
 		'message-load-interface': 'インターフェースを読み込み中...',
@@ -366,7 +363,7 @@ const i18n = {
 		'message-preview-failed': 'プレビューの取得に失敗しました。',
 		'title-preview-expand': 'プレビュータブを展開',
 		'title-preview-collapse': 'プレビュータブを格納',
-		'title-preview-disabled': 'プレビュータブを使用するにはプロファイルを作成してください。'
+		'title-preview-disabled': 'プレビュータブを使用するにはプロファイルを作成してください。',
 	},
 	/**
 	 * @author [[User:Nvdtn19]]
@@ -425,8 +422,8 @@ const i18n = {
 		'message-preview-failed': 'Không thể tải bản xem trước.',
 		'title-preview-expand': 'Mở rộng tab xem trước',
 		'title-preview-collapse': 'Thu gọn tab xem trước',
-		'title-preview-disabled': 'Tạo hồ sơ để sử dụng tab xem trước.'
-	}
+		'title-preview-disabled': 'Tạo hồ sơ để sử dụng tab xem trước.',
+	},
 };
 /**
  * @type {PrivateSandboxMessage}
@@ -470,9 +467,9 @@ class PrivateSandbox {
 				'oojs-ui.styles.icons-interactions',
 				'oojs-ui.styles.icons-moderation',
 				'oojs-ui.styles.icons-editing-core',
-				'oojs-ui.styles.icons-editing-list'
+				'oojs-ui.styles.icons-editing-list',
 			],
-			ed: /** @type {string[]} */ ([])
+			ed: /** @type {string[]} */ ([]),
 		};
 		const defModules = mw.loader.using(dependencies.main);
 
@@ -482,7 +479,7 @@ class PrivateSandbox {
 		// Show a "now loading" overlay
 		const sco = new ScreenOverlay({
 			text: getMessage('message-load-interface'),
-			autoStart: true
+			autoStart: true,
 		});
 
 		// Load wikiEditor-related modules in the background
@@ -500,7 +497,7 @@ class PrivateSandbox {
 				'ext.TemplateWizard',
 				'ext.cite.wikiEditor',
 				'ext.CodeMirror.WikiEditor',
-				'ext.CodeMirror.mode.mediawiki'
+				'ext.CodeMirror.mode.mediawiki',
 			];
 			for (let i = 0; i < modules.length; i++) {
 				const mod = modules[i];
@@ -565,7 +562,7 @@ class PrivateSandbox {
 				// Cast the old profile to profile 1 and reset the option
 				const options = {
 					[key]: null,
-					'userjs-pvtsand-1-0': content
+					'userjs-pvtsand-1-0': content,
 				};
 				return PrivateSandbox.saveOptions(options).then(() => {
 					mw.user.options.set(options);
@@ -583,7 +580,7 @@ class PrivateSandbox {
 		const ps = new PrivateSandbox(mwString, cmReq, processed, sco, $content);
 		ps.welcomeOnFirstVisit();
 		if (cfg.debug) {
-			// @ts-expect-error
+			// @ts-expect-error For debugging
 			mw.libs.PrivateSandbox = ps;
 		}
 	}
@@ -694,12 +691,12 @@ class PrivateSandbox {
 		const sep = '\u001F';
 		return new mw.Api({
 			ajax: {
-				timeout: 60*1000 // 60 seconds, overwriting the default value of 30 seconds
-			}
+				timeout: 60 * 1000, // 60 seconds, overwriting the default value of 30 seconds
+			},
 		}).postWithToken('csrf', {
 			action: 'options',
 			change: sep + data.join(sep),
-			formatversion: '2'
+			formatversion: '2',
 		}).then((res) => {
 			if (res) {
 				if (res.options !== 'success' || res.warning) {
@@ -777,7 +774,7 @@ class PrivateSandbox {
 
 		const prfFieldset = new OO.ui.FieldsetLayout({
 			label: getMessage('label-profiles'),
-			id: 'pvtsand-profiles-fieldset'
+			id: 'pvtsand-profiles-fieldset',
 		});
 
 		/**
@@ -787,8 +784,8 @@ class PrivateSandbox {
 		this.prfDropdown = new OO.ui.DropdownWidget({
 			id: 'pvtsand-profiles-selector',
 			menu: {
-				items: dropdownOptions
-			}
+				items: dropdownOptions,
+			},
 		});
 
 		/**
@@ -813,20 +810,20 @@ class PrivateSandbox {
 				this.prfInput.setTitle(title);
 				$('#pvtsand-profiles-input-warning').toggleClass('pvtsand-warning', needWarning);
 				return title === '';
-			}
+			},
 		});
 
 		prfFieldset.addItems([
 			new OO.ui.FieldLayout(this.prfDropdown, {
 				label: getMessage('label-profiles-select'),
-				align: 'top'
+				align: 'top',
 			}),
 			new OO.ui.FieldLayout(this.prfInput, {
 				label: getMessage('label-profiles-edit'),
 				align: 'top',
 				help: new OO.ui.HtmlSnippet(`<span id="pvtsand-profiles-input-warning">${getMessage('label-profiles-edit-help')}</span>`),
-				helpInline: true
-			})
+				helpInline: true,
+			}),
 		]);
 
 		/**
@@ -836,7 +833,7 @@ class PrivateSandbox {
 		this.btnCreate = new OO.ui.ButtonWidget({
 			label: getMessage('label-profiles-button-create'),
 			flags: 'progressive',
-			icon: 'add'
+			icon: 'add',
 		}).off('click').on('click', () => {
 			this.modifyProfile('create');
 		});
@@ -847,7 +844,7 @@ class PrivateSandbox {
 		 */
 		this.btnRename = new OO.ui.ButtonWidget({
 			label: getMessage('label-profiles-button-rename'),
-			icon: 'edit'
+			icon: 'edit',
 		}).off('click').on('click', () => {
 			this.modifyProfile('rename');
 		});
@@ -859,7 +856,7 @@ class PrivateSandbox {
 		this.btnDelete = new OO.ui.ButtonWidget({
 			label: getMessage('label-profiles-button-delete'),
 			flags: 'destructive',
-			icon: 'trash'
+			icon: 'trash',
 		}).off('click').on('click', () => {
 			this.modifyProfile('delete');
 		});
@@ -886,7 +883,7 @@ class PrivateSandbox {
 			label: getMessage('label-profiles-save'),
 			title: getMessage('title-profiles-save'),
 			flags: ['progressive', 'primary'],
-			icon: 'check'
+			icon: 'check',
 		}).off('click').on('click', () => {
 			this.saveProfiles(this.getSelectedProfile(true));
 		});
@@ -899,7 +896,7 @@ class PrivateSandbox {
 			label: getMessage('label-profiles-saveall'),
 			title: getMessage('title-profiles-saveall'),
 			flags: 'progressive',
-			icon: 'checkAll'
+			icon: 'checkAll',
 		}).off('click').on('click', () => {
 			this.saveProfiles();
 		});
@@ -911,14 +908,14 @@ class PrivateSandbox {
 		this.btnListUnsaved = new OO.ui.ButtonWidget({
 			label: getMessage('label-profiles-listunsaved'),
 			title: getMessage('title-profiles-listunsaved'),
-			icon: 'listBullet'
+			icon: 'listBullet',
 		}).off('click').on('click', () => {
 			// When clicked, show a list of unsaved profiles on a dialog
 			OO.ui.alert(
 				$('<ul>')
 					.css({
 						'word-break': 'break-all',
-						'overflow-wrap': 'break-word'
+						'overflow-wrap': 'break-word',
 					})
 					.append(
 						$.map(this.getUnsavedProfiles(), (prof) => {
@@ -931,7 +928,7 @@ class PrivateSandbox {
 					),
 				{
 					title: getMessage('title-dialog-listunsaved'),
-					size: 'medium'
+					size: 'medium',
 				}
 			);
 		});
@@ -944,7 +941,7 @@ class PrivateSandbox {
 			label: getMessage('label-deletedata'),
 			title: getMessage('title-deletedata'),
 			icon: 'trash',
-			flags: ['destructive', 'primary']
+			flags: ['destructive', 'primary'],
 		}).off('click').on('click', () => {
 			this.deleteData();
 		});
@@ -976,8 +973,8 @@ class PrivateSandbox {
 					'Api-User-Agent': `PrivateSandbox/${version} (https://meta.wikimedia.org/wiki/User:Dragoniez/PrivateSandbox.js)`,
 					/** @see https://www.mediawiki.org/wiki/API:Etiquette#Other_notes */
 					'Promise-Non-Write-API-Action': '1',
-				}
-			}
+				},
+			},
 		});
 
 		/**
@@ -994,7 +991,7 @@ class PrivateSandbox {
 			framed: false,
 			label: getMessage('label-preview'),
 			title: getMessage(cfg.expandPreview ? 'title-preview-collapse' : 'title-preview-expand'),
-			icon: 'article'
+			icon: 'article',
 		}).off('click').on('click', () => {
 			const show = !this.$previewContent.is(':visible');
 			this.$previewContent.toggle(show);
@@ -1029,7 +1026,7 @@ class PrivateSandbox {
 								),
 							new OO.ui.LabelWidget({
 								label: getMessage('label-profiles-save-help'),
-								classes: ['oo-ui-inline-help']
+								classes: ['oo-ui-inline-help'],
 							}).$element
 						),
 					$('<div>')
@@ -1039,7 +1036,7 @@ class PrivateSandbox {
 							$editorOverlay
 								.prop({
 									id: 'pvtsand-editor-overlay',
-									title: getMessage('title-editor-disabled')
+									title: getMessage('title-editor-disabled'),
 								})
 								.addClass('pvtsand-overlay'),
 							this.$editor
@@ -1047,7 +1044,7 @@ class PrivateSandbox {
 									id: 'wpTextbox1',
 									class: 'pvtsand-editor',
 									cols: 80,
-									rows: 20
+									rows: 20,
 								})
 						),
 					$('<div>')
@@ -1065,7 +1062,7 @@ class PrivateSandbox {
 							$previewOverlay
 								.prop({
 									id: 'pvtsand-preview-overlay',
-									title: getMessage('title-preview-disabled')
+									title: getMessage('title-preview-disabled'),
 								})
 								.addClass('pvtsand-overlay'),
 							$('<div>')
@@ -1075,7 +1072,7 @@ class PrivateSandbox {
 									this.$previewLoader
 										.prop({
 											id: 'pvtsand-preview-loading',
-											src: 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif'
+											src: 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Ajax_loader_metal_512.gif',
 										})
 										.hide()
 								),
@@ -1090,7 +1087,7 @@ class PrivateSandbox {
 		);
 
 		// Set up wikiEditor
-		// @ts-expect-error
+		// @ts-expect-error Type definitions unavailable
 		const addWikiEditor = mw.addWikiEditor;
 		let codeMirrorLoaded = false;
 		if (typeof addWikiEditor === 'function') {
@@ -1098,7 +1095,7 @@ class PrivateSandbox {
 
 			// Load realtimepreview if available. The extension internally defines a "context" variable, and
 			// the loading must be deferred until wikiEditor is initialized.
-			const rtp ='ext.wikiEditor.realtimepreview';
+			const rtp = 'ext.wikiEditor.realtimepreview';
 			if (PrivateSandbox.isModuleAvailable(rtp)) {
 				mw.user.options.set('wikieditor-realtimepreview', 0); // Turn it off by default
 				mw.loader.using(rtp);
@@ -1139,7 +1136,7 @@ class PrivateSandbox {
 			this.prfInput.setValue(profileName || '');
 
 			// Set the profile content to the textarea
-			this.setEditorValue(profileName && this.getProfileContent(profileName) || '');
+			this.setEditorValue(profileName ? this.getProfileContent(profileName) : '');
 
 			// Toggle the visibility of the overlays based on whether there's a profile
 			$editorOverlay.toggle(!profileName);
@@ -1154,7 +1151,7 @@ class PrivateSandbox {
 					this.setDisabled({
 						create: true,
 						rename: true,
-						delete: true
+						delete: true,
 					});
 				} else { // Valid input value
 					if (this.getSelectedProfile()) { // There's some profiles
@@ -1165,13 +1162,13 @@ class PrivateSandbox {
 						this.setDisabled({
 							create: profileExists,
 							rename: profileExists,
-							delete: !profileExists
+							delete: !profileExists,
 						});
 					} else { // No profile has been created
 						this.setDisabled({
 							create: false,
 							rename: true,
-							delete: true
+							delete: true,
 						});
 					}
 				}
@@ -1219,7 +1216,7 @@ class PrivateSandbox {
 				this.setDisabled({
 					save: true,
 					saveall: unsaved.length === 0,
-					listunsaved: unsaved.length === 0
+					listunsaved: unsaved.length === 0,
 				});
 				return;
 			}
@@ -1230,7 +1227,7 @@ class PrivateSandbox {
 			this.setDisabled({
 				save: !unsaved.includes(prof),
 				saveall: !(unsaved.length >= 2 || unsaved.some((v) => v !== prof)),
-				listunsaved: unsaved.length === 0
+				listunsaved: unsaved.length === 0,
 			});
 
 		});
@@ -1296,7 +1293,7 @@ class PrivateSandbox {
 				this.sco.toggle(false, 800).then(() => {
 					OO.ui.alert(getMessage(this.processed ? 'message-load-updated' : 'message-load-welcome'), {
 						title: 'Welcome!',
-						size: 'medium'
+						size: 'medium',
 					});
 				});
 			});
@@ -1425,7 +1422,7 @@ class PrivateSandbox {
 			delete: this.btnDelete,
 			save: this.btnSave,
 			saveall: this.btnSaveAll,
-			listunsaved: this.btnListUnsaved
+			listunsaved: this.btnListUnsaved,
 		};
 		if (typeof nameOrObj === 'string') {
 			if (typeof disable !== 'boolean') {
@@ -1434,7 +1431,7 @@ class PrivateSandbox {
 			elementMap[nameOrObj].setDisabled(disable);
 		} else if (typeof nameOrObj === 'object' && !Array.isArray(nameOrObj) && nameOrObj !== null) {
 			for (const key in nameOrObj) {
-				// @ts-expect-error
+				// @ts-expect-error The objects aren't typed strongly enough
 				elementMap[key].setDisabled(nameOrObj[key]);
 			}
 		} else {
@@ -1499,7 +1496,7 @@ class PrivateSandbox {
 		const oldName = this.getSelectedProfile();
 		if (oldName) {
 			OO.ui.confirm(mw.format(getMessage('message-profiles-rename-confirm'), oldName, name), {
-				size: 'medium'
+				size: 'medium',
 			}).then((confirmed) => {
 				if (confirmed) {
 
@@ -1543,7 +1540,7 @@ class PrivateSandbox {
 	 */
 	deleteProfile(name) {
 		OO.ui.confirm(mw.format(getMessage('message-profiles-delete-confirm'), name), {
-			size: 'medium'
+			size: 'medium',
 		}).then((confirmed) => {
 			if (confirmed) {
 
@@ -1552,9 +1549,7 @@ class PrivateSandbox {
 
 				// Change interface contents
 				const menu = this.prfDropdown.getMenu();
-				/** @type {OO.ui.MenuOptionWidget[]} */
-				// @ts-expect-error
-				const options = menu.items;
+				const options = /** @type {OO.ui.MenuOptionWidget[]} */ (menu.getItems());
 				let err = true;
 				for (let i = 0; i < options.length; i++) {
 					if (options[i].getLabel() === name) {
@@ -1634,7 +1629,7 @@ class PrivateSandbox {
 	 */
 	deleteData() {
 		OO.ui.confirm(getMessage('message-deletedata-confirm'), {
-			size: 'medium'
+			size: 'medium',
 		}).then((confirmed) => {
 			if (confirmed) {
 
@@ -1744,7 +1739,7 @@ class PrivateSandbox {
 						),
 						{
 							size: 'large',
-							title: getMessage('title-conflict')
+							title: getMessage('title-conflict'),
 						}
 					).then((confirmed) => {
 						this.sco.$overlay.css('z-index', ''); // Reset to the default
@@ -1869,9 +1864,9 @@ class PrivateSandbox {
 			action: 'query',
 			meta: 'userinfo',
 			uiprop: 'options',
-			formatversion: '2'
+			formatversion: '2',
 		}).then(/** @param {ApiResponse} res */ (res) => {
-			return res && res.query && res.query.userinfo && res.query.userinfo.options || null;
+			return (res && res.query && res.query.userinfo && res.query.userinfo.options) || null;
 		}).catch((_, err) => {
 			console.warn(err);
 			return null;
@@ -1891,7 +1886,7 @@ class PrivateSandbox {
 		} else {
 			const ret = [];
 			let acc = text;
-			// eslint-disable-next-line no-constant-condition
+
 			while (true) {
 				const chunk = this.mwString.trimByteLength('', acc, maxBytes);
 				ret.push(chunk.newVal);
@@ -1927,7 +1922,7 @@ class PrivateSandbox {
 			disablelimitreport: true,
 			disableeditsection: true,
 			contentmodel: 'wikitext',
-			formatversion: '2'
+			formatversion: '2',
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const resParse = res && res.parse;
 			if (resParse) {
@@ -1942,7 +1937,7 @@ class PrivateSandbox {
 			} else {
 				return null;
 			}
-		}).catch(/** @param {Record<string, any>} err */ function(_, err) {
+		}).catch(/** @param {Record<string, any>} err */ function (_, err) {
 			if (err.exception === 'abort') {
 				return '';
 			} else {
@@ -1964,11 +1959,10 @@ class PrivateSandbox {
 			}
 		});
 	}
-
 }
 PrivateSandbox.availableModules = new Set(mw.loader.getModuleNames());
 
-//*************************************************************************************************
+// *************************************************************************************************
 
 /**
  * @typedef {import('./window/PrivateSandbox.d.ts').PrivateSandboxConfig} PrivateSandboxConfig
@@ -1981,6 +1975,6 @@ PrivateSandbox.availableModules = new Set(mw.loader.getModuleNames());
 
 PrivateSandbox.init();
 
-//*************************************************************************************************
+// *************************************************************************************************
 })();
-//</nowiki>
+// </nowiki>
