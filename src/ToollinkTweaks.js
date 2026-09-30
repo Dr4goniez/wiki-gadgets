@@ -1,15 +1,14 @@
-/******************************************************************************************************************\
-	ToollinkTweaks
-	Extend toollinks attached to user links to the script user's liking.
-	@version 1.3.8
-	@author [[User:Dragoniez]]
-\******************************************************************************************************************/
-
+/**
+ * ToollinkTweaks
+ *
+ * @author [[User:Dragoniez]]
+ * @version 1.3.9
+ */
 // @ts-check
 /* global mw, OO */
 /* eslint-disable @typescript-eslint/no-this-alias */
-//<nowiki>
-(function() {
+// <nowiki>
+(function () {
 // *****************************************************************************************************************
 
 // Across-the-board variables
@@ -44,7 +43,7 @@ var disabledSps = [
 	'Mytalk', // ---> User talk:XXX(/subpage)
 	'Myuploads', // ---> Special:Listfiles/USER || title=Special:Listfiles&user=USER
 	'NewSection', // ---> action=edit&section=new
-	'Uploads' // ---> Special:Listfiles
+	'Uploads', // ---> Special:Listfiles
 ];
 
 /**
@@ -73,7 +72,7 @@ var dbName = mw.config.get('wgDBname');
  */
 var userjs = {
 	local: 'userjs-toollinktweaks',
-	global: 'userjs-toollinktweaks-global'
+	global: 'userjs-toollinktweaks-global',
 };
 
 // *****************************************************************************************************************
@@ -104,7 +103,7 @@ function init() {
 		'oojs-ui.styles.icons-interactions',
 		'oojs-ui.styles.icons-moderation',
 		'oojs-ui.styles.icons-editing-list',
-		'jquery.ui' // For effects
+		'jquery.ui', // For effects
 	];
 	if (!onConfig) {
 		modules.splice(2);
@@ -113,13 +112,13 @@ function init() {
 	// Load dependencies
 	var deferreds = [
 		mw.loader.using(modules),
-		$.ready
+		$.ready,
 	];
 	if (onConfig) {
 		deferreds.unshift(getCanonicalSpecialPageList());
 		$(loadConfigInterface); // Show a 'Loading the interface' message as soon as the DOM gets ready
 	}
-	$.when.apply($, deferreds).then(function() { // When all the modules are loaded and the DOM is ready
+	$.when.apply($, deferreds).then(function () { // When all the modules are loaded and the DOM is ready
 
 		// Get canonical special page name, retrieve the user config, and set up CSS styles
 		spName = getCanonicalSpecialPageName();
@@ -131,7 +130,7 @@ function init() {
 			// Create interface when we're on the config page
 			spList = arguments[0];
 			if (!spList) {
-				mw.notify('Failed to fetch canonical special page names.', {type: 'error'});
+				mw.notify('Failed to fetch canonical special page names.', { type: 'error' });
 			}
 			createConfigInterface(cfg);
 
@@ -147,7 +146,7 @@ function init() {
 			);
 
 			// Filter out toollink builder config
-			var builderCfg = cfg.reduce(/** @param {TTBuilderConfig[]} acc */ function(acc, obj) {
+			var builderCfg = cfg.reduce(/** @param {TTBuilderConfig[]} acc */ function (acc, obj) {
 				if (!(isSpOptedOut(spName, obj.spInclude, obj.spExclude) ||
 					obj.optedOut.indexOf(dbName) !== -1 ||
 					!obj.enabled)
@@ -156,7 +155,7 @@ function init() {
 						label: obj.label,
 						url: obj.url,
 						target: obj.target.slice(),
-						tab: obj.tab
+						tab: obj.tab,
 					});
 				}
 				return acc;
@@ -169,9 +168,9 @@ function init() {
 			// Add toollinks when hook is triggered
 			/** @type {ReturnType<typeof setTimeout>} */
 			var hookTimeout;
-			mw.hook('wikipage.content').add(function() {
+			mw.hook('wikipage.content').add(function () {
 				clearTimeout(hookTimeout); // Prevent `addLinks` from being called multiple times (hook can be fired several times in an instant)
-				hookTimeout = setTimeout(function() {
+				hookTimeout = setTimeout(function () {
 					addLinks(builderCfg);
 				}, 100);
 			});
@@ -191,23 +190,23 @@ function getCanonicalSpecialPageList() {
 		action: 'query',
 		meta: 'siteinfo',
 		siprop: 'specialpagealiases',
-		formatversion: '2'
-	}).then(function(res) {
+		formatversion: '2',
+	}).then(function (res) {
 		var resSpa;
 		if (!res || !res.query || !Array.isArray((resSpa = res.query.specialpagealiases))) {
 			return null;
 		}
-		return resSpa.reduce(/** @param {string[]} acc */ function(acc, obj) {
+		return resSpa.reduce(/** @param {string[]} acc */ function (acc, obj) {
 			var canonical = obj.realname;
 			if (canonical && disabledSps.indexOf(canonical) === -1) {
 				acc.push(canonical);
 			}
 			return acc;
 		}, [
-			'Preview'
+			'Preview',
 		])
 		.sort();
-	}).catch(function(_code, err) {
+	}).catch(function (_code, err) {
 		console.warn(err);
 		return null;
 	});
@@ -241,7 +240,7 @@ function loadConfigInterface() {
 
 	return {
 		header: header,
-		body: body
+		body: body,
 	};
 
 }
@@ -354,15 +353,13 @@ function mergeConfig() {
 	var /** @type {TTConfig[]} */ cfg;
 	try {
 		cfgGlobal = JSON.parse(strCfgGlobal);
-	}
-	catch (err) {
+	} catch (err) {
 		console.error(err);
 		cfgGlobal = [];
 	}
 	try {
 		cfg = JSON.parse(strCfg);
-	}
-	catch (err) {
+	} catch (err) {
 		console.error(err);
 		cfg = [];
 	}
@@ -442,7 +439,7 @@ function createStyleTag() {
 		'}' +
 		'.tt-config-buttongroup:not(:last-child) {' + // Bottom margin for each button div
 			'margin-bottom: 0.8em;' +
-		'}'	+
+		'}' +
 		'#tt-config-list.tt-config-list-reordering {' + // Set border on list when getting reordered (inner fieldset is hidden)
 			'padding: 1em 1em 0.5em 1em;' +
 			'margin-bottom: 1em;' +
@@ -467,11 +464,11 @@ function createStyleTag() {
 			'display: none;' +
 		'}' +
 		'#tt-config .oo-ui-selectWidget:not(.oo-ui-element-hidden) {' + // Prevent SelectWidget options from propagating all over
-			'max-height: 22em;' +										// the viewport by restricting the field's height
+			'max-height: 22em;' + // the viewport by restricting the field's height
 		'}' +
 		'.tt-config-localexception {' + // "Lower the level" of local exception checkboxes
 			'margin-left: 2em;' +
-		'}'	+
+		'}' +
 		// Toollinks
 		'.tt-toollink-bare::before {' + // For toollink wrapper spans that are not enclosed by a parent span
 			'content: " | ";' +
@@ -490,7 +487,7 @@ function createConfigInterface(cfg) {
 	var header = elements.header;
 	var body = elements.body;
 	if (!header || !body) {
-		mw.notify('Failed to load the config interface.', {type: 'error', autoHide: false});
+		mw.notify('Failed to load the config interface.', { type: 'error', autoHide: false });
 		return;
 	}
 	mw.util.$content.css('font-size', '90%');
@@ -519,16 +516,16 @@ function createConfigInterface(cfg) {
 	var $scrollButtons = $('<div>').prop('id', 'tt-config-scrollbuttons');
 	var $upButton = $('<img>').prop('id', 'tt-config-scrollup').addClass('tt-config-scrollbutton')
 		.attr('src', 'https://upload.wikimedia.org/wikipedia/commons/1/10/OOjs_UI_icon_collapse.svg')
-		.off('click').on('click', function() {
+		.off('click').on('click', function () {
 			setOverlay(true);
-			window.scrollTo({top: 0});
+			window.scrollTo({ top: 0 });
 			setOverlay(false);
 		});
 	var $downButton = $('<img>').prop('id', 'tt-config-scrolldown').addClass('tt-config-scrollbutton')
 		.attr('src', 'https://upload.wikimedia.org/wikipedia/commons/9/90/OOjs_UI_icon_expand.svg')
-		.off('click').on('click', function() {
+		.off('click').on('click', function () {
 			setOverlay(true);
-			window.scrollTo({top: document.body.scrollHeight});
+			window.scrollTo({ top: document.body.scrollHeight });
 			setOverlay(false);
 		});
 	$scrollButtons.append($upButton, $downButton);
@@ -538,18 +535,18 @@ function createConfigInterface(cfg) {
 	var addButton = new OO.ui.ButtonWidget({
 		label: 'Add toollink',
 		id: 'tt-config-add',
-		icon: 'add'
+		icon: 'add',
 	});
 	var reorderButton = new OO.ui.ButtonWidget({
 		label: 'Reorder toollinks',
 		id: 'tt-config-reorder',
-		icon: 'listNumbered'
+		icon: 'listNumbered',
 	});
-	addButton.$element.off('click').on('click', function(_e) {
-		var options = ttFields.length ? {scroll: true}: {animate: true};
+	addButton.$element.off('click').on('click', function (_e) {
+		var options = ttFields.length ? { scroll: true } : { animate: true };
 		new ToollinkField($dummyLi, reorderButton, options);
 	});
-	reorderButton.$element.off('click').on('click', function(_e) {
+	reorderButton.$element.off('click').on('click', function (_e) {
 		reorderToollinkFields(true);
 	});
 	$buttonGroup1.append(addButton.$element, reorderButton.$element);
@@ -558,9 +555,9 @@ function createConfigInterface(cfg) {
 	var reorderEndButton = new OO.ui.ButtonWidget({
 		label: 'End reordering',
 		id: 'tt-config-endreorder',
-		icon: 'logOut'
+		icon: 'logOut',
 	});
-	reorderEndButton.$element.off('click').on('click', function(_e) {
+	reorderEndButton.$element.off('click').on('click', function (_e) {
 		reorderToollinkFields(false);
 	});
 	$buttonGroup2.append(reorderEndButton.$element);
@@ -570,9 +567,9 @@ function createConfigInterface(cfg) {
 		label: 'Save toollinks',
 		id: 'tt-config-save',
 		icon: 'bookmarkOutline',
-		flags: ['primary', 'progressive']
+		flags: ['primary', 'progressive'],
 	});
-	saveButton.$element.off('click').on('click', function(_e) {
+	saveButton.$element.off('click').on('click', function (_e) {
 		saveConfig(saveButton);
 	});
 	$buttonGroup3.append(saveButton.$element);
@@ -581,8 +578,8 @@ function createConfigInterface(cfg) {
 	$container.append($ul, $buttons);
 
 	// Initialize toollink options, reflecting the user config
-	cfg.forEach(function(obj) {
-		new ToollinkField($dummyLi, reorderButton, {cfg: obj});
+	cfg.forEach(function (obj) {
+		new ToollinkField($dummyLi, reorderButton, { cfg: obj });
 	});
 
 }
@@ -593,7 +590,7 @@ function createConfigInterface(cfg) {
  */
 function makeDraggable($li) {
 	$li.on({
-		dragstart: function(e) { // When the listitem has started to be dragged
+		dragstart: function (e) { // When the listitem has started to be dragged
 			// Start dragging only on the reordering mode
 			if (this.querySelector('.tt-config-listitem-dragger.tt-config-list-reordering') && e.originalEvent && e.originalEvent.dataTransfer) {
 				e.originalEvent.dataTransfer.setData('text/plain', this.id); // Save the element's ID
@@ -601,14 +598,14 @@ function makeDraggable($li) {
 				e.preventDefault();
 			}
 		},
-		dragover: function(e) { // When the listitem is dragged over a valid drop target
+		dragover: function (e) { // When the listitem is dragged over a valid drop target
 			e.preventDefault();
 			this.style.borderTop = '2px solid blue'; // Highlight the drop point by border
 		},
-		dragleave: function(_e) { // When the listitem is dragged off a valid drop target
+		dragleave: function (_e) { // When the listitem is dragged off a valid drop target
 			this.style.borderTop = ''; // Reset border
 		},
-		drop: function(e) { // When the dragged listitem is dropped
+		drop: function (e) { // When the dragged listitem is dropped
 			e.preventDefault();
 			if (e.originalEvent && e.originalEvent.dataTransfer) {
 				var id = e.originalEvent.dataTransfer.getData('text/plain');
@@ -617,14 +614,16 @@ function makeDraggable($li) {
 					this.parentElement.insertBefore(dragged, this); // Insert the element before the drop target
 					/** @type {HTMLLIElement[]} */
 					var listitems = Array.prototype.slice.call(document.querySelectorAll('.tt-config-listitem:not(#tt-config-listitem-dummy)'));
-					var ids = listitems.map(function(el) { return el.id; });
-					ttFields.sort(function(field1, field2) {
+					var ids = listitems.map(function (el) {
+						return el.id;
+					});
+					ttFields.sort(function (field1, field2) {
 						return ids.indexOf(field1.getId()) - ids.indexOf(field2.getId());
 					});
 				}
 			}
 			this.style.borderTop = '';
-		}
+		},
 	});
 }
 
@@ -653,7 +652,7 @@ function ToollinkField($dummyLi, reorderButton, options) {
 		spExclude: [],
 		global: false,
 		optedOut: [],
-		enabled: true
+		enabled: true,
 	};
 	this.index /** @type {number} */ = ttFields.length;
 	this.reorderButton /** @type {OO.ui.ButtonWidget} */ = reorderButton;
@@ -672,18 +671,18 @@ function ToollinkField($dummyLi, reorderButton, options) {
 	// Create div for listitem reordering
 	/**
 	 * @type {{
-	 * 	icon: OO.ui.IconWidget;
-	 * 	label: OO.ui.LabelWidget;
+	 *   icon: OO.ui.IconWidget;
+	 *   label: OO.ui.LabelWidget;
 	 * }}
 	 */
 	this.dragger = {
 		icon: new OO.ui.IconWidget({
 			icon: 'draggable',
-			classes: ['tt-config-listitem-dragger-icon']
+			classes: ['tt-config-listitem-dragger-icon'],
 		}),
 		label: new OO.ui.LabelWidget({
-			classes: ['tt-config-listitem-dragger-label']
-		})
+			classes: ['tt-config-listitem-dragger-label'],
+		}),
 	};
 	var $wrapper = $('<div>').addClass('tt-config-listitem-dragger');
 	$wrapper.append(this.dragger.icon.$element, this.dragger.label.$element);
@@ -692,7 +691,7 @@ function ToollinkField($dummyLi, reorderButton, options) {
 	// Create toollink fieldset
 	this.fieldset /** @type {OO.ui.FieldsetLayout} */ = new OO.ui.FieldsetLayout({
 		label: 'Toollink',
-		classes: ['tt-config-listitem-field']
+		classes: ['tt-config-listitem-field'],
 	});
 	this.$li.append(this.fieldset.$element);
 
@@ -700,19 +699,19 @@ function ToollinkField($dummyLi, reorderButton, options) {
 	this.label /** @type {OO.ui.TextInputWidget} */ = new OO.ui.TextInputWidget({
 		placeholder: 'Label',
 		value: cfg.label,
-		required: true
+		required: true,
 	});
 	this.url /** @type {OO.ui.TextInputWidget} */ = new OO.ui.TextInputWidget({
 		placeholder: 'URL',
 		value: cfg.url,
-		required: true
+		required: true,
 	});
 	this.target /** @type {OO.ui.MenuTagMultiselectWidget} */ = new OO.ui.MenuTagMultiselectWidget({
 		inputPosition: 'inline',
 		options: [
-			{data: 'User'},
-			{data: 'IP'},
-			{data: 'CIDR'}
+			{ data: 'User' },
+			{ data: 'IP' },
+			{ data: 'CIDR' },
 		],
 		allowedValues: ['User', 'IP', 'CIDR'],
 		selected: cfg.target,
@@ -724,64 +723,66 @@ function ToollinkField($dummyLi, reorderButton, options) {
 			items: [
 				new OO.ui.MenuOptionWidget({
 					data: '_self',
-					label: 'The current tab'
+					label: 'The current tab',
 				}),
 				new OO.ui.MenuOptionWidget({
 					data: '_blank',
-					label: 'A new tab'
-				})
-			]
-		}
+					label: 'A new tab',
+				}),
+			],
+		},
 	});
 	this.tab.getMenu().selectItemByData(cfg.tab);
-	var spNameData = ['*'].concat(spList || []).map(function(name) {
-		return {data: name};
+	var spNameData = ['*'].concat(spList || []).map(function (name) {
+		return { data: name };
 	});
 	this.spInclude /** @type {OO.ui.MenuTagMultiselectWidget} */ = new OO.ui.MenuTagMultiselectWidget({
 		inputPosition: 'inline',
 		options: spNameData.slice(),
 		selected: cfg.spInclude,
-		placeholder: 'Add canonical special page names'
+		placeholder: 'Add canonical special page names',
 	});
 	this.spExclude /** @type {OO.ui.MenuTagMultiselectWidget} */ = new OO.ui.MenuTagMultiselectWidget({
 		inputPosition: 'inline',
 		options: spNameData.slice(),
 		selected: cfg.spExclude,
-		placeholder: 'Add canonical special page names'
+		placeholder: 'Add canonical special page names',
 	});
 	this.global /** @type {OO.ui.CheckboxInputWidget} */ = new OO.ui.CheckboxInputWidget({
-		selected: !!cfg.global
+		selected: !!cfg.global,
 	});
 	this.globalIndexes /** @type {IndexObject} */ = $.extend({}, cfg.global || {});
 	this.optedOutDBs /** @type {string[]} */ = cfg.optedOut;
 	this.localException /** @type {OO.ui.CheckboxInputWidget} */ = new OO.ui.CheckboxInputWidget({
 		classes: ['tt-config-localexception'],
-		selected: cfg.optedOut.indexOf(dbName) !== -1
+		selected: cfg.optedOut.indexOf(dbName) !== -1,
 	});
 	this.enabled /** @type {OO.ui.CheckboxInputWidget} */ = new OO.ui.CheckboxInputWidget({
-		selected: cfg.enabled
+		selected: cfg.enabled,
 	});
 	this.removeButton /** @type {OO.ui.ButtonWidget} */ = new OO.ui.ButtonWidget({
 		label: 'Remove toollink',
 		icon: 'trash',
-		flags: 'destructive'
+		flags: 'destructive',
 	});
-	this.removeButton.$element.off('click').on('click', function(_e) {
+	this.removeButton.$element.off('click').on('click', function (_e) {
 		_this.remove();
 	});
 
 	// Set field items
 	var spIncludeHelp = mw.config.get('wgServer') + mw.util.wikiScript('api') + '?action=query&meta=siteinfo&siprop=specialpagealiases&formatversion=2';
-	var otherDbs = cfg.optedOut.filter(function(project) { return project !== dbName; });
+	var otherDbs = cfg.optedOut.filter(function (project) {
+		return project !== dbName;
+	});
 	this.localExceptionWrapper /** @type {OO.ui.FieldLayout} */ = new OO.ui.FieldLayout(this.localException, {
 		label: 'Set a local exception and disable this toollink on this project',
 		align: 'inline',
-		help: 'Other opted-out projects: ' + (otherDbs.length ? otherDbs.join(', ') : 'none')
+		help: 'Other opted-out projects: ' + (otherDbs.length ? otherDbs.join(', ') : 'none'),
 	});
 	this.fieldset.addItems([
 		new OO.ui.FieldLayout(this.label, {
 			label: 'Label (required)',
-			align: 'top'
+			align: 'top',
 		}),
 		new OO.ui.FieldLayout(this.url, {
 			label: 'URL (required)',
@@ -794,64 +795,64 @@ function ToollinkField($dummyLi, reorderButton, options) {
 					'<li>$3: Script path (usually <code>/w/index.php</code>)</li>' +
 					'<li>$4: API path (usually <code>/w/api.php</code>)</li>' +
 				'</ul>'
-			)
+			),
 		}),
 		new OO.ui.FieldLayout(this.target, {
 			label: 'Target',
-			align: 'top'
+			align: 'top',
 		}),
 		new OO.ui.FieldLayout(this.tab, {
 			label: 'Open link on',
-			align: 'top'
+			align: 'top',
 		}),
 		new OO.ui.FieldLayout(this.spInclude, {
 			label: 'Run on special pages including',
 			align: 'top',
 			help: new OO.ui.HtmlSnippet('<code>*</code> signifies <code>all</code> (<a href="' + spIncludeHelp + '"target="_blank">find aliases</a>)'),
-			helpInline: true
+			helpInline: true,
 		}),
 		new OO.ui.FieldLayout(this.spExclude, {
 			label: 'Run on special pages excluding',
 			align: 'top',
 			help: 'Overrides the inclusion settings',
-			helpInline: true
+			helpInline: true,
 		}),
 		new OO.ui.FieldLayout(this.global, {
 			label: 'Make this toollink global',
-			align: 'inline'
+			align: 'inline',
 		}),
 		this.localExceptionWrapper,
 		new OO.ui.FieldLayout(this.enabled, {
 			label: 'Enable',
-			align: 'inline'
+			align: 'inline',
 		}),
 		new OO.ui.FieldLayout(this.removeButton, {
-			align: 'top'
-		})
+			align: 'top',
+		}),
 	]);
 
 	// Variable-dependent event listeners
-	this.global.$element.off('change').on('change', function(_e) {
+	this.global.$element.off('change').on('change', function (_e) {
 		_this.localExceptionWrapper.toggle(_this.global.isSelected());
 	});
 	this.global.$element.trigger('change');
-	this.localException.$element.off('change').on('change', function() {
+	this.localException.$element.off('change').on('change', function () {
 		// When the "local exception" checkbox is checked, disable all other elements in the field
 		var disable = _this.localException.isSelected();
 		if (disable) { // Ensure that the required fields are filled before disabling them
 			var /** @type {OO.ui.TextInputWidget} */ blankInput;
-			[_this.label, _this.url].forEach(function(widget) {
+			[_this.label, _this.url].forEach(function (widget) {
 				if (!widget.getValue() && widget.isRequired()) {
-					// @ts-ignore "Property 'onBlur' does not exist on type 'TextInputWidget'."
+					// @ts-expect-error "Property 'onBlur' does not exist on type 'TextInputWidget'."
 					widget.onBlur(); // Highlight the blank input
 					blankInput = blankInput || widget;
 				}
 			});
-			// @ts-ignore "Variable 'blankInput' is used before being assigned."
+			// @ts-expect-error "Variable 'blankInput' is used before being assigned."
 			if (blankInput) {
 				_this.localException.setSelected(false);
 				blankInput.focus();
-				mw.notify('Fill out the required field(s).', {type: 'error'});
+				mw.notify('Fill out the required field(s).', { type: 'error' });
 				return;
 			}
 		}
@@ -864,9 +865,9 @@ function ToollinkField($dummyLi, reorderButton, options) {
 			_this.spExclude,
 			_this.global,
 			_this.enabled,
-			_this.removeButton
+			_this.removeButton,
 		]
-		.forEach(function(widget) {
+		.forEach(function (widget) {
 			widget.setDisabled(disable);
 		});
 	});
@@ -875,16 +876,16 @@ function ToollinkField($dummyLi, reorderButton, options) {
 	// Append <li> to <ul>
 	if (options.scroll) {
 		$dummyLi.before(this.$li);
-		this.$li[0].scrollIntoView({behavior: 'smooth'}); // Scroll to the new field
+		this.$li[0].scrollIntoView({ behavior: 'smooth' }); // Scroll to the new field
 		toggleScrollButtons();
 	} else if (options.animate) {
 		this.$li.css('display', 'none'); // Temporarily hide the element to append
 		$dummyLi.before(this.$li);
 		this.$li.show({ // Gradually show the appended element
 			duration: 400,
-			complete: function() {
+			complete: function () {
 				toggleScrollButtons();
-			}
+			},
 		});
 	} else {
 		$dummyLi.before(this.$li);
@@ -900,7 +901,7 @@ function ToollinkField($dummyLi, reorderButton, options) {
  * Get the ID of the wrapper \<li> element.
  * @returns {string}
  */
-ToollinkField.prototype.getId = function() {
+ToollinkField.prototype.getId = function () {
 	return this.id;
 };
 
@@ -908,7 +909,7 @@ ToollinkField.prototype.getId = function() {
  * Get `globalIndexes`.
  * @returns {IndexObject}
  */
-ToollinkField.prototype.getGlobalIndexes = function() {
+ToollinkField.prototype.getGlobalIndexes = function () {
 	return this.globalIndexes;
 };
 
@@ -916,7 +917,7 @@ ToollinkField.prototype.getGlobalIndexes = function() {
  * Set a value to `globalIndexes`.
  * @param {IndexObject} globalIndexes
  */
-ToollinkField.prototype.setGlobalIndexes = function(globalIndexes) {
+ToollinkField.prototype.setGlobalIndexes = function (globalIndexes) {
 	this.globalIndexes = globalIndexes;
 };
 
@@ -924,7 +925,7 @@ ToollinkField.prototype.setGlobalIndexes = function(globalIndexes) {
  * Get the names of projects that have opted out for this toolink.
  * @returns {string[]} A deep copy of `optedOutDBs`.
  */
-ToollinkField.prototype.getOptedOutDBs = function() {
+ToollinkField.prototype.getOptedOutDBs = function () {
 	return this.optedOutDBs.slice();
 };
 
@@ -932,7 +933,7 @@ ToollinkField.prototype.getOptedOutDBs = function() {
  * Set a value to `optedOutDBs`.
  * @param {string[]} optedOutDBs
  */
-ToollinkField.prototype.setOptedOutDBs = function(optedOutDBs) {
+ToollinkField.prototype.setOptedOutDBs = function (optedOutDBs) {
 	this.optedOutDBs = optedOutDBs;
 };
 
@@ -940,7 +941,7 @@ ToollinkField.prototype.setOptedOutDBs = function(optedOutDBs) {
  * Get the field index (in the `ttFields` array).
  * @returns {number}
  */
-ToollinkField.prototype.getIndex = function() {
+ToollinkField.prototype.getIndex = function () {
 	return this.index;
 };
 
@@ -948,22 +949,22 @@ ToollinkField.prototype.getIndex = function() {
  * Set the field index (in the `ttFields` array).
  * @param {number} index
  */
-ToollinkField.prototype.setIndex = function(index) {
+ToollinkField.prototype.setIndex = function (index) {
 	this.index = index;
 };
 
 /**
  * Remove this toollink field from the DOM and `ttFields`.
  */
-ToollinkField.prototype.remove = function() {
+ToollinkField.prototype.remove = function () {
 	setOverlay(true); // The save button shouldn't function when we're removing the option
 	var _this = this;
-	this.$li.hide(400, function() { // Hide the option with animation, then remove it
+	this.$li.hide(400, function () { // Hide the option with animation, then remove it
 		this.remove();
 		toggleScrollButtons();
 		var idx = _this.getIndex();
 		var cnt = 0;
-		ttFields = ttFields.reduce(/** @param {ToollinkField[]} acc */ function(acc, field, i) {
+		ttFields = ttFields.reduce(/** @param {ToollinkField[]} acc */ function (acc, field, i) {
 			if (i !== idx) {
 				field.setIndex(cnt++);
 				acc.push(field);
@@ -986,7 +987,7 @@ function reorderToollinkFields(start) {
 		'.tt-config-listitem-dragger',
 		'#tt-config-buttongroup1',
 		'#tt-config-buttongroup2',
-		'#tt-config-buttongroup3'
+		'#tt-config-buttongroup3',
 	];
 	var $elements = $(selectors.join(', '));
 	var $fields = $('.tt-config-listitem-field');
@@ -995,7 +996,7 @@ function reorderToollinkFields(start) {
 	setOverlay(true);
 	if (start) {
 		var emptyFieldCnt = 0;
-		ttFields.forEach(function(field) {
+		ttFields.forEach(function (field) {
 			var /** @type {string|OO.ui.HtmlSnippet} */ inputVal = field.label.getValue() || field.url.getValue();
 			if (!inputVal) {
 				inputVal = new OO.ui.HtmlSnippet('<span style="color: red;">(Empty ' + (emptyFieldCnt++) + ')</span>');
@@ -1004,23 +1005,23 @@ function reorderToollinkFields(start) {
 		});
 		$fields.hide({
 			effect: 'highlight',
-			complete: function() {
+			complete: function () {
 				$elements.addClass(clss);
 				toggleScrollButtons();
 				setOverlay(false);
-			}
+			},
 		});
 		if (emptyFieldCnt) {
-			mw.notify('Fill out required fields for the best results.', {type: 'warn'});
+			mw.notify('Fill out required fields for the best results.', { type: 'warn' });
 		}
 	} else {
 		$elements.removeClass(clss);
 		$fields.show({
 			effect: 'highlight',
-			complete: function() {
+			complete: function () {
 				toggleScrollButtons();
 				setOverlay(false);
-			}
+			},
 		});
 	}
 
@@ -1038,17 +1039,17 @@ function saveConfig(saveButton) {
 	/** @type {{local: TTConfig[]; global: TTConfig[];}} */
 	var cfg = {
 		local: [],
-		global: []
+		global: [],
 	};
 
 	var /** @type {OO.ui.TextInputWidget} */ blankInput;
-	cfg = ttFields.reduce(function(acc, field) {
+	cfg = ttFields.reduce(function (acc, field) {
 
 		var widget;
 		if (blankInput) {
 			return acc;
 		} else if (!(widget = field.label).getValue() || !(widget = field.url).getValue()) {
-			// @ts-ignore "Property 'onBlur' does not exist on type 'TextInputWidget'."
+			// @ts-expect-error "Property 'onBlur' does not exist on type 'TextInputWidget'."
 			widget.onBlur(); // Highlight the blank input
 			blankInput = blankInput || widget;
 			return acc;
@@ -1077,10 +1078,9 @@ function saveConfig(saveButton) {
 		acc[madeGlobal ? 'global' : 'local'].push({
 			label: field.label.getValue(),
 			url: field.url.getValue(),
-			// @ts-ignore
-			target: field.target.getValue(),
-			// @ts-ignore "Type 'unknown' is not assignable to type '"_self" | "_blank"'."
-			tab: (function() {
+			target: /** @type {UserType[]} */ (field.target.getValue()),
+			// @ts-expect-error "Type 'unknown' is not assignable to type '"_self" | "_blank"'."
+			tab: (function () {
 				/**
 				 * `OO.ui.OptionWidget` when one item is selected, `OO.ui.OptionWidget[]` when multiple items are selected, and `null` when nothing is selected.
 				 * @type {OO.ui.OptionWidget|OO.ui.OptionWidget[]|null}
@@ -1088,22 +1088,20 @@ function saveConfig(saveButton) {
 				var selected = field.tab.getMenu() && field.tab.getMenu().findSelectedItem(); // This is never an array because we don't use multiselect
 				return selected instanceof OO.ui.OptionWidget ? selected.getData() : '_self';
 			})(),
-			// @ts-ignore
-			spInclude: field.spInclude.getValue(),
-			// @ts-ignore
-			spExclude: field.spExclude.getValue(),
+			spInclude: /** @type {string[]} */ (field.spInclude.getValue()),
+			spExclude: /** @type {string[]} */ (field.spExclude.getValue()),
 			global: !madeGlobal ? false : globalIndexes,
 			optedOut: optedOutDBs,
-			enabled: field.enabled.isSelected()
+			enabled: field.enabled.isSelected(),
 		});
 		return acc;
 
 	}, cfg);
 
 	// Stop if there's some blank field that's required to be filled out
-	// @ts-ignore "Variable 'blankInput' is used before being assigned."
+	// @ts-expect-error "Variable 'blankInput' is used before being assigned."
 	if (blankInput) {
-		mw.notify('Some required fields are not filled.', {type: 'error'});
+		mw.notify('Some required fields are not filled.', { type: 'error' });
 		blankInput.focus();
 		setOverlay(false);
 		return;
@@ -1119,42 +1117,42 @@ function saveConfig(saveButton) {
 	saveButton.setIcon(null).setLabel($label);
 
 	// Save config (separate API requests for local and global settings)
-	$.when.apply($, [saveLocalOptions(cfg.local), saveGlobalOptions(cfg.global)]).then(function(lErr, gErr) {
+	$.when.apply($, [saveLocalOptions(cfg.local), saveGlobalOptions(cfg.global)]).then(function (lErr, gErr) {
 
 		if (!lErr && !gErr) { // Success on both
 
 			saveButton.setIcon('bookmarkOutline').setLabel('Save toollinks');
 			setOverlay(false);
-			mw.notify('Successfully saved the toollinks.', {type: 'success'});
+			mw.notify('Successfully saved the toollinks.', { type: 'success' });
 
 		} else if (lErr && gErr) { // Failure on both
 
 			saveButton.setIcon('bookmarkOutline').setLabel('Save toollinks');
 			setOverlay(false);
-			mw.notify('Failed to save the toollinks (' + [lErr, gErr].join(', ') + ').', {type: 'error'});
+			mw.notify('Failed to save the toollinks (' + [lErr, gErr].join(', ') + ').', { type: 'error' });
 
 		} else { // Failure on one, config is messed up
 
 			var success = gErr ? 'local' : 'global';
 			var fail = gErr ? 'global' : 'local';
 			var errMsg = 'Successfully saved the ' + success + ' toollinks, but failed to save the ' + fail + ' ones. Retrying in 10 seconds...';
-			mw.notify(errMsg, {type: 'warn'});
+			mw.notify(errMsg, { type: 'warn' });
 			textNode.textContent = 'Please wait for a while...';
 
-			setTimeout(function() { // Make another try
+			setTimeout(function () { // Make another try
 				var retrying = 'Retrying...';
 				mw.notify(retrying);
 				textNode.textContent = retrying;
-				$.when.apply($, [lErr ? saveLocalOptions(cfg.local) : saveGlobalOptions(cfg.global)]).then(function(err) {
+				$.when.apply($, [lErr ? saveLocalOptions(cfg.local) : saveGlobalOptions(cfg.global)]).then(function (err) {
 					saveButton.setIcon('bookmarkOutline').setLabel('Save toollinks');
 					setOverlay(false);
 					if (!err) {
-						mw.notify('Successfully saved both types of the toollinks.', {type: 'success'});
+						mw.notify('Successfully saved both types of the toollinks.', { type: 'success' });
 					} else {
 						mw.notify(
 							'Failed to save the ' + fail + ' toollinks. It is recommended that you wait for a few minutes and try again before ' +
 							'making other changes in the settings or leaving this page.',
-							{type: 'error', autoHideSeconds: 'long'}
+							{ type: 'error', autoHideSeconds: 'long' }
 						);
 					}
 				});
@@ -1195,15 +1193,15 @@ function toggleScrollButtons() {
 function saveLocalOptions(cfg) {
 	var /** @type {string} */ oldCfgStr = mw.user.options.get(userjs.local) || '[]';
 	var cfgStr = JSON.stringify(cfg);
-	if (oldCfgStr === '[]' && !cfg.length || oldCfgStr === cfgStr) {
+	if ((oldCfgStr === '[]' && !cfg.length) || oldCfgStr === cfgStr) {
 		return $.Deferred().resolve(null);
 	} else {
 		return new mw.Api().saveOption(userjs.local, cfgStr)
-			.then(function() {
+			.then(function () {
 				mw.user.options.set(userjs.local, cfgStr);
 				return null;
 			})
-			.catch(function(code, err) {
+			.catch(function (code, err) {
 				console.warn(err);
 				return code;
 			});
@@ -1218,18 +1216,18 @@ function saveLocalOptions(cfg) {
 function saveGlobalOptions(cfg) {
 	var /** @type {string} */ oldCfgStr = mw.user.options.get(userjs.global) || '[]';
 	var cfgStr = JSON.stringify(cfg);
-	if (oldCfgStr === '[]' && !cfg.length || oldCfgStr === cfgStr) {
+	if ((oldCfgStr === '[]' && !cfg.length) || oldCfgStr === cfgStr) {
 		return $.Deferred().resolve(null);
 	} else {
 		return new mw.Api().postWithToken('csrf', {
 			action: 'globalpreferences',
 			optionname: userjs.global,
 			optionvalue: cfgStr,
-			formatversion:'2'
-		}).then(function() {
+			formatversion: '2',
+		}).then(function () {
 			mw.user.options.set(userjs.global, cfgStr);
 			return null;
-		}).catch(function(code, err) {
+		}).catch(function (code, err) {
 			console.warn(err);
 			return code;
 		});
@@ -1297,7 +1295,7 @@ function addLinks(cfg) {
 	// Iterate over user links
 	var onInvestigate = spName === 'Investigate';
 	var classes = ['.' + CLS_USERLINK, '.' + CLS_USERLINK_ANON, '.' + CLS_USERLINK_TEMP];
-	$(classes.join(', ')).each(function(_, userLink) {
+	$(classes.join(', ')).each(function (_, userLink) {
 
 		if (userLink.role === 'button') {
 			return;
@@ -1348,7 +1346,7 @@ function addLinks(cfg) {
 			$tools = $userLink.next('.' + CLS_USERTALKLINK_GROUPED).children('.' + CLS_TOOLLINKS).first();
 		} else {
 			$tools = $([]);
-			$userLink.nextAll().each(function() {
+			$userLink.nextAll().each(function () {
 				var $this = $(this);
 				if ($this.hasClass(CLS_USERLINK) || $this.hasClass(CLS_USERLINK_ANON) || $this.hasClass(CLS_USERLINK_TEMP)) {
 					// Stop traversal entirely if we find another userlink before finding a toollink
@@ -1406,7 +1404,7 @@ function extractCidr(text) {
 	var m;
 	if ((m = text.match(v4_regex)) ||
 		(m = text.match(v6_regex)) ||
-		(m = text.match(v6_regex2)) && /::/.test(m[0]) && !/::.*::/.test(m[0])
+		((m = text.match(v6_regex2)) && /::/.test(m[0]) && !/::.*::/.test(m[0]))
 	) {
 		return m[0];
 	} else {
@@ -1445,16 +1443,16 @@ function createLinks(cfg, username, targetElement, appendType) {
 	var rep = {
 		$2: mw.config.get('wgArticlePath').replace('$1', ''),
 		$3: mw.config.get('wgScript'),
-		$4: mw.util.wikiScript('api')
+		$4: mw.util.wikiScript('api'),
 	};
-	cfg.forEach(function(obj) {
+	cfg.forEach(function (obj) {
 
 		if (obj.target.indexOf(userType) === -1) {
 			return;
 		}
 
 		var a = document.createElement('a');
-		a.href = obj.url.replace(/\$[1234]/g, function(m) {
+		a.href = obj.url.replace(/\$[1234]/g, function (m) {
 			switch (m) {
 				case '$1':
 					return username;
@@ -1508,4 +1506,4 @@ init();
 
 // *****************************************************************************************************************
 })();
-//</nowiki>
+// </nowiki>
