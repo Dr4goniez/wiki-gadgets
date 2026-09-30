@@ -1,7 +1,7 @@
 /**
  * InvestigateHelper
  *
- * @version 1.2.5
+ * @version 1.2.6
  * @author [[User:Dragoniez]]
  */
 // @ts-check
@@ -10,7 +10,7 @@
 (() => {
 // *******************************************************************************************************
 
-const VERSION = '1.2.5';
+const VERSION = '1.2.6';
 
 /** @type {mw.Api} */
 let api;
@@ -68,7 +68,7 @@ class InvestigateHelper {
 				'oojs-ui.styles.icons-movement', // collapse, expand, sortVertical
 				'oojs-ui.styles.icons-moderation', // trash
 				'oojs-ui.styles.icons-editing-core', // edit
-				'mediawiki.widgets.UsersMultiselectWidget'
+				'mediawiki.widgets.UsersMultiselectWidget',
 			]),
 			Messages.loadMessagesIfMissing([
 				// For UserListItem
@@ -328,7 +328,7 @@ class InvestigateHelper {
 					all,
 					foreign,
 					startUnix,
-					endUnix
+					endUnix,
 				});
 			}
 		});
@@ -340,7 +340,7 @@ class InvestigateHelper {
 				ips: new Set([ip1, ip2]),
 				foreign: false,
 					startUnix: 1722384000,
-					endUnix: 1722384000
+					endUnix: 1722384000,
 				});
 			ips.set(ip1, {
 				ip: /** @type {InstanceType<IP>} */ (IP.newFromText(ip1)),
@@ -349,7 +349,7 @@ class InvestigateHelper {
 				all: 2,
 				foreign: false,
 				startUnix: 1722384000,
-				endUnix: 1722384000
+				endUnix: 1722384000,
 			});
 			ips.set(ip2, {
 				ip: /** @type {InstanceType<IP>} */ (IP.newFromText(ip2)),
@@ -358,7 +358,7 @@ class InvestigateHelper {
 				all: 4,
 				foreign: false,
 				startUnix: 1722384000,
-				endUnix: 1722384000
+				endUnix: 1722384000,
 			});
 		}
 		if (!users.size && !ips.size) {
@@ -369,7 +369,7 @@ class InvestigateHelper {
 		/** @type {CollectedUsernames} */
 		const ret = {
 			users: [],
-			ips: []
+			ips: [],
 		};
 		[...users.keys()].sort((a, b) => {
 			// "Push" temp users to the bottom of the list
@@ -391,7 +391,7 @@ class InvestigateHelper {
 				}),
 				foreign: userObj.foreign,
 				startUnix: userObj.startUnix,
-				endUnix: userObj.endUnix
+				endUnix: userObj.endUnix,
 			});
 		});
 		[...ips.keys()].sort().forEach((ipStr) => {
@@ -550,12 +550,12 @@ class InvestigateHelper {
 	static createTraverser($content, pager) {
 		const traverser = new OO.ui.ButtonWidget({
 			label: Messages.get('investigatehelper-traverser-button'),
-			flags: ['primary', 'progressive']
+			flags: ['primary', 'progressive'],
 		});
 		$content.append(traverser.$element);
 
 		const aborter = new OO.ui.ButtonInputWidget({
-			label: Messages.get('ooui-dialog-message-reject')
+			label: Messages.get('ooui-dialog-message-reject'),
 		});
 		aborter.off('click').on('click', () => {
 			aborter.setDisabled(true);
@@ -574,7 +574,7 @@ class InvestigateHelper {
 							$('<p>')
 								.css({
 									'font-size': '140%',
-									'font-family': 'inherit'
+									'font-family': 'inherit',
 								})
 								.append(
 									Messages.get('investigatehelper-traverser-running-main'),
@@ -629,7 +629,7 @@ class InvestigateHelper {
 			const options = {
 				label: Messages.get('investigatehelper-traverser-notice'),
 				/** @type {OO.ui.MessageWidget.ConfigOptions['type']} */
-				type: 'success'
+				type: 'success',
 			};
 			switch (isComplete) {
 				case false:
@@ -647,7 +647,7 @@ class InvestigateHelper {
 			const message = new OO.ui.MessageWidget({
 				label: new OO.ui.HtmlSnippet(options.label),
 				type: options.type,
-				classes: [cls]
+				classes: [cls],
 			});
 
 			$(`.ih-collapsible, .${cls}`).remove();
@@ -797,14 +797,14 @@ class InvestigateHelper {
 			classes: ['ih-collapsible'],
 			expanded: false,
 			framed: true,
-			padded: true
+			padded: true,
 		});
 		wrapper.$element.prop('id', id);
 
 		const fieldset = new OO.ui.FieldsetLayout({
 			classes: ['mw-collapsibleFieldsetLayout', 'mw-collapsible', 'mw-collapsed'],
 			label,
-			icon: 'expand'
+			icon: 'expand',
 		});
 		fieldset.$element
 			.appendTo(wrapper.$element)
@@ -847,7 +847,7 @@ class InvestigateHelper {
 			user: Messages.get('checkuser-helper-user'),
 			ipv4: 'IPv4',
 			ipv6: 'IPv6',
-			block: Messages.get('block')
+			block: Messages.get('block'),
 		};
 
 		const $content = $('<ul>');
@@ -870,8 +870,8 @@ class InvestigateHelper {
 			icon: 'sortVertical',
 			popup: {
 				$content,
-				padded: true
-			}
+				padded: true,
+			},
 		});
 
 		$('body').append(
@@ -895,7 +895,7 @@ class InvestigateHelper {
 			parameters: {
 				action: 'query',
 				format: 'json',
-				formatversion: '2'
+				formatversion: '2',
 			},
 		};
 	}
@@ -907,8 +907,8 @@ class InvestigateHelper {
 	static nonwritePost() {
 		return {
 			headers: {
-				'Promise-Non-Write-API-Action': '1'
-			}
+				'Promise-Non-Write-API-Action': '1',
+			},
 		};
 	}
 
@@ -955,7 +955,7 @@ class Messages {
 		// Retrieve cached messages if there's any
 		/** @type {Record<string, string> | false | null} */
 		const cached = mw.storage.getObject(this.storageKey);
-		if (cached && Object.values(cached).every(val => typeof val === 'string')) {
+		if (cached && Object.values(cached).every((val) => typeof val === 'string')) {
 			mw.messages.set(cached);
 		}
 
@@ -997,9 +997,9 @@ class Messages {
 				formatversion: '2',
 				meta: 'allmessages',
 				ammessages: batch,
-				amlang: wgUserLanguage
+				amlang: wgUserLanguage,
 			}).then(/** @param {ApiResponse} res */ (res) => {
-				const allmessages = res && res.query && res.query.allmessages || [];
+				const allmessages = (res && res.query && res.query.allmessages) || [];
 				let added = false;
 				/** @type {Set<string>} */
 				const containsIntAndMissing = new Set();
@@ -1189,7 +1189,7 @@ class Messages {
 			disablelimitreport: true,
 			disableeditsection: true,
 			disabletoc: true,
-			contentmodel: 'wikitext'
+			contentmodel: 'wikitext',
 		}, InvestigateHelper.nonwritePost()).then((res) => {
 			const $res = $(res.parse.text);
 			const toCache = Object.create(null);
@@ -1258,7 +1258,7 @@ class Messages {
 					if (typeof options[optgroup] !== 'object' || options[optgroup] === null) {
 						options[optgroup] = {};
 					}
-					// @ts-expect-error
+					// @ts-expect-error `opt` isn't inferred as a union type
 					options[optgroup][opt] = opt;
 				}
 			} else {
@@ -1270,7 +1270,7 @@ class Messages {
 
 		// Adapted from listDropdownOptionsOoui
 		const /** @type {OO.ui.MenuOptionWidget[]} */ items = [
-			new OO.ui.MenuOptionWidget({ data: '', label: Messages.get('htmlform-selectorother-other') })
+			new OO.ui.MenuOptionWidget({ data: '', label: Messages.get('htmlform-selectorother-other') }),
 		];
 		for (const [text, value] of Object.entries(options)) {
 			if (typeof value === 'object') {
@@ -1337,8 +1337,8 @@ class Messages {
 		const options = [
 			new OO.ui.MenuOptionWidget({
 				label: this.get('ipbother').replace(/[:：]$/, ''),
-				data: ''
-			})
+				data: '',
+			}),
 		];
 		for (const [label, value] of map) {
 			options.push(
@@ -1359,7 +1359,7 @@ class Messages {
 		const map = this.parseOptionsMessage(this.get('ipboptions'));
 		const isInputIndef = mw.util.isInfinity(expiry);
 		for (const [label, value] of map) {
-			if (expiry === value || isInputIndef && mw.util.isInfinity(value)) {
+			if (expiry === value || (isInputIndef && mw.util.isInfinity(value))) {
 				return label;
 			}
 		}
@@ -1377,7 +1377,7 @@ class Messages {
 			action: 'parse',
 			formatversion: '2',
 			summary,
-			prop: ''
+			prop: '',
 		}).then(/** @param {ApiResponse} res */ (res) => {
 			const parsedsummary = res && res.parse && res.parse.parsedsummary;
 			return typeof parsedsummary === 'string' ? parsedsummary : null;
@@ -1413,56 +1413,55 @@ class Messages {
 		}
 		return text;
 	}
-
 }
 /**
  * @type {Record<'en' | 'ja', OriginalMessages>}
  */
 Messages.i18n = {
 	en: {
-		"investigatehelper-traverser-button": "Collect data from other tabs",
-		"investigatehelper-traverser-running-main": "Collecting data",
-		"investigatehelper-traverser-running-counter": "Traversed pages:",
-		"investigatehelper-traverser-notice": "CheckUser data has been collected from other Special:Investigate tabs. <b>The collected data will be lost if you refresh or leave this page</b>, because InvestigateHelper does not cache sensitive data for security reasons. To navigate to other tabs on this special page, it is recommended that you open them in a new tab or window to preserve the current page.<br>In the lists below, usernames collected from other tabs are highlighted in light pink.",
-		"investigatehelper-traverser-notice-http": "<b>The data may be incomplete because the process encountered an HTTP request failure.</b>",
-		"investigatehelper-traverser-notice-aborted": "<b>The data may be incomplete because the process was aborted before completion.</b>",
-		"investigatehelper-traverser-complete": "CheckUser data has been collected from other tabs.",
-		"investigatehelper-dialog-button-expand": "Expand",
-		"investigatehelper-dialog-button-shrink": "Shrink",
-		"investigatehelper-dialog-unblockreason": "Reason for lifting any blocks:",
-		"investigatehelper-dialog-unblockreason-default": "Remove duplicate block",
-		"investigatehelper-dialog-blocktarget-contains": "Contains: $1",
-		"investigatehelper-dialog-blocktarget-containedin": "Contained in: $1",
-		"investigatehelper-dialog-blocktarget-none": "No block targets have been selected.",
-		"investigatehelper-dialog-blocktarget-unblockonly": "This will only <b>unblock</b> the targets. Do you want to continue?",
-		"investigatehelper-dialog-blocktarget-mixed": "You are about to block $1 with the same reason at the same time, based on CheckUser data.$2<br>Please double-check the following in accordance with the [$3 Non-Disclosure Agreement]:<ul><li>The IP addresses of registered users should not be disclosed.</li><li>Temporary accounts should not be associated with registered accounts based on evidence restricted to CheckUsers ([$4 details]).</li></ul><br>Are you sure you want to continue?",
-		"investigatehelper-dialog-blocktarget-user": "registered accounts",
-		"investigatehelper-dialog-blocktarget-temp": "temporary accounts",
-		"investigatehelper-dialog-blocktarget-ip": "IP addresses",
-		"investigatehelper-dialog-blocktarget-processed": "Processed $1 {{PLURAL:$1|request|requests}}.<ul><li>Success: $2</li><li>Failure: $3</li></ul>"
+		'investigatehelper-traverser-button': 'Collect data from other tabs',
+		'investigatehelper-traverser-running-main': 'Collecting data',
+		'investigatehelper-traverser-running-counter': 'Traversed pages:',
+		'investigatehelper-traverser-notice': 'CheckUser data has been collected from other Special:Investigate tabs. <b>The collected data will be lost if you refresh or leave this page</b>, because InvestigateHelper does not cache sensitive data for security reasons. To navigate to other tabs on this special page, it is recommended that you open them in a new tab or window to preserve the current page.<br>In the lists below, usernames collected from other tabs are highlighted in light pink.',
+		'investigatehelper-traverser-notice-http': '<b>The data may be incomplete because the process encountered an HTTP request failure.</b>',
+		'investigatehelper-traverser-notice-aborted': '<b>The data may be incomplete because the process was aborted before completion.</b>',
+		'investigatehelper-traverser-complete': 'CheckUser data has been collected from other tabs.',
+		'investigatehelper-dialog-button-expand': 'Expand',
+		'investigatehelper-dialog-button-shrink': 'Shrink',
+		'investigatehelper-dialog-unblockreason': 'Reason for lifting any blocks:',
+		'investigatehelper-dialog-unblockreason-default': 'Remove duplicate block',
+		'investigatehelper-dialog-blocktarget-contains': 'Contains: $1',
+		'investigatehelper-dialog-blocktarget-containedin': 'Contained in: $1',
+		'investigatehelper-dialog-blocktarget-none': 'No block targets have been selected.',
+		'investigatehelper-dialog-blocktarget-unblockonly': 'This will only <b>unblock</b> the targets. Do you want to continue?',
+		'investigatehelper-dialog-blocktarget-mixed': 'You are about to block $1 with the same reason at the same time, based on CheckUser data.$2<br>Please double-check the following in accordance with the [$3 Non-Disclosure Agreement]:<ul><li>The IP addresses of registered users should not be disclosed.</li><li>Temporary accounts should not be associated with registered accounts based on evidence restricted to CheckUsers ([$4 details]).</li></ul><br>Are you sure you want to continue?',
+		'investigatehelper-dialog-blocktarget-user': 'registered accounts',
+		'investigatehelper-dialog-blocktarget-temp': 'temporary accounts',
+		'investigatehelper-dialog-blocktarget-ip': 'IP addresses',
+		'investigatehelper-dialog-blocktarget-processed': 'Processed $1 {{PLURAL:$1|request|requests}}.<ul><li>Success: $2</li><li>Failure: $3</li></ul>',
 	},
 	ja: {
-		"investigatehelper-traverser-button": "他のタブからデータを収集",
-		"investigatehelper-traverser-running-main": "データを収集しています",
-		"investigatehelper-traverser-running-counter": "処理したページ数:",
-		"investigatehelper-traverser-notice": "特別:Investigate の他のタブからチェックユーザーデータを収集しました。<b>収集したデータは、このページを更新したり離れた場合失われます</b>。これは、セキュリティ上の理由で InvestigateHelper が機密データをキャッシュしないためです。この特別ページ内の別タブに移動する場合は、新しいタブまたはウィンドウで開くことを推奨します。<br>以下のリストでは、別のタブから収集した利用者名は薄いピンクでハイライトされています。",
-		"investigatehelper-traverser-notice-http": "<b>処理中に HTTP リクエストエラーが発生したため、データは不完全な可能性があります。</b>",
-		"investigatehelper-traverser-notice-aborted": "<b>完了前に処理が中止されたため、データは不完全な可能性があります。</b>",
-		"investigatehelper-traverser-complete": "他のタブからチェックユーザーデータを収集しました。",
-		"investigatehelper-dialog-button-expand": "拡大",
-		"investigatehelper-dialog-button-shrink": "縮小",
-		"investigatehelper-dialog-unblockreason": "ブロック解除理由:",
-		"investigatehelper-dialog-unblockreason-default": "重複ブロックを除去",
-		"investigatehelper-dialog-blocktarget-contains": "含有するIP: $1",
-		"investigatehelper-dialog-blocktarget-containedin": "含有されるIP: $1",
-		"investigatehelper-dialog-blocktarget-none": "ブロック対象が選択されていません。",
-		"investigatehelper-dialog-blocktarget-unblockonly": "<b>ブロック解除</b>の処理のみが行われます。続行しますか？",
-		"investigatehelper-dialog-blocktarget-mixed": "$1を同じ理由で同時にチェックユーザーブロックしようとしています。$2<br>[$3 秘密保持契約]に基づき、以下の点を確認してください。<ul><li>登録利用者のIPアドレスは開示すべきではありません。</li><li>チェックユーザーのみがアクセス可能な情報に基づき、仮アカウントを登録利用者に関連付けるべきではありません ([$4 詳細])。</li></ul><br>本当に続行しますか？",
-		"investigatehelper-dialog-blocktarget-user": "登録利用者",
-		"investigatehelper-dialog-blocktarget-temp": "仮アカウント",
-		"investigatehelper-dialog-blocktarget-ip": "IPアドレス",
-		"investigatehelper-dialog-blocktarget-processed": "$1{{PLURAL:$1|件}}のリクエストを処理しました。<ul><li>成功: $2</li><li>失敗: $3</li></ul>"
-	}
+		'investigatehelper-traverser-button': '他のタブからデータを収集',
+		'investigatehelper-traverser-running-main': 'データを収集しています',
+		'investigatehelper-traverser-running-counter': '処理したページ数:',
+		'investigatehelper-traverser-notice': '特別:Investigate の他のタブからチェックユーザーデータを収集しました。<b>収集したデータは、このページを更新したり離れた場合失われます</b>。これは、セキュリティ上の理由で InvestigateHelper が機密データをキャッシュしないためです。この特別ページ内の別タブに移動する場合は、新しいタブまたはウィンドウで開くことを推奨します。<br>以下のリストでは、別のタブから収集した利用者名は薄いピンクでハイライトされています。',
+		'investigatehelper-traverser-notice-http': '<b>処理中に HTTP リクエストエラーが発生したため、データは不完全な可能性があります。</b>',
+		'investigatehelper-traverser-notice-aborted': '<b>完了前に処理が中止されたため、データは不完全な可能性があります。</b>',
+		'investigatehelper-traverser-complete': '他のタブからチェックユーザーデータを収集しました。',
+		'investigatehelper-dialog-button-expand': '拡大',
+		'investigatehelper-dialog-button-shrink': '縮小',
+		'investigatehelper-dialog-unblockreason': 'ブロック解除理由:',
+		'investigatehelper-dialog-unblockreason-default': '重複ブロックを除去',
+		'investigatehelper-dialog-blocktarget-contains': '含有するIP: $1',
+		'investigatehelper-dialog-blocktarget-containedin': '含有されるIP: $1',
+		'investigatehelper-dialog-blocktarget-none': 'ブロック対象が選択されていません。',
+		'investigatehelper-dialog-blocktarget-unblockonly': '<b>ブロック解除</b>の処理のみが行われます。続行しますか？',
+		'investigatehelper-dialog-blocktarget-mixed': '$1を同じ理由で同時にチェックユーザーブロックしようとしています。$2<br>[$3 秘密保持契約]に基づき、以下の点を確認してください。<ul><li>登録利用者のIPアドレスは開示すべきではありません。</li><li>チェックユーザーのみがアクセス可能な情報に基づき、仮アカウントを登録利用者に関連付けるべきではありません ([$4 詳細])。</li></ul><br>本当に続行しますか？',
+		'investigatehelper-dialog-blocktarget-user': '登録利用者',
+		'investigatehelper-dialog-blocktarget-temp': '仮アカウント',
+		'investigatehelper-dialog-blocktarget-ip': 'IPアドレス',
+		'investigatehelper-dialog-blocktarget-processed': '$1{{PLURAL:$1|件}}のリクエストを処理しました。<ul><li>成功: $2</li><li>失敗: $3</li></ul>',
+	},
 };
 /**
  * Key for `mw.storage` to cache some messages.
@@ -1492,7 +1491,7 @@ class UserListItem {
 			// IPv6: any hextet with leading zeros (e.g., 00ff)
 			/\b0[0-9a-fA-F]{2,}\b/.test(username) ||
 			// IPv6: uncompressed zero run (e.g., :0:0:0:) without "::"
-			/(^|:)0(:0){2,}(:|$)(?!:)/.test(username) && !username.includes('::')
+			(/(^|:)0(:0){2,}(:|$)(?!:)/.test(username) && !username.includes('::'))
 		)) {
 			throw new Error(`IP address must be in abbreviated form: ${username}`);
 		}
@@ -1527,7 +1526,7 @@ class UserListItem {
 		this.container = new OO.ui.FieldLayout(this.checkbox, {
 			classes: ['ih-username'],
 			label: $('<b>').toggleClass(UserListItem.CLS_USERNAME_FOREIGN, foreign).text(username),
-			align: 'inline'
+			align: 'inline',
 		});
 		/**
 		 * A `<span>` tag situated in the same line as the main toollinks. To add a new text,
@@ -1645,7 +1644,7 @@ class UserListItem {
 	static createInternalLink(label, page, params, setTitle = false) {
 		const $a = $('<a>').prop({
 				target: '_blank',
-				href: mw.util.getUrl(page, params)
+				href: mw.util.getUrl(page, params),
 			})
 			.text(label);
 		if (setTitle) {
@@ -1666,7 +1665,7 @@ class UserListItem {
 		const $a = $('<a>')
 			.prop({
 				target: '_blank',
-				href: url
+				href: url,
 			})
 			.text(label);
 		return $('<span>').append($a);
@@ -1710,12 +1709,12 @@ class UserListItem {
 			return api.post({
 				action: 'query',
 				formatversion: '2',
-				titles
+				titles,
 			}, InvestigateHelper.nonwritePost()).then(/** @param {ApiResponse} res */ (res) => {
 				const {
 					normalized = [],
-					pages = []
-				} = res && res.query || {};
+					pages = [],
+				} = (res && res.query) || {};
 
 				const /** @type {Map<string, string>} */ canonicalizedMap = new Map();
 				for (const { from, to } of normalized) {
@@ -1841,7 +1840,6 @@ class UserListItem {
 		this.$sublist.append($item);
 		return this;
 	}
-
 }
 /**
  * Class name for toollinks whose target page existence needs to be checked via the API.
@@ -2085,7 +2083,7 @@ class IPFieldContent {
 				// Put arrays with more elements on top
 				combinations.sort((a, b) => b.length - a.length);
 
-				for (let i = 0; i < combinations.length; ) {
+				for (let i = 0; i < combinations.length;) {
 					let level = combinations[i];
 					const len = level.length;
 
@@ -2252,7 +2250,6 @@ class IPFieldContent {
 	static getAllActionCountText(count) {
 		return Messages.get('checkuser-investigate-compare-table-cell-other-actions', [String(count)]);
 	}
-
 }
 /**
  * @type {import('ip-wiki').IntersectOptions}
@@ -2262,7 +2259,7 @@ IPFieldContent.intersectOptions = {
 	minV4: 16,
 	maxV6: 63,
 	minV6: 19,
-	verbose: false
+	verbose: false,
 };
 
 /**
@@ -2386,7 +2383,6 @@ class SetUtil {
 		}
 		return new Set([...setA, ...setB]);
 	}
-
 }
 
 class BlockField {
@@ -2438,7 +2434,7 @@ class BlockField {
 			api: new mw.Api(InvestigateHelper.getApiOptions()),
 			ipAllowed: true,
 			ipRangeAllowed: true,
-			selected: presetTargets
+			selected: presetTargets,
 		});
 		/**
 		 * Tracks change events to the {@link target} widget, in order to prevent circular
@@ -2456,7 +2452,7 @@ class BlockField {
 		this.investigateButton = new OO.ui.ButtonWidget({
 			label: Messages.get('checkuser-investigate'),
 			disabled: !presetTargets.length,
-			flags: 'progressive'
+			flags: 'progressive',
 		});
 		/**
 		 * @type {OO.ui.ButtonWidget}
@@ -2464,7 +2460,7 @@ class BlockField {
 		 * @private
 		 */
 		this.clearButton = new OO.ui.ButtonWidget({
-			label: Messages.get('apisandbox-reset')
+			label: Messages.get('apisandbox-reset'),
 		});
 
 		const targetField = new OO.ui.FieldsetLayout({
@@ -2476,7 +2472,7 @@ class BlockField {
 						$element: $('<div>').append(
 							this.investigateButton.$element,
 							this.clearButton.$element
-						)
+						),
 					})
 				),
 			],
@@ -2490,8 +2486,8 @@ class BlockField {
 		 */
 		this.expiry = new OO.ui.DropdownWidget({
 			menu: {
-				items: Messages.getBlockDurations()
-			}
+				items: Messages.getBlockDurations(),
+			},
 		});
 		/**
 		 * @type {OO.ui.TextInputWidget}
@@ -2499,14 +2495,14 @@ class BlockField {
 		 * @private
 		 */
 		this.expiryCustom = new OO.ui.TextInputWidget({
-			placeholder: Messages.get('ipbother').replace(/[:：]$/, '')
+			placeholder: Messages.get('ipbother').replace(/[:：]$/, ''),
 		});
 
 		const expiryField = new OO.ui.FieldsetLayout({
 			label: Messages.get('block-expiry'),
 			items: [
 				new OO.ui.FieldLayout(this.expiry),
-				new OO.ui.FieldLayout(this.expiryCustom)
+				new OO.ui.FieldLayout(this.expiryCustom),
 			],
 		});
 
@@ -2518,8 +2514,8 @@ class BlockField {
 		 */
 		this.reason1 = new OO.ui.DropdownWidget({
 			menu: {
-				items: Messages.parseBlockReasonDropdown()
-			}
+				items: Messages.parseBlockReasonDropdown(),
+			},
 		});
 		/**
 		 * @type {OO.ui.DropdownWidget}
@@ -2528,8 +2524,8 @@ class BlockField {
 		 */
 		this.reason2 = new OO.ui.DropdownWidget({
 			menu: {
-				items: Messages.parseBlockReasonDropdown()
-			}
+				items: Messages.parseBlockReasonDropdown(),
+			},
 		});
 		/**
 		 * @type {OO.ui.TextInputWidget}
@@ -2543,13 +2539,13 @@ class BlockField {
 			items: [
 				new OO.ui.FieldLayout(this.reason1),
 				new OO.ui.FieldLayout(this.reason2),
-				new OO.ui.FieldLayout(this.reasonC)
+				new OO.ui.FieldLayout(this.reasonC),
 			],
 		});
 
 		// Block actions
 		const actionField = new OO.ui.FieldsetLayout({
-			label: Messages.get('block-details')
+			label: Messages.get('block-details'),
 		});
 
 		/**
@@ -2603,33 +2599,33 @@ class BlockField {
 		actionField.addItems([
 			new OO.ui.FieldLayout(this.nocreate, {
 				label: Messages.get('ipbcreateaccount'),
-				align: 'inline'
+				align: 'inline',
 			}),
 			new OO.ui.FieldLayout(this.noemail, {
 				label: Messages.get('ipbemailban'),
-				align: 'inline'
+				align: 'inline',
 			}),
 			new OO.ui.FieldLayout(this.nousertalk, {
 				label: Messages.get('ipb-disableusertalk'),
-				align: 'inline'
+				align: 'inline',
 			}),
 			new OO.ui.Element({
 				$element: $('<span>')
 					.addClass('ih-inlineblock')
 					.css('padding', '8px 0')
-					.html(`<b>${Messages.get('block-options')}</b>&nbsp;${Messages.get('htmlform-optional-flag')}`)
+					.html(`<b>${Messages.get('block-options')}</b>&nbsp;${Messages.get('htmlform-optional-flag')}`),
 			}),
 			new OO.ui.FieldLayout(this.autoblock, {
 				label: Messages.get('ipbenableautoblock', [
-					Messages.get('days', ['1'])
+					Messages.get('days', ['1']),
 				]),
-				align: 'inline'
+				align: 'inline',
 			}),
 			hidenameLayout,
 			new OO.ui.FieldLayout(this.hardblock, {
 				label: Messages.get('ipb-hardblock'),
-				align: 'inline'
-			})
+				align: 'inline',
+			}),
 		]);
 
 		// Block button
@@ -2641,7 +2637,7 @@ class BlockField {
 		this.blockButton = new OO.ui.ButtonWidget({
 			label: Messages.ucFirst(Messages.get('blocklink')),
 			flags: ['progressive', 'primary'],
-			disabled: !presetTargets.length
+			disabled: !presetTargets.length,
 		});
 
 		const blockButtonLayout = new OO.ui.FieldLayout(this.blockButton, {
@@ -2653,7 +2649,7 @@ class BlockField {
 			expiryField,
 			reasonField,
 			actionField,
-			blockButtonLayout
+			blockButtonLayout,
 		]);
 
 		/**
@@ -2691,19 +2687,19 @@ class BlockField {
 			}
 			this.inChangeEvent = true;
 
-			const removed = [...prevSet].filter(u => !currSet.has(u));
-			const added = [...currSet].filter(u => !prevSet.has(u));
+			const removed = [...prevSet].filter((u) => !currSet.has(u));
+			const added = [...currSet].filter((u) => !prevSet.has(u));
 
 			for (const username of removed) {
 				const items = this.checkboxMap.get(username);
 				if (items) {
-					items.forEach(item => item.checkbox.setSelected(false));
+					items.forEach((item) => item.checkbox.setSelected(false));
 				}
 			}
 			for (const username of added) {
 				const items = this.checkboxMap.get(username);
 				if (items) {
-					items.forEach(item => item.checkbox.setSelected(true));
+					items.forEach((item) => item.checkbox.setSelected(true));
 				}
 			}
 
@@ -2853,7 +2849,7 @@ class BlockField {
 		this.blockButton.setDisabled(true);
 
 		const targets = this.getCategorizedUsernames();
-		if (!targets || !Object.values(targets).some(arr => arr.length)) {
+		if (!targets || !Object.values(targets).some((arr) => arr.length)) {
 			// The user should never get caught in this block because we disable the block button
 			// when no user is selected; hence the message is not translated
 			await OO.ui.alert('No users are selected as the block targets.');
@@ -2923,13 +2919,13 @@ class BlockField {
 		const ret = {
 			user: [],
 			temp: [],
-			ip: []
+			ip: [],
 		};
 		if (users.size) {
 			for (const user of users) {
 				ret.user.push({
 					username: user,
-					usertype: 'user'
+					usertype: 'user',
 				});
 			}
 			ret.user.sort((a, b) => b.username.localeCompare(a.username));
@@ -2938,7 +2934,7 @@ class BlockField {
 			for (const temp of temps) {
 				ret.temp.push({
 					username: temp,
-					usertype: 'temp'
+					usertype: 'temp',
 				});
 			}
 			ret.temp.sort((a, b) => b.username.localeCompare(a.username));
@@ -2969,7 +2965,7 @@ class BlockField {
 					usertype: isCIDR ? 'cidr' : 'ip',
 					abbreviated: ip.abbreviate(),
 					covers: Array.from(covers).sort(),
-					coveredBy: Array.from(coveredBy).sort()
+					coveredBy: Array.from(coveredBy).sort(),
 				});
 			}
 
@@ -3002,18 +2998,18 @@ class BlockField {
 				list: 'blocks',
 				bkusers: batch.join('|'),
 				bklimit: 'max',
-				bkprop: 'id|user|timestamp'
+				bkprop: 'id|user|timestamp',
 			}).then(/** @param {ApiResponse} res */ (res) => {
-				const blocks = res && res.query && res.query.blocks || [];
+				const blocks = (res && res.query && res.query.blocks) || [];
 				for (const obj of blocks) {
 					const username = mw.util.isIPAddress(obj.user, true) ? obj.user.toLowerCase() : obj.user;
 					const unixTime = Date.parse(obj.timestamp) / 1000;
 					if (!map.has(username)) {
 						map.set(username, {
 							ids: new Map([
-								[obj.id, obj]
+								[obj.id, obj],
 							]),
-							earliestTimestamp: unixTime
+							earliestTimestamp: unixTime,
 						});
 					} else {
 						const entry = /** @type {BlockIdMapValue} */ (map.get(username));
@@ -3045,7 +3041,7 @@ class BlockField {
 			autoblock: this.autoblock.isSelected(),
 			noemail: this.noemail.isSelected(),
 			hidename: this.hidename.isSelected(),
-			allowusertalk: !this.nousertalk.isSelected()
+			allowusertalk: !this.nousertalk.isSelected(),
 		};
 	}
 
@@ -3061,11 +3057,10 @@ class BlockField {
 		const reasons = [
 			/** @type {string} */ (/** @type {OO.ui.MenuOptionWidget} */ (this.reason1.getMenu().findFirstSelectedItem()).getData()),
 			/** @type {string} */ (/** @type {OO.ui.MenuOptionWidget} */ (this.reason2.getMenu().findFirstSelectedItem()).getData()),
-			this.reasonC.getValue()
+			this.reasonC.getValue(),
 		];
 		return reasons.filter(Boolean).join(': ');
 	}
-
 }
 
 /**
@@ -3093,9 +3088,9 @@ class BlockLog {
 			leend: earliestTimestamp,
 			letitle: `User:${username}`,
 			lelimit: 'max',
-			uselang: wgUserLanguage
+			uselang: wgUserLanguage,
 		}).then(/** @param {ApiResponse} res */ (res) => {
-			const logevents = res && res.query && res.query.logevents || [];
+			const logevents = (res && res.query && res.query.logevents) || [];
 			/**
 			 * @type {BlockLogMap}
 			 */
@@ -3189,7 +3184,7 @@ class BlockLog {
 						: duration_l10n,
 					flags,
 					restrictions,
-					parsedcomment
+					parsedcomment,
 				});
 			}
 
@@ -3256,7 +3251,7 @@ class BlockLog {
 			Messages.wikilink(`User:${target}`, target),
 			target,
 			duration,
-			this.formatFlags(flags)
+			this.formatFlags(flags),
 		];
 
 		// Adapted from BlockLogFormatter::getMessageKey
@@ -3273,13 +3268,13 @@ class BlockLog {
 				key = `logentry-non-editing-${type}-${subtype}`;
 			}
 		}
-		if (subtype === 'block' && count > 1 ) {
+		if (subtype === 'block' && count > 1) {
 			// logentry-block-block-multi, logentry-partialblock-block-multi,
 			// logentry-non-editing-block-block-multi
 			key += '-multi';
 		}
 
-		// @ts-expect-error
+		// @ts-expect-error `key` is inferred as a string
 		const logline = Messages.get(key, parameters);
 		const comment = parsedcomment && Messages.get('parentheses', [parsedcomment]);
 
@@ -3372,7 +3367,6 @@ class BlockLog {
 		 */
 		this.loglineMap = loglineMap;
 	}
-
 }
 
 /**
@@ -3416,7 +3410,7 @@ function BlockDialogFactory() {
 			 */
 			this.unblockReason = new OO.ui.TextInputWidget({
 				placeholder: Messages.get('block-removal-reason-placeholder'),
-				value: Messages.get('investigatehelper-dialog-unblockreason-default')
+				value: Messages.get('investigatehelper-dialog-unblockreason-default'),
 			});
 			/**
 			 * @type {BlockTarget[]}
@@ -3434,15 +3428,15 @@ function BlockDialogFactory() {
 		 * @override
 		 */
 		initialize() {
-			// @ts-expect-error
+			// @ts-expect-error IArguments is used for []
 			super.initialize.apply(this, arguments);
 
 			this.content = new OO.ui.PanelLayout({
 				padded: true,
-				expanded: false
+				expanded: false,
 			});
 			this.content.$element.append(this.fieldset.$element);
-			// @ts-expect-error
+			// @ts-expect-error "$body does not exist"
 			this.$body.append(this.content.$element);
 
 			return this;
@@ -3545,7 +3539,7 @@ function BlockDialogFactory() {
 								$('<b>').text(Messages.get('block-expiry') + ':'),
 								'&nbsp;',
 								Messages.translateBlockExpiry(params.expiry)
-							)
+							),
 					}),
 					new OO.ui.Element({
 						$element: $('<div>')
@@ -3554,23 +3548,23 @@ function BlockDialogFactory() {
 								$('<b>').text(Messages.get('checkuser-investigateblock-reason') + ':'),
 								'&nbsp;',
 								this.formatBlockReason()
-							)
-					})
+							),
+					}),
 				]);
 
 				const unblockReasonLayout = new OO.ui.FieldLayout(this.unblockReason, {
 					label: new OO.ui.HtmlSnippet(
 						`<b>${Messages.get('investigatehelper-dialog-unblockreason')}</b>`
 					),
-					align: 'top'
+					align: 'top',
 				});
 				unblockReasonLayout.$element.css('margin-top', '0');
 
 				this.fieldset.addItems([
 					unblockReasonLayout,
 					new OO.ui.Element({
-						$element: $('<hr>').css('margin', '1em 0')
-					})
+						$element: $('<hr>').css('margin', '1em 0'),
+					}),
 				]);
 
 				// Set up the dialog body for block confirmation
@@ -3599,7 +3593,7 @@ function BlockDialogFactory() {
 			const error = new OO.ui.MessageWidget({
 				type: 'error',
 				label: Messages.get('api-feed-error-title', [errorCode]),
-				inline: true
+				inline: true,
 			});
 			/** @type {OO.ui.PanelLayout} */ (this.content).$element.append(error.$element);
 
@@ -3674,7 +3668,7 @@ function BlockDialogFactory() {
 			const blockCount = {
 				user: 0,
 				temp: 0,
-				ip: 0
+				ip: 0,
 			};
 			let unblockCount = 0;
 
@@ -3723,7 +3717,7 @@ function BlockDialogFactory() {
 
 			// Start async jobs
 			let confirmed = false;
-			// @ts-expect-error
+			// @ts-expect-error Promise is compatible with Step
 			return super.getActionProcess(action).next(async () => {
 				// Confirm an unblock-only job if applicable
 				if (!blockScheduled) {
@@ -3737,7 +3731,7 @@ function BlockDialogFactory() {
 					const $countList = $('<ul>');
 					for (const [type, count] of Object.entries(blockCount)) {
 						if (count > 0) {
-							// @ts-expect-error
+							// @ts-expect-error `type` is inferred as a string
 							const userTypeLocal = Messages.get(`investigatehelper-dialog-blocktarget-${type}`);
 							targetUserTypes.push(userTypeLocal);
 							$countList.append($('<li>').text(`${Messages.ucFirst(userTypeLocal)}: ${count}`));
@@ -3754,7 +3748,7 @@ function BlockDialogFactory() {
 								Messages.listToText(targetUserTypes),
 								$countList.prop('outerHTML'),
 								'https://foundation.wikimedia.org/wiki/Special:MyLanguage/Legal:Wikimedia_Foundation_Confidentiality_Agreement_for_Nonpublic_Information',
-								'https://www.mediawiki.org/wiki/Special:MyLanguage/Trust_and_Safety_Product/Temporary_Accounts/FAQ#Can_we_publicly_document_the_IP_addresses_used_by_suspected_(but_not_confirmed)_bad_actors_who_are_using_temporary_accounts?'
+								'https://www.mediawiki.org/wiki/Special:MyLanguage/Trust_and_Safety_Product/Temporary_Accounts/FAQ#Can_we_publicly_document_the_IP_addresses_used_by_suspected_(but_not_confirmed)_bad_actors_who_are_using_temporary_accounts?',
 							],
 							{ method: 'parse', restoreTags: true }
 						);
@@ -3764,14 +3758,14 @@ function BlockDialogFactory() {
 						confirmed = true;
 					}
 				}
-			// @ts-expect-error
+			// @ts-expect-error Promise is compatible with Step
 			}).next(async () => {
 				if (!confirmed) {
 					this.actionProcessRunning = false;
 					return true;
 				}
 
-				// @ts-expect-error
+				// @ts-expect-error `OO.ui.Element[]` is actually correct
 				const headerItems = /** @type {OO.ui.Element[]} */ (this.fieldset.getItems()).filter((item) => {
 					return !item.$element.hasClass('ih-dialog-row') && !item.$element.hasClass('ih-dialog-subrow');
 				});
@@ -3894,7 +3888,7 @@ function BlockDialogFactory() {
 				// Massblock in parallel might encounter a DB deadlock ([[phab:T260838]])
 				// In this case, sequentially retry failed requests once for each
 				if (retryQueue.size) {
-					await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+					await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
 					for (const [$icon, { params, $line, newline, blockId }] of retryQueue) {
 						const code = await BlockTarget.doBlock(params);
 						postProcess($icon, $line, newline, blockId, code);
@@ -3912,7 +3906,7 @@ function BlockDialogFactory() {
 						Messages.get('investigatehelper-dialog-blocktarget-processed', [
 							String(totalCount),
 							String(successCount),
-							String(failureCount)
+							String(failureCount),
 						])
 					)
 				);
@@ -3939,14 +3933,14 @@ function BlockDialogFactory() {
 							{
 								action: 'accept',
 								label: Messages.get('ooui-dialog-process-continue'),
-								flags: ['primary', 'progressive']
+								flags: ['primary', 'progressive'],
 							},
 							{
 								action: 'reject',
 								label: Messages.get('ooui-dialog-message-reject'),
-								flags: 'safe'
-							}
-						]
+								flags: 'safe',
+							},
+						],
 					},
 					options
 				)
@@ -3955,7 +3949,6 @@ function BlockDialogFactory() {
 				return confirmed;
 			});
 		}
-
 	}
 
 	BlockDialog.static.name = 'BlockDialog';
@@ -3964,15 +3957,15 @@ function BlockDialogFactory() {
 		{
 			action: 'block',
 			label: Messages.get('block-submit'),
-			flags: ['primary', 'progressive']
+			flags: ['primary', 'progressive'],
 		},
 		{
 			action: 'resize',
-			label: Messages.get('investigatehelper-dialog-button-expand')
+			label: Messages.get('investigatehelper-dialog-button-expand'),
 		},
 		{
-			flags: ['safe', 'close']
-		}
+			flags: ['safe', 'close'],
+		},
 	];
 	BlockDialog.windowManager = (() => {
 		const windowManager = new OO.ui.WindowManager();
@@ -3997,7 +3990,7 @@ class BlockTarget {
 			abbreviated,
 			covers,
 			coveredBy,
-			logs
+			logs,
 		} = target;
 
 		/**
@@ -4018,7 +4011,7 @@ class BlockTarget {
 		 * @type {OO.ui.CheckboxInputWidget}
 		 */
 		this.blockToggle = new OO.ui.CheckboxInputWidget({
-			selected: true
+			selected: true,
 		});
 		/**
 		 * A `FieldLayout` widget that serves as the entire row.
@@ -4029,7 +4022,7 @@ class BlockTarget {
 		this.row = new OO.ui.FieldLayout(this.blockToggle, {
 			label: new OO.ui.HtmlSnippet(`<b>${abbreviated || username}</b>`),
 			align: 'inline',
-			classes: ['ih-dialog-row']
+			classes: ['ih-dialog-row'],
 		});
 		/**
 		 * @type {OO.ui.Element}
@@ -4037,7 +4030,7 @@ class BlockTarget {
 		 */
 		this.subrow = new OO.ui.Element({
 			$element: $('<div>'),
-			classes: ['ih-dialog-subrow']
+			classes: ['ih-dialog-subrow'],
 		});
 
 		// If the target is an IP, display a list of IP addresses that the target contains and is contained in
@@ -4060,9 +4053,9 @@ class BlockTarget {
 		 * Map of block IDs to checkboxes whose values indicate how the associated existing blocks should be handled.
 		 *
 		 * @type {Map<number, {
-		 * 	override: OO.ui.CheckboxInputWidget;
-		 * 	lift: OO.ui.CheckboxInputWidget;
-		 * 	$line: JQuery<HTMLElement>;
+		 *   override: OO.ui.CheckboxInputWidget;
+		 *   lift: OO.ui.CheckboxInputWidget;
+		 *   $line: JQuery<HTMLElement>;
 		 * }>}
 		 */
 		this.existingBlocks = new Map();
@@ -4076,7 +4069,7 @@ class BlockTarget {
 		this.addBlockLayout = new OO.ui.FieldLayout(this.addBlock, {
 			label: Messages.get('block-create'),
 			align: 'inline',
-			classes: ['ih-dialog-addblock']
+			classes: ['ih-dialog-addblock'],
 		});
 
 		// List existing blocks so that the client can choose to add/override/lift blocks
@@ -4088,14 +4081,14 @@ class BlockTarget {
 						$('<th>').append(
 							new OO.ui.IconWidget({
 								icon: 'edit',
-								title: Messages.get('checkuser-investigateblock-reblock-label')
+								title: Messages.get('checkuser-investigateblock-reblock-label'),
 							}).$element
 						),
 						$('<th>').append(
 							new OO.ui.IconWidget({
 								icon: 'trash',
 								title: Messages.get('block-removal-confirm-yes'),
-								flags: 'destructive'
+								flags: 'destructive',
 							}).$element
 						),
 						$('<th>')
@@ -4240,7 +4233,7 @@ class BlockTarget {
 		if (!hasSubrow) {
 			ret.set(this.blockToggle, {
 				params: rowEnabled ? this.generateBlockParams() : null,
-				$line: this.row.$header
+				$line: this.row.$header,
 			});
 			return ret;
 		}
@@ -4253,11 +4246,11 @@ class BlockTarget {
 		const addBlockParams = addBlock ? this.generateBlockParams({ blockType: 'newblock' }) : null;
 		// If `addBlockParams` is set, fabricate a block ID because there's no relevant IDs here
 		// Note that negative numbers would never conflict with actual block IDs
-		let blockId = addBlockParams ? -Date.now(): void 0;
-		ret.set(this.addBlock,{
+		let blockId = addBlockParams ? -Date.now() : void 0;
+		ret.set(this.addBlock, {
 			params: addBlockParams,
 			$line: this.addBlockLayout.$header,
-			blockId
+			blockId,
 		});
 
 		let reblockScheduled = false;
@@ -4319,7 +4312,7 @@ class BlockTarget {
 		/** @type {Partial<BlockParamsCore> & Pick<BlockParamsCore, 'action' | 'formatversion'>} */
 		const params = {
 			action: 'block',
-			formatversion: '2'
+			formatversion: '2',
 		};
 		const hasId = typeof id === 'number';
 		if (hasId) {
@@ -4347,7 +4340,7 @@ class BlockTarget {
 			action: 'unblock',
 			formatversion: '2',
 			id,
-			reason
+			reason,
 		};
 	}
 
@@ -4407,7 +4400,7 @@ class BlockTarget {
 			.css({
 				width: /** @type {number} */ ($target.width()),
 				'vertical-align': 'middle',
-				border: 0
+				border: 0,
 			});
 		const $container = $('<span>').css('display', 'inline-block');
 		$container.append($icon);
@@ -4429,7 +4422,6 @@ class BlockTarget {
 			img.src = src;
 		}
 	}
-
 }
 /** @type {Map<IconTypes, string>} */
 BlockTarget.iconMap = new Map([
