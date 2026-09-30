@@ -1,15 +1,15 @@
-/************************************************************************\
+/**
  * ShortPagesForDeletion
  *
  * Visualize which pages are AfD-ed or SD-ed on [[Special:Shortpages]].
  *
- * @version 1.1.0
+ * @version 1.1.1
  * @author [[User:Dragoniez]]
-\************************************************************************/
+ */
 /* global mw */
-//<nowiki>
+// <nowiki>
 (() => {
-//***********************************************************************
+// ***********************************************************************
 
 if (mw.config.get('wgCanonicalSpecialPageName') !== 'Shortpages') return;
 
@@ -70,7 +70,7 @@ function getTitles($ol) {
 	const apilimit = (mw.config.get('wgUserGroups') || []).includes('sysop') ? 500 : 50;
 
 	const /** @type {TitleMap[]} */ ret = [];
-	$ol.children('li').each(function() {
+	$ol.children('li').each(function () {
 		const $li = $(this);
 		const href = $li.children('bdi').children('a').attr('href');
 		let m;
@@ -104,7 +104,7 @@ function queryCategories(titles) {
 		prop: 'categories',
 		clprop: '',
 		clcategories: [CAT_AFD, CAT_CSD].join('|'),
-		formatversion: '2'
+		formatversion: '2',
 	}).then((res) => {
 		/** @type {{ title: string; categories: { ns: number; title: string; }[] | undefined; }[]=} */
 		const pages = res && res.query && res.query.pages;
@@ -127,6 +127,6 @@ function queryCategories(titles) {
 	});
 }
 
-//***********************************************************************
+// ***********************************************************************
 })();
-//</nowiki>
+// </nowiki>
