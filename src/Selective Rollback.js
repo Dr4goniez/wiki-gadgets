@@ -2,7 +2,7 @@
  * Selective Rollback
  *
  * @author [[User:Dragoniez]]
- * @version 5.1.7
+ * @version 5.1.8
  * @see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
  *
  * Some functionality in this script is adapted from:
@@ -18,7 +18,7 @@
 (() => {
 // **************************************************************************************************
 
-const version = '5.1.7';
+const version = '5.1.8';
 
 // Run this script only when on /wiki/$1 or /w/index.php
 if (
@@ -498,8 +498,8 @@ class SelectiveRollback {
 			return match;
 		});
 
-		// Process '{{GENDER:$1/2|...}}' by using the neutral form
-		summary = summary.replace(/\{\{\s*GENDER:\s*\$[12]\s*\|([^}]+?)\}\}/, (_, forms) => {
+		// Process '{{GENDER:$1/$2|...}}' by using the neutral form
+		summary = summary.replace(/\{\{\s*GENDER:\s*\$[12]\s*\|([^}]+?)\}\}/gi, (_, forms) => {
 			const formList = /** @type {string} */ (forms).split('|');
 			if (formList.length >= 3) {
 				// Use the neutral form when it is explicitly provided
