@@ -2,7 +2,7 @@
  * Selective Rollback
  *
  * @author [[User:Dragoniez]]
- * @version 5.1.6
+ * @version 5.1.7
  * @see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
  *
  * Some functionality in this script is adapted from:
@@ -18,7 +18,7 @@
 (() => {
 // **************************************************************************************************
 
-const version = '5.1.6';
+const version = '5.1.7';
 
 // Run this script only when on /wiki/$1 or /w/index.php
 if (
@@ -369,28 +369,10 @@ class SelectiveRollback {
 			params.uiprop = 'rights';
 		}
 
-		/**
-		 * Extracts the fallback ("other") form from a `'{{PLURAL:$7|...}}'` expression.
-		 * Only the last non-numeric form is used.
-		 * @param {string} str
-		 * @returns {string}
-		 */
-		const parsePluralOther = (str) => {
-			return str.replace(/\{\{\s*PLURAL:\s*\$7\s*\|([^}]+?)\}\}/gi, (match, forms) => {
-				const formList = /** @type {string} */ (forms).split('|').map((f) => f.trim());
-				for (let i = formList.length - 1; i >= 0; i--) {
-					const form = formList[i];
-					if (!/^\d+\s*=/.test(form)) {
-						return form;
-					}
-				}
-				return match;
-			});
-		};
 		if (typeof summary === 'string' && rights) {
 			return {
 				summary,
-				parsedsummary: parsePluralOther(summary),
+				parsedsummary: this.preprocessSummary(summary),
 				fetched: true,
 				rights: new Set(rights),
 			};
@@ -420,10 +402,115 @@ class SelectiveRollback {
 		}
 		return {
 			summary,
-			parsedsummary: parsePluralOther(summary),
+			parsedsummary: this.preprocessSummary(summary),
 			fetched,
 			rights: rights ? new Set(rights) : new Set(),
 		};
+	}
+
+	/**
+	 * @param {string} summary
+	 * @returns {string}
+	 * @private
+	 */
+	static preprocessSummary(summary) {
+		// Temporarily replace pipes in wikilinks with a placeholder so that
+		// they are not mistaken for template argument separators below
+		const rNextToken = /[{}[\]|]/;
+		const placeholder = '\x01';
+		if (summary.includes('[[') && rNextToken.test(summary)) {
+			const indexes = {
+				template: /** @type {number[]} */ ([]),
+				link: /** @type {number[]} */ ([]),
+			};
+
+			for (let i = 0; i < summary.length; i++) {
+				const nextTokenIndex = summary.slice(i).search(rNextToken);
+				if (nextTokenIndex === -1) {
+					break;
+				}
+				if (nextTokenIndex !== 0) {
+					i += nextTokenIndex - 1;
+					continue;
+				}
+
+				/**
+				 * @type {boolean}
+				 */
+				let usePlaceholder;
+				/**
+				 * @type {keyof typeof indexes | boolean}
+				 */
+				let processEndExpr;
+
+				if (indexes.template.length && indexes.link.length) {
+					usePlaceholder = indexes.template[indexes.template.length - 1] < indexes.link[indexes.link.length - 1];
+					processEndExpr = true;
+				} else if (indexes.template.length) {
+					usePlaceholder = false;
+					processEndExpr = 'template';
+				} else if (indexes.link.length) {
+					usePlaceholder = true;
+					processEndExpr = 'link';
+				} else {
+					usePlaceholder = false;
+					processEndExpr = false;
+				}
+
+				if (summary[i] === '|') {
+					if (usePlaceholder) {
+						summary = summary.slice(0, i) + placeholder + summary.slice(i + 1);
+					}
+					continue;
+				}
+
+				if ((processEndExpr === true || processEndExpr === 'template') && summary.startsWith('}}', i)) {
+					indexes.template.pop();
+					i++;
+					continue;
+				}
+				if ((processEndExpr === true || processEndExpr === 'link') && summary.startsWith(']]', i)) {
+					indexes.link.pop();
+					i++;
+					continue;
+				}
+
+				if (summary.startsWith('{{', i) && summary[i + 2] !== '{') {
+					indexes.template.push(i);
+					i++;
+				} else if (summary.startsWith('[[', i) && summary[i + 2] !== '[') {
+					indexes.link.push(i);
+					i++;
+				}
+			}
+		}
+
+		// Process '{{PLURAL:$7|...}}' by using its "other" form
+		summary = summary.replace(/\{\{\s*PLURAL:\s*\$7\s*\|([^}]+?)\}\}/gi, (match, forms) => {
+			const formList = /** @type {string} */ (forms).split('|');
+			for (let i = formList.length - 1; i >= 0; i--) {
+				// The last unnumbered form is the fallback ("other") form
+				const form = formList[i];
+				if (!/^\d+\s*=/.test(form)) {
+					return form;
+				}
+			}
+			return match;
+		});
+
+		// Process '{{GENDER:$1/2|...}}' by using the neutral form
+		summary = summary.replace(/\{\{\s*GENDER:\s*\$[12]\s*\|([^}]+?)\}\}/, (_, forms) => {
+			const formList = /** @type {string} */ (forms).split('|');
+			if (formList.length >= 3) {
+				// Use the neutral form when it is explicitly provided
+				return formList[2];
+			} else {
+				// With no neutral form, fall back to the first form
+				return formList[0];
+			}
+		});
+
+		return summary.replace(new RegExp(placeholder, 'g'), '|');
 	}
 
 	/**
@@ -841,7 +928,7 @@ SelectiveRollback.i18n = {
 		'dialog-help-summaryinput-$0': '<code>$0</code>は既定の編集要約に置換されます。',
 		'dialog-help-summaryinput-$0-error': '<code>$0</code>は<b>英語の</b>既定編集要約に置換されます。',
 		'dialog-label-summarypreview': '要約プレビュー', // v4.0.0
-		'dialog-help-summarypreview': '<code>{{PLURAL:$7}}</code>は置換されます。', // Updated in v5.0.0
+		'dialog-help-summarypreview': '<code>{{GENDER:$1/$2}}</code>と<code>{{PLURAL:$7}}</code>は置換されます。', // Updated in v5.0.0, 5.1.7
 		'dialog-label-markbot': 'ボット編集として巻き戻し',
 		'dialog-label-watchlist': '巻き戻し対象をウォッチリストに追加',
 		'dialog-label-watchlistexpiry': '期間', // Deprecated since v5.0.0
@@ -943,7 +1030,7 @@ SelectiveRollback.i18n = {
 		'dialog-help-summaryinput-$0': '<code>$0</code> will be replaced with the default rollback summary.',
 		'dialog-help-summaryinput-$0-error': '<code>$0</code> will be replaced with the default rollback summary <b>in English</b>.',
 		'dialog-label-summarypreview': 'Summary preview', // v4.0.0
-		'dialog-help-summarypreview': '<code>{{PLURAL:$7}}</code> will be replaced.', // Updated in v5.0.0
+		'dialog-help-summarypreview': '<code>{{GENDER:$1/$2}}</code> and <code>{{PLURAL:$7}}</code> will be replaced.', // Updated in v5.0.0, 5.1.7
 		'dialog-label-markbot': 'Mark rollbacks as bot edits',
 		'dialog-label-watchlist': 'Add rollback targets to watchlist',
 		'dialog-label-watchlistexpiry': 'Expiry', // Deprecated since v5.0.0
@@ -1049,7 +1136,7 @@ SelectiveRollback.i18n = {
 		'dialog-help-summaryinput-$0': '<code>$0</code>将会被默认编辑摘要替代。',
 		'dialog-help-summaryinput-$0-error': '<code>$0</code>将会被默认编辑摘要为<b>英文</b>替代。',
 		'dialog-label-summarypreview': '编辑摘要的预览', // v4.0.0
-		'dialog-help-summarypreview': '<code>{{PLURAL:$7}}</code>将被替换。', // Updated in v5.0.0
+		'dialog-help-summarypreview': '<code>{{GENDER:$1/$2}}</code>和<code>{{PLURAL:$7}}</code>将被替换。', // Updated in v5.0.0, 5.1.7
 		'dialog-label-markbot': '标记为机器人编辑',
 		'dialog-label-watchlist': '将回退目标加入监视列表', // Updated in v5.1.0
 		'dialog-label-watchlistexpiry': '时间', // Deprecated since v5.0.0
@@ -1155,7 +1242,7 @@ SelectiveRollback.i18n = {
 		'dialog-help-summaryinput-$0': '<code>$0</code> será reemplazado con el resumen de edición predeterminado.',
 		'dialog-help-summaryinput-$0-error': '<code>$0</code> será reemplazado con él resumen de edición predeterminado <b>en inglés</b>.',
 		'dialog-label-summarypreview': 'Vista previa del resumen', // v4.0.0
-		'dialog-help-summarypreview': '<code>{{PLURAL:$7}}</code> será reemplazado.', // Updated in v5.0.0
+		'dialog-help-summarypreview': '<code>{{GENDER:$1/$2}}</code> y <code>{{PLURAL:$7}}</code> serán reemplazados.', // Updated in v5.0.0, 5.1.7
 		'dialog-label-markbot': 'Marcar las reversiones como ediciones del bot',
 		'dialog-label-watchlist': 'Agregar objetivos de reversión a la lista de seguimiento', // Updated in v5.1.0
 		'dialog-label-watchlistexpiry': 'Expiración', // Deprecated since v5.0.0
@@ -1261,7 +1348,7 @@ SelectiveRollback.i18n = {
 		'dialog-help-summaryinput-$0': '<code>$0</code> va fi înlocuit cu descrierea implicită a revenirii.',
 		'dialog-help-summaryinput-$0-error': '<code>$0</code> va fi înlocuit cu descrierea implicită a revenirii <b>în engleză</b>.',
 		'dialog-label-summarypreview': 'Previzualizare descriere', // v4.0.0
-		'dialog-help-summarypreview': '<code>{{PLURAL:$7}}</code> va fi înlocuit.', // Updated in v5.0.0
+		'dialog-help-summarypreview': '<code>{{GENDER:$1/$2}}</code> și <code>{{PLURAL:$7}}</code> vor fi înlocuite.', // Updated in v5.0.0, 5.1.7
 		'dialog-label-markbot': 'Marchează revenirile drept modificări făcute de robot',
 		'dialog-label-watchlist': 'Adaugă țintele revenirii în lista de urmărire', // Updated in v5.1.0
 		'dialog-label-watchlistexpiry': 'Expiră', // Deprecated since v5.0.0
@@ -1368,7 +1455,7 @@ SelectiveRollback.i18n = {
 		'dialog-help-summaryinput-$0': '<code>$0</code> sẽ được thay bằng tóm lược lùi sửa mặc định.',
 		'dialog-help-summaryinput-$0-error': '<code>$0</code> sẽ được thay bằng tóm lược lùi sửa mặc định <b>trong tiếng Anh</b>.',
 		'dialog-label-summarypreview': 'Xem trước tóm lược', // v4.0.0
-		'dialog-help-summarypreview': '<code>{{PLURAL:$7}}</code> sẽ được thay thế.', // Updated in v5.0.0
+		'dialog-help-summarypreview': '<code>{{GENDER:$1/$2}}</code> và <code>{{PLURAL:$7}}</code> sẽ được thay thế.', // Updated in v5.0.0, 5.1.7
 		'dialog-label-markbot': 'Đánh dấu là sửa đổi bot',
 		'dialog-label-watchlist': 'Thêm trang tôi lùi sửa vào danh sách theo dõi', // Updated in v5.1.0
 		'dialog-label-watchlistexpiry': 'Thời hạn', // Deprecated since v5.0.0
@@ -1474,7 +1561,7 @@ SelectiveRollback.i18n = {
 		'dialog-help-summaryinput-$0': '<code>$0</code> سيتم استبداله بملخص التراجع الافتراضي.',
 		'dialog-help-summaryinput-$0-error': '<code>$0</code> سيتم استبداله بملخص التراجع الافتراضي <b>باللغة الإنجليزية</b>.',
 		'dialog-label-summarypreview': 'معاينة الملخص', // v4.0.0
-		'dialog-help-summarypreview': 'سيتم استبدال الكلمات السحرية (مثل <code>{{PLURAL:$7}}</code>).', // Updated in v5.0.0
+		'dialog-help-summarypreview': 'سيتم استبدال الكلمات السحرية (مثل <code>{{GENDER:$1/$2}}</code> و<code>{{PLURAL:$7}}</code>).', // Updated in v5.0.0, 5.1.7
 		'dialog-label-markbot': 'تمييز التراجعات كتحريرات بوت',
 		'dialog-label-watchlist': 'أضف صفحات التراجع إلى قائمة المراقبة', // Updated in v5.1.0
 		'dialog-label-watchlistexpiry': 'مدة الصلاحية', // Deprecated since v5.0.0
