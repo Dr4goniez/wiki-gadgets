@@ -2,7 +2,7 @@
  * Selective Rollback
  *
  * @author [[User:Dragoniez]]
- * @version 5.1.8
+ * @version 5.1.9
  * @see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
  *
  * Some functionality in this script is adapted from:
@@ -18,7 +18,7 @@
 (() => {
 // **************************************************************************************************
 
-const version = '5.1.8';
+const version = '5.1.9';
 
 // Run this script only when on /wiki/$1 or /w/index.php
 if (
@@ -1011,7 +1011,7 @@ SelectiveRollback.i18n = {
 		'config-label-deletelocal': 'ローカル設定を削除',
 		'config-help-deletelocal-absent': 'ローカル設定は保存されていません。',
 		'config-label-deletelocalall': '他のすべてのプロジェクトのローカル設定を削除',
-		'config-help-deletelocalall-present': 'この操作を行うには、$1でログインしている必要があります。',
+		'config-help-deletelocalall-present': 'ローカル設定が保存されているプロジェクト: $1',
 		'config-help-deletelocalall-absent': 'ローカル設定が保存されている他プロジェクトはありません。',
 		'config-label-deletedata': 'データを削除',
 		'config-button-deletedata': '削除',
@@ -1113,7 +1113,7 @@ SelectiveRollback.i18n = {
 		'config-label-deletelocal': 'Delete local config',
 		'config-help-deletelocal-absent': 'You do not have any local settings configured.',
 		'config-label-deletelocalall': 'Delete local config on all other projects',
-		'config-help-deletelocalall-present': 'To perform this action, you need to be logged in on $1.',
+		'config-help-deletelocalall-present': 'Projects with saved local configuration: $1',
 		'config-help-deletelocalall-absent': 'You do not have any local settings configured on other projects.',
 		'config-label-deletedata': 'Delete data',
 		'config-button-deletedata': 'Delete',
@@ -1219,7 +1219,7 @@ SelectiveRollback.i18n = {
 		'config-label-deletelocal': '删除本地配置',
 		'config-help-deletelocal-absent': '您尚未设置任何本地配置。',
 		'config-label-deletelocalall': '删除所有其他项目的本地配置',
-		'config-help-deletelocalall-present': '要执行此操作，您需要登录到 $1。',
+		'config-help-deletelocalall-present': '保存了本地配置的项目：$1', // Updated in v5.1.9, review needed
 		'config-help-deletelocalall-absent': '您在其他项目上没有设置本地配置。',
 		'config-label-deletedata': '删除数据',
 		'config-button-deletedata': '删除',
@@ -1325,7 +1325,7 @@ SelectiveRollback.i18n = {
 		'config-label-deletelocal': 'Eliminar configuración local',
 		'config-help-deletelocal-absent': 'No tienes ninguna configuración local establecida.',
 		'config-label-deletelocalall': 'Eliminar configuración local en todos los demás proyectos',
-		'config-help-deletelocalall-present': 'Para realizar esta acción, debes haber iniciado sesión en $1.',
+		'config-help-deletelocalall-present': 'Proyectos con configuración local guardada: $1', // Updated in v5.1.9, review needed
 		'config-help-deletelocalall-absent': 'No tienes configuraciones locales en otros proyectos.',
 		'config-label-deletedata': 'Borrar datos',
 		'config-button-deletedata': 'Borrar',
@@ -1431,7 +1431,7 @@ SelectiveRollback.i18n = {
 		'config-label-deletelocal': 'Șterge configurația locală',
 		'config-help-deletelocal-absent': 'Nu ai nicio configurație locală setată.',
 		'config-label-deletelocalall': 'Șterge configurația locală de pe toate celelalte proiecte',
-		'config-help-deletelocalall-present': 'Pentru a efectua această acțiune, trebuie să fii autentificat pe $1.',
+		'config-help-deletelocalall-present': 'Proiecte cu configurație locală salvată: $1', // Updated in v5.1.9, review needed
 		'config-help-deletelocalall-absent': 'Nu ai nicio configurație locală pe alte proiecte.',
 		'config-label-deletedata': 'Șterge datele',
 		'config-button-deletedata': 'Șterge',
@@ -1538,7 +1538,7 @@ SelectiveRollback.i18n = {
 		'config-label-deletelocal': 'Xóa cấu hình cục bộ',
 		'config-help-deletelocal-absent': 'Bạn chưa thiết lập bất kỳ cấu hình cục bộ nào.',
 		'config-label-deletelocalall': 'Xóa cấu hình cục bộ trên tất cả các dự án khác',
-		'config-help-deletelocalall-present': 'Để thực hiện thao tác này, bạn cần đăng nhập vào $1.',
+		'config-help-deletelocalall-present': 'Các dự án có cấu hình cục bộ đã lưu: $1', // Updated in v5.1.9, review needed
 		'config-help-deletelocalall-absent': 'Bạn không có cấu hình cục bộ nào trên các dự án khác.',
 		'config-label-deletedata': 'Xóa dữ liệu',
 		'config-button-deletedata': 'Xóa',
@@ -1644,7 +1644,7 @@ SelectiveRollback.i18n = {
 		'config-label-deletelocal': 'حذف الإعدادات المحلية',
 		'config-help-deletelocal-absent': 'ليس لديك أي إعدادات محلية مُكوّنة.',
 		'config-label-deletelocalall': 'حذف الإعدادات المحلية في جميع المشاريع الأخرى',
-		'config-help-deletelocalall-present': 'لإتمام هذه العملية، يجب أن تسجل الدخول في $1.',
+		'config-help-deletelocalall-present': 'المشاريع التي لديها إعدادات محلية محفوظة: $1', // Updated in v5.1.9, review needed
 		'config-help-deletelocalall-absent': 'ليس لديك أي إعدادات محلية في المشاريع الأخرى.',
 		'config-label-deletedata': 'حذف البيانات',
 		'config-button-deletedata': 'حذف',
@@ -3054,17 +3054,16 @@ class SelectiveRollbackConfigMisc {
 			);
 			$deleteLocalAllHelp.html(message);
 
-			const $deleteLocalAllHelpWikiList = this.getHelpElement('deletelocalall-list');
 			let i = 0;
+			const elements = /** @type {(Text | JQuery<HTMLElement>)[]} */ ([]);
 			for (const [wikiId, apiUrl] of Object.entries(wikiMap)) {
-				/** @type {(string | JQuery<HTMLElement>)[]} */
-				const elements = [];
 				if (i !== 0) {
-					elements.push(', ');
+					elements.push(document.createTextNode(', '));
 				}
 				elements.push(SelectiveRollbackConfigMisc.getLinkFromWikiID(wikiId, apiUrl));
-				$deleteLocalAllHelpWikiList.append(...elements);
+				i++;
 			}
+			this.getHelpElement('deletelocalall-list').append(...elements);
 		} else {
 			this.deleteLocalAll.setSelected(false).setDisabled(true);
 			$deleteLocalAllHelp.html(msg['config-help-deletelocalall-absent']);
