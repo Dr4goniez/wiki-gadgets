@@ -5,7 +5,7 @@
  * to the special page.
  *
  * @author [[User:Dragoniez]]
- * @version 2.0.4
+ * @version 2.0.5
  * @see https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock
  */
 // <nowiki>
@@ -14,7 +14,7 @@
 (() => {
 // **********************************************************************
 
-const VERSION = '2.0.4';
+const VERSION = '2.0.5';
 const SCRIPT_NAME = 'AjaxBlock';
 const DEBUG_MODE = false;
 const VERBOSE = mw.config.get('wgUserName') === 'Dragoniez';
@@ -10049,17 +10049,16 @@ class AjaxBlockConfigMisc {
 			);
 			$deleteLocalAllHelp.html(message);
 
-			const $deleteLocalAllHelpWikiList = this.getHelpElement('deletelocalall-list');
 			let i = 0;
+			const elements = /** @type {(Text | JQuery<HTMLElement>)[]} */ ([]);
 			for (const [wikiId, apiUrl] of Object.entries(wikiMap)) {
-				/** @type {(string | JQuery<HTMLElement>)[]} */
-				const elements = [];
 				if (i !== 0) {
-					elements.push(', ');
+					elements.push(document.createTextNode(', '));
 				}
 				elements.push(AjaxBlockConfigMisc.getLinkFromWikiID(wikiId, apiUrl));
-				$deleteLocalAllHelpWikiList.append(...elements);
+				i++;
 			}
+			this.getHelpElement('deletelocalall-list').append(...elements);
 		} else {
 			this.deleteLocalAll.setSelected(false).setDisabled(true);
 			$deleteLocalAllHelp.html(Messages.get('ajaxblock-config-help-deletelocalall-absent'));
