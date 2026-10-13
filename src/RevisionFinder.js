@@ -1,13 +1,15 @@
-/*****************************************************************\
-    Name: RevisionFinder
-    Author: Dragoniez
-    Version: 1.2.7
-    Documentation: [[User:Dragoniez/scripts/RevisionFinder]]
-\*****************************************************************/
-//<nowiki>
-/* global mediaWiki, jQuery */
+/**
+ * RevisionFinder
+ *
+ * @author [[User:Dragoniez]]
+ * @version 1.2.8
+ * @see https://ja.wikipedia.org/wiki/User:Dragoniez/scripts/RevisionFinder
+ */
+// @ts-check
+/* global mw */
+// <nowiki>
 
-(function(mw, $) { // コンテナ関数
+(function() { // コンテナ関数
 
 // ************************************** 初期化 **************************************
 
@@ -111,7 +113,10 @@ $.when(
 
         // スクリプトの準備ができたことを可視化するために、一瞬リンクを点滅させる
         var $datelinks = $('.mw-contributions-list').children('li').find('a.mw-changeslist-date');
-        $datelinks.css('color', 'orange').animate({color: '#0645AD'}, 800);
+		var color = $datelinks.css('color');
+        $datelinks.css('color', 'orange').animate({ color }, 600, function () {
+			$(this).css({ color: '' });
+		});
 
     });
 
@@ -1627,5 +1632,5 @@ function deletePrep() {
 
 // ****************************************************************************
 
-})(mediaWiki, jQuery);
-//</nowiki>
+})();
+// </nowiki>
