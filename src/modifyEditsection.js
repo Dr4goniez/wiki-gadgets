@@ -1,7 +1,7 @@
 /**
  * modifyEditsection
  *
- * Expands "edit section" links generated for transcluded sections.
+ * Extends "edit section" links generated for transcluded sections.
  *
  * @author dbenzhuser ([[de:Benutzer:Dbenzhuser]])
  * @author Alex Smotrov ([[en:User:Alex Smotrov]])
@@ -12,7 +12,7 @@
  * @author Dragoniez ([[ja:User:Dragoniez]])
  * - Rewritten completely in Feb 2026; added AJAX watchlist and purge updates
  *
- * @version 2.0.6
+ * @version 2.1.0
  */
 // @ts-check
 /* global mw, OO */
@@ -20,7 +20,7 @@
 (() => {
 // *******************************************************************************************
 
-const VERSION = '2.0.6';
+const VERSION = '2.1.0';
 
 class ModifyEditSection {
 
@@ -43,10 +43,12 @@ class ModifyEditSection {
 
 		await mw.loader.using(['mediawiki.storage', 'mediawiki.util', 'mediawiki.api', 'mediawiki.Title']);
 		await this.loadMessagesIfMissing();
-		this.addStyleTag();
 
 		const mes = new this();
-		await mes.execute(editSectionLinks);
+		const count = await mes.execute(editSectionLinks);
+		if (count > 0) {
+			ModifyEditSection.createSpinner(); // Preload image
+		}
 	}
 
 	static async loadMessagesIfMissing() {
@@ -107,38 +109,28 @@ class ModifyEditSection {
 		mw.storage.setObject(storageKey, newData, 60 * 60 * 24 * 7); // 1 week
 	}
 
-	static addStyleTag() {
-		const style = document.createElement('style');
-		style.textContent = `
-			.mw-editsection-expanded::before {
-				content: " | ";
-			}
-		`.replace(/[\t\r\n]/g, '');
-		document.head.appendChild(style);
-	}
-
 	/**
-	 * @typedef {object} ExpandedSectionLink
-	 * @property {HTMLAnchorElement} anchor
+	 * @typedef {object} ExtendedSectionLink
 	 * @property {mw.Title} title
 	 * @property {boolean} watched
-	 * @property {WrappedLink} view
-	 * @property {WrappedLink} history
-	 * @property {WrappedLink} watch
-	 * @property {WrappedLink} unwatch
+	 * @property {JQuery<HTMLAnchorElement>} $edit
+	 * @property {JQuery<HTMLAnchorElement>} $view
+	 * @property {JQuery<HTMLAnchorElement>} $history
+	 * @property {JQuery<HTMLAnchorElement>} $watch
+	 * @property {JQuery<HTMLAnchorElement>} $unwatch
 	 * @property {JQuery<HTMLImageElement>} $watchSpinner
-	 * @property {WrappedLink} purge
-	 * @property {JQuery<HTMLSpanElement>} $purgeSpinner
+	 * @property {JQuery<HTMLAnchorElement>} $purge
+	 * @property {JQuery<HTMLImageElement>} $purgeSpinner
 	 */
 	constructor() {
 		/**
 		 * Mapping from title strings (as in API responses) to objects that store
-		 * expanded section links.
+		 * extended section links.
 		 *
-		 * @type {Map<string, ExpandedSectionLink>}
+		 * @type {Map<string, ExtendedSectionLink>}
 		 * @readonly
 		 */
-		this.expanded = new Map();
+		this.extended = new Map();
 		/**
 		 * @type {mw.Api}
 		 * @readonly
@@ -168,6 +160,7 @@ class ModifyEditSection {
 
 	/**
 	 * @param {NodeListOf<HTMLAnchorElement>} editSectionLinks
+	 * @returns {Promise<number>}
 	 */
 	async execute(editSectionLinks) {
 		const rArticle = new RegExp(mw.config.get('wgArticlePath').replace('$1', '([^?]+)'));
@@ -216,7 +209,7 @@ class ModifyEditSection {
 				continue;
 			}
 
-			// Skip this editsection link if we've already expanded another for the same page
+			// Skip this editsection link if we've already extended another for the same page
 			// with a smaller heading level
 			const prefixedTitle = t.getPrefixedText();
 			const seenLevel = levelMap.get(prefixedTitle);
@@ -225,21 +218,21 @@ class ModifyEditSection {
 			}
 			levelMap.set(prefixedTitle, level);
 
-			this.expanded.set(prefixedTitle, {
-				anchor: a,
+			this.extended.set(prefixedTitle, {
 				title: t,
 				watched: false,
-				view: new WrappedLink(lcFirst(mw.msg('view')), prefixedTitle),
-				history: new WrappedLink(mw.msg('history_small'), prefixedTitle, { action: 'history' }),
-				watch: new WrappedLink(lcFirst(mw.msg('watch')), prefixedTitle, { action: 'watch' }),
-				unwatch: new WrappedLink(lcFirst(mw.msg('unwatch')), prefixedTitle, { action: 'unwatch' }),
-				$watchSpinner: WrappedLink.createSpinner().css({ 'margin-left': '0.2em' }),
-				purge: new WrappedLink(lcFirst(mw.msg('purge')), prefixedTitle, { action: 'purge' }),
-				$purgeSpinner: WrappedLink.wrap(WrappedLink.createSpinner()),
+				$edit: $(a),
+				$view: ModifyEditSection.createLink(lcFirst(mw.msg('view')), prefixedTitle),
+				$history: ModifyEditSection.createLink(mw.msg('history_small'), prefixedTitle, { action: 'history' }),
+				$watch: ModifyEditSection.createLink(lcFirst(mw.msg('watch')), prefixedTitle, { action: 'watch' }),
+				$unwatch: ModifyEditSection.createLink(lcFirst(mw.msg('unwatch')), prefixedTitle, { action: 'unwatch' }),
+				$watchSpinner: ModifyEditSection.createSpinner(),
+				$purge: ModifyEditSection.createLink(lcFirst(mw.msg('purge')), prefixedTitle, { action: 'purge' }),
+				$purgeSpinner: ModifyEditSection.createSpinner(),
 			});
 		}
-		if (!this.expanded.size) {
-			return;
+		if (!this.extended.size) {
+			return 0;
 		}
 
 		// Initialize the `watched` property
@@ -248,17 +241,19 @@ class ModifyEditSection {
 		/**
 		 * @param {JQuery.ClickEvent<HTMLAnchorElement, undefined, HTMLAnchorElement, HTMLAnchorElement>} e
 		 * @param {boolean} unwatch
-		 * @param {ExpandedSectionLink} obj
+		 * @param {ExtendedSectionLink} obj
 		 * @param {string} title
 		 */
 		const clickHandler = async (e, unwatch, obj, title) => {
 			e.preventDefault();
 			e.stopPropagation();
-			if (obj.$watchSpinner.is(':visible')) {
+			if (obj.$watchSpinner[0].isConnected) {
 				return;
+			} else if (unwatch) {
+				obj.$unwatch.append(obj.$watchSpinner);
+			} else {
+				obj.$watch.append(obj.$watchSpinner);
 			}
-			obj.$watchSpinner.show();
-			// handleWatchLinkClick() should never reject by design, but we take the *safest* approach here
 			try {
 				await this.handleWatchLinkClick(unwatch, obj, title);
 			} finally {
@@ -268,31 +263,51 @@ class ModifyEditSection {
 					this.notifDropdowns[title].setDisabled(true);
 					delete this.notifDropdowns[title];
 				}
-				obj.$watchSpinner.hide();
+				obj.$watchSpinner.remove();
 			}
 		};
 
-		// All preparations are complete; actually expand the edit section links
-		for (const [title, obj] of this.expanded) {
-			$(obj.anchor).after(
-				obj.view.$container,
-				obj.history.$container,
-				obj.watch.$container.toggle(!obj.watched),
-				obj.unwatch.$container.toggle(obj.watched),
-				obj.$watchSpinner.hide(),
-				obj.purge.$container,
-				obj.$purgeSpinner.hide()
+		// All preparations are complete; actually extend the edit section links
+		for (const [title, obj] of this.extended) {
+			obj.$edit.after(
+				obj.$view,
+				obj.$history,
+				obj.$watch.toggle(!obj.watched),
+				obj.$unwatch.toggle(obj.watched),
+				obj.$purge
 			);
 
-			obj.watch.$link.off('click').on('click', (e) => clickHandler(e, false, obj, title));
-			obj.unwatch.$link.off('click').on('click', (e) => clickHandler(e, true, obj, title));
-			obj.purge.$link.off('click').on('click', (e) => this.handlePurgeLinkClick(e, obj, title));
+			obj.$watch.off('click').on('click', (e) => clickHandler(e, false, obj, title));
+			obj.$unwatch.off('click').on('click', (e) => clickHandler(e, true, obj, title));
+			obj.$purge.off('click').on('click', (e) => this.handlePurgeLinkClick(e, obj, title));
 		}
+
+		return this.extended.size;
 	}
 
 	/**
-	 * Checks all titles in {@link expanded} for whether the user is currently
-	 * watching them, and updates the {@link ExpandedSectionLink.watched} property.
+	 * @param {string} text
+	 * @param {string} title
+	 * @param {Record<string, string | number | boolean>} [query]
+	 */
+	static createLink(text, title, query) {
+		return /** @type {JQuery<HTMLAnchorElement>} */ ($('<a>'))
+			.prop({ href: mw.util.getUrl(title, query) })
+			.append(
+				$('<span>').text(text)
+			);
+	}
+
+	static createSpinner() {
+		const spinner = new Image();
+		spinner.src = 'https://upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif';
+		spinner.style.cssText = 'vertical-align: middle; height: 1em; border: 0; margin-left: 0.2em;';
+		return $(spinner);
+	}
+
+	/**
+	 * Checks all titles in {@link extended} for whether the user is currently
+	 * watching them, and updates the {@link ExtendedSectionLink.watched} property.
 	 */
 	initializeWatchedStates() {
 		// Get the user's API limit
@@ -305,7 +320,7 @@ class ModifyEditSection {
 		const apiLimit = groups.some((g) => groupsWithApiHighLimits.has(g)) ? 500 : 50;
 
 		// Unflatten the titles array respecting the API limit
-		const titleBatch = [...this.expanded.keys()].reduce((acc, title) => {
+		const titleBatch = [...this.extended.keys()].reduce((acc, title) => {
 			if (acc[acc.length - 1].length >= apiLimit) {
 				acc.push([]);
 			}
@@ -350,9 +365,9 @@ class ModifyEditSection {
 						console.warn('The watched property is not a boolean');
 						continue;
 					}
-					const obj = this.expanded.get(title);
+					const obj = this.extended.get(title);
 					if (!obj) {
-						console.error(`"${title}" not found in expanded`);
+						console.error(`"${title}" not found in extended`);
 						continue;
 					}
 					obj.watched = watched;
@@ -372,7 +387,7 @@ class ModifyEditSection {
 	 */
 	/**
 	 * @param {boolean} unwatch
-	 * @param {ExpandedSectionLink} obj
+	 * @param {ExtendedSectionLink} obj
 	 * @param {string} title
 	 * @param {Expiry} [expiryObj]
 	 */
@@ -411,20 +426,23 @@ class ModifyEditSection {
 		const notif = await mw.notify($msg);
 		if (dropdown) {
 			dropdown.on('labelChange', async () => {
-				if (obj.$watchSpinner.is(':visible')) {
+				if (obj.$watchSpinner[0].isConnected) {
 					return;
+				} else if (unwatch) {
+					obj.$unwatch.append(obj.$watchSpinner);
+				} else {
+					obj.$watch.append(obj.$watchSpinner);
 				}
-				obj.$watchSpinner.show();
 				try {
 					await this.handleExpiryDropdownChange(notif, obj, title, dropdown);
 				} finally {
-					obj.$watchSpinner.hide();
+					obj.$watchSpinner.remove();
 				}
 			});
 		}
 
-		obj.watch.$container.toggle(unwatch);
-		obj.unwatch.$container.toggle(!unwatch);
+		obj.$watch.toggle(unwatch);
+		obj.$unwatch.toggle(!unwatch);
 	}
 
 	/**
@@ -451,7 +469,7 @@ class ModifyEditSection {
 
 	/**
 	 * @param {boolean} unwatch
-	 * @param {ExpandedSectionLink} obj
+	 * @param {ExtendedSectionLink} obj
 	 * @param {string} [expiry]
 	 * @returns {string}
 	 */
@@ -527,7 +545,7 @@ class ModifyEditSection {
 
 	/**
 	 * @param {Awaited<ReturnType<mw['notify']>>} notif
-	 * @param {ExpandedSectionLink} obj
+	 * @param {ExtendedSectionLink} obj
 	 * @param {string} title
 	 * @param {OO.ui.DropdownWidget} dropdown
 	 */
@@ -558,20 +576,19 @@ class ModifyEditSection {
 
 	/**
 	 * @param {JQuery.ClickEvent<HTMLAnchorElement, undefined, HTMLAnchorElement, HTMLAnchorElement>} e
-	 * @param {ExpandedSectionLink} obj
+	 * @param {ExtendedSectionLink} obj
 	 * @param {string} title
 	 */
 	async handlePurgeLinkClick(e, obj, title) {
 		e.preventDefault();
 		e.stopPropagation();
 
-		if (obj.$purgeSpinner.is(':visible')) {
+		if (obj.$purgeSpinner[0].isConnected) {
 			return;
 		}
-		obj.purge.$container.hide();
-		obj.$purgeSpinner.show();
+		obj.$purge.append(obj.$purgeSpinner);
 
-		await mw.loader.using('oojs-ui');
+		await mw.loader.using('oojs-ui-windows');
 
 		const confirmed = await OO.ui.confirm(
 			$('<div>').append(
@@ -602,8 +619,7 @@ class ModifyEditSection {
 			}
 		);
 		if (!confirmed) {
-			obj.purge.$container.show();
-			obj.$purgeSpinner.hide();
+			obj.$purgeSpinner.remove();
 			return;
 		}
 
@@ -624,8 +640,7 @@ class ModifyEditSection {
 
 		if ($msg) {
 			await mw.notify($msg, { type: 'error' });
-			obj.purge.$container.show();
-			obj.$purgeSpinner.hide();
+			obj.$purgeSpinner.remove();
 			return;
 		}
 		location.reload();
@@ -636,44 +651,6 @@ class ModifyEditSection {
  * `false` if no parsable messages exist.
  */
 ModifyEditSection.expiryOptions = null;
-
-class WrappedLink {
-
-	/**
-	 * @param {string} text
-	 * @param {string} title
-	 * @param {Record<string, string | number | boolean>} [query]
-	 */
-	constructor(text, title, query) {
-		/**
-		 * @type {JQuery<HTMLAnchorElement>}
-		 * @readonly
-		 */
-		this.$link = $('<a>');
-		/**
-		 * @type {JQuery<HTMLSpanElement>}
-		 * @readonly
-		 */
-		this.$container = WrappedLink.wrap(this.$link);
-
-		this.$link.prop({ href: mw.util.getUrl(title, query) }).text(text);
-	}
-
-	/**
-	 * @param {JQuery<HTMLElement>} $el
-	 * @returns {JQuery<HTMLSpanElement>}
-	 */
-	static wrap($el) {
-		return $('<span>').addClass('mw-editsection-expanded').append($el);
-	}
-
-	static createSpinner() {
-		const spinner = new Image();
-		spinner.src = 'https://upload.wikimedia.org/wikipedia/commons/4/42/Loading.gif';
-		spinner.style.cssText = 'vertical-align: middle; height: 1em; border: 0;';
-		return $(spinner);
-	}
-}
 
 /**
  * @param {string} str
