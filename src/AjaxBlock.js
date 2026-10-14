@@ -5,7 +5,7 @@
  * to the special page.
  *
  * @author [[User:Dragoniez]]
- * @version 2.0.5
+ * @version 2.0.6
  * @see https://meta.wikimedia.org/wiki/User:Dragoniez/AjaxBlock
  */
 // <nowiki>
@@ -14,7 +14,7 @@
 (() => {
 // **********************************************************************
 
-const VERSION = '2.0.5';
+const VERSION = '2.0.6';
 const SCRIPT_NAME = 'AjaxBlock';
 const DEBUG_MODE = false;
 const VERBOSE = mw.config.get('wgUserName') === 'Dragoniez';
@@ -1616,14 +1616,15 @@ class AjaxBlockServices {
 							}
 						}
 
+						const rights = PermissionManager.filterUsedRights(userRights);
 						mw.storage.setObject(
 							_storageKeys.permissions,
-							{ rights: userRights, localBlockingGroups },
+							{ rights, localBlockingGroups },
 							daysInSeconds(3)
 						);
 						this.setService(
 							'permissionManager',
-							new PermissionManager(new Set(userRights), new Set(localBlockingGroups))
+							new PermissionManager(new Set(rights), new Set(localBlockingGroups))
 						);
 					}
 
@@ -2018,6 +2019,7 @@ class PermissionManager {
 	/**
 	 * @param {string} permission
 	 * @returns {boolean}
+	 * @private
 	 */
 	isAllowed(permission) {
 		return this.permissions.has(permission);
@@ -2066,7 +2068,23 @@ class PermissionManager {
 	getApiLimit() {
 		return this.isAllowed('apihighlimits') ? 500 : 50;
 	}
+
+	/**
+	 * Filters an array of permissions to only include used permissions.
+	 *
+	 * @param {string[]} permissions
+	 * @returns {string[]}
+	 */
+	static filterUsedRights(permissions) {
+		return permissions.filter((perm) => PermissionManager.usedRights.has(perm));
+	}
 }
+/**
+ * @type {ReadonlySet<string>}
+ */
+PermissionManager.usedRights = new Set([
+	'block', 'hideuser', 'apihighlimits',
+]);
 
 class BlockLookup {
 
