@@ -2,7 +2,7 @@
  * Selective Rollback
  *
  * @author [[User:Dragoniez]]
- * @version 5.1.9
+ * @version 5.1.10
  * @see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
  *
  * Some functionality in this script is adapted from:
@@ -18,7 +18,7 @@
 (() => {
 // **************************************************************************************************
 
-const version = '5.1.9';
+const version = '5.1.10';
 
 // Run this script only when on /wiki/$1 or /w/index.php
 if (
@@ -82,7 +82,7 @@ class SelectiveRollback {
 		// Set up variables
 		api = new mw.Api(this.apiOptions());
 		const cfg = SelectiveRollbackConfig.getMerged();
-		this.appendStyleTag(cfg);
+		this.addStyleTag(cfg);
 
 		// Get localized message object
 		langSwitch = /** @type {Languages} */ (
@@ -234,113 +234,113 @@ class SelectiveRollback {
 	}
 
 	/**
-	 * Appends to the document head a \<style> tag for SR.
+	 * Adds to the document head a \<style> tag for SR.
 	 * @param {Required<SelectiveRollbackConfigObject>} cfg
 	 * @returns {void}
 	 * @private
 	 */
-	static appendStyleTag(cfg) {
+	static addStyleTag(cfg) {
 		const style = document.createElement('style');
-		style.textContent =
-			'.sr-rollback {' +
-				'display: inline-block;' +
-				'margin: 0 0.5em;' +
-			'}' +
-			'.sr-checkbox-wrapper {' +
-				'display: inline-block;' +
-			'}' +
-			'.sr-checkbox {' +
-				'margin: 0 4px 2px !important;' +
-				'vertical-align: middle;' +
-			'}' +
-			'.sr-rollback-label {' +
-				'font-weight: bold;' +
-				`color: ${cfg.checkboxLabelColor};` +
-			'}' +
-			'.sr-dialog .oo-ui-inline-help code {' +
-				'color: inherit;' +
-			'}' +
-			'.sr-selected-count {' +
-				'padding-top: 6px !important;' +
-			'}' +
-			'#sr-summarypreview {' +
-				'background-color: var(--background-color-neutral-subtle, #f8f9fa);' +
-				'color: var(--color-emphasized, #000);' +
-				'margin: 0;' +
-				'border: 1px solid var(--border-color-base, #a2a9b1);' +
-				'border-radius: 2px;' +
-				'padding: 5px 8px;' +
-				'font-size: inherit;' +
-				'font-family: inherit;' +
-				'line-height: 1.42857143em;' +
-				'width: 100%;' +
-				'box-sizing: border-box;' +
-				'vertical-align: middle;' +
-				'max-width: 50em;' +
-				'min-height: 2.2857143em;' +
-			'}' +
-			'.sr-rollback-link-success {' +
-				'background-color: lightgreen;' +
-			'}' +
-			'@media screen {' +
-				'html.skin-theme-clientpref-night .sr-rollback-link-success {' +
-					'background-color: #099979;' +
-				'}' +
-			'}' +
-			'@media screen and (prefers-color-scheme: dark) {' +
-				'html.skin-theme-clientpref-os .sr-rollback-link-success {' +
-					'background-color: #099979;' +
-				'}' +
-			'}' +
-			'.sr-rollback-link-fail {' +
-				'background-color: lightpink;' +
-			'}' +
-			'@media screen {' +
-				'html.skin-theme-clientpref-night .sr-rollback-link-fail {' +
-					'background-color: #f54739;' +
-				'}' +
-			'}' +
-			'@media screen and (prefers-color-scheme: dark) {' +
-				'html.skin-theme-clientpref-os .sr-rollback-link-fail {' +
-					'background-color: #f54739;' +
-				'}' +
-			'}' +
-			'.sr-config-overlay {' +
-				'width: 100%;' +
-				'height: 100%;' +
-				'position: absolute;' +
-				'top: 0;' +
-				'left: 0;' +
-				'z-index: 10000;' +
-			'}' +
-			'.sr-config-notice {' +
-				'margin-bottom: 1em;' +
-				'max-width: 50em;' +
-			'}' +
-			'.sr-config-headinglabel {' +
-				'margin-top: 12px;' +
-			'}' +
-			'.oo-ui-fieldLayout.sr-config-propertyfield-buttoncontainer {' +
-				'margin-top: 8px;' +
-			'}' +
-			'.sr-config-icon-container {' +
-				'display: inline-block;' +
-			'}' +
-			'.sr-config-icon {' +
-				'width: 1em;' +
-				'vertical-align: middle;' +
-				'border: 0;' +
-			'}' +
-			'.sr-config-icon-subtext {' +
-				'margin-left: 0.2em;' +
-			'}' +
-			'.sr-config-icon-subtext-green {' +
-				'color: var(--color-icon-success, #099979);' +
-			'}' +
-			'.sr-config-icon-subtext-red {' +
-				'color: var(--color-icon-error, #f54739);' +
-			'}' +
-			'';
+		style.textContent = `
+			.sr-rollback {
+				display: inline-block;
+				margin: 0 0.5em;
+			}
+			.sr-checkbox-wrapper {
+				display: inline-block;
+			}
+			.sr-checkbox {
+				margin: 0 4px 2px !important;
+				vertical-align: middle;
+			}
+			.sr-rollback-label {
+				font-weight: bold;
+				color: ${cfg.checkboxLabelColor};
+			}
+			.sr-dialog .oo-ui-inline-help code {
+				color: inherit;
+			}
+			.sr-selected-count {
+				padding-top: 6px !important;
+			}
+			#sr-summarypreview {
+				background-color: var(--background-color-neutral-subtle, #f8f9fa);
+				color: var(--color-emphasized, #000);
+				margin: 0;
+				border: 1px solid var(--border-color-base, #a2a9b1);
+				border-radius: 2px;
+				padding: 5px 8px;
+				font-size: inherit;
+				font-family: inherit;
+				line-height: 1.42857143em;
+				width: 100%;
+				box-sizing: border-box;
+				vertical-align: middle;
+				max-width: 50em;
+				min-height: 2.2857143em;
+			}
+			.sr-rollback-link-success {
+				background-color: lightgreen;
+			}
+			@media screen {
+				html.skin-theme-clientpref-night .sr-rollback-link-success {
+					background-color: #099979;
+				}
+			}
+			@media screen and (prefers-color-scheme: dark) {
+				html.skin-theme-clientpref-os .sr-rollback-link-success {
+					background-color: #099979;
+				}
+			}
+			.sr-rollback-link-fail {
+				background-color: lightpink;
+			}
+			@media screen {
+				html.skin-theme-clientpref-night .sr-rollback-link-fail {
+					background-color: #f54739;
+				}
+			}
+			@media screen and (prefers-color-scheme: dark) {
+				html.skin-theme-clientpref-os .sr-rollback-link-fail {
+					background-color: #f54739;
+				}
+			}
+			.sr-config-overlay {
+				width: 100%;
+				height: 100%;
+				position: absolute;
+				top: 0;
+				left: 0;
+				z-index: 10000;
+			}
+			.sr-config-notice {
+				margin-bottom: 1em;
+				max-width: 50em;
+			}
+			.sr-config-headinglabel {
+				margin-top: 12px;
+			}
+			.oo-ui-fieldLayout.sr-config-propertyfield-buttoncontainer {
+				margin-top: 8px;
+			}
+			.sr-config-icon-container {
+				display: inline-block;
+			}
+			.sr-config-icon {
+				width: 1em;
+				vertical-align: middle;
+				border: 0;
+			}
+			.sr-config-icon-subtext {
+				margin-left: 0.2em;
+			}
+			.sr-config-icon-subtext-green {
+				color: var(--color-icon-success, #099979);
+			}
+			.sr-config-icon-subtext-red {
+				color: var(--color-icon-error, #f54739);
+			}
+			`.replace(/[\t\r\n]/g, '');
 		document.head.appendChild(style);
 	}
 
