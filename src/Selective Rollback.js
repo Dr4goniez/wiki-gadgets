@@ -2,7 +2,7 @@
  * Selective Rollback
  *
  * @author [[User:Dragoniez]]
- * @version 5.1.10
+ * @version 5.1.11
  * @see https://meta.wikimedia.org/wiki/User:Dragoniez/Selective_Rollback
  *
  * Some functionality in this script is adapted from:
@@ -18,7 +18,7 @@
 (() => {
 // **************************************************************************************************
 
-const version = '5.1.10';
+const version = '5.1.11';
 
 // Run this script only when on /wiki/$1 or /w/index.php
 if (
@@ -252,6 +252,9 @@ class SelectiveRollback {
 			.sr-checkbox {
 				margin: 0 4px 2px !important;
 				vertical-align: middle;
+				position: static !important;
+				top: auto !important;
+				left: auto !important;
 			}
 			.sr-rollback-label {
 				font-weight: bold;
